@@ -1,259 +1,147 @@
 ---
 name: deepchem
-description: Molecular ML with diverse featurizers and pre-built datasets. Use for property prediction (ADMET, toxicity) with traditional ML or GNNs when you want extensive featurization options and MoleculeNet benchmarks. Best for quick experiments with pre-trained models, diverse molecular representations. For graph-first PyTorch workflows use torchdrug; for benchmark datasets use pytdc.
+description: Builds molecular property prediction and MoleculeNet workflows with DeepChem, including SMILES featurization, scaffold or grouped holdouts, masked labels, graph models and explicit pretrained encoder transfer. Used for ADMET, toxicity, solubility and chemistry ML when DeepChem data/model contracts and scientific validation are needed.
 license: MIT license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.7–3.11 (PyPI 2.8.0 caps at <3.12). Install PyTorch, TensorFlow, or JAX before the matching deepchem extra. RDKit is a core dependency.
+compatibility: Requires Python 3.11 for the tested DeepChem 2.8.0 stack. Molecular workflows need RDKit. Torch, Transformers, torch-geometric or DGL/DGL-LifeSci depend on the chosen model. Network is needed only for package, benchmark or model downloads.
 metadata:
-  version: "1.6"
+  version: "2.0"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-09-30"
 ---
 
 # DeepChem
 
-## Overview
+## When to use
 
-DeepChem is a comprehensive Python library for applying machine learning to chemistry, materials science, and biology. Enable molecular property prediction, drug discovery, materials design, and biomolecule analysis through specialized neural networks, molecular featurization methods, and pretrained models.
+Use for molecular property prediction, SMILES/graph featurization, MoleculeNet
+benchmarks and explicitly configured encoder transfer. The workflow also covers
+DeepChem materials and sequence adapters when their data/model contracts are met.
 
-**Version note:** Examples target **deepchem 2.8.0** (PyPI stable, Apr 2024). Requires **Python 3.7–3.11** (`<3.12` on PyPI). Core utilities (loaders, featurizers, MoleculeNet) work without a DL backend; GNN and transformer models need the matching extra (`torch`, `tensorflow`, or `jax`). Install the backend framework first when using GPU builds.
+Targets **DeepChem 2.8.0**, still the stable PyPI release at review. Nightly 2.8.1
+builds have additional APIs and different constraints; do not mix `latest` docs
+with a stable installation. The tested CPU stack and optional-backend limitations
+are in [references/review.md](references/review.md).
 
-## When to Use This Skill
+## Workflow
 
-This skill should be used when:
-- Loading and processing molecular data (SMILES strings, SDF files, protein sequences)
-- Predicting molecular properties (solubility, toxicity, binding affinity, ADMET properties)
-- Training models on chemical/biological datasets
-- Using MoleculeNet benchmark datasets (Tox21, BBBP, Delaney, etc.)
-- Converting molecules to ML-ready features (fingerprints, graph representations, descriptors)
-- Implementing graph neural networks for molecules (GCN, GAT, MPNN, AttentiveFP)
-- Applying transfer learning with pretrained models (ChemBERTa, GROVER, MolFormer)
-- Predicting crystal/materials properties (bandgap, formation energy)
-- Analyzing protein or DNA sequences
+1. Define compound identity, assay conditions, target units and missing labels.
+   Parse SMILES and retain a record of rejected rows. Audit duplicate structures
+   and repeated measurements before splitting.
+2. Match the representation to the model using the table below. Fit a numeric
+   baseline first; dataset size alone does not select the best architecture.
+3. Choose a scaffold, temporal or grouped holdout for the deployment question.
+   Preserve exact split IDs, inspect scaffold overlap and per-task class support,
+   and reject empty splits. Scaffold splitting does not eliminate all leakage.
+4. Fit preprocessing on training data only. Preserve `dataset.w` masks. Normalize
+   continuous targets only, and invert those transforms for metrics/predictions.
+5. Select model settings/epochs on validation data and evaluate the final holdout
+   once. Report per-task support, uncertainty across planned repeats and baseline
+   comparisons. AUC requires both observed classes.
+6. Predict using the training representation and transforms. Preserve identifiers,
+   original target units and applicability limits. Successful fitting is not
+   evidence of prospective scientific performance.
 
-## Core Capabilities
+## Essential model contracts
 
-Eight capability areas, each with worked code, are in
-[references/core_capabilities.md](references/core_capabilities.md):
+| Model path | Input |
+|---|---|
+| Fingerprint baseline or `MultitaskRegressor` | Explicit `CircularFingerprint(size=2048)` |
+| Torch GCN/GAT | `MolGraphConvFeaturizer()` |
+| Torch AttentiveFP/MPNN | `MolGraphConvFeaturizer(use_edges=True)` |
+| DMPNN | `DMPNNFeaturizer()`; binary tasks need `n_classes=2` |
+| GROVER | `GroverFeaturizer` plus matching encoder checkpoint/configuration |
+| HF wrapper | SMILES strings, actual network object and tokenizer object |
 
-1. **Molecular data loading and processing** — loaders, `NumpyDataset` / `DiskDataset`.
-2. **Molecular featurization** — circular fingerprints, graph convolution, and descriptors.
-3. **Data splitting** — random, scaffold, stratified, and butina splitters, and why
-   scaffold splitting is the honest default for molecules.
-4. **Model selection and training** — the model families and how to fit them.
-5. **MoleculeNet benchmarks** — loading standard datasets and their published splits.
-6. **Transfer learning** — pretraining and fine-tuning.
-7. **Model evaluation** — metrics appropriate to regression and classification tasks.
-8. **Making predictions** — applying a trained model to new molecules.
+MoleculeNet's `'ECFP'` alias is **1024** bits, while the fingerprint class defaults
+to **2048**. `'GraphConv'` is legacy `ConvMolFeaturizer`, incompatible with Torch
+GCN. `'Raw'` defaults to RDKit Mol objects; use `DummyFeaturizer()` for raw strings.
+Import Torch MPNN/GROVER from `deepchem.models.torch_models`.
 
-Three end-to-end workflows are in
-[references/typical_workflows.md](references/typical_workflows.md).
-
-## Example Scripts
-
-This skill includes three example scripts in `scripts/`; validate their selected
-backend, split, task labels, and metrics on your data before relying on a result:
-
-### 1. `predict_solubility.py`
-Train and evaluate solubility prediction models. Works with Delaney benchmark or custom CSV data.
-
-```bash
-# Use Delaney benchmark
-python scripts/predict_solubility.py
-
-# Use custom data
-python scripts/predict_solubility.py \
-    --data my_data.csv \
-    --smiles-col smiles \
-    --target-col solubility \
-    --predict "CCO" "c1ccccc1"
-```
-
-### 2. `graph_neural_network.py`
-Train various graph neural network architectures on molecular data.
-
-```bash
-# Train GCN on Tox21
-python scripts/graph_neural_network.py --model gcn --dataset tox21
-
-# Train AttentiveFP on custom data
-python scripts/graph_neural_network.py \
-    --model attentivefp \
-    --data molecules.csv \
-    --task-type regression \
-    --targets activity \
-    --epochs 100
-```
-
-### 3. `transfer_learning.py`
-Fine-tune pretrained models (ChemBERTa, GROVER, MolFormer) on molecular property prediction tasks.
-
-```bash
-# Fine-tune ChemBERTa on BBBP
-python scripts/transfer_learning.py --model chemberta --dataset bbbp
-
-# Fine-tune GROVER on custom data
-python scripts/transfer_learning.py \
-    --model grover \
-    --data small_dataset.csv \
-    --target activity \
-    --task-type classification \
-    --epochs 20
-```
-
-## Common Patterns and Best Practices
-
-### Pattern 1: Always Use Scaffold Splitting for Molecules
-```python
-# GOOD: Prevents data leakage
-splitter = dc.splits.ScaffoldSplitter()
-train, test = splitter.train_test_split(dataset)
-
-# BAD: Similar molecules in train and test
-splitter = dc.splits.RandomSplitter()
-train, test = splitter.train_test_split(dataset)
-```
-
-### Pattern 2: Normalize Regression Targets
-Fit target transformations on training data only and pass them to evaluation/prediction
-to recover the original units. This `transform_y=True` example does not normalize X;
-do not apply it to binary class labels.
-```python
-transformers = [
-    dc.trans.NormalizationTransformer(
-        transform_y=True,  # Also normalize target values
-        dataset=train
-    )
-]
-for transformer in transformers:
-    train = transformer.transform(train)
-    test = transformer.transform(test)
-```
-
-### Pattern 3: Start Simple, Then Scale
-1. Start with Random Forest + CircularFingerprint (fast baseline)
-2. Try XGBoost/LightGBM if RF works well
-3. Move to deep learning (MultitaskRegressor) if you have >5K samples
-4. Try GNNs if you have >10K samples
-5. Use transfer learning for small datasets or novel scaffolds
-
-### Pattern 4: Preserve Missing-Label Masks and Handle Imbalance
-For multitask data, keep `dataset.w` aligned with `X`, `y`, and `ids`: a zero weight
-can mark an unmeasured task, not an inactive compound. DeepChem CSV loading masks
-empty labels and drops unfeaturizable rows. Inspect per-task observed/positive counts
-and rejected IDs after loading; preserve masks in custom losses and metrics instead
-of treating placeholder zeros as negative assay results. Verify the loader behavior
-for your missing-value representation. See the [2.8.0 loader source](https://github.com/deepchem/deepchem/blob/2.8.0/deepchem/data/data_loader.py).
-
-For observed classification labels:
-```python
-# Option 1: Balancing transformer
-transformer = dc.trans.BalancingTransformer(dataset=train)
-train = transformer.transform(train)
-
-# Option 2: Use balanced metrics
-metric = dc.metrics.Metric(dc.metrics.balanced_accuracy_score)
-```
-
-### Pattern 5: Avoid Memory Issues
-```python
-# Use DiskDataset for large datasets
-dataset = dc.data.DiskDataset.from_numpy(X, y, w, ids)
-
-# Use smaller batch sizes
-model = dc.models.GCNModel(batch_size=32)  # Instead of 128
-```
-
-## Common Pitfalls
-
-### Issue 1: Data Leakage in Drug Discovery
-**Problem**: Using random splitting allows similar molecules in train/test sets.
-**Solution**: Always use `ScaffoldSplitter` for molecular datasets.
-
-### Issue 2: GNN Underperforming vs Fingerprints
-**Problem**: Graph neural networks perform worse than simple fingerprints.
-**Solutions**:
-- Ensure dataset is large enough (>10K samples typically)
-- Increase training epochs (50-100)
-- Try different architectures (AttentiveFP, DMPNN instead of GCN)
-- Use pretrained models (GROVER)
-
-### Issue 3: Overfitting on Small Datasets
-**Problem**: Model memorizes training data.
-**Solutions**:
-- Use stronger regularization (increase dropout to 0.5)
-- Use simpler models (Random Forest instead of deep learning)
-- Apply transfer learning (ChemBERTa, GROVER)
-- Collect more data
-
-### Issue 4: Import Errors
-**Problem**: `No module named 'torch'` / `No module named 'tensorflow'` warnings, or model classes fail to import.
-**Solution**: DeepChem loads lazily — install the backend that matches your model, then add the matching extra:
-```bash
-uv pip install deepchem              # loaders, featurizers, MoleculeNet only
-uv pip install 'deepchem[torch]'       # GCN, GAT, AttentiveFP, HuggingFaceModel, GroverModel
-uv pip install 'deepchem[tensorflow]'  # legacy Keras models
-uv pip install 'deepchem[jax]'         # Haiku/JAX models
-```
-Install PyTorch or TensorFlow with the correct CUDA build **before** the extra when using GPUs. Quote extras in zsh: `'deepchem[torch]'`.
-
-**Conda + PyTorch users:** If `import deepchem` fails with `undefined symbol: iJIT_NotifyEvent`, pin MKL below 2025 (`conda install "mkl<2025"`) — PyTorch wheels may be incompatible with MKL 2025.0.0.
-
-## Reference Documentation
-
-This skill includes comprehensive reference documentation:
-
-### `references/api_reference.md`
-Complete API documentation including:
-- All data loaders and their use cases
-- Dataset classes and when to use each
-- Complete featurizer catalog with selection guide
-- Model catalog organized by category (50+ models)
-- MoleculeNet dataset descriptions
-- Metrics and evaluation functions
-- Common code patterns
-
-**When to reference**: Search this file when you need specific API details, parameter names, or want to explore available options.
-
-### `references/workflows.md`
-Eight detailed end-to-end workflows:
-1. Molecular property prediction from SMILES
-2. Using MoleculeNet benchmarks
-3. Hyperparameter optimization
-4. Transfer learning with pretrained models
-5. Molecular generation with GANs
-6. Materials property prediction
-7. Protein sequence analysis
-8. Custom model integration
-
-**When to reference**: Use these workflows as templates for implementing complete solutions.
+Stable `HuggingFaceModel` returns logits and its training loss ignores sample
+weights. The bundled HF transfer script accepts one fully observed, unweighted
+binary/regression task and rejects sparse multitask datasets. A model ID or
+`model_dir` is not itself a loaded pretrained model.
 
 ## Installation
 
-Core package (data loaders, featurizers, MoleculeNet, scikit-learn wrappers):
+Use an isolated Python 3.11 environment, outside any repository environment whose
+Python requirement conflicts. This tested core stack supports the fingerprint,
+DMPNN, local HF and GROVER smoke paths:
 
 ```bash
-uv pip install deepchem
+uv venv --python 3.11 .venv-deepchem
+uv pip install --python .venv-deepchem/bin/python \
+  'deepchem==2.8.0' 'torch==2.14.1' 'transformers==5.18.0' \
+  'torch-geometric==2.8.0.post1'
 ```
 
-Add the extra that matches your model backend (install PyTorch/TensorFlow/JAX first for GPU builds):
+The CPU smoke checks used these versions, not GPU builds. For GPU training install
+the correct framework build according to its official platform instructions.
+GCN/GAT/AttentiveFP/Torch MPNN additionally require mutually compatible **DGL and
+DGL-LifeSci**; those backends were not available in this audit. Installing Torch
+alone, or importing DeepChem successfully, does not establish those model paths.
+
+The stable distribution exposes `torch`, `tensorflow`, `jax`, and `dqc` extras,
+with historical optional dependency requirements; they are not an assurance that
+every modern platform/backend combination resolves or executes. No `[all]` extra
+exists. The TensorFlow, JAX and quantum-chemistry routes were source-reviewed only.
+Check [release installation docs](https://deepchem.readthedocs.io/en/2.8.0/get_started/installation.html)
+and [requirements](https://deepchem.readthedocs.io/en/2.8.0/get_started/requirements.html).
+DeepChem attempts optional imports at package import time and can log skipped
+modules; it does not promise all classes are available after that import.
+
+## Bundled scripts
+
+The primary executable end-to-end example is `predict_solubility.py` with a custom
+CSV and query SMILES: validate complete continuous targets, create 2048-bit
+fingerprints, scaffold-split, fit training-target normalization, train a Torch
+`MultitaskRegressor`, then print original-unit metrics and predictions. Its Python
+training function returns `(model, test, transformers)`. It does not invoke the
+separate random-forest reference baseline or `GridHyperparamOpt` template.
+
+The command prints results; it does not export split IDs, rejected-row tables or a
+prediction file. Bad custom rows stop loading rather than becoming a saved rejection
+audit. Persist data provenance, split IDs and outputs explicitly when adapting it
+for research. Qualitative assay/applicability assessment remains the agent's work.
+
+Run from this skill directory with the selected environment's Python. These
+external-data commands are illustrative; offline synthetic fits are documented
+in the review. All scripts use CPU, a scaffold split, fixed epochs, and report metrics;
+they do not perform automatic early stopping or a hyperparameter search.
 
 ```bash
-uv pip install 'deepchem[torch]'       # GNNs, TorchModel, HuggingFaceModel, GroverModel
-uv pip install 'deepchem[tensorflow]'  # Keras/TensorFlow models
-uv pip install 'deepchem[jax]'         # JAX/Haiku models
-uv pip install 'deepchem[dqc]'         # Differentiable quantum chemistry (torch + xitorch)
+# ESOL log10(mol/L), or custom continuous targets in their declared input units.
+python scripts/predict_solubility.py --epochs 50
+python scripts/predict_solubility.py --data measured.csv \
+  --smiles-col smiles --target-col logS --predict CCO c1ccccc1
+
+# Model-specific graph features, including bonds where required.
+python scripts/graph_neural_network.py --model dmpnn --dataset bbbp --epochs 20
+
+# Explicit HF network + tokenizer; single complete task only.
+python scripts/transfer_learning.py --model chemberta --dataset bbbp --epochs 10
 ```
 
-Nightly builds: `uv pip install --pre deepchem` (same extras apply with `--pre`).
+The CSV guard rejects duplicate headers, non-finite labels, invalid SMILES and
+featurization row loss. Empty labels remain masked for compatible graph losses;
+custom solubility and HF training require complete targets. The shared scorer
+reports original-unit regression metrics and excludes undefined AUC tasks from
+macro means while reporting the contributing task count.
 
-See [installation guide](https://deepchem.readthedocs.io/en/latest/get_started/installation.html) and [soft requirements](https://deepchem.readthedocs.io/en/latest/requirements.html) for optional dependencies per model class.
+MoLFormer uses the current `ibm-research/MoLFormer-XL-both-10pct` repository and
+needs reviewed repository code plus an explicit revision. GROVER needs a local
+DeepChem component checkpoint and matching JSON architecture; simply creating a
+fresh model is not transfer learning. See
+[references/typical_workflows.md](references/typical_workflows.md) for both recipes.
 
-## Additional Resources
+## References and validation
 
-- Official documentation: https://deepchem.readthedocs.io/
-- GitHub repository: https://github.com/deepchem/deepchem
-- Tutorials: https://deepchem.readthedocs.io/en/latest/get_started/tutorials.html
-- Paper: "MoleculeNet: A Benchmark for Molecular Machine Learning"
+- [Core scientific workflow and executable numeric baseline](references/core_capabilities.md)
+- [Versioned API/representation/split/metric contracts](references/api_reference.md)
+- [Script recipes](references/typical_workflows.md)
+- [Search, generation, materials, sequence and custom-model workflows](references/workflows.md)
+- [Executed review evidence and limitations](references/review.md)
 
 ## Citing Scientific Agent Skills
 

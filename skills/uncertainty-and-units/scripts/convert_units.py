@@ -117,6 +117,8 @@ def convert(
         ) from exc
     except pint.errors.PintError as exc:
         raise CliError(f"pint could not perform the conversion: {exc}") from exc
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise CliError(f"invalid conversion or context parameters: {exc}") from exc
 
 
 def propagate(
@@ -135,14 +137,23 @@ def propagate(
     context introduces.
     """
 
-    step = 1e-6 * max(abs(value), 1.0)
+    if uncertainty == 0:
+        return 0.0
+    # Keep the perturbation relative to the supplied magnitude: a fixed floor
+    # of 1 made 532e-9 metres differ from 532 nanometres for reciprocal contexts.
+    step = (math.ulp(1.0) ** (1.0 / 3.0)) * (abs(value) if value else 1.0)
+    if step == 0 or value + step == value or value - step == value:
+        raise CliError("magnitude is too small to resolve a conversion derivative")
     high = convert(registry, value + step, unit, target, contexts, parameters)
     low = convert(registry, value - step, unit, target, contexts, parameters)
     # audit-units: ignore UNIT003 -- both quantities were just converted to `target`
     derivative = (high.magnitude - low.magnitude) / (2.0 * step)
     if not math.isfinite(derivative):
         raise CliError("the conversion is not differentiable at this value")
-    return abs(derivative) * uncertainty
+    propagated = abs(derivative) * uncertainty
+    if not math.isfinite(propagated):
+        raise CliError("propagated uncertainty is not finite")
+    return propagated
 
 
 def run(arguments: argparse.Namespace) -> dict[str, Any]:
@@ -181,6 +192,8 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         "unit": str(result.units),
         "warnings": [],
     }
+    if not math.isfinite(document["value"]):
+        raise CliError("converted value is not finite; check the conversion domain")
 
     source_multiplicative = is_multiplicative(registry, unit)
     target_multiplicative = is_multiplicative(registry, target)
@@ -189,7 +202,12 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         # audit-units: ignore UNIT003 -- `one` is already in `target`
         document["conversion_factor"] = float(one.magnitude)
 
-    if not source_multiplicative or not target_multiplicative:
+    offset_temperature = (
+        (not source_multiplicative or not target_multiplicative)
+        and registry.Quantity(1, unit).check("[temperature]")
+        and registry.Quantity(1, target).check("[temperature]")
+    )
+    if offset_temperature:
         document["warnings"].append(f"{OFFSET_HINT} (in {unit} or {target})")
     for candidate in (unit, target):
         # audit-units: ignore UNIT004 -- this line is the detector, not a usage
@@ -209,18 +227,25 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         document["input"]["uncertainty"] = arguments.uncertainty
         document["uncertainty"] = converted
         note = "propagated through the local derivative of the conversion"
-        if not source_multiplicative or not target_multiplicative:
+        document["uncertainty_unit"] = target
+        if offset_temperature:
+            difference_unit = f"delta_{target}" if not target_multiplicative else target
+            document["uncertainty_unit"] = difference_unit
             note += (
                 "; for an offset temperature that derivative is the scale factor "
-                f"alone, so the result is {converted:.6g} delta_{target}, not a "
+                f"alone, so the result is {converted:.6g} {difference_unit}, not a "
                 "point on the scale"
             )
+        if "dB" in target or "decibel" in target:  # audit-units: ignore UNIT004 -- detector
+            document["uncertainty_unit"] = "dB"  # audit-units: ignore UNIT004 -- label
+            note += "; uncertainty on a logarithmic level is a level difference in dB"  # audit-units: ignore UNIT004 -- label
         document["uncertainty_note"] = note
-        if contexts:
+        if contexts or not source_multiplicative or not target_multiplicative:
             document["warnings"].append(
                 "a context conversion can be nonlinear, so the propagated "
                 "uncertainty is a first-order approximation valid only while the "
-                "uncertainty is small compared with the value"
+                "conversion is locally linear across the input uncertainty; "
+                "context parameters such as mw and n are treated as exact"
             )
     return document
 

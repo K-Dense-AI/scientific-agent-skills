@@ -17,10 +17,11 @@ Returns only the specified fields. Accepts a comma-separated list of field names
 
 ### Aggregation / Auto-Sum
 
-When the `fields=` parameter excludes some non-numeric fields, the API automatically groups by the remaining fields and sums numeric values.
+In some endpoints, omitting fields aggregates non-unique rows and sums numeric values. This is not a universal SQL-style grouping guarantee. Keep the dimensions identifying each observation when working with rates, balances, totals or hierarchical statements.
 
 ```python
-# Returns sum of transaction amounts grouped by record_date and transaction_type
+# Demonstrates API aggregation; this is NOT a validated cash-flow total.
+# Statement subtotals and overlapping categories must be resolved first.
 params = {
     "fields": "record_date,transaction_type,transaction_today_amt"
 }
@@ -119,57 +120,63 @@ import requests
 import pandas as pd
 
 def fetch_all(endpoint, params=None, max_pages=50, max_records=500_000):
-    """Fetch paginated results and return as DataFrame.
-
-    Stops when all pages are retrieved or when max_pages / max_records limits
-    are reached. Retries on HTTP 429 with exponential backoff.
-    """
+    """Return all matching rows or raise on a bound or changed result size."""
+    if max_pages < 1 or max_records < 1:
+        raise ValueError("Bounds must be positive")
     params = dict(params or {})
-    params["page[size]"] = min(params.get("page[size]", 10000), 10000)
+    allowed = {"fields", "filter", "sort", "format", "page[size]", "page[number]"}
+    if set(params) - allowed:
+        raise ValueError(f"Unknown query parameters: {set(params) - allowed}")
+    if params.get("format", "json") != "json":
+        raise ValueError("fetch_all requires JSON")
+    size = int(params.get("page[size]", 1000))
+    if size < 1:
+        raise ValueError("page[size] must be positive")
+    params["page[size]"] = min(size, 10000)  # local request-size policy
     params["page[number]"] = 1
-
     base = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
-    all_data = []
-
-    for _ in range(max_pages):
+    rows = []
+    expected = None
+    for page in range(1, max_pages + 1):
+        params["page[number]"] = page
         for attempt in range(3):
-            resp = requests.get(f"{base}{endpoint}", params=params)
-            if resp.status_code == 429:
-                time.sleep(2 ** attempt)
+            resp = requests.get(base + endpoint, params=params, timeout=30)
+            if resp.status_code in (429, 502, 503, 504) and attempt < 2:
+                delay = resp.headers.get("Retry-After", "")
+                time.sleep(min(float(delay), 60) if delay.isdigit() else 2 ** attempt)
                 continue
             resp.raise_for_status()
             break
-        else:
-            raise RuntimeError("Rate limited after retries")
-
         result = resp.json()
         if "error" in result:
-            raise ValueError(f"API error: {result['error']} — {result.get('message', '')}")
-
-        all_data.extend(result["data"])
-        if len(all_data) >= max_records:
-            all_data = all_data[:max_records]
-            break
-
-        meta = result["meta"]
-        if params["page[number]"] >= meta["total-pages"]:
-            break
-        params["page[number]"] += 1
-        time.sleep(0.1)
-    else:
-        raise RuntimeError(
-            f"Reached max_pages={max_pages}; increase limit or narrow filters"
-        )
-
-    return pd.DataFrame(all_data)
+            raise ValueError(result)
+        total = int(result["meta"]["total-count"])
+        pages = int(result["meta"]["total-pages"])
+        if total > max_records or pages > max_pages:
+            raise RuntimeError("Result exceeds bounds; narrow filters or raise limits")
+        if expected is not None and total != expected:
+            raise RuntimeError("Result count changed during pagination; rerun snapshot")
+        expected = total
+        rows.extend(result["data"])
+        if len(rows) > max_records:
+            raise RuntimeError("Result exceeds max_records")
+        if page >= pages:
+            if len(rows) != expected:
+                raise RuntimeError("Incomplete result")
+            return pd.DataFrame(rows)
+    raise RuntimeError("Reached max_pages before completion")
 ```
+
+This detects count changes, not every possible revision with unchanged row counts.
+Use explicit date bounds and a deterministic sort (including row identifiers when
+needed), and retain the raw download for a reproducible snapshot.
 
 ## Combining Parameters
 
 ```python
 params = {
-    "fields": "country_currency_desc,exchange_rate,record_date",
-    "filter": "country_currency_desc:in:(Canada-Dollar,Euro),record_date:gte:2020-01-01",
+    "fields": "country_currency_desc,exchange_rate,record_date,effective_date",
+    "filter": "country_currency_desc:in:(Canada-Dollar,Euro Zone-Euro),record_date:gte:2020-01-01",
     "sort": "-record_date",
     "format": "json",
     "page[size]": 100,
@@ -177,6 +184,8 @@ params = {
 }
 resp = requests.get(
     "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/rates_of_exchange",
-    params=params
+    params=params,
+    timeout=30,
 )
+resp.raise_for_status()
 ```

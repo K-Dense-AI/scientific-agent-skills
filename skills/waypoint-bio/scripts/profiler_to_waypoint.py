@@ -26,6 +26,7 @@ Examples
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 from pathlib import Path
@@ -155,13 +156,19 @@ def parse_metaphlan(path: Path, rank: str) -> pd.DataFrame:
         if dropped in frame.columns:
             frame = frame.drop(columns=[dropped])
 
+    # Select the requested cumulative rank before removing unsupported strain
+    # segments: otherwise a species row and its t__ descendants count twice.
+    strain_rows = frame[clade_col].map(
+        lambda value: any(part.strip().startswith("t__") for part in re.split(r"[|;]", str(value)))
+    )
+    frame = frame.loc[~strain_rows].copy()
     frame[clade_col] = frame[clade_col].map(normalise_lineage)
     frame = frame[frame[clade_col].map(deepest_rank) == rank]
     if frame.empty:
         raise ValueError(f"{path}: no rows at rank {rank!r}")
 
     frame = frame.set_index(clade_col)
-    matrix = frame.apply(pd.to_numeric, errors="coerce").fillna(0.0).T
+    matrix = frame.apply(pd.to_numeric, errors="raise").fillna(0.0).T
     matrix.index.name = "sample_id"
     return matrix
 
@@ -227,6 +234,8 @@ def parse_kraken(paths: list[Path], rank: str) -> pd.DataFrame:
 
     per_sample = {}
     for path in paths:
+        if path.stem in per_sample:
+            raise ValueError(f"duplicate sample ID from report filenames: {path.stem}")
         series = parse_kraken_report(path, rank)
         if series.empty:
             print(f"warning: {path} has no rows at rank {rank!r}", file=sys.stderr)
@@ -253,18 +262,20 @@ def parse_table(
     frame = pd.read_csv(path, sep=sep, skiprows=skiprows)
     frame.columns = [str(c).lstrip("#").strip() for c in frame.columns]
 
-    if taxonomy_column and taxonomy_column in frame.columns:
+    if taxonomy_column and taxonomy_column not in frame.columns:
+        raise ValueError(f"taxonomy column {taxonomy_column!r} not found in {path}")
+    if taxonomy_column:
         lineages = frame[taxonomy_column].astype(str).map(normalise_lineage)
         feature_col = frame.columns[0]
         drop = {taxonomy_column, feature_col}
         values = frame.drop(columns=[c for c in frame.columns if c in drop])
-        values = values.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        values = values.apply(pd.to_numeric, errors="raise").fillna(0.0)
         values.index = lineages
         matrix = values.T
     else:
         label_col = frame.columns[0]
         indexed = frame.set_index(label_col)
-        numeric = indexed.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        numeric = indexed.apply(pd.to_numeric, errors="raise").fillna(0.0)
         taxa_as_rows = orientation == "taxa_as_rows" or (
             orientation == "auto"
             and str(label_col).lower()
@@ -277,7 +288,8 @@ def parse_table(
             numeric.columns = [normalise_lineage(c) for c in numeric.columns]
             matrix = numeric
 
-    keep = [c for c in matrix.columns if str(c).strip()]
+    # A boolean mask preserves each duplicate lineage once for later summation.
+    keep = [bool(str(c).strip()) for c in matrix.columns]
     matrix = matrix.loc[:, keep]
     matrix.index = matrix.index.astype(str)
     matrix.index.name = "sample_id"
@@ -305,8 +317,14 @@ def matrix_to_waypoint(
 
     if matrix.empty:
         raise ValueError("abundance matrix is empty")
+    if not matrix.index.is_unique:
+        raise ValueError("sample IDs must be unique")
+    if not math.isfinite(min_abundance) or min_abundance < 0:
+        raise ValueError("min_abundance must be finite and nonnegative")
 
     values = matrix.astype(float)
+    if any(not math.isfinite(v) or v < 0 for v in values.to_numpy().flat):
+        raise ValueError("abundances must be finite and nonnegative")
     if values.columns.duplicated().any():
         values = values.T.groupby(level=0).sum().T
 
@@ -345,14 +363,18 @@ def attach_metadata(frame: pd.DataFrame, metadata_path: Path) -> pd.DataFrame:
     suffix = metadata_path.suffix.lower()
     if suffix == ".parquet":
         meta = pd.read_parquet(metadata_path)
+        if isinstance(meta.index, pd.RangeIndex) and meta.index.name is None:
+            raise ValueError("parquet metadata must have a sample-ID index")
     else:
-        meta = pd.read_csv(metadata_path, sep="\t" if suffix in {".tsv", ".tab"} else ",")
-    if meta.index.name is None or meta.index.dtype != object:
-        meta = meta.set_index(meta.columns[0])
+        sep = "\t" if suffix in {".tsv", ".tab"} else ","
+        id_column = pd.read_csv(metadata_path, sep=sep, nrows=0).columns[0]
+        meta = pd.read_csv(metadata_path, sep=sep, index_col=0, dtype={id_column: str})
     meta.index = meta.index.astype(str)
+    if not meta.index.is_unique:
+        raise ValueError("metadata sample IDs must be unique")
 
     joined = frame.join(meta, how="left")
-    missing = int(joined[meta.columns[0]].isna().sum()) if len(meta.columns) else 0
+    missing = int((~frame.index.isin(meta.index)).sum())
     if missing:
         print(
             f"warning: {missing}/{len(joined)} samples had no metadata match; "

@@ -114,6 +114,11 @@ channel:
 
 `new_tip` is a contamination decision.
 
+For standard `distribute()` and `consolidate()`, `new_tip="always"` still uses
+one tip for the entire command, including refills. The isolation behavior below
+applies to `transfer()`; use explicit transfers or building blocks for
+independent samples. Liquid-class commands have their own policies.
+
 | Policy | Typical use | Primary risk |
 | --- | --- | --- |
 | `"always"` | Independent samples, controls, or source-destination pairs | Higher tip consumption |
@@ -132,6 +137,30 @@ Calculate tips for every conditional path. Multi-channel operations consume
 sets, not individual command calls.
 
 ## Flow Rate, Position, and Delays
+
+### Flex 50 µL volume modes
+
+The nominal 1–50 µL range spans two modes. With an empty Flex 1- or 8-channel
+50 µL pipette, call `configure_for_volume()` before pickup:
+
+```python
+pipette.configure_for_volume(1)
+pipette.pick_up_tip()
+pipette.aspirate(1, source)
+pipette.dispense(1, destination)
+pipette.drop_tip()
+```
+
+Inputs 1–4.9 µL select a 1–30 µL mode; inputs 5–50 µL select a 5–50 µL mode.
+Tips may further limit capacity. Reconfigure while empty when changing modes,
+and requalify low-volume delivery for the actual liquid. Simulation validates
+the mode/range contract, not accuracy at 1 µL.
+
+The 10.0.0 simulator reports `min_volume=0.5` in low-volume mode, below the
+official guide's 1 µL lower limit. Keep the documented 1 µL limit unless
+Opentrons explicitly qualifies a lower range for the exact hardware and tips;
+the property alone is not evidence of accuracy below 1 µL. Mode changes also
+reset flow rates, so apply any validated custom rate after changing mode.
 
 ### Relative and absolute rates
 
@@ -265,6 +294,15 @@ The calculated surface depends on liquid volume and labware geometry. With
 dynamic aspiration or dispensing, `target="start"` and `target="end"` can
 represent the expected surface at either end of the operation.
 
+API 2.30 permits a start-only aspiration without an end location:
+
+```python
+pipette.aspirate(50, reservoir["A1"].meniscus(z=-1, target="start"))
+```
+
+At API 2.29 and lower, that form raises an error; use the documented end-target
+or dynamic start/end form instead. This 2.30 fix does not add OT-2 support.
+
 Do not rely on meniscus targeting until declared volumes, well geometry, and
 liquid-level behavior have been checked on the robot.
 
@@ -296,6 +334,9 @@ Operational constraints:
 - An 8-channel pipette has pressure sensors only on channels 1 and 8.
 - A 96-channel pipette has pressure sensors only on channels 1 and 96.
 - A wet tip can defeat absence detection.
+- With global detection, complex-command refills may check with a wet tip.
+  Prefer building blocks that pick up a fresh tip immediately before every
+  checked aspiration.
 - Detection is not a substitute for source-volume planning.
 
 Use explicit checks at critical sources when global detection would add too
@@ -356,6 +397,12 @@ For a full 96-well plate and an 8-channel pipette:
 4. Use a fresh tip set at each dilution step unless the validated method says
    otherwise.
 5. Remove one transfer volume from column 12 if equal final volumes are needed.
+
+The bundled template uses 13 sets of eight tips (104 individual tips), draws
+8,800 µL diluent from the 12,000 µL setup volume, and collects 800 µL final
+liquid waste in initially empty reservoir A12. That reserve still requires
+validation against the source's dead volume. Waste must remain separate from
+diluent; the trash bin receives tips.
 
 Referencing A-row wells addresses full columns:
 

@@ -3,9 +3,11 @@ name: datamol
 description: Pythonic wrapper around RDKit with simplified interface and sensible defaults. Preferred for standard drug discovery including SMILES parsing, standardization, descriptors, fingerprints, clustering, 3D conformers, parallel processing. Returns native rdkit.Chem.Mol objects. For advanced control or custom parameters, use rdkit directly.
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.8+ and datamol (uv pip install). RDKit is installed automatically as a datamol dependency (since 0.12.2). Optional s3fs/gcsfs for cloud I/O via fsspec.
+compatibility: Requires Python 3.11+ and datamol 0.13.0 with RDKit 2024.09+. Installation needs network access; local molecular workflows need no credentials. Remote I/O needs the selected provider credentials.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
+  upstream-version: "0.13.0"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,7 +17,13 @@ metadata:
 
 Datamol is a Python library that provides a lightweight, Pythonic abstraction layer over RDKit for molecular cheminformatics. Simplify complex molecular operations with sensible defaults, efficient parallelization, and modern I/O capabilities. All molecular objects are native `rdkit.Chem.Mol` instances, ensuring full compatibility with the RDKit ecosystem.
 
-**Version note:** Examples target **datamol 0.12.x** (PyPI stable: **0.12.5**, June 2024). Since 0.10.0, modules are lazy-loaded by default (set `DATAMOL_DISABLE_LAZY_LOADING=1` to disable). Since 0.12.2, RDKit is a direct PyPI dependency of datamol. Fingerprints use RDKit's `rdFingerprintGenerator` API (0.12.5+).
+**Verified target:** datamol **0.13.0**, released September 9, 2026. Local checks used
+Python 3.13 and RDKit 2026.03.6. Python 3.11+ and RDKit 2024.09+ are required.
+The 0.13 distribution includes SELFIES, visualization, cloud, Excel and Parquet
+runtime dependencies. Current API examples and verification limits are recorded in
+[references/review.md](references/review.md). Pin the environment: RDKit upgrades can
+change canonical representations and retained conformers. Compare chemical invariants,
+not a fixed conformer count or an exact version-dependent canonical string.
 
 **Key capabilities**:
 - Molecular format conversion (SMILES, SELFIES, InChI)
@@ -34,15 +42,12 @@ Datamol is a Python library that provides a lightweight, Pythonic abstraction la
 Guide users to install datamol:
 
 ```bash
-uv pip install datamol
+uv pip install "datamol==0.13.0"
 ```
 
-RDKit is installed automatically with datamol. For remote file paths (S3, GCS, HTTP), install the matching fsspec backend:
-
-```bash
-uv pip install s3fs   # AWS S3
-uv pip install gcsfs  # Google Cloud Storage
-```
+RDKit and the S3/GCS, Excel/Parquet, visualization and SELFIES dependencies are
+installed by the current distribution; separate feature extras are not required.
+Use an isolated environment to avoid conflicting scientific-package requirements.
 
 **Import convention**:
 ```python
@@ -79,12 +84,14 @@ Datamol includes built-in parallelization for many operations. Use `n_jobs` para
 
 **Functions supporting parallelization**:
 - `dm.read_sdf(..., n_jobs=-1)`
-- `dm.descriptors.batch_compute_many_descriptors(..., n_jobs=-1)`
+- `dm.descriptors.batch_compute_many_descriptors(..., n_jobs=-1, batch_size=128)`
 - `dm.cluster_mols(..., n_jobs=-1)`
 - `dm.pdist(..., n_jobs=-1)`
 - `dm.conformers.sasa(..., n_jobs=-1)`
 
 **Progress bars**: Many batch operations support `progress=True` parameter.
+For parallel descriptor batches, supply a positive `batch_size` (for example 128).
+In the tested 0.13.0 stack the default None reaches joblib and raises when parallelism is enabled.
 
 ## Reference Documentation
 
@@ -117,12 +124,12 @@ For detailed API documentation, consult these reference files:
 
 3. **Use parallel processing** for large datasets:
    ```python
-   result = dm.operation(..., n_jobs=-1, progress=True)
+   result = dm.parallelized(dm.to_mol, smiles_list, n_jobs=-1, progress=True)
    ```
 
-4. **Use cloud I/O only when requested** — confirm remote write paths; install `s3fs`/`gcsfs` as needed:
+4. **Use cloud I/O for the requested remote paths** with the selected provider credentials:
    ```python
-   df = dm.read_sdf("s3://bucket/compounds.sdf")
+   df = dm.read_sdf("s3://bucket/compounds.sdf", as_df=True, mol_column="mol")
    ```
 
 5. **Use appropriate fingerprints** for similarity:
@@ -131,14 +138,17 @@ For detailed API documentation, consult these reference files:
    - Atom pairs: Considers atom pairs and distances
 
 6. **Consider scale limitations**:
-   - Butina clustering: ~1,000 molecules (full distance matrix)
-   - For larger datasets: Use diversity selection or hierarchical methods
+   - Butina clustering stores O(N²) pairwise distances; choose a size limit from the memory budget.
+   - For larger datasets: use `pick_diverse` with a bounded `npick`; hierarchical clustering can also need quadratic memory.
 
 7. **Scaffold splitting for ML**: Ensure proper train/test separation by scaffold
 
 8. **Align molecules** when visualizing SAR series
 
 ## Error Handling
+
+Illustrative input policy: provide `smiles_list` and retain source IDs plus failures alongside
+the accepted molecules. Standardization is task-specific, not a repair guarantee.
 
 ```python
 # Safe molecule creation
@@ -162,21 +172,22 @@ for smiles in smiles_list:
 
 ## Integration with Machine Learning
 
+Illustrative model template: supply aligned `train_mols`, `y_target`, and held-out `test_mols`.
+Split compounds by the task-appropriate scaffold/group before fitting any learned preprocessing.
+
 Datamol ships with `scipy` and `scikit-learn` as dependencies. Import them as normal PyPI packages — they are not scripts bundled in this skill.
 
 ```python
 import numpy as np
 
-# Feature generation
-X = np.array([dm.to_fp(mol) for mol in mols])
-
-# Or descriptors
-desc_df = dm.descriptors.batch_compute_many_descriptors(mols, n_jobs=-1)
-X = desc_df.values
+# Use the same fingerprint schema for training and held-out molecules.
+fp_options = dict(fp_type="ecfp", radius=2, fpSize=2048, includeChirality=True)
+X = np.stack([dm.to_fp(mol, **fp_options) for mol in train_mols])
+X_test = np.stack([dm.to_fp(mol, **fp_options) for mol in test_mols])
 
 # Train model (scikit-learn PyPI package)
 from sklearn.ensemble import RandomForestRegressor  # third-party library
-model = RandomForestRegressor()
+model = RandomForestRegressor(random_state=42)
 model.fit(X, y_target)
 
 # Predict
@@ -192,10 +203,10 @@ predictions = model.predict(X_test)
 - **Solution**: Use `dm.pick_diverse()` instead of full clustering for large sets
 
 **Issue**: Slow conformer generation
-- **Solution**: Reduce `n_confs` or increase `rms_cutoff` to generate fewer conformers
+- **Solution**: Reduce `n_confs` to lower embedding work. RMS pruning happens after embedding/minimization, so a larger `rms_cutoff` reduces retained conformers without avoiding the initial work
 
 **Issue**: Remote file access fails
-- **Solution**: Install the matching fsspec backend (`uv pip install s3fs` or `gcsfs`) and verify only the provider credentials needed for that backend are set (see Remote file support above)
+- **Solution**: Verify the selected fsspec protocol and provider credentials. S3/GCS dependencies are included in 0.13.0; other backends may need installation. Remote authorization and writes were not tested here
 
 ## Additional Resources
 

@@ -2,17 +2,15 @@
 
 # Issue Documentation Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
-**Use this template for:** Documenting bugs, feature requests, improvement proposals, incidents, or any trackable work item as a persistent markdown record. This file IS the issue — the full lifecycle from report through investigation, resolution, and lessons learned — in a format that's searchable, portable, and part of your codebase.
+**Use this template for:** Documenting bugs, feature requests, improvement proposals, incidents, or any trackable work item as a persistent markdown record. It can document the full lifecycle from report through investigation, resolution, and lessons learned — in a format that's searchable, portable, and part of your codebase.
 
 **Key features:** Classification with severity/priority, customer impact quantification, reproduction steps with expected vs actual, investigation log, resolution with root cause, acceptance criteria for feature requests, and SLA tracking.
 
-**Philosophy:** This file is the source of truth for the issue — not GitHub Issues, not Jira, not Linear. Those platforms are notification and comment layers. The full lifecycle — report, investigation, root cause, fix, and lessons learned — lives HERE, committed to the repo.
-
-An issue report is a contract between the reporter and the resolver. Vague issues get vague fixes. The best issue documents are so clear that anyone on the team — or any AI agent — could pick them up, understand the problem, and start working without asking a single clarifying question. Include everything. Assume the person reading this has zero prior context.
-
-This is the [Everything is Code](../markdown_style_guide.md#-everything-is-code) philosophy: any agent or team member can find, read, and update issues with file access alone. No API, no tokens, no platform lock-in. `grep docs/project/issues/` beats searching Jira every time.
+**Project convention:** Use this optional file-based record only when the project requests
+it. Preserve the established tracker/PR workflow, link the live record, and replace all
+example paths. Editing this Markdown file does not update a hosted issue, PR, or board.
 
 ---
 
@@ -57,7 +55,7 @@ This template has two variants — use the section that matches your issue type:
 | **Status**             | [Open / In progress / Resolved / Closed / Won't fix]                                              |
 | **Users affected**     | [Count or segment — e.g., "~2,000 free-tier users" / "All API consumers"]                         |
 | **Revenue impact**     | [None / Indirect / Direct — $N/day or N% of transactions]                                         |
-| **Resolved in**        | [PR-#NUMBER](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md) or N/A |
+| **Resolved in**        | PR-#NUMBER (replace with the project link) or N/A |
 | **Time to resolution** | [N hours / N days — from report to fix deployed]                                                  |
 
 ---
@@ -160,7 +158,7 @@ flowchart TB
 
 [What was changed to fix the bug. Link to the PR.]
 
-**Fixed in:** [PR-#NUMBER](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md)
+**Fixed in:** PR-#NUMBER (replace with the project link)
 
 ### Verification
 
@@ -177,7 +175,7 @@ flowchart TB
 
 ## 🔗 References
 
-- [Related issues](../../docs/project/issues/issue-00000001-agentic-documentation-system.md)
+- Related issues (replace with the project link)
 - [Relevant documentation](https://example.com)
 - [Monitoring dashboard or alert](https://example.com)
 
@@ -205,7 +203,7 @@ _Last updated: [Date]_
 | **Date requested** | [YYYY-MM-DD]                                                                                      |
 | **Status**         | [Proposed / Accepted / In progress / Shipped / Declined]                                          |
 | **Target release** | [Version, sprint, or quarter]                                                                     |
-| **Shipped in**     | [PR-#NUMBER](../../docs/project/pr/pr-00000001-agentic-docs-and-monorepo-modernization.md) or N/A |
+| **Shipped in**     | PR-#NUMBER (replace with the project link) or N/A |
 
 ---
 
@@ -295,8 +293,8 @@ flowchart TB
 
 - [User feedback or support tickets](https://example.com)
 - [Competitive analysis](https://example.com)
-- [Related feature requests](../../docs/project/issues/issue-00000001-agentic-documentation-system.md)
-- [Design document or ADR](../adr/ADR-001-agent-optimized-documentation-system.md)
+- Related feature requests (replace with the project link)
+- Design document or ADR (replace with the project link)
 
 ---
 

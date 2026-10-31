@@ -12,24 +12,27 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 
 try:
-    from rdkit import Chem
+    from rdkit import Chem, rdBase
     from rdkit.Chem import Descriptors, Lipinski
 except ImportError:
     print("Error: RDKit not installed. Install with: uv pip install rdkit")
     sys.exit(1)
 
 
+from _common import read_molecule_records, molecule_smiles
+
+
 def calculate_properties(mol):
     """Calculate comprehensive molecular properties."""
-    if mol is None:
+    if mol is None or mol.GetNumAtoms() == 0:
         return None
 
     properties = {
         # Basic properties
-        'SMILES': Chem.MolToSmiles(mol),
+        'SMILES': molecule_smiles(mol),
+        'RDKit_Version': rdBase.rdkitVersion,
         'Molecular_Formula': Chem.rdMolDescriptors.CalcMolFormula(mol),
 
         # Molecular weight
@@ -92,7 +95,7 @@ def calculate_properties(mol):
 def process_single_molecule(smiles):
     """Process a single SMILES string."""
     mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
+    if mol is None or mol.GetNumAtoms() == 0:
         print(f"Error: Failed to parse SMILES: {smiles}")
         return None
 
@@ -102,31 +105,14 @@ def process_single_molecule(smiles):
 
 def process_file(input_file, output_file=None):
     """Process molecules from a file."""
-    input_path = Path(input_file)
-
-    if not input_path.exists():
-        print(f"Error: File not found: {input_file}")
-        return
-
-    # Determine file type
-    if input_path.suffix.lower() in ['.sdf', '.mol']:
-        suppl = Chem.SDMolSupplier(str(input_path))
-    elif input_path.suffix.lower() in ['.smi', '.smiles', '.txt']:
-        suppl = Chem.SmilesMolSupplier(str(input_path), titleLine=False)
-    else:
-        print(f"Error: Unsupported file format: {input_path.suffix}")
-        return
-
     results = []
-    for idx, mol in enumerate(suppl):
-        if mol is None:
-            print(f"Warning: Failed to parse molecule {idx+1}")
-            continue
-
+    for index, mol in read_molecule_records(input_file):
         props = calculate_properties(mol)
-        if props:
-            props['Index'] = idx + 1
-            results.append(props)
+        props['Index'] = index
+        props['Name'] = mol.GetProp('_Name') if mol.HasProp('_Name') else ''
+        results.append(props)
+    if not results:
+        raise ValueError("No valid, nonempty molecules in input")
 
     # Output results
     if output_file:
@@ -229,14 +215,20 @@ Examples:
         parser.print_help()
         sys.exit(1)
 
-    if args.smiles:
+    if args.smiles is not None:
         # Process single molecule
         props = process_single_molecule(args.smiles)
-        if props:
-            print_properties(props)
+        if props is None:
+            parser.error("Invalid or empty SMILES")
+        print_properties(props)
+        if args.output:
+            write_csv([props], args.output)
     elif args.file:
         # Process file
-        process_file(args.file, args.output)
+        try:
+            process_file(args.file, args.output)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
 
 
 if __name__ == '__main__':

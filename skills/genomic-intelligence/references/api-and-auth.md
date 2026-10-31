@@ -26,7 +26,7 @@ commit it.
 
 ## Endpoints
 
-Eleven operations are published. The six predict paths are **literal, one per
+Twelve operations are published in contract revision 16. The six predict paths are **literal, one per
 task**; the published document has no templated `/v1/tasks/{task}/predict`
 operation.
 
@@ -39,10 +39,11 @@ operation.
 | POST | `/v1/tasks/annotation/predict` | `AnnotationPredictRequest` |
 | POST | `/v1/tasks/expression/predict` | `ExpressionPredictRequest` (also requires `options`) |
 | POST | `/v1/workflows/find-genes-and-predict-expression` | Composite: find genes, predict each one's expression |
-| GET | `/v1/tasks/jobs` | List async jobs |
+| GET | `/v1/tasks/jobs` | Recent own jobs, `limit=1..500` (default 50); flat `{jobs, count}`, no cursor/offset |
 | GET | `/v1/tasks/jobs/{job_id}` | Poll an async job (202 running → 200 terminal) |
 | GET | `/v1/tasks/{task}/models` | List available model IDs for a task |
-| GET | `/health` | Public liveness |
+| GET | `/health` | Public liveness; does not validate a prediction key |
+| POST | `/v1/workflows/genomic-variant-interpretation` | Separate async-only VCF workflow; see boundary below |
 
 There is no usable templated route to fall back on: the six literal paths are
 matched first, and any other task segment is `404 not_found`
@@ -76,8 +77,8 @@ document must be regenerated against the current one: the shared `PredictRequest
 model such clients were built from is not in the published document.
 
 Success is a `{data, meta}` envelope; `data` is task-specific (see `tasks.md`),
-`meta` carries model + request info. **Exception:** `GET /v1/tasks/{task}/models`
-is *not* enveloped — it returns a flat
+`meta` carries model + request info. **Exceptions:** job listing is flat `{jobs, count}`; `GET /v1/tasks/{task}/models`
+is also *not* enveloped — it returns a flat
 `{task, default_model, models: [{id, name, description, is_default, bio_spec}]}`.
 
 Errors use an `{error}` envelope carrying `code`, `message`, `request_id` and an
@@ -105,3 +106,45 @@ practice — feed transcript orientation.
 
 Keys are scoped to a tier with concurrency and per-minute caps. A `429` means a
 cap was hit — back off and retry, or ask GI to raise the tier.
+
+## Job lifecycle and response stability
+
+`GET /v1/tasks/jobs/{job_id}` returns 202 while accepted/running, 200 for a
+successful result, the underlying 4xx/5xx for a failed job, 404 for unknown or
+not-owned work, and 410 for expiration. Completed bodies differ across the six
+tasks, the composite, and VCF receipts: branch on **`data.task`**, not first-match
+union deserialization. Results are documented as retained 24 hours from last
+activity; listing is only a recent list, not a way to page through all history.
+
+`data.summary` keys can change without a revision. `data.input` is an input-label
+echo, not a general metadata bag: expression has `sequence_name`, `description`,
+`tss_index`; the other five have only `sequence_name`. Use
+`meta.sequence_length` and expression's `meta.task_specific_counts.scored_window`.
+
+Record both `info.version` and top-level `x-contract-revision`. The latter is
+16 in the reviewed deployment and is the intended contract-change indicator.
+`x-sync-limit-bp` applies to JSON delivery. Annotation text formats stay sync
+above the threshold and may hit gateway timeouts. An edge-generated 504/reset
+may carry no API JSON envelope. Bounded requests and polling do not cancel
+server-side work or make a POST retry idempotent.
+
+## VCF workflow boundary
+
+The official API also publishes `POST /v1/workflows/genomic-variant-interpretation`.
+This is distinct from calling variants or the sequence tasks above. It requires
+bearer auth and `Prefer: respond-async`; its closed request contains `input`
+(`type: "s3_object"`, `uri` naming a VCF), required `options.genome_build`
+(currently **GRCh37 only**), and optional `client_ref`. Optional settings include
+`window` (1–100,000; default 5,000), `tissues` (1–16 strings), and `genes`
+(1–1,000 symbols/Ensembl gene IDs; omit for all nearby genes, never an empty list).
+The service reads the object and writes an annotated copy beside it; use the
+returned `data.output.uri` rather than constructing a filename.
+
+This workflow is **under development** in the current official guide. When
+`meta.model` is absent, per-tissue values are not established model results;
+an HTTP 200 receipt is not biological validation. Its input build differs from
+the GRCh38 default used by human sequence acquisition. Identical requests reuse
+a job; changing `client_ref` changes submission identity. Do not infer that
+idempotency rule for the six sequence tasks. No VCF submission or object-storage
+write was executed in this review. Read the [current workflow contract](https://docs.genomicintelligence.ai/tasks#genomic-variant-interpretation)
+before attempting this separate workflow.

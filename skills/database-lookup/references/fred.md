@@ -58,7 +58,7 @@ https://api.stlouisfed.org/fred/series/observations?series_id=GDP&api_key=YOUR_K
   "realtime_end": "2024-11-01",
   "observation_start": "2020-01-01",
   "observation_end": "2024-12-31",
-  "units": "Percent Change",
+  "units": "pch",
   "output_type": 1,
   "file_type": "json",
   "order_by": "observation_date",

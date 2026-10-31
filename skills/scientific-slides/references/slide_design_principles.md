@@ -99,7 +99,7 @@ Maintain visual consistency throughout the presentation.
 **Sans-Serif Fonts** (Highly Recommended):
 - **Arial**: Universal, highly legible
 - **Helvetica**: Clean, professional
-- **Calibri**: Modern default, works well
+- **Aptos**: Current Microsoft Office default; verify installation on the presenting computer
 - **Gill Sans**: Elegant sans-serif
 - **Futura**: Geometric, modern
 - **Avenir**: Friendly, professional
@@ -224,8 +224,8 @@ BETTER:
 - Use: Large venues, virtual presentations, accessibility priority
 
 **Data Visualization** (Color-blind Safe):
-- Blue (#0173B2), orange (#DE8F05), green (#029E73), red (#CC78BC)
-- Based on Wong/IBM palettes
+- Blue (#0173B2), orange (#DE8F05), green (#029E73), magenta (#CC78BC)
+- Example categorical palette; verify each plotted color and add shape/line cues
 - Use: Figures with categorical data, bar charts, line plots
 
 ### Color Psychology in Science

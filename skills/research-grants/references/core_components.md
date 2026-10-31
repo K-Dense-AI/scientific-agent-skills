@@ -2,7 +2,13 @@
 
 Every standard proposal section in detail: purpose, expected structure, length, and
 worked language. Agency-specific variations are noted inline; see the per-agency guides
-for authoritative formatting rules.
+for dated official sources and opportunity-specific formatting rules.
+
+Reviewed 2026-10-01. All example language and suggested allocations are illustrative,
+not agency requirements or evidence of actual results, access, or commitments. Use the
+active call and its effective instructions; preserve investigator authorship, especially
+NIH restrictions on substantial AI development. For NIH and NSF, consult the agency
+references for current Common Forms, data-sharing and form-transition rules.
 
 ## Core Components of Research Proposals
 
@@ -13,10 +19,9 @@ Every proposal needs a concise overview that communicates the essential elements
 **Purpose**: Provide a standalone summary that captures the research vision, significance, and approach
 
 **Length**: 
-- NSF: 1 page (Project Summary with separate Overview, Intellectual Merit, Broader Impacts)
-- NIH: 30 lines (Project Summary/Abstract)
-- DOE: Varies (typically 1 page)
-- DARPA: Varies (often 1-2 pages)
+- NSF: Up to 1 page (Project Summary with separate Overview, Intellectual Merit, Broader Impacts)
+- NIH: Normally up to 30 lines (Project Summary/Abstract)
+- DOE and DARPA: Use the solicitation's component-specific limit
 
 **Essential Elements**:
 - Clear statement of the problem or research question
@@ -47,16 +52,16 @@ The core technical narrative that presents the research plan in detail.
 
 **Structure Varies by Agency:**
 
-**NSF Project Description** (typically 15 pages):
+**NSF Project Description** (normally up to 15 pages):
 - Introduction and background
 - Research objectives and questions
 - Preliminary results (if applicable)
 - Research plan and methodology
 - Timeline and milestones
-- Broader impacts (integrated throughout or separate section)
+- Broader impacts under its own required heading; may also be integrated elsewhere
 - Prior NSF support (if applicable)
 
-**NIH Research Strategy** (12 pages for R01):
+**NIH Research Strategy** (normally up to 12 pages for R01):
 - Significance (why the problem matters)
 - Innovation (what's novel and transformative)
 - Approach (detailed research plan)
@@ -91,11 +96,11 @@ For detailed agency-specific guidance, refer to:
 
 Clear, testable goals that structure the research plan.
 
-**NIH Specific Aims Page** (1 page):
+**NIH Specific Aims Page** (normally up to 1 page):
 - Opening paragraph: Gap in knowledge and significance
 - Long-term goal and immediate objectives
 - Central hypothesis or research question
-- 2-4 specific aims with sub-aims
+- A small set of feasible aims; no universal required aim count or sub-aim structure
 - Expected outcomes and impact
 - Payoff paragraph: Why this matters
 
@@ -120,16 +125,18 @@ For detailed guidance, refer to `references/specific_aims_guide.md`.
 
 Articulate the societal, educational, or translational value of the research.
 
-**NSF Broader Impacts** (critical component, equal weight with Intellectual Merit):
+**NSF Broader Impacts** (both criteria receive full consideration; no fixed numerical weighting):
 
-NSF explicitly evaluates broader impacts. Address at least one of these areas:
+NSF explicitly evaluates broader impacts. These are illustrative activity groupings,
+not an official five-category checklist. Follow current NSF priorities and opportunity
+requirements, including participant eligibility. Possible approaches include:
 1. **Advancing discovery and understanding while promoting teaching, training, and learning**
    - Integration of research and education
    - Training of students and postdocs
    - Curriculum development
    - Educational materials and resources
 
-2. **Broadening participation of underrepresented groups**
+2. **Expanding access to research and education**
    - Recruitment and retention strategies
    - Partnerships with minority-serving institutions
    - Outreach to underrepresented communities
@@ -217,7 +224,7 @@ Detailed description of how the research will be conducted.
 - Address potential limitations proactively
 - Include preliminary data demonstrating feasibility
 - Show that you've thought through the research process
-- Balance detail with readability (use supplementary materials for extensive details)
+- Balance detail with readability; use supplementary material only where expressly permitted, never to evade page limits
 
 **For Experimental Research**:
 - Describe experimental design (controls, replicates, blinding)
@@ -261,8 +268,8 @@ Demonstrate that the research is achievable and the team is capable.
 - Feasibility assessments or power calculations
 
 **NIH Requirements**:
-- R01 applications typically require substantial preliminary data
-- R21 applications may have less stringent requirements
+- Preliminary studies normally support R01 feasibility; follow the current instructions and NOFO
+- Standard R21 guidance does not require preliminary data; verify the chosen NOFO
 - New investigators may have less preliminary data
 - Preliminary data should directly support proposed aims
 
@@ -309,7 +316,7 @@ Demonstrate that the project is well-planned and achievable within the proposed 
 **DARPA Emphasis**:
 - Particularly important for DARPA proposals
 - Clear technical milestones with measurable metrics
-- Quarterly deliverables and reporting
+- Deliverables and reporting at the intervals specified in the solicitation
 - Phase-based structure with exit criteria
 - Demonstration and transition planning
 
@@ -338,7 +345,7 @@ Demonstrate that the team has the expertise, experience, and resources to succee
 **Biosketches / CVs**:
 - Follow agency-specific formats (NSF, NIH, DOE, DARPA differ)
 - Highlight most relevant publications and accomplishments
-- Include synergistic activities and collaborations
+- Put synergistic activities and collaboration disclosures in the required separate form/section, not automatically inside a biosketch
 - Show trajectory and productivity
 - Address any career gaps or interruptions
 
@@ -346,7 +353,7 @@ Demonstrate that the team has the expertise, experience, and resources to succee
 - Specific commitments and contributions
 - Demonstrates genuine partnership
 - Includes resource sharing or access agreements
-- Signed and on letterhead
+- Use the required agency wording, scope and signature rules; NSF collaboration letters do not endorse the project, and NIH has an announced FORMS-J transition
 
 
 ### 10. Budget and Budget Justification
@@ -355,7 +362,7 @@ Develop realistic budgets that align with the proposed work and agency guideline
 
 **Budget Categories** (typical):
 - **Personnel**: Salary and fringe for PI, co-Is, postdocs, students, staff
-- **Equipment**: Items >$5,000 (varies by agency)
+- **Equipment**: Apply the effective agency definition and institutional capitalization threshold
 - **Travel**: Conferences, collaborations, fieldwork
 - **Materials and Supplies**: Consumables, reagents, software
 - **Other Direct Costs**: Publication costs, participant incentives, consulting
@@ -366,26 +373,26 @@ Develop realistic budgets that align with the proposed work and agency guideline
 
 **NSF**:
 - Full budget justification required
-- Cost sharing generally not required (but may strengthen proposal)
-- Up to 2 months summer salary for faculty
+- Voluntary committed cost sharing is prohibited; include mandatory sharing only when required
+- Normal two-month salary policy across all NSF grants for each senior/key person; anticipated excess needs justification/approval
 - Graduate student support encouraged
 
 **NIH**:
-- Modular budgets for ≤$250K direct costs per year (R01)
-- Detailed budgets for >$250K or complex awards
-- Salary cap: Executive Level II (updated annually; see [NIH Salary Cap Summary](https://grants.nih.gov/policy-and-compliance/policy-topics/nih-fiscal-policies/salary-cap-summary)) — e.g., $228,000 effective January 1, 2026 ([NOT-OD-26-034](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-26-034.html)); cap applies to direct and indirect salaries for awards issued on or after October 1, 2024 ([NOT-OD-25-025](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-25-025.html))
-- Limited to 1 month (8.33% FTE) for most PIs
+- Modular budgets for eligible applications requesting at most $250K direct costs per budget period, excluding consortium F&A
+- Detailed budgets when above that threshold or required by the NOFO, applicant type or mechanism
+- Salary cap and current fiscal policy: see the dated source trail in `nih_guidelines.md`; use the institutional salary basis and allowable effort
+- No universal one-month PI effort cap; reconcile effort, appointment and other commitments
 
 **DOE**:
-- Often requires cost sharing (especially ARPA-E)
-- Detailed budget with quarterly breakdown
-- Requires institutional commitment letters
-- National laboratory collaboration budgets separate
+- Cost sharing and exceptions depend on the NOFO and award instrument
+- Budget periods and task breakdown as required by the NOFO
+- Institutional commitment letters when required by the NOFO
+- National laboratory funding route and budget as permitted by the NOFO and lab
 
 **DARPA**:
-- Detailed budgets by phase and task
-- Requires supporting cost data for large procurements
-- Often requires cost-plus or firm-fixed-price structures
+- Budgets by phase and task when requested
+- Supporting cost data as required by the solicitation and instrument
+- Award instrument determines applicable cost and supporting-document requirements
 - Travel budget for program meetings
 
 **Budget Justification Writing**:

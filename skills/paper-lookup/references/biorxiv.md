@@ -2,7 +2,7 @@
 
 bioRxiv is a preprint server for biology. The API provides metadata for preprints, including title, authors, abstract, DOI, and publication status.
 
-**Important:** The bioRxiv API has **no keyword search**. It supports date-range browsing and DOI lookup only. For keyword search of bioRxiv preprints, use Semantic Scholar, OpenAlex, or CORE instead.
+**Important:** The bioRxiv API has **no keyword search**. It supports date-range browsing and DOI lookup only. For keyword search of bioRxiv preprints, use Europe PMC (`SRC:"PPR" AND PUBLISHER:"bioRxiv"`), Semantic Scholar, or OpenAlex instead.
 
 ## Base URL
 
@@ -151,13 +151,20 @@ Stepping a `/details/` walk by 100 therefore skips records 30-99 of every hundre
 successful. Step by the `count` the response actually reported, and stop when
 `cursor + count >= total` or `collection` comes back empty.
 
-`scripts/paginate.py --api biorxiv` implements this walk with the right step and reconciles the
-retrieved total against `total` and `count_new_papers`.
+`scripts/paginate.py --api biorxiv` implements this walk with the right step and reconciles version-record counts against `total`; it reports `count_new_papers` as a separate note, without claiming to validate a DOI-deduplicated count.
 
 ## Rate Limits
 
 No documented rate limits. No authentication required. Be reasonable with request frequency.
 
+DOI lookups and N-most-recent requests are single-response lookups in the helper: they expose no total/continuation. For an exhaustive interval, use explicit dates and reconcile `total`. A DOI path requires `/na/json`, not a numeric cursor.
+
 ## Categories
 
+Category names below are website slugs; API category filters use spaces (URL-encoded) or underscores, e.g. `cell_biology`, not hyphens.
+
 `animal-behavior-and-cognition`, `biochemistry`, `bioengineering`, `bioinformatics`, `biophysics`, `cancer-biology`, `cell-biology`, `clinical-trials`, `developmental-biology`, `ecology`, `epidemiology`, `evolutionary-biology`, `genetics`, `genomics`, `immunology`, `microbiology`, `molecular-biology`, `neuroscience`, `paleontology`, `pathology`, `pharmacology-and-toxicology`, `physiology`, `plant-biology`, `scientific-communication-and-education`, `synthetic-biology`, `systems-biology`, `zoology`
+
+## Official sources reviewed 2026-09-30
+
+- https://api.biorxiv.org/

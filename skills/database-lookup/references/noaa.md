@@ -24,7 +24,7 @@ https://www.ncdc.noaa.gov/cdo-web/api/v2
 | `stationid`   | string | No       | -       | Station ID (e.g. `GHCND:USW00013874`). |
 | `startdate`   | string | Varies   | -       | ISO date `YYYY-MM-DD`. |
 | `enddate`     | string | Varies   | -       | ISO date `YYYY-MM-DD`. |
-| `units`       | string | No       | `standard` | `standard` or `metric`. |
+| `units`       | string | No       | native/unscaled | `standard` or `metric`. |
 | `limit`       | int    | No       | 25      | Results per page (max 1000). |
 | `offset`      | int    | No       | 1       | Pagination offset (1-based). |
 | `sortfield`   | string | No       | -       | Field to sort by (e.g. `date`, `name`). |
@@ -76,7 +76,7 @@ curl -H "Token: YOUR_TOKEN" \
   ]
 }
 ```
-Note: When `units=standard`, GHCND temperature values are in tenths of degrees C. With `units=metric`, they are converted to degrees C.
+`units=standard` requests scaled US customary units (temperature in Fahrenheit); `units=metric` requests scaled metric units (Celsius). When `units` is omitted, native dataset scaling applies (GHCND raw temperature uses tenths of Celsius). Save the requested units with the observations.
 
 ### 2. Datasets
 ```
@@ -197,3 +197,5 @@ Location category IDs: `CITY`, `CLIM_DIV`, `CLIM_REG`, `CNTRY`, `CNTY`, `HYD_ACC
 - Station IDs include a dataset prefix (e.g. `GHCND:USW00013874`).
 - The `attributes` field in data results contains quality flags (comma-separated). Consult dataset documentation for flag meanings.
 - Token goes in the header, not as a query parameter.
+
+For `/data`, bound daily/subdaily requests to one year; monthly and annual datasets allow up to ten years. Follow the returned resultset offset and count rather than assuming every endpoint starts at the same offset. Official contract: https://www.ncei.noaa.gov/cdo-web/webservices/v2

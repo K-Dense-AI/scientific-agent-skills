@@ -41,13 +41,13 @@ This dominates material choice, and it eliminates most of the obvious options:
   transition temperature. PLA in particular softens well below autoclave temperature and should be
   treated as single-use.
 - **Porosity carries odour.** FDM parts are porous by construction, hold odour cues between
-  animals, and cannot be reliably disinfected. Odour is a genuine confound in behavior work. Prefer
+  animals, and need validated cleaning/disinfection; do not assume the layer texture is cleanable. Odour is a genuine confound in behavior work. Prefer
   a non-porous process, or seal the surface, or treat FDM parts as consumable and per-cohort.
 - **Chew resistance.** Rodents will chew anything reachable. Printed polymer at an exposed edge
   will be destroyed and, worse, ingested. Put metal, glass, or a hard sacrificial edge wherever an
   animal can bite, and keep printed material out of reach where possible.
-- **Uncured resin is cytotoxic and an irritant.** SLA parts that contact animals need full post-
-  cure and thorough washing. See `references/fabrication-limits.md`.
+- **Uncured resin is cytotoxic and an irritant.** SLA parts that contact animals need a validated material/process for the intended contact, including full post-
+  cure and washing; those steps alone do not establish safety. See `references/fabrication-limits.md`.
 
 ## Video tracking and optics
 
@@ -134,3 +134,6 @@ Confirm in the snapshot:
 Deliberately none for dimensions. Arena, maze, and head-fixation geometry must come from the
 protocol being replicated or from the physical implant, not from a general reference. The
 material, cleaning, tracking, and extrusion guidance above is general engineering practice.
+
+Current welfare guidance: <https://nc3rs.org.uk/3rs-resource-library/evaluating-environmental-enrichment/choosing-appropriate-enrichment>.
+This informs material/entrapment review, not protocol-specific apparatus dimensions.

@@ -1,11 +1,12 @@
 ---
 name: research-grants
-description: Write competitive research proposals for NSF, NIH, DOE, DARPA, and Taiwan NSTC. Agency-specific formatting, review criteria, budget preparation, broader impacts, significance statements, innovation narratives, and compliance with submission requirements.
+description: Supports research proposal preparation and review for NSF, NIH, DOE, DARPA, and Taiwan NSTC, including opportunity-specific requirements, aims, review criteria, budgets, broader impacts, forms, and resubmissions. Use for investigator-authored grant development, compliance matrices, and proposal critiques.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-compatibility: Works in Agent Skills-compatible hosts. Grant-writing guidance needs no network; optional figures via the scientific-schematics skill require OPENROUTER_API_KEY and outbound API access.
+compatibility: Requires network access to verify current opportunities and agency instructions, or supplied dated official documents for a bounded review. Optional figures via scientific-schematics require OPENROUTER_API_KEY and outbound API access.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -31,6 +32,26 @@ This skill should be used when:
 - Writing preliminary data or feasibility sections
 - Preparing biosketches, CVs, or facilities descriptions
 
+## Establish the governing opportunity first
+
+For each task, record agency, opportunity identifier and amendment, activity/project
+type, due date/time zone, eligibility, submission stage, application form version,
+limits, required attachments, review criteria and source URL/retrieval date. Check
+current notices as well as the original solicitation. An archived call, funded award,
+or budget announcement does not establish live funding availability. If the official
+package is unavailable, provide a bounded drafting review and list unresolved rules.
+
+Build a requirement -> source section -> draft location -> gap matrix before judging
+compliance. Templates in `assets/` are illustrative worksheets, not official forms.
+Never invent data, citations, investigator records, partner commitments or approvals.
+Inspect the final exported files; Markdown text does not establish page compliance.
+
+For NIH, use this skill for requirements, critique, consistency checks and limited
+editing of investigator-authored material. [NIH policy](https://grants.nih.gov/grants/policy/nihgps/HTML5/section_2/2.3.7_policies_affecting_applications.htm)
+excludes applications or sections substantially developed by AI. Preserve applicant
+ownership of substantive science and writing; review or disclosure alone does not
+make substantial AI authorship compliant. Apply other agencies' current rules too.
+
 ## Visual Enhancement (Optional)
 
 Strong proposals often include 1–3 figures (timelines, workflow diagrams, preliminary data). Figures support review but are not a substitute for clear aims and methods.
@@ -41,13 +62,13 @@ Strong proposals often include 1–3 figures (timelines, workflow diagrams, prel
 - Conceptual framework or system architecture (technical proposals)
 - Experimental design flowcharts
 - Broader impacts activity diagrams
-- NSTC CM03 research architecture diagrams (often expected)
+- NSTC CM03 research architecture diagrams when they clarify the proposed methods
 
 **How to create figures:**
 - **Preferred:** Use the **scientific-schematics** skill (`--doc-type grant`) for AI-generated diagrams from a natural-language description
 - **Alternative:** Build figures in your usual tools (matplotlib, Illustrator, PowerPoint, etc.)
 
-Run from the repository root, with `OPENROUTER_API_KEY` set:
+Illustrative optional integration (CLI options checked; no paid generation tested in this refresh). Run from the repository root, with `OPENROUTER_API_KEY` set:
 
 ```bash
 python skills/scientific-schematics/scripts/generate_schematic.py "project timeline with Year 1-3 milestones" -o figures/timeline.png --doc-type grant
@@ -63,22 +84,22 @@ python skills/scientific-schematics/scripts/generate_schematic.py "project timel
 **Mission**: Promote the progress of science and advance national health, prosperity, and welfare
 
 **Key Features**:
-- Follow [PAPPG 24-1](https://www.nsf.gov/policies/pappg) (effective May 20, 2024) unless a solicitation overrides it
-- Intellectual Merit + Broader Impacts (equally weighted)
+- Use the [current PAPPG index](https://www.nsf.gov/policies/pappg), effective supplements and solicitation; as reviewed, NSF 24-1 is supplemented by NSF 26-200 and 26-202
+- Intellectual Merit + Broader Impacts both receive full consideration; no universal numerical weighting
 - 15-page project description limit (most programs; includes Results from Prior NSF Support, max 5 pages)
-- Emphasis on education, diversity, and societal benefit
+- Education and societal benefit, with activities aligned to current NSF priorities and the solicitation
 - Collaborative research encouraged
-- Open data and open science emphasis
+- Current SciENcv Common Forms, graduate/postdoc mentoring, and Research.gov DMSP tool requirements
 - Merit review process with panel + ad hoc reviewers
 
 ### NIH (National Institutes of Health)
 **Mission**: Enhance health, lengthen life, and reduce illness and disability
 
 **Key Features**:
-- Specific Aims (1 page) + Research Strategy (12 pages for R01)
-- Significance, Innovation, Approach as core review criteria
-- Preliminary data typically required for R01s
-- Emphasis on rigor, reproducibility, and clinical relevance
+- Standard R01: Specific Aims up to 1 page and Research Strategy up to 12; verify the NOFO
+- Most RPGs use Importance, Rigor/Feasibility, and Expertise/Resources review factors; required narrative headings remain Significance, Innovation, Approach
+- Preliminary evidence normally supports R01 feasibility; follow the mechanism-specific instructions
+- Rigor and reproducibility; SciENcv Common Forms and NIH Supplement required under the 2026 implementation
 - For eligible applications, modular budgets use **$25,000 increments**, up to **$250,000 in direct costs per budget period**, excluding consortium F&A; verify the NOFO and organization eligibility. See [NIH budget guidance](https://grants.nih.gov/grants/developing_budget.htm).
 - NIH permits **one resubmission (A1)** of an unfunded application, within 37 months of the initial application due date when the NOFO permits resubmissions; see [resubmission policy](https://grants.nih.gov/grants-process/submit/submission-policies/resubmission-applications).
 
@@ -87,11 +108,11 @@ python skills/scientific-schematics/scripts/generate_schematic.py "project timel
 
 **Key Features**:
 - Focus on energy, climate, computational science, basic energy sciences
-- Often requires cost sharing or industry partnerships
+- Cost sharing and partnerships depend on the specific office, NOFO, and award instrument
 - Emphasis on national laboratory collaboration
 - Strong computational and experimental integration
 - Energy innovation and commercialization pathways
-- Varies by office (ARPA-E, Office of Science, EERE, etc.)
+- Distinguish SC, ARPA-E and current applied-energy offices; legacy EERE Exchange now identifies CMEI eXCHANGE
 
 ### DARPA (Defense Advanced Research Projects Agency)
 **Mission**: Make pivotal investments in breakthrough technologies for national security
@@ -110,10 +131,10 @@ python skills/scientific-schematics/scripts/generate_schematic.py "project timel
 
 **Key Features**:
 - **CM03 Form**: The core technical proposal format.
-- **Bilingual**: Abstract required in both Chinese and English.
+- **Forms**: Use the current call and division forms for Chinese/English abstracts and CM03.
 - **Innovation & Feasibility**: Primary review focus.
 - **Preliminary Data**: Highly critical for credibility.
-- **Research Architecture Diagram**: A mandatory visual element for clarity.
+- **Research Architecture Diagram**: Useful where appropriate; not a verified universal requirement.
 
 ## Core Components of Research Proposals
 
@@ -162,7 +183,7 @@ length targets, and worked language, is in
 
 ### Formatting Mistakes
 
-1. **Exceeding Page Limits**: Automatic rejection
+1. **Exceeding Page Limits**: Can cause validation failure or return without review
 2. **Wrong Font or Margins**: Non-compliant formatting
 3. **Missing Required Sections**: Incomplete application
 4. **Poor Figure Quality**: Illegible or unprofessional figures
@@ -177,6 +198,9 @@ length targets, and worked language, is in
 5. **Late Submission**: Technical issues or rushed preparation
 
 ## Workflow for Grant Development
+
+The following periods are planning suggestions, not agency deadlines. Work backward
+from the verified sponsor and earlier institutional deadlines.
 
 ### Phase 1: Planning and Preparation (2-6 months before deadline)
 
@@ -248,10 +272,10 @@ length targets, and worked language, is in
 
 **Activities**:
 - Institutional review and approval
-- Upload to submission portal
+- Have an authorized institutional submitter upload through the opportunity-specific route
 - Verify all documents and formatting
 - Submit 24-48 hours before deadline
-- Confirm successful submission
+- Confirm agency receipt, validation status and the assembled application
 - Receive confirmation and proposal number
 
 **Outputs**:
@@ -259,7 +283,7 @@ length targets, and worked language, is in
 - Submission confirmation
 - Archived copy of all materials
 
-**Critical Tip**: Never wait until the deadline. Portals crash, files corrupt, and emergencies happen. Aim for 48 hours early.
+**Planning tip**: Leave time for institutional approvals, validations and corrections. A 48-hour buffer is a target, not an agency grace period or proof that registrations will finish. Public portal access does not verify authenticated submission.
 
 ## Integration with Other Skills
 

@@ -18,11 +18,11 @@ No API key required.
 | `v2/spls/{setid}/media.json` | Images/media for a label |
 | `v2/drugnames.json?drug_name={prefix}` | Drug name autocomplete |
 | `v2/drugclasses.json?drug_class_name={name}` | Search by pharmacologic class |
-| `v2/rxcuis.json?drug_name={name}` | RxNorm CUIs for a drug |
-| `v2/ndc/{ndc_code}/spls.json` | Find labels by NDC code |
+| `v2/rxcuis.json?rxcui={rxcui}` | Query RxNorm CUIs |
+| `v2/spls.json?ndc={ndc_code}` | Find labels by NDC code |
 
 ## Additional filters for `/v2/spls.json`
-- `drug_class` — pharmacologic class
+- `drug_class_code` and `drug_class_coding_system` — pharmacologic class code and terminology; discover codes via `/drugclasses.json`
 - `labeler` — manufacturer name
 - `page` / `pagesize` — pagination (max 100)
 
@@ -36,10 +36,10 @@ https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=metformin
 https://dailymed.nlm.nih.gov/dailymed/services/v2/drugnames.json?drug_name=ator
 
 # Search by pharmacologic class
-https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_class=HMG-CoA+Reductase+Inhibitor
+https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_class_code={code_from_drugclasses}
 
 # Full label XML (SPL content with sections)
-https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/{setid}/packaging.xml
+https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/{setid}.xml
 ```
 
 ## Response Format

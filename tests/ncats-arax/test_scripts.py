@@ -491,6 +491,36 @@ class OpenApiAndTransportTests(unittest.TestCase):
         )
         self.assertIn("UNTESTED_SERVICE_VERSION", {item["code"] for item in service.warnings})
 
+    def test_openapi_requires_supported_http_methods(self):
+        for path, method in (("/query", "post"), ("/entity", "get")):
+            payload = fixture_json("openapi_1_5_minimal.json")
+            del payload["paths"][path][method]
+            with self.subTest(path=path), self.assertRaises(client.PreflightError):
+                client.parse_openapi_service_info(
+                    payload, base_url=client.PRODUCTION_BASE_URL,
+                    openapi_url=client.PRODUCTION_BASE_URL + "/openapi.json",
+                    allow_untested_version=False,
+                )
+
+    def test_openapi_uses_machine_readable_trapi_version(self):
+        payload = fixture_json("openapi_1_5_minimal.json")
+        payload["info"]["title"] = "ARAX Translator Reasoner"
+        payload["info"]["x-trapi"] = {"version": "1.5.0"}
+        service = client.parse_openapi_service_info(
+            payload, base_url=client.PRODUCTION_BASE_URL,
+            openapi_url=client.PRODUCTION_BASE_URL + "/openapi.json",
+            allow_untested_version=False,
+        )
+        self.assertEqual(service.trapi_version, "1.5.0")
+        payload["info"]["title"] += " - TRAPI 1.5.0"
+        payload["info"]["x-trapi"]["version"] = "2.0.0"
+        with self.assertRaises(client.PreflightError):
+            client.parse_openapi_service_info(
+                payload, base_url=client.PRODUCTION_BASE_URL,
+                openapi_url=client.PRODUCTION_BASE_URL + "/openapi.json",
+                allow_untested_version=False,
+            )
+
     def test_get_retries_one_retryable_status(self):
         headers = Message()
         headers["Retry-After"] = "0"
@@ -642,6 +672,26 @@ class OpenApiAndTransportTests(unittest.TestCase):
 
 
 class NormalizationTests(unittest.TestCase):
+    def test_entity_synonym_labels_are_preserved(self):
+        payload = fixture_json("normalization_response.json")
+        node = payload["ivacaftor"]["nodes"][0]
+        node["label"] = node.pop("name")
+        summary, usable = client.parse_normalization_response(
+            payload, term="ivacaftor", expected_category=None,
+            max_synonyms=1, service=service_info(),
+        )
+        self.assertTrue(usable)
+        self.assertEqual(summary["synonym_preview"][0]["name"], "ivacaftor")
+
+    def test_normalization_preserves_service_warnings(self):
+        warning = client.make_warning("UNTESTED_SERVICE_VERSION", "Version differs")
+        summary, usable = client.parse_normalization_response(
+            fixture_json("normalization_response.json"), term="ivacaftor",
+            expected_category=None, max_synonyms=1, service=service_info((warning,)),
+        )
+        self.assertTrue(usable)
+        self.assertIn(warning, summary["warnings"])
+
     def test_nested_normalization_match_and_mismatch(self):
         payload = fixture_json("normalization_response.json")
         summary, usable = client.parse_normalization_response(
@@ -825,6 +875,42 @@ class ResponseParserTests(unittest.TestCase):
         self.assertEqual(summary["results"], [])
         self.assertEqual(summary["truncation_status"], "no")
         self.assertIn("NO_RESULTS", {item["code"] for item in summary["warnings"]})
+
+    def test_application_error_is_not_a_valid_empty_result(self):
+        payload = fixture_json("no_results.json")
+        contract = client.validate_saved_request_contract(one_hop_body())
+        for status in ("InvalidKP", "QueryNotTraversable", "KPsNotAvailable", "Running"):
+            payload["status"] = status
+            with self.subTest(status=status), self.assertRaisesRegex(client.ResponseError, status):
+                client.parse_trapi_response(payload, contract)
+        for status in (None, "OK", "Success"):
+            payload["status"] = status
+            self.assertEqual(client.parse_trapi_response(payload, contract)["counts"]["results_returned"], 0)
+
+    def test_lookup_provider_failure_is_partial(self):
+        payload = fixture_json("no_results.json")
+        contract = client.validate_saved_request_contract(one_hop_body())
+        for message, code in (
+            ("infores:rtx-kg2: Query timed out after 30 seconds", "KP_TIMEOUT"),
+            ("infores:rtx-kg2: Server disconnected error", "KP_ERROR"),
+            ("infores:rtx-kg2: Request threw exception after 2 seconds", "KP_ERROR"),
+            ("https://example.org: response.message is not a dict; got NoneType", "MALFORMED_KP_RESPONSE"),
+        ):
+            payload["logs"] = [{"level": "WARNING", "message": message}]
+            summary = client.parse_trapi_response(payload, contract)
+            self.assertEqual(summary["completeness"], "partial")
+            self.assertIn(code, {item["code"] for item in summary["warnings"]})
+
+    def test_provider_metadata_warning_is_not_a_failure(self):
+        payload = fixture_json("one_hop_provenance.json")
+        payload["logs"] = [{
+            "level": "WARNING",
+            "message": "infores:molepro: this KP may not return preferred CURIEs; please check",
+        }]
+        contract = client.validate_saved_request_contract(one_hop_body(
+            mode="federated", provider_ids=["infores:rtx-kg2", "infores:molepro"],
+        ))
+        self.assertEqual(client.parse_trapi_response(payload, contract)["completeness"], "complete")
 
     def test_partial_federation_is_retained(self):
         body = one_hop_body(
@@ -1305,6 +1391,24 @@ class ArtifactAndCommandTests(unittest.TestCase):
             self.assertFalse((output / "summary.json").exists())
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["execution_status"], "client_error")
+
+    def test_http_200_application_error_retains_raw_response_without_summary(self):
+        payload = fixture_json("no_results.json")
+        payload.update(status="InvalidKP", description="Selected provider is unavailable")
+        response_body = client.serialize_request(payload)
+        preflight = client.HttpResult(200, fixture_bytes("openapi_1_5_minimal.json"), {}, 2, 1)
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(
+            client, "fetch_openapi", return_value=(service_info(), preflight)
+        ), mock.patch.object(client, "post_query", return_value=client.HttpResult(200, response_body, {}, 3, 1)):
+            output = Path(temporary) / "error"
+            with self.assertRaisesRegex(client.ResponseError, "InvalidKP"):
+                client.handle_graph_query(one_hop_args(output))
+            self.assertEqual((output / "response.json").read_bytes(), response_body)
+            self.assertFalse((output / "summary.json").exists())
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertEqual(manifest["result_status"], "not_available")
+            self.assertEqual(manifest["response"]["http_status"], 200)
+            self.assertEqual(manifest["attempts"]["query_post"], 1)
 
     def test_normalize_command_never_posts(self):
         preflight = client.HttpResult(200, fixture_bytes("openapi_1_5_minimal.json"), {}, 2, 1)

@@ -1,19 +1,28 @@
-# COBRApy Comprehensive Workflows
+# COBRApy workflows
 
-This document provides detailed step-by-step workflows for common COBRApy tasks in metabolic modeling.
-
-**Operational notes (cobra 0.31.1):**
-- Confirm with the user before writing CSV/PNG files; set `OUTDIR` to a user-approved path.
-- `load_model("ecoli")` and `load_model("universal")` no longer work — use `textbook` / `e_coli_core`, `iJO1366`, or BiGG IDs such as `iML1515`.
-- Double deletions, loopless FVA, and large sampling runs can take hours on genome-scale models — use `textbook` for exploration, lower `n`/`processes`, or subset `gene_list1`.
+The five Python workflows below were executed with cobra 0.32.1, GLPK, and Python
+3.12 on the bundled textbook model. They are small demonstrations, not validated
+predictions for an organism or condition. Run this setup first, then each workflow
+independently; each loads a fresh model. Plotting needs matplotlib/seaborn. Choose
+`OUTDIR` from the task context; authorization to produce outputs covers those files.
 
 ```python
-OUTDIR = "cobrapy_output"  # set with user approval before running workflows
+from pathlib import Path
+import cobra
+
+OUTDIR = Path("cobrapy_output")
+OUTDIR.mkdir(parents=True, exist_ok=True)
+cobra.Configuration().solver = "glpk"
+cobra.Configuration().processes = 1
 ```
 
-## Workflow 1: Complete Knockout Study with Visualization
+## Workflow 1: Knockouts and synthetic-lethal candidates
 
-This workflow demonstrates how to perform a comprehensive gene knockout study and visualize the results.
+The 1% wild-type growth threshold is an analysis choice. Separate successful
+low-growth predictions from infeasible, numerical, or other unresolved solves.
+The `ids` column contains sets, including singletons for self-pairs. Never derive
+identifiers from the integer row index. GPR redundancy means one gene need not
+correspond to one reaction. A bounded subset is a screen, not an exhaustive study.
 
 ```python
 import pandas as pd
@@ -21,580 +30,324 @@ import matplotlib.pyplot as plt
 from cobra.io import load_model
 from cobra.flux_analysis import single_gene_deletion, double_gene_deletion
 
-# Step 1: Load model (textbook = core tutorial; use iJO1366 for genome-scale)
 model = load_model("textbook")
-print(f"Loaded model: {model.id}")
-print(f"Model contains {len(model.reactions)} reactions, {len(model.metabolites)} metabolites, {len(model.genes)} genes")
-
-# Step 2: Get baseline growth rate
-baseline = model.slim_optimize()
-print(f"Baseline growth rate: {baseline:.3f} /h")
-
-# Step 3: Perform single gene deletions
-print("Performing single gene deletions...")
-single_results = single_gene_deletion(model)
-
-# Step 4: Classify genes by impact
-essential_genes = single_results[single_results["growth"] < 0.01]
-severely_impaired = single_results[(single_results["growth"] >= 0.01) &
-                                   (single_results["growth"] < 0.5 * baseline)]
-moderately_impaired = single_results[(single_results["growth"] >= 0.5 * baseline) &
-                                     (single_results["growth"] < 0.9 * baseline)]
-neutral_genes = single_results[single_results["growth"] >= 0.9 * baseline]
-
-print(f"\nSingle Deletion Results:")
-print(f"  Essential genes: {len(essential_genes)}")
-print(f"  Severely impaired: {len(severely_impaired)}")
-print(f"  Moderately impaired: {len(moderately_impaired)}")
-print(f"  Neutral genes: {len(neutral_genes)}")
-
-# Step 5: Visualize distribution
-fig, ax = plt.subplots(figsize=(10, 6))
-single_results["growth"].hist(bins=50, ax=ax)
-ax.axvline(baseline, color='r', linestyle='--', label='Baseline')
-ax.set_xlabel("Growth rate (/h)")
-ax.set_ylabel("Number of genes")
-ax.set_title("Distribution of Growth Rates After Single Gene Deletions")
-ax.legend()
-plt.tight_layout()
-plt.savefig(f"{OUTDIR}/single_deletion_distribution.png", dpi=300)
-
-# Step 6: Identify gene pairs for double deletions
-# Focus on non-essential genes to find synthetic lethals
-target_genes = single_results[single_results["growth"] >= 0.5 * baseline].index.tolist()
-target_genes = [list(gene)[0] for gene in target_genes[:50]]  # Limit for performance
-
-print(f"\nPerforming double deletions on {len(target_genes)} genes...")
-# Double deletions scale poorly — use processes=1 on large models unless user approves
+baseline = model.slim_optimize(error_value=None)
+assert baseline > 0
+threshold = 0.01 * baseline
+single_results = single_gene_deletion(model, processes=1)
+valid_single = single_results[
+    single_results.status.eq("optimal") & single_results.growth.notna()
+].copy()
+valid_single["gene"] = valid_single.ids.map(lambda ids: next(iter(ids)))
+single_by_gene = valid_single.set_index("gene")["growth"]
+low_growth = valid_single[valid_single.growth < threshold]
+unresolved_single = single_results.drop(valid_single.index)
+target_genes = sorted(single_by_gene[single_by_gene >= 0.5 * baseline].index)[:30]
 double_results = double_gene_deletion(
-    model,
-    gene_list1=target_genes,
-    processes=1
+    model, gene_list1=target_genes, gene_list2=target_genes, processes=1,
 )
-
-# Step 7: Find synthetic lethal pairs
 synthetic_lethals = double_results[
-    (double_results["growth"] < 0.01) &
-    (single_results.loc[double_results.index.get_level_values(0)]["growth"].values >= 0.5 * baseline) &
-    (single_results.loc[double_results.index.get_level_values(1)]["growth"].values >= 0.5 * baseline)
-]
+    double_results.status.eq("optimal")
+    & double_results.growth.lt(threshold)
+    & double_results.ids.map(
+        lambda ids: len(ids) == 2
+        and all(single_by_gene.get(g, float("nan")) >= 0.5 * baseline for g in ids)
+    )
+].copy()
 
-print(f"Found {len(synthetic_lethals)} synthetic lethal gene pairs")
-print("\nTop 10 synthetic lethal pairs:")
-print(synthetic_lethals.head(10))
-
-# Step 8: Export results (confirm OUTDIR with user first)
-single_results.to_csv(f"{OUTDIR}/single_gene_deletions.csv")
-double_results.to_csv(f"{OUTDIR}/double_gene_deletions.csv")
-synthetic_lethals.to_csv(f"{OUTDIR}/synthetic_lethals.csv")
+fig, ax = plt.subplots()
+valid_single.growth.hist(bins=25, ax=ax)
+ax.axvline(baseline, color="red", linestyle="--", label="Wild type")
+ax.set(xlabel="Predicted growth (1/h)", ylabel="Number of genes")
+ax.legend()
+fig.savefig(OUTDIR / "single_deletion_distribution.png", dpi=150)
+plt.close(fig)
+# Sort identifiers for reproducible, human-readable CSVs.
+for name, table in [("single", single_results), ("double", double_results),
+                    ("synthetic_lethals", synthetic_lethals)]:
+    exported = table.assign(ids=table.ids.map(lambda ids: ";".join(sorted(ids))))
+    exported.sort_values("ids").to_csv(OUTDIR / f"{name}_deletions.csv", index=False)
+print("Low-growth single mutants:", len(low_growth))
+print("Unresolved single mutants:", len(unresolved_single))
+print("Candidate synthetic-lethal pairs:", len(synthetic_lethals))
 ```
 
-## Workflow 2: Media Design and Optimization
+## Workflow 2: Minimal and custom media
 
-This workflow shows how to systematically design growth media and find minimal media compositions.
+With `open_exchanges=False`, the **allowed nutrient universe stays fixed**. The
+optimizer still **selects the nutrient subset and its import bounds** within that
+universe; the selected nutrients and amounts are not fixed. This workflow therefore
+minimizes component count within allowed nutrients, then rechecks the selected
+medium. Opening all exchanges expands the allowed universe, permits alternative
+carbon sources, and defines a different experiment. Minimal media may be nonunique; integer tolerances can affect tiny
+imports. Report the objective, growth target and tested uptake units.
 
 ```python
+import pandas as pd
 from cobra.io import load_model
 from cobra.medium import minimal_medium
-import pandas as pd
 
-# Step 1: Load model and check current medium
 model = load_model("textbook")
-current_medium = model.medium
-print("Current medium composition:")
-for exchange, bound in current_medium.items():
-    metabolite_id = exchange.replace("EX_", "").replace("_e", "")
-    print(f"  {metabolite_id}: {bound:.2f} mmol/gDW/h")
-
-# Step 2: Get baseline growth
-baseline_growth = model.slim_optimize()
-print(f"\nBaseline growth rate: {baseline_growth:.3f} /h")
-
-# Step 3: Calculate minimal medium for different growth targets
-growth_targets = [0.25, 0.5, 0.75, 1.0]
+baseline = model.slim_optimize(error_value=None)
+assert baseline > 0
 minimal_media = {}
-
-for fraction in growth_targets:
-    target_growth = baseline_growth * fraction
-    print(f"\nCalculating minimal medium for {fraction*100:.0f}% growth ({target_growth:.3f} /h)...")
-
-    min_medium = minimal_medium(
-        model,
-        target_growth,
-        minimize_components=True,
-        open_exchanges=True
+rechecked_growth = {}
+for fraction in [0.25, 0.5, 0.75, 0.95]:
+    target = fraction * baseline
+    medium = minimal_medium(
+        model, min_objective_value=target,
+        minimize_components=True, open_exchanges=False,
     )
+    if medium is None:
+        raise RuntimeError(f"No medium found for growth {target}")
+    with model:
+        model.medium = medium.to_dict()
+        growth = model.slim_optimize(error_value=None)
+        assert growth >= target - 1e-6
+    minimal_media[fraction] = medium
+    rechecked_growth[fraction] = growth
+pd.DataFrame(minimal_media).fillna(0).to_csv(OUTDIR / "minimal_media.csv")
 
-    minimal_media[fraction] = min_medium
-    print(f"  Required components: {len(min_medium)}")
-    print(f"  Components: {list(min_medium.index)}")
-
-# Step 4: Compare media compositions
-media_df = pd.DataFrame(minimal_media).fillna(0)
-media_df.to_csv(f"{OUTDIR}/minimal_media_comparison.csv")
-
-# Step 5: Test aerobic vs anaerobic conditions
-print("\n--- Aerobic vs Anaerobic Comparison ---")
-
-# Aerobic
-model_aerobic = model.copy()
-aerobic_growth = model_aerobic.slim_optimize()
-aerobic_medium = minimal_medium(model_aerobic, aerobic_growth * 0.9, minimize_components=True)
-
-# Anaerobic
-model_anaerobic = model.copy()
-medium_anaerobic = model_anaerobic.medium
-medium_anaerobic["EX_o2_e"] = 0.0
-model_anaerobic.medium = medium_anaerobic
-anaerobic_growth = model_anaerobic.slim_optimize()
-anaerobic_medium = minimal_medium(model_anaerobic, anaerobic_growth * 0.9, minimize_components=True)
-
-print(f"Aerobic growth: {aerobic_growth:.3f} /h (requires {len(aerobic_medium)} components)")
-print(f"Anaerobic growth: {anaerobic_growth:.3f} /h (requires {len(anaerobic_medium)} components)")
-
-# Step 6: Identify unique requirements
-aerobic_only = set(aerobic_medium.index) - set(anaerobic_medium.index)
-anaerobic_only = set(anaerobic_medium.index) - set(aerobic_medium.index)
-shared = set(aerobic_medium.index) & set(anaerobic_medium.index)
-
-print(f"\nShared components: {len(shared)}")
-print(f"Aerobic-only: {aerobic_only}")
-print(f"Anaerobic-only: {anaerobic_only}")
-
-# Step 7: Test custom medium
-print("\n--- Testing Custom Medium ---")
-custom_medium = {
-    "EX_glc__D_e": 10.0,  # Glucose
-    "EX_o2_e": 20.0,       # Oxygen
-    "EX_nh4_e": 5.0,       # Ammonium
-    "EX_pi_e": 5.0,        # Phosphate
-    "EX_so4_e": 1.0,       # Sulfate
-}
-
+# Retain valid IDs and other nutrients in this model; textbook has no EX_so4_e.
+custom_medium = model.medium
+custom_medium["EX_glc__D_e"] = 5.0
+custom_medium["EX_o2_e"] = 0.0
 with model:
     model.medium = custom_medium
-    custom_growth = model.optimize().objective_value
-    print(f"Growth on custom medium: {custom_growth:.3f} /h")
-
-    # Check which nutrients are limiting
-    for exchange in custom_medium:
-        with model:
-            # Double the uptake rate
-            medium_test = model.medium
-            medium_test[exchange] *= 2
-            model.medium = medium_test
-            test_growth = model.optimize().objective_value
-            improvement = (test_growth - custom_growth) / custom_growth * 100
-            if improvement > 1:
-                print(f"  {exchange}: +{improvement:.1f}% growth when doubled (LIMITING)")
+    custom_growth = model.slim_optimize(error_value=None)
+    limiting = []
+    if custom_growth > model.tolerance:
+        for exchange, bound in custom_medium.items():
+            if bound <= 0:  # Doubling zero is not nutrient supplementation.
+                continue
+            with model:
+                altered = model.medium
+                altered[exchange] = 2 * bound
+                model.medium = altered
+                growth = model.slim_optimize(error_value=None)
+                if growth > 1.01 * custom_growth:
+                    limiting.append((exchange, growth / custom_growth - 1))
+print("Custom growth:", custom_growth, "Candidate limiting imports:", limiting)
 ```
 
-## Workflow 3: Flux Space Exploration with Sampling
+## Workflow 3: Matched FVA and sampling
 
-This workflow demonstrates comprehensive flux space analysis using FVA and sampling.
+FVA constraints are temporary. Explicitly install the growth floor **before**
+creating the sampler. Compare samples with FVA from that same constrained model.
+OptGP feasibility checks do not measure convergence; use independent seeds/chains,
+trace plots and effective sample size for scientific inference. Correlation from
+stoichiometric constraints is not evidence of regulation or causation.
 
 ```python
-from cobra.io import load_model
-from cobra.flux_analysis import flux_variability_analysis
-from cobra.sampling import sample
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from cobra.io import load_model
+from cobra.flux_analysis import flux_variability_analysis
+from cobra.sampling import OptGPSampler
 
-# Step 1: Load model
 model = load_model("textbook")
-baseline = model.slim_optimize()
-print(f"Baseline growth: {baseline:.3f} /h")
-
-# Step 2: Perform FVA at optimal growth (loopless=True is much slower)
-print("\nPerforming FVA at optimal growth...")
-fva_optimal = flux_variability_analysis(model, fraction_of_optimum=1.0)
-
-# Step 3: Identify reactions with flexibility
-fva_optimal["range"] = fva_optimal["maximum"] - fva_optimal["minimum"]
-fva_optimal["relative_range"] = fva_optimal["range"] / (fva_optimal["maximum"].abs() + 1e-9)
-
-flexible_reactions = fva_optimal[fva_optimal["range"] > 1.0].sort_values("range", ascending=False)
-print(f"\nFound {len(flexible_reactions)} reactions with >1.0 mmol/gDW/h flexibility")
-print("\nTop 10 most flexible reactions:")
-print(flexible_reactions.head(10)[["minimum", "maximum", "range"]])
-
-# Step 4: Perform FVA at suboptimal growth (90%)
-print("\nPerforming FVA at 90% optimal growth...")
-fva_suboptimal = flux_variability_analysis(model, fraction_of_optimum=0.9)
-fva_suboptimal["range"] = fva_suboptimal["maximum"] - fva_suboptimal["minimum"]
-
-# Step 5: Compare flexibility at different optimality levels
-comparison = pd.DataFrame({
-    "range_100": fva_optimal["range"],
-    "range_90": fva_suboptimal["range"]
-})
-comparison["range_increase"] = comparison["range_90"] - comparison["range_100"]
-
-print("\nReactions with largest increase in flexibility at suboptimality:")
-print(comparison.sort_values("range_increase", ascending=False).head(10))
-
-# Step 6: Perform flux sampling (reduce n/processes on genome-scale models)
-print("\nPerforming flux sampling (1000 samples)...")
-samples = sample(model, n=500, method="optgp", processes=1)
-
-# Step 7: Analyze sampling results for key reactions
+biomass_id = "Biomass_Ecoli_core"
+baseline = model.slim_optimize(error_value=None)
 key_reactions = ["PFK", "FBA", "TPI", "GAPD", "PGK", "PGM", "ENO", "PYK"]
-available_key_reactions = [r for r in key_reactions if r in samples.columns]
+fva_optimal = flux_variability_analysis(
+    model, reaction_list=key_reactions, fraction_of_optimum=1.0, processes=1,
+)
+with model:
+    model.reactions.get_by_id(biomass_id).lower_bound = 0.9 * baseline
+    fva_sampled = flux_variability_analysis(
+        model, reaction_list=key_reactions, fraction_of_optimum=0.0, processes=1,
+    )
+    sampler = OptGPSampler(model, processes=1, thinning=100, seed=7)
+    samples = sampler.sample(500)
+    assert (sampler.validate(samples) == "v").all()
+    assert (samples[biomass_id] >= 0.9 * baseline - 1e-6).all()
 
-if available_key_reactions:
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-    axes = axes.flatten()
-
-    for idx, reaction_id in enumerate(available_key_reactions[:8]):
-        ax = axes[idx]
-        samples[reaction_id].hist(bins=30, ax=ax, alpha=0.7)
-
-        # Overlay FVA bounds
-        fva_min = fva_optimal.loc[reaction_id, "minimum"]
-        fva_max = fva_optimal.loc[reaction_id, "maximum"]
-        ax.axvline(fva_min, color='r', linestyle='--', label='FVA min')
-        ax.axvline(fva_max, color='r', linestyle='--', label='FVA max')
-
-        ax.set_xlabel("Flux (mmol/gDW/h)")
-        ax.set_ylabel("Frequency")
-        ax.set_title(reaction_id)
-        if idx == 0:
-            ax.legend()
-
-    plt.tight_layout()
-    plt.savefig(f"{OUTDIR}/flux_distributions.png", dpi=300)
-
-# Step 8: Calculate correlation between reactions
-print("\nCalculating flux correlations...")
-correlation_matrix = samples[available_key_reactions].corr()
-
-fig, ax = plt.subplots(figsize=(10, 8))
-sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm",
-            center=0, ax=ax, square=True)
-ax.set_title("Flux Correlations Between Key Glycolysis Reactions")
-plt.tight_layout()
-plt.savefig(f"{OUTDIR}/flux_correlations.png", dpi=300)
-
-# Step 9: Identify reaction modules (highly correlated groups)
-print("\nHighly correlated reaction pairs (|r| > 0.9):")
-for i in range(len(correlation_matrix)):
-    for j in range(i+1, len(correlation_matrix)):
-        corr = correlation_matrix.iloc[i, j]
-        if abs(corr) > 0.9:
-            print(f"  {correlation_matrix.index[i]} <-> {correlation_matrix.columns[j]}: {corr:.3f}")
-
-# Step 10: Export all results
-fva_optimal.to_csv(f"{OUTDIR}/fva_optimal.csv")
-fva_suboptimal.to_csv(f"{OUTDIR}/fva_suboptimal.csv")
-samples.to_csv(f"{OUTDIR}/flux_samples.csv")
-correlation_matrix.to_csv(f"{OUTDIR}/flux_correlations.csv")
+for reaction_id in key_reactions:
+    assert samples[reaction_id].min() >= fva_sampled.loc[reaction_id, "minimum"] - 1e-6
+    assert samples[reaction_id].max() <= fva_sampled.loc[reaction_id, "maximum"] + 1e-6
+fig, ax = plt.subplots()
+samples.PFK.hist(bins=25, ax=ax)
+for bound in fva_sampled.loc["PFK", ["minimum", "maximum"]]:
+    ax.axvline(bound, color="red", linestyle="--")
+ax.set(xlabel="PFK flux (mmol/gDW/h)", ylabel="Frequency")
+fig.savefig(OUTDIR / "matched_flux_distribution.png", dpi=150)
+plt.close(fig)
+correlation = samples[key_reactions].corr()
+fig, ax = plt.subplots()
+sns.heatmap(correlation, vmin=-1, vmax=1, center=0, cmap="coolwarm", ax=ax)
+fig.tight_layout()
+fig.savefig(OUTDIR / "flux_correlations.png", dpi=150)
+plt.close(fig)
+samples.to_csv(OUTDIR / "flux_samples.csv", index=False)
+fva_optimal.to_csv(OUTDIR / "fva_optimal.csv")
+fva_sampled.to_csv(OUTDIR / "fva_sampled.csv")
 ```
 
-## Workflow 4: Production Strain Design
+## Workflow 4: Product coupling at a common growth floor
 
-This workflow demonstrates how to design a production strain for a target metabolite.
+For affected reactions whose bounds already allow zero, deletion removes feasible
+flux states; it cannot increase the global product maximum if other constraints
+are identical. Verify this premise: resetting a forced nonzero reaction to zero
+can instead relax an original requirement. Instead, this screen asks whether
+minimum acetate secretion increases at the **same absolute growth floor**, while
+recording growth capacity and maximum secretion. A higher minimum is a conditional
+coupling prediction, not proof of better experimental production. Ranking only one
+arbitrary FBA solution can mistake alternate optima for improved production.
 
 ```python
-from cobra.io import load_model
-from cobra.flux_analysis import (
-    production_envelope,
-    flux_variability_analysis,
-    single_gene_deletion
-)
 import pandas as pd
 import matplotlib.pyplot as plt
+from cobra.io import load_model
+from cobra.flux_analysis import production_envelope, flux_variability_analysis
 
-# Step 1: Define production target
-TARGET_METABOLITE = "EX_ac_e"  # Acetate production
-CARBON_SOURCE = "EX_glc__D_e"  # Glucose uptake
-
-# Step 2: Load model (textbook has acetate exchange; use iJO1366 for genome-scale)
 model = load_model("textbook")
-biomass_id = list(model.objective.variables)[0].name  # e.g. Biomass_Ecoli_core
-print(f"Designing strain for {TARGET_METABOLITE} production")
-
-# Step 3: Calculate baseline production envelope
-print("\nCalculating production envelope...")
-envelope = production_envelope(
-    model,
-    reactions=[CARBON_SOURCE, TARGET_METABOLITE],
-    carbon_sources=CARBON_SOURCE
-)
-
-# Visualize production envelope
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(envelope[CARBON_SOURCE], envelope["mass_yield_maximum"], 'b-', label='Max yield')
-ax.plot(envelope[CARBON_SOURCE], envelope["mass_yield_minimum"], 'r-', label='Min yield')
-ax.set_xlabel(f"Glucose uptake (mmol/gDW/h)")
-ax.set_ylabel(f"Acetate yield")
-ax.set_title("Wild-type Production Envelope")
-ax.legend()
-ax.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.savefig(f"{OUTDIR}/production_envelope_wildtype.png", dpi=300)
-
-# Step 4: Maximize production while maintaining growth
-print("\nOptimizing for production...")
-
-max_growth = model.slim_optimize()
-MIN_GROWTH = 0.1 * max_growth  # Maintain at least 10% of max growth
-
+biomass_id = "Biomass_Ecoli_core"  # Explicit model-specific objective, not solver variable order.
+product_id = "EX_ac_e"
+baseline = model.slim_optimize(error_value=None)
+growth_floor = 0.1 * baseline
 with model:
-    model.reactions.get_by_id(biomass_id).lower_bound = MIN_GROWTH
-    model.objective = TARGET_METABOLITE
-    model.objective_direction = "max"
-    production_solution = model.optimize()
+    model.reactions.get_by_id(biomass_id).lower_bound = growth_floor
+    envelope = production_envelope(
+        model, reactions=["EX_glc__D_e"], objective=product_id,
+        carbon_sources=["EX_glc__D_e"], points=12,
+    )
+    wt_range = flux_variability_analysis(
+        model, reaction_list=[product_id], fraction_of_optimum=0.0, processes=1,
+    ).loc[product_id]
+    records = []
+    for gene in sorted(model.genes, key=lambda g: g.id):
+        with model:
+            gene.knock_out()
+            growth_solution = model.optimize()
+            record = {"gene": gene.id, "status": growth_solution.status}
+            if growth_solution.status == "optimal":
+                product_range = flux_variability_analysis(
+                    model, reaction_list=[product_id], fraction_of_optimum=0.0,
+                    processes=1,
+                ).loc[product_id]
+                record.update(max_growth=growth_solution.objective_value,
+                              product_min=product_range.minimum,
+                              product_max=product_range.maximum)
+            records.append(record)
+knockout_results = pd.DataFrame(records)
+feasible = knockout_results[knockout_results.status.eq("optimal")].copy()
+# Bounds can differ by solver tolerance, but a strict subset cannot raise the maximum.
+assert (feasible.product_max <= wt_range.maximum + 1e-6).all()
+candidates = feasible[feasible.product_min > wt_range.minimum + 1e-6]
+candidates = candidates.sort_values("product_min", ascending=False)
+knockout_results.to_csv(OUTDIR / "product_coupling_screen.csv", index=False)
 
-    max_production = production_solution.objective_value
-    print(f"Maximum production: {max_production:.3f} mmol/gDW/h")
-    print(f"Growth rate: {production_solution.fluxes[biomass_id]:.3f} /h")
-
-# Step 5: Identify beneficial gene knockouts
-print("\nScreening for beneficial knockouts...")
-model.objective = TARGET_METABOLITE
-model.objective_direction = "max"
-
-knockout_results = []
-for gene in model.genes:
-    with model:
-        model.reactions.get_by_id(biomass_id).lower_bound = MIN_GROWTH
-        model.objective = TARGET_METABOLITE
-        model.objective_direction = "max"
-        gene.knock_out()
-        try:
-            solution = model.optimize()
-            if solution.status == "optimal":
-                production = solution.objective_value
-                growth = solution.fluxes[biomass_id]
-
-                if production > max_production * 1.05:  # >5% improvement
-                    knockout_results.append({
-                        "gene": gene.id,
-                        "production": production,
-                        "growth": growth,
-                        "improvement": (production / max_production - 1) * 100
-                    })
-        except:
-            continue
-
-knockout_df = pd.DataFrame(knockout_results)
-if len(knockout_df) > 0:
-    knockout_df = knockout_df.sort_values("improvement", ascending=False)
-    print(f"\nFound {len(knockout_df)} beneficial knockouts:")
-    print(knockout_df.head(10))
-    knockout_df.to_csv(f"{OUTDIR}/beneficial_knockouts.csv", index=False)
-else:
-    print("No beneficial single knockouts found")
-
-# Step 6: Test combination of best knockouts
-if len(knockout_df) > 0:
-    print("\nTesting knockout combinations...")
-    top_genes = knockout_df.head(3)["gene"].tolist()
-
-    with model:
-        model.reactions.get_by_id(biomass_id).lower_bound = MIN_GROWTH
-        model.objective = TARGET_METABOLITE
-        model.objective_direction = "max"
-        for gene_id in top_genes:
-            model.genes.get_by_id(gene_id).knock_out()
-
-        solution = model.optimize()
-        if solution.status == "optimal":
-            combined_production = solution.objective_value
-            combined_growth = solution.fluxes[biomass_id]
-            combined_improvement = (combined_production / max_production - 1) * 100
-
-            print(f"\nCombined knockout results:")
-            print(f"  Genes: {', '.join(top_genes)}")
-            print(f"  Production: {combined_production:.3f} mmol/gDW/h")
-            print(f"  Growth: {combined_growth:.3f} /h")
-            print(f"  Improvement: {combined_improvement:.1f}%")
-
-# Step 7: Analyze flux distribution in production strain
-if len(knockout_df) > 0:
-    best_gene = knockout_df.iloc[0]["gene"]
-
-    with model:
-        model.reactions.get_by_id(biomass_id).lower_bound = MIN_GROWTH
-        model.objective = TARGET_METABOLITE
-        model.objective_direction = "max"
-        model.genes.get_by_id(best_gene).knock_out()
-        solution = model.optimize()
-
-        # Get active pathways
-        active_fluxes = solution.fluxes[solution.fluxes.abs() > 0.1]
-        active_fluxes.to_csv(f"{OUTDIR}/production_strain_fluxes_{best_gene}_knockout.csv")
-
-        print(f"\nActive reactions in production strain: {len(active_fluxes)}")
+plot_data = envelope.assign(uptake=-envelope.EX_glc__D_e).sort_values("uptake")
+fig, ax = plt.subplots()
+ax.plot(plot_data.uptake, plot_data.flux_maximum, label="Maximum acetate flux")
+ax.plot(plot_data.uptake, plot_data.flux_minimum, label="Minimum acetate flux")
+ax.set(xlabel="Glucose uptake (mmol/gDW/h)", ylabel="Acetate secretion (mmol/gDW/h)")
+ax.legend()
+fig.savefig(OUTDIR / "production_envelope.png", dpi=150)
+plt.close(fig)
+print("Conditional coupling candidates:", len(candidates))
 ```
 
-## Workflow 5: Model Validation and Debugging
+Do not automatically combine the best single knockouts: rerun combined genotypes
+under the identical medium and growth requirement. Report failed statuses and any
+trade-off in growth or secretion bounds. Yield requires a nonzero, correctly
+oriented substrate flux; flux units are not yield units.
 
-This workflow shows systematic approaches to validate and debug metabolic models.
+## Workflow 5: Validation and bounded diagnostics
+
+Feasibility, chemistry, connectivity, and loop constraints answer different
+questions. Missing formulas/charges make chemical validation incomplete. Boundary,
+biomass and pseudoreactions have deliberate bookkeeping exceptions; inspect them
+rather than declaring every nonzero imbalance an error. A direction-aware local
+dead-end screen is only a topology heuristic, not flux consistency.
 
 ```python
-from cobra.io import load_model, read_sbml_model
-from cobra.flux_analysis import flux_variability_analysis
 import pandas as pd
+from cobra.io import load_model
+from cobra.flux_analysis import find_blocked_reactions, flux_variability_analysis
 
-# Step 1: Load model
-model = load_model("textbook")  # Or read_sbml_model("your_model.xml")
-print(f"Model: {model.id}")
-print(f"Reactions: {len(model.reactions)}")
-print(f"Metabolites: {len(model.metabolites)}")
-print(f"Genes: {len(model.genes)}")
-
-# Step 2: Check model feasibility
-print("\n--- Feasibility Check ---")
-try:
-    objective_value = model.slim_optimize()
-    print(f"Model is feasible (objective: {objective_value:.3f})")
-except:
-    print("Model is INFEASIBLE")
-    print("Troubleshooting steps:")
-
-    # Check for blocked reactions
-    from cobra.flux_analysis import find_blocked_reactions
-    blocked = find_blocked_reactions(model)
-    print(f"  Blocked reactions: {len(blocked)}")
-    if len(blocked) > 0:
-        print(f"  First 10 blocked: {list(blocked)[:10]}")
-
-    # Check medium
-    print(f"\n  Current medium: {model.medium}")
-
-    # Try opening all exchanges
-    for reaction in model.exchanges:
-        reaction.lower_bound = -1000
-
-    try:
-        objective_value = model.slim_optimize()
-        print(f"\n  Model feasible with open exchanges (objective: {objective_value:.3f})")
-        print("  Issue: Medium constraints too restrictive")
-    except:
-        print("\n  Model still infeasible with open exchanges")
-        print("  Issue: Structural problem (missing reactions, mass imbalance, etc.)")
-
-# Step 3: Check mass and charge balance
-print("\n--- Mass and Charge Balance Check ---")
-unbalanced_reactions = []
+model = load_model("textbook")
+solution = model.optimize()
+status = solution.status
+objective_value = solution.objective_value if status == "optimal" else None
+missing_chemistry = [m.id for m in model.metabolites if not m.formula or m.charge is None]
+excluded_sbo = {"SBO:0000627", "SBO:0000628", "SBO:0000629", "SBO:0000631", "SBO:0000632"}
+excluded_ids = {"Biomass_Ecoli_core"} | {r.id for r in model.boundary}
+unbalanced = {}
+unchecked = []
 for reaction in model.reactions:
+    if reaction.id in excluded_ids or reaction.annotation.get("sbo") in excluded_sbo:
+        continue
+    if any(m.id in missing_chemistry for m in reaction.metabolites):
+        unchecked.append(reaction.id)
+        continue
     try:
-        balance = reaction.check_mass_balance()
-        if balance:
-            unbalanced_reactions.append({
-                "reaction": reaction.id,
-                "imbalance": balance
-            })
-    except:
-        pass
+        imbalance = reaction.check_mass_balance()
+    except ValueError:
+        unchecked.append(reaction.id)
+        continue
+    if imbalance:
+        unbalanced[reaction.id] = imbalance
 
-if unbalanced_reactions:
-    print(f"Found {len(unbalanced_reactions)} unbalanced reactions:")
-    for item in unbalanced_reactions[:10]:
-        print(f"  {item['reaction']}: {item['imbalance']}")
-else:
-    print("All reactions are mass balanced")
+tol = model.tolerance
+dead_end_candidates = []
+for met in model.metabolites:
+    producers, consumers = set(), set()
+    for reaction in met.reactions:
+        coefficient = reaction.metabolites[met]
+        if (coefficient > 0 and reaction.upper_bound > tol) or (coefficient < 0 and reaction.lower_bound < -tol):
+            producers.add(reaction.id)
+        if (coefficient < 0 and reaction.upper_bound > tol) or (coefficient > 0 and reaction.lower_bound < -tol):
+            consumers.add(reaction.id)
+    if not producers or not consumers:
+        dead_end_candidates.append(met.id)
 
-# Step 4: Identify dead-end metabolites
-print("\n--- Dead-end Metabolite Check ---")
-dead_end_metabolites = []
-for metabolite in model.metabolites:
-    producing_reactions = [r for r in metabolite.reactions
-                          if r.metabolites[metabolite] > 0]
-    consuming_reactions = [r for r in metabolite.reactions
-                          if r.metabolites[metabolite] < 0]
-
-    if len(producing_reactions) == 0 or len(consuming_reactions) == 0:
-        dead_end_metabolites.append({
-            "metabolite": metabolite.id,
-            "producers": len(producing_reactions),
-            "consumers": len(consuming_reactions)
-        })
-
-if dead_end_metabolites:
-    print(f"Found {len(dead_end_metabolites)} dead-end metabolites:")
-    for item in dead_end_metabolites[:10]:
-        print(f"  {item['metabolite']}: {item['producers']} producers, {item['consumers']} consumers")
-else:
-    print("No dead-end metabolites found")
-
-# Step 5: Check for duplicate reactions
-print("\n--- Duplicate Reaction Check ---")
-reaction_equations = {}
-duplicates = []
-
+# Exact stoichiometric duplicates only; compare bounds/GPRs before merging anything.
+seen, duplicates = {}, []
 for reaction in model.reactions:
-    equation = reaction.build_reaction_string()
-    if equation in reaction_equations:
-        duplicates.append({
-            "reaction1": reaction_equations[equation],
-            "reaction2": reaction.id,
-            "equation": equation
-        })
+    key = tuple(sorted((m.id, c) for m, c in reaction.metabolites.items()))
+    if key in seen:
+        duplicates.append((seen[key], reaction.id))
     else:
-        reaction_equations[equation] = reaction.id
-
-if duplicates:
-    print(f"Found {len(duplicates)} duplicate reaction pairs:")
-    for item in duplicates[:10]:
-        print(f"  {item['reaction1']} == {item['reaction2']}")
+        seen[key] = reaction.id
+orphan_genes = [g.id for g in model.genes if not g.reactions]
+blocked, loop_sensitive = None, None
+if status == "optimal":
+    blocked = find_blocked_reactions(model, open_exchanges=False, processes=1)
+    subset = ["PFK", "FRD7", "SUCDi"]
+    ordinary = flux_variability_analysis(model, subset, processes=1)
+    loopless = flux_variability_analysis(model, subset, loopless="fastSNP", processes=1)
+    loop_sensitive = [rid for rid in subset if
+                      ordinary.loc[rid, "maximum"] > loopless.loc[rid, "maximum"] + 1e-6
+                      or ordinary.loc[rid, "minimum"] < loopless.loc[rid, "minimum"] - 1e-6]
 else:
-    print("No duplicate reactions found")
-
-# Step 6: Identify orphan genes
-print("\n--- Orphan Gene Check ---")
-orphan_genes = [gene for gene in model.genes if len(gene.reactions) == 0]
-
-if orphan_genes:
-    print(f"Found {len(orphan_genes)} orphan genes (not associated with reactions):")
-    print(f"  First 10: {[g.id for g in orphan_genes[:10]]}")
-else:
-    print("No orphan genes found")
-
-# Step 7: Check for thermodynamically infeasible loops (loopless FVA is slow on large models)
-print("\n--- Thermodynamic Loop Check ---")
-fva_standard = flux_variability_analysis(model)
-fva_loopless = flux_variability_analysis(model, loopless=True)
-
-loop_reactions = []
-for reaction_id in fva_standard.index:
-    standard_range = fva_standard.loc[reaction_id, "maximum"] - fva_standard.loc[reaction_id, "minimum"]
-    loopless_range = fva_loopless.loc[reaction_id, "maximum"] - fva_loopless.loc[reaction_id, "minimum"]
-
-    if standard_range > loopless_range + 0.1:
-        loop_reactions.append({
-            "reaction": reaction_id,
-            "standard_range": standard_range,
-            "loopless_range": loopless_range
-        })
-
-if loop_reactions:
-    print(f"Found {len(loop_reactions)} reactions potentially involved in loops:")
-    loop_df = pd.DataFrame(loop_reactions).sort_values("standard_range", ascending=False)
-    print(loop_df.head(10))
-else:
-    print("No thermodynamically infeasible loops detected")
-
-# Step 8: Generate validation report
-print("\n--- Generating Validation Report ---")
-validation_report = {
-    "model_id": model.id,
-    "feasible": objective_value if 'objective_value' in locals() else None,
-    "n_reactions": len(model.reactions),
-    "n_metabolites": len(model.metabolites),
-    "n_genes": len(model.genes),
-    "n_unbalanced": len(unbalanced_reactions),
-    "n_dead_ends": len(dead_end_metabolites),
-    "n_duplicates": len(duplicates),
-    "n_orphan_genes": len(orphan_genes),
-    "n_loop_reactions": len(loop_reactions)
+    print("[FAIL] Original model status:", status)
+    with model:
+        medium = {r.id: 1000.0 for r in model.exchanges}
+        model.medium = medium
+        diagnostic = model.optimize()
+        print("Open-import diagnostic status:", diagnostic.status)
+    # Do not overwrite the original status or claim a structural cause from this alone.
+report = {
+    "model_id": model.id, "status": status, "objective_value": objective_value,
+    "missing_chemistry": len(missing_chemistry), "unchecked_internal": len(unchecked),
+    "unbalanced_internal": len(unbalanced), "dead_end_candidates": len(dead_end_candidates),
+    "exact_duplicate_pairs": len(duplicates), "orphan_genes": len(orphan_genes),
+    "blocked_in_current_medium": None if blocked is None else len(blocked),
+    "loop_sensitive_in_tested_subset": None if loop_sensitive is None else len(loop_sensitive),
 }
-
-validation_df = pd.DataFrame([validation_report])
-validation_df.to_csv(f"{OUTDIR}/model_validation_report.csv", index=False)
-print(f"Validation report saved to {OUTDIR}/model_validation_report.csv")
+pd.DataFrame([report]).to_csv(OUTDIR / "validation_report.csv", index=False)
+print(report)
 ```
 
-These workflows provide comprehensive templates for common COBRApy tasks. Adapt them as needed for specific research questions and models.
+A negative loop screen on three reactions is not a whole-model thermodynamic
+certificate. Growth, knockouts, media, and sampling all depend on the model's
+objective, uptake bounds, maintenance costs, and solver tolerances.
+
+## Official sources
+
+- [Deletion tutorial](https://cobrapy.readthedocs.io/en/latest/deletions.html)
+- [Media tutorial](https://cobrapy.readthedocs.io/en/latest/media.html)
+- [Sampling tutorial](https://cobrapy.readthedocs.io/en/latest/sampling.html)
+- [FVA API and loopless methods](https://cobrapy.readthedocs.io/en/latest/autoapi/cobra/flux_analysis/variability/index.html)
+- [Production-envelope API](https://cobrapy.readthedocs.io/en/latest/autoapi/cobra/flux_analysis/phenotype_phase_plane/index.html)

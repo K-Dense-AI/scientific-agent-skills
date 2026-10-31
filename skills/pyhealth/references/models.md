@@ -1,114 +1,100 @@
-# Models
+# Models and training
 
-All PyHealth models are PyTorch modules with a unified constructor: they take a `SampleDataset` (the output of `base.set_task(...)`) as the first argument, plus model-specific hyperparameters. The model auto-configures input/output dimensions from the dataset's schema — you don't wire layers by hand.
+Reviewed against PyHealth 2.0.2 exports, constructors and implementations. All model
+choices below require checking the actual sample schema and a forward pass; a shared
+`dataset=` parameter does not make modalities or hyperparameters interchangeable.
+
+## Choosing a compatible architecture
+
+| Input/task | Candidate exports | Contract to check |
+|---|---|---|
+| Code sequences | `Transformer`, `RNN`, `RETAIN`, `Deepr`, `TCN` | Flat versus nested sequences, label processor and pooling semantics |
+| Irregular clinical series | `AdaCare`, `ConCare`, `StageNet`, `EHRMamba` | Required processors, numeric features and time inputs |
+| Medication sets | `GAMENet`, `SafeDrug`, `MICRON`, `MoleRec` | Visit histories, ATC level 3 labels, DDI/molecular resources |
+| Simple baselines | `LogisticRegression`, `MLP` | PyHealth's LogisticRegression learns embeddings with a linear head; it is not automatically a fixed bag-of-codes baseline |
+| Signals/images | `CNN`, `ContraWR`, `SparcNet`, `BIOT` | Expected channels, sample rate, length and model-specific transforms |
+| Graphs | `GCN`, `GAT`, `GraphCare`, `GRASP` | Graph construction and optional graph dependencies; there is no exported `GNN` class in 2.0.2 |
+| Text | `TransformersModel`, `TransformerDeID`, `MedLink` | Tokenizers/checkpoints, text or retrieval schema; MedLink links de-identified patient records using retrieval; it is not a terminology cross-map |
+| Generative | `VAE`, `GAN` | Architecture-specific generation/training contract |
+| Learned feature selection | `Agent` | Uses RL within a predictive model; it is not a ready-made treatment-policy optimizer |
+| Mixed inputs | `MultimodalRNN` | Supported sequence/tensor processors |
+
+RETAIN attention may help inspect associations but is not by itself a causal
+explanation. MICRON models medication changes internally yet returns probabilities
+for the medication set; do not interpret its output as change labels automatically.
+DDI loss terms do not make a recommendation clinically safe. Build GAMENet from the
+training dataset because its EHR adjacency is learned from dataset records.
+
+## Constructor examples
 
 ```python
-model = Transformer(dataset=samples, hidden_dim=128)
+from pyhealth.models import Transformer, RNN, RETAIN
+model = Transformer(dataset=train, embedding_dim=32, heads=2,
+                    num_layers=1, dropout=0.1)
+rnn = RNN(dataset=train, embedding_dim=32, hidden_dim=64, rnn_type="GRU")
+retain = RETAIN(dataset=train, embedding_dim=32, dropout=0.1)
 ```
 
-If you pass a `BaseDataset` instead of a `SampleDataset`, the model can't introspect schemas and will error or misbehave.
+`Transformer` does not accept `hidden_dim`. RNN passes extra arguments to `RNNLayer`;
+RETAIN passes its extra arguments to `RETAINLayer`. Use `inspect.signature` and the
+[model-specific documentation](https://pyhealth.readthedocs.io/en/latest/api/models.html)
+for additional parameters. Model dimensions come from fitted input/output processors.
+Most predictive models require exactly one output field. Inspect its schema rather
+than adding obsolete `feature_keys`, `label_key`, or `mode` kwargs from 1.x tutorials.
 
-## Choosing a model
+A minimal forward check after creating the loader:
 
-Pick by data shape and task type, not by recency. The "newest" model is rarely the right answer.
+```python
+batch = next(iter(train_loader))
+output = model(**batch)
+assert output["loss"].isfinite().all()
+assert output["y_prob"].shape[0] == output["y_true"].shape[0]
+```
 
-### EHR sequential codes (diagnoses, procedures, prescriptions across visits)
+For drug recommendation, the built-in MIMIC task supplies nested conditions,
+procedures and historical medications plus `drugs: multilabel`. It converts NDCs to
+ATC level 3. Validate mapped coverage and the availability of resource tables before
+trying molecular models. Their initialization can perform network downloads.
+GAMENet, SafeDrug and MICRON passed small synthetic forward checks, including
+ATC resource loading; they were not benchmarked on clinical data. A concrete
+2.0.2 caveat: GAMENet's `generate_ehr_adj` skips tensor-valued medication labels.
+Processed sample datasets normally contain tensors, and the smoke fixture with
+co-occurring drugs produced an all-zero EHR adjacency. Inspect this matrix and
+resolve the upstream behavior before claiming the EHR graph is active. Other
+specialized architectures were reviewed in source only.
 
-| Model | When to pick it |
-|---|---|
-| `Transformer` | Strong default. Long visit histories, attention over codes. |
-| `RNN` (LSTM/GRU) | Smaller datasets; faster than Transformer; sensible baseline. |
-| `RETAIN` | When **interpretability** matters — produces visit-level and code-level attention weights. |
-| `Deepr` | CNN-over-codes; readmission-style tasks. |
-| `TCN` | Long-range temporal patterns where causality matters. |
-| `AdaCare` | Adaptive feature extraction across irregular time intervals. |
-| `ConCare` | Contextualized representations across visits. |
-| `StageNet` | Disease-progression staging from irregular vitals. |
-| `EHRMamba` | State-space alternative to Transformer for long sequences. |
+## Trainer contract
 
-### Drug recommendation (multilabel)
+```python
+from pyhealth.trainer import Trainer
+trainer = Trainer(model=model, metrics=["pr_auc", "roc_auc"], device="cpu",
+                  output_path="./output", exp_name="mortality")
+trainer.train(train_dataloader=train_loader, val_dataloader=val_loader,
+              epochs=30, monitor="pr_auc", monitor_criterion="max", patience=5)
+scores = trainer.evaluate(test_loader)
+y_true, y_prob, mean_loss = trainer.inference(test_loader)
+```
 
-| Model | When to pick it |
-|---|---|
-| `GAMENet` | Drug-rec baseline with memory networks; pairs with `DrugRecommendation*` tasks. |
-| `SafeDrug` | Models drug-drug interactions / safety constraints via molecular structure. |
-| `MICRON` | Predicts **medication change** between visits, not the full set. |
-| `MoleRec` | Substructure-aware molecular drug recommendation. |
+For binary AUC, verify both classes occur in the evaluation cohort. Multiclass and
+multilabel metrics need their corresponding names; see [tasks](tasks.md). Missing
+monitor keys cause `KeyError`; unsupported metric names cause metric evaluation
+errors. They do not silently choose a different checkpoint. Include the monitored
+metric in `metrics` and verify `trainer.evaluate(val_loader)` before a long run.
 
-### Static / tabular features
+With logging enabled, checkpoints are stored under `output_path/exp_name/` as
+`best.ckpt` and `last.ckpt`. Best weights are restored at training end by default.
+`enable_logging=False` suppresses checkpoint writing, so do not promise persistent
+best-model restoration in that mode. `Trainer.train` returns no score dictionary;
+use `evaluate` afterward. Avoid passing the test loader to every tuning run.
 
-| Model | When to pick it |
-|---|---|
-| `LogisticRegression` | Strong, fast baseline. Always run this first. |
-| `MLP` | Static numeric vectors, no sequence order. |
+```python
+trainer.load_ckpt("./output/mortality/best.ckpt")
+```
 
-### Imaging / signals
+This restores weights only: recreate the same architecture **and the original
+processors/vocabularies**, since token-index changes can silently invalidate a model.
+Persist data split IDs, schema, processor artifacts, code version and dependency lock
+with the checkpoint. `save_processors`/`load_processors` exist in `pyhealth.datasets`;
+only load trusted local processor artifacts (they use pickle).
 
-| Model | When to pick it |
-|---|---|
-| `CNN` | Generic convolutional baseline for images and 1D signals. |
-| `ContraWR` | Contrastive learning for biosignals. |
-| `SparcNet` | Sparse signal prediction (seizure, sleep staging). |
-| `BIOT` | Biosignal transformer. |
-
-### Graph-structured data
-
-| Model | When to pick it |
-|---|---|
-| `GNN` | Generic graph neural net baseline. |
-| `GraphCare` | EHR codes augmented with external medical knowledge graphs (UMLS/SNOMED). |
-| `GRASP` | Patient-similarity graph representations. |
-
-### Text
-
-| Model | When to pick it |
-|---|---|
-| `TransformersModel` | Pretrained HuggingFace transformer (BERT-family) — clinical notes, transcripts. |
-| `TransformerDeID` | De-identification NER head on top of a transformer. |
-| `MedLink` | Medical entity linking. |
-
-### Generative / representation
-
-| Model | When to pick it |
-|---|---|
-| `VAE` | Synthetic EHR generation, anomaly detection. |
-| `GAN` | Synthetic data with adversarial training. |
-
-### Reinforcement learning
-
-| Model | When to pick it |
-|---|---|
-| `Agent` | Treatment recommendation framed as RL. |
-
-### Multimodal
-
-| Model | When to pick it |
-|---|---|
-| `MultimodalRNN` | Mix of sequential codes and static tensors in one sample. |
-
-## Common arguments
-
-Most clinical models accept:
-
-- `dataset` — the `SampleDataset` (required, positional)
-- `hidden_dim` — embedding/hidden width (default ≈128)
-- `embedding_dim` — separate embedding width if exposed
-- `dropout` — dropout rate
-- `num_layers` — for RNN/Transformer/TCN
-
-Refer to the docstring (`help(Transformer)`) for model-specific knobs (e.g., `rnn_type` for `RNN`, `num_filters` for `CNN`, `latent_dim` for `VAE`).
-
-## Recommended progression
-
-When starting on a new task, work up the model ladder rather than jumping to the most exotic option:
-
-1. **`LogisticRegression`** — sanity check + floor.
-2. **`MLP`** if features are static, **`RNN`** if sequential.
-3. **`Transformer`** — strong general default.
-4. **Specialized model** (RETAIN, GAMENet, StageNet, etc.) — only if the task has a property that motivates it (interpretability, drug structure, irregular time, etc.).
-
-Stop as soon as a model does the job. A working `Transformer` beats a half-debugged `MoleRec`.
-
-## Custom models
-
-Subclass `BaseModel` if nothing fits. The dataset object provides feature extractors via `dataset.input_processors` — use them to keep tokenization consistent with the rest of the pipeline rather than rolling custom encoders.
+[Official Trainer API](https://pyhealth.readthedocs.io/en/latest/api/trainer.html).

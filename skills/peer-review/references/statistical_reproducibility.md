@@ -1,6 +1,6 @@
 # Statistical, Methods, and Reproducibility Review
 
-This guide supports structured questions; it does not replace a statistician, methodologist, domain expert, or independent reanalysis. Sources verified on **2026-07-23** are recorded in `assets/source_ledger.csv`.
+This guide supports structured questions; it does not replace a statistician, methodologist, domain expert, or independent reanalysis. Sources reviewed on **2026-10-01**, with source-specific verification limits, are recorded in `assets/source_ledger.csv`.
 
 ## Evidence hierarchy for the review
 

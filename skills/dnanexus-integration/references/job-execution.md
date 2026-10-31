@@ -223,7 +223,7 @@ except DXError:
     raise
 ```
 
-Despite its docstring, dxpy 0.410.0 raises `DXJobFailureError` for remote
+Despite its docstring, dxpy 0.415.0 raises `DXJobFailureError` for remote
 failure, termination, **and local wait timeout**. Classify the exception by
 re-describing the remote state. A local timeout does not terminate the remote
 execution.

@@ -96,6 +96,7 @@ def test_redacts_known_secret_env_var_assignments():
         "OPENAI_API_KEY=really-long-secret-value-12345",
         "GITHUB_TOKEN=ghp_thesecret1234567890abcdefghij",
         "ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxx",
+        "LM_API_TOKEN=synthetic-auth-value",
     ]
     for c in cases:
         out = redact(c)

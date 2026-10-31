@@ -1,6 +1,17 @@
 # Security validation record
 
-Validation date: **2026-07-24**.
+Historical security validation date: **2026-07-24**.
+
+## 2026-10-01 maintenance validation
+
+- Exact generation pins are now python-pptx 1.0.2, Pillow 12.3.0, and lxml 6.1.3.
+- The isolated per-skill suite passed **52 tests**, including generation/reopen,
+  deterministic bytes, UTC conversion across day boundaries, metadata limits,
+  in-directory final-symlink rejection, and distinct canvas/artboard PDF dimensions.
+- The spec validator passed. New aggregate security scan results are tracked by the
+  repository refresh; the historical scan findings below are not a new scan.
+- No native PowerPoint, PDF export, accessibility, or physical printer validation was
+  performed in this maintenance pass.
 
 ## Baseline
 
@@ -75,7 +86,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \
 PYTHONDONTWRITEBYTECODE=1 uv run --no-project \
   --with "python-pptx==1.0.2" \
   --with "Pillow==12.3.0" \
-  --with "lxml==6.1.1" \
+  --with "lxml==6.1.3" \
   python -B -m unittest discover \
   -s tests/pptx-posters -p "test_*.py" -v
 

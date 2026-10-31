@@ -17,7 +17,7 @@ from typing import Any
 
 SCHEMA_VERSION = "1.1"
 PYDICOM_VERSION = "3.0.2"
-NUMPY_VERSION = "2.5.1"
+NUMPY_VERSION = "2.5.3"
 PILLOW_VERSION = "12.3.0"
 
 KIB = 1024
@@ -81,7 +81,6 @@ STRUCTURAL_UID_KEYWORDS = frozenset(
         "CodingSchemeUID",
         "ContextGroupExtensionCreatorUID",
         "ContextGroupLocalVersion",
-        "DeviceUID",
         "ImplementationClassUID",
         "MediaStorageSOPClassUID",
         "PrivateInformationCreatorUID",
@@ -98,6 +97,7 @@ UID_REMAP_KEYWORDS = frozenset(
         "AcquisitionUID",
         "ConcatenationUID",
         "ContrastBolusAgentNumber",
+        "DeviceUID",
         "DimensionOrganizationUID",
         "DoseReferenceUID",
         "FiducialUID",

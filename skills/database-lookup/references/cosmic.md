@@ -1,59 +1,24 @@
-# COSMIC (Catalogue of Somatic Mutations in Cancer)
+# COSMIC — Catalogue of Somatic Mutations in Cancer
 
-## Base URL
-```
-https://cancer.sanger.ac.uk/cosmic/api/v1/
-```
+Use the [official COSMIC site](https://cancer.sanger.ac.uk/cosmic) to search genes,
+mutations, tissues and Cancer Gene Census records. Programmatic bulk access is
+through the [licensed download service](https://cancer.sanger.ac.uk/cosmic/help/file_download).
+A COSMIC account and acceptance of the applicable data licence are required;
+commercial access has separate licensing terms.
 
-## Auth
-**Registration required.** Free academic account or paid commercial license.
+Workflow:
+1. Sign in through COSMIC and select the dataset, release and genome assembly.
+2. Use the download instructions supplied for that release/account. If the
+   service supplies a temporary signed URL, download it promptly and keep it
+   out of logs and published artifacts.
+3. Record the release, file name, checksum, assembly and selected columns.
+4. Filter locally by gene, tissue or variant; preserve sample identifiers and
+   distinguish mutation counts from numbers of tested samples.
 
-Login to get JWT token:
-```
-POST /auth/login
-Content-Type: application/json
-{"email": "you@example.com", "password": "yourpassword"}
-```
-Pass token as: `Authorization: Bearer <token>`
+No current public documentation was found supporting a generic
+`/cosmic/api/v1` mutation-search API or a JWT `/auth/login` workflow. Those
+recipes have been removed. Authenticated downloads were not executed during
+this review; consult the signed-in official instructions for exact routes.
 
-## Key Endpoints
-
-### Search mutations by gene
-```
-GET /mutations/search?q={gene_symbol}&page=1&page_size=5
-```
-
-### Get gene information
-```
-GET /genes/{gene_symbol}
-```
-Example: `/genes/BRAF`
-
-Response includes: gene_symbol, gene_name, chromosome, cancer_census (bool), tier, mutation_count, sample_count
-
-### Get specific mutation by COSMIC ID
-```
-GET /mutations/{cosmic_mutation_id}
-```
-Example: `/mutations/COSV56056643`
-
-Response includes: gene, cds_mutation, aa_mutation, mutation_type, fathmm_prediction, genomic_coordinates, tissue_distribution
-
-### Cancer Gene Census
-```
-GET /cancer-gene-census?tier=1&page_size=10
-```
-
-### Mutations by tissue/histology
-```
-GET /mutations/distribution/{gene_symbol}
-```
-
-## Rate Limits
-Not officially published. Bulk data requires SFTP download (licensed).
-
-## Important
-- COSMIC requires authentication for all API calls
-- Commercial use requires a paid license
-- Bulk data access via SFTP is preferred over API for large queries
-- API structure may change across COSMIC versions
+COSMIC catalogue inclusion is evidence of observation in a cancer sample, not
+proof of driver status, pathogenicity or response to a drug.

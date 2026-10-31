@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from _common import (
@@ -93,6 +93,7 @@ def _interval_or_unavailable(
 def run_experiment(config: ExperimentConfig) -> dict[str, Any]:
     """Run independent replication streams and summarize replication estimates."""
 
+    config = ExperimentConfig.from_mapping(asdict(config))
     reports = [
         run_simulation(config.model, replication=index)
         for index in range(config.replications)
@@ -134,6 +135,8 @@ def run_experiment(config: ExperimentConfig) -> dict[str, Any]:
             "warm_up": config.model.warm_up,
         },
         "intervals": intervals,
+        "metric_windows": reports[0]["metric_windows"],
+        "simpy_version": reports[0]["simpy_version"],
         "model": {
             key: getattr(config.model, key)
             for key in config.model.__dataclass_fields__
@@ -145,7 +148,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, Any]:
             "total_entity_budget": MAX_TOTAL_ENTITY_BUDGET,
             "total_event_budget": MAX_TOTAL_EVENT_BUDGET,
         },
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "warnings": [
             "Intervals quantify Monte Carlo uncertainty under the configured model; "
             "they do not validate the model or establish causality.",

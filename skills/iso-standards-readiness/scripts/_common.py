@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ MAX_INPUT_BYTES = 2_000_000
 MAX_ITEMS = 5_000
 MAX_DEPTH = 30
 MAX_TEXT_CHARS = 20_000
+RESEARCH_BASIS = "2026-10-01"
 EXIT_OK = 0
 EXIT_FINDINGS = 1
 EXIT_INPUT_ERROR = 2
@@ -113,6 +115,10 @@ def _check_depth_and_size(value: Any) -> None:
             raise InputError(
                 f"JSON string exceeds {MAX_TEXT_CHARS} characters"
             )
+        elif isinstance(current, float) and not math.isfinite(current):
+            # parse_constant rejects NaN/Infinity tokens, but a JSON number such
+            # as 1e999 also overflows to infinity with the standard parser.
+            raise InputError("non-finite JSON number is not permitted")
         if items > MAX_ITEMS:
             raise InputError(f"JSON contains more than {MAX_ITEMS} items")
 
@@ -153,7 +159,7 @@ def load_json(path_text: str) -> Any:
         )
     except InputError:
         raise
-    except (json.JSONDecodeError, RecursionError) as exc:
+    except (ValueError, RecursionError) as exc:
         raise InputError(f"invalid JSON in {path}: {exc}") from exc
     _check_depth_and_size(value)
     return value
@@ -187,7 +193,10 @@ def is_placeholder(value: Any) -> bool:
 
 
 def valid_iso_date(value: Any) -> bool:
-    if not isinstance(value, str):
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None
+    ):
         return False
     try:
         date.fromisoformat(value)
@@ -471,7 +480,7 @@ def build_report(
     findings: Iterable[Finding],
     *,
     metrics: dict[str, Any] | None = None,
-    basis: str = "2026-07-26",
+    basis: str = RESEARCH_BASIS,
     standard: str | None = None,
 ) -> dict[str, Any]:
     ordered = sorted(

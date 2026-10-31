@@ -24,7 +24,7 @@ GET https://data.rcsb.org/rest/v1/core/entry/4HHB
 ```
 Returns JSON with resolution, method, deposition date, title, authors, etc.
 
-### 2. Polymer Entity (chain-level info)
+### 2. Polymer Entity (unique molecular entity)
 ```
 GET https://data.rcsb.org/rest/v1/core/polymer_entity/{entry_id}/{entity_id}
 ```
@@ -32,6 +32,8 @@ Example:
 ```
 GET https://data.rcsb.org/rest/v1/core/polymer_entity/4HHB/1
 ```
+
+An entity may have multiple chain instances. For chain-specific coordinates/annotations use `/core/polymer_entity_instance/{entry_id}/{label_asym_id}`; `label_asym_id` is the mmCIF identifier, not necessarily the author chain ID.
 
 ### 3. Assembly Info
 ```
@@ -109,7 +111,7 @@ Body example:
 ```
 
 ## Response Format
-All REST/Search endpoints return JSON. File downloads return PDB/mmCIF text.
+REST/Data and successful Search results return JSON. Search can return HTTP 204 for no matches; do not attempt to JSON-decode an empty body. File downloads return PDB/mmCIF text.
 
 ## Useful `return_type` Values for Search
 - `entry` — PDB IDs

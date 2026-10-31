@@ -1,11 +1,13 @@
 ---
 name: liteparse
-description: Local document and PDF parsing that returns spatial text with bounding boxes. Use for extracting text from PDFs, DOCX, Office files, and images; running OCR on scans; producing layout-preserved JSON for RAG; batch-ingesting folders of papers; or rendering pages to PNG for multimodal agents. Distinguishing capabilities are per-token bounding boxes, page raster output, and fully local processing with no cloud API.
+description: Local document and PDF parsing that returns spatial text with bounding boxes. Use for extracting text from PDFs, DOCX, Office files, and images; running OCR on scans; producing layout-preserved JSON for RAG; batch-ingesting folders of papers; or rendering pages to PNG for multimodal agents. Distinguishing capabilities are spatial text boxes, Markdown, page raster output, and local parsing with optional custom HTTP OCR.
 license: Apache-2.0
 allowed-tools: Read Write Edit Bash
-compatibility: Python 3.10+. Optional LibreOffice (Office formats) and ImageMagick (images). Bundled Tesseract for OCR. All processing is local — no cloud API required.
+compatibility: Python 3.10+ with liteparse 2.15.0. LibreOffice required for Office formats; images convert natively. Tesseract is bundled but missing language data downloads on first use. Optional HTTP OCR requires network access and server-specific authentication.
 metadata:
-  version: "1.4"
+  version: "1.6"
+  last-reviewed: "2026-10-01"
+  upstream-version: "2.15.0"
   skill-author: K-Dense Inc.
 ---
 
@@ -13,13 +15,11 @@ metadata:
 
 ## Overview
 
-LiteParse is a fast, open-source document parser (Rust core, Python/Node bindings) focused on **local, layout-aware text extraction** with bounding boxes. The pinned workflows here use **plain text** (layout-preserved) or **structured JSON** with per-page `text_items` (position, font metadata, optional confidence) and do not call cloud LLMs.
+LiteParse is an open-source document parser (Rust core, Python/Node bindings) for **local, layout-aware text extraction**. It produces layout text, structured JSON, or heuristic Markdown. Spatial text items may span several words; Python `emit_word_boxes=True` adds word boxes when needed.
 
-**Capability drift:** [current upstream releases also document Markdown output](https://developers.llamaindex.ai/liteparse/). Do not treat that as unavailable across the project or copy current flags into the pinned 2.0.0 environment without checking its CLI/API. Review and test a version upgrade separately.
+**Verified release:** Python **liteparse 2.15.0** (September 29, 2026); CLI and synthetic local PDF/image fixtures tested on Python 3.13. Node/Rust examples below are source-checked and illustrative. Images convert through bundled Rust libraries, not ImageMagick. No cloud account is needed, but missing Tesseract language data can download from GitHub and an explicitly configured HTTP OCR service receives document images.
 
-**Version note:** Examples target **liteparse 2.0.0** (PyPI, May 2026). The upstream V1 branch is legacy; this skill documents **V2 / main** only.
-
-For parser selection vs MarkItDown, the `pdf` skill, or LlamaParse, see `references/choosing_a_parser.md`.
+For parser selection vs MarkItDown, PDF manipulation libraries, or LlamaParse, see `references/choosing_a_parser.md`.
 
 ## When to Use This Skill
 
@@ -37,13 +37,13 @@ Use LiteParse when you need:
 | Task | Use instead |
 |------|-------------|
 | Markdown for LLM ingestion (EPUB, audio, YouTube, HTML) | `markitdown` skill |
-| Merge/split PDFs, forms, watermarks, rotation | `pdf` skill |
-| Dense tables, handwriting, production cloud pipelines | [LlamaParse](https://docs.cloud.llamaindex.ai/llamaparse/overview) (cloud; sign up separately) |
+| Merge/split PDFs, forms, watermarks, rotation | A PDF manipulation library such as `pypdf` |
+| Dense tables, handwriting, production cloud pipelines | [LlamaParse](https://developers.llamaindex.ai/llamaparse/parse/) (cloud; sign up separately) |
 
 ## Installation
 
 ```bash
-uv pip install "liteparse==2.0.0"
+uv pip install "liteparse==2.15.0"
 ```
 
 This installs the Python bindings and the **`lit`** CLI. Verify:
@@ -53,14 +53,15 @@ lit --help
 python -c "import liteparse; print(liteparse.__version__)"
 ```
 
-**Optional system tools** (for non-PDF inputs):
+**Optional system tool** (for Office inputs):
 
 - **LibreOffice** — Word, Excel, PowerPoint, OpenDocument, CSV/TSV
-- **ImageMagick** — PNG, JPEG, TIFF, WebP, SVG, etc.
+
+PNG, JPEG, TIFF, WebP, SVG and other supported images convert natively.
 
 Install commands are in `references/ocr_and_formats.md`.
 
-**Node.js / TypeScript** (optional): `npm i @llamaindex/liteparse` — see `references/api_reference.md`.
+**Node.js / TypeScript** (optional): `npm i @llamaindex/liteparse@2.15.0` — see `references/api_reference.md`.
 
 ---
 
@@ -87,6 +88,9 @@ lit parse paper.pdf
 
 # Structured JSON with bounding boxes
 lit parse paper.pdf --format json -o paper.json
+
+# Heuristic Markdown, including headings, tables and links
+lit parse paper.pdf --format markdown -o paper.md
 
 # Disable OCR on text-native PDFs (faster)
 lit parse paper.pdf --no-ocr
@@ -115,7 +119,6 @@ lit parse document.pdf -o output.txt
 Use when building layout-aware RAG, highlighting source regions, or joining text with screenshots.
 
 ```python
-import json
 from liteparse import LiteParse
 
 parser = LiteParse(output_format="json", quiet=True)
@@ -182,7 +185,7 @@ Combine **JSON parse + screenshots** when an agent needs both coordinates and pi
 
 ### 6. Batch-parse a directory
 
-For large corpora, prefer the CLI (parallel OCR workers) or the bundled script.
+Use the CLI or bundled script. OCR workers parallelize OCR tasks; they do not parallelize whole-document PDFium parsing. Python worker pools provide process-level parallelism and hard parse timeouts; see the API reference.
 
 ```bash
 lit batch-parse ./papers ./parsed --format json --recursive
@@ -193,11 +196,11 @@ lit batch-parse ./papers ./parsed --extension .pdf --no-ocr
 python scripts/batch_parse_dir.py ./papers ./parsed --format json --recursive
 ```
 
-See `scripts/batch_parse_dir.py` for a Python batch wrapper without network calls.
+The wrapper mirrors subdirectories, preserves source suffixes (`paper.pdf.json`), and rejects existing outputs or partial-page results. It emits a documented Python JSON subset, not the native CLI schema. Native `lit batch-parse` uses `paper.json`, so same-stem inputs in one directory can collide; restrict the input extension or use the wrapper.
 
 ### 7. OCR configuration
 
-OCR is **on by default**. Tesseract is bundled; no extra install for basic English OCR.
+OCR is **on by default**. Tesseract is bundled; missing `.traineddata` files are downloaded on demand, including when a custom tessdata directory is set.
 
 ```python
 parser = LiteParse(
@@ -214,7 +217,7 @@ lit parse scan.pdf --no-ocr
 lit parse scan.pdf --ocr-server-url http://localhost:8080/ocr
 ```
 
-**Offline / air-gapped:** set `TESSDATA_PREFIX` to a directory of `.traineddata` files, or pass `--tessdata-path`. Details: `references/ocr_and_formats.md`.
+**Offline / air-gapped:** pre-populate every requested `.traineddata` file, then set `TESSDATA_PREFIX` or pass `--tessdata-path`. A directory setting alone does not prohibit downloads. Details: `references/ocr_and_formats.md`.
 
 ### 8. Encrypted PDFs
 
@@ -235,7 +238,7 @@ Merge adjacent items and return combined bounding boxes for a phrase (e.g. secti
 from liteparse import search_items
 
 page = result.get_page(1)
-matches = search_items(page.text_items, "Materials and Methods", case_sensitive=False)
+matches = search_items(page.text_items, "Materials and Methods", case_sensitive=False) if page else []
 ```
 
 ---
@@ -246,9 +249,9 @@ matches = search_items(page.text_items, "Materials and Methods", case_sensitive=
 |----------|----------------------|-------------|
 | PDF | `.pdf` | Native |
 | Office | `.docx`, `.xlsx`, `.pptx`, `.doc`, `.odt`, … | LibreOffice |
-| Images | `.png`, `.jpg`, `.tiff`, `.webp`, `.svg`, … | ImageMagick |
+| Images | `.png`, `.jpg`, `.tiff`, `.webp`, `.svg`, … | Built-in conversion |
 
-Files are converted to PDF internally, then parsed. If conversion tools are missing, parsing fails with an actionable error — install the dependency and retry.
+Non-PDF inputs convert to PDF internally. Office conversion depends on LibreOffice and available fonts. Inspect representative converted pages; formulas, layout, and scientific symbols can change during conversion.
 
 ---
 
@@ -257,11 +260,18 @@ Files are converted to PDF internally, then parsed. If conversion tools are miss
 - **`--no-ocr`** on born-digital PDFs — largest speedup
 - **`target_pages`** — parse only methods/supplement sections
 - **`num_workers`** — scale OCR across CPU cores
-- **`max_pages`** — cap very large files (default 1000)
+- **`max_pages`** — cap parsed pages (default 1000); compare `result.total_pages`, selected page numbers, and `result.page_errors` before declaring ingestion complete
 - **`lit batch-parse`** — directory-scale jobs with `--recursive` and `--extension`
 - Lower **`dpi`** (e.g. 100) when OCR quality is already sufficient
 
 ---
+
+## Validate extraction
+
+- Confirm requested page numbers and total source pages; page caps and `target_pages` intentionally omit content. `continue_on_page_error=True` permits partial results, so inspect `page_errors`.
+- Compare a rendered page with text/Markdown for columns, tables, subscripts, units and references. Markdown is heuristic and does not recover chart data or guarantee mathematical transcription.
+- Native CLI JSON uses `pages[].page`, while Python uses `page.page_num`; native CLI confidence defaults to 1.0 for native text. Do not treat confidence as proof of correctness or OCR provenance.
+- Store page dimensions with boxes and scale coordinates to screenshot dimensions; screenshot pixels are not PDF points.
 
 ## Reference Files
 
@@ -271,7 +281,7 @@ Files are converted to PDF internally, then parsed. If conversion tools are miss
 | `references/api_reference.md` | Python/TypeScript API, types, `search_items` |
 | `references/cli_reference.md` | Full `lit` command flags |
 | `references/output_formats.md` | JSON schema, bboxes, confidence scores |
-| `references/ocr_and_formats.md` | Tesseract, HTTP OCR, LibreOffice, ImageMagick |
+| `references/ocr_and_formats.md` | Tesseract, HTTP OCR, LibreOffice, native images |
 
 ---
 
@@ -280,11 +290,11 @@ Files are converted to PDF internally, then parsed. If conversion tools are miss
 | Issue | Fix |
 |-------|-----|
 | Office file fails | Install LibreOffice; ensure `soffice` is on PATH (Windows: add LibreOffice `program` dir) |
-| Image fails | Install ImageMagick; verify `convert` or `magick` works |
+| Image fails | Check format/decoding and image integrity; 2.15.0 does not require ImageMagick |
 | OCR poor quality | Increase `--dpi`; try `--ocr-language`; or HTTP OCR server |
 | OCR slow | `--no-ocr` if not needed; reduce pages; increase `num_workers` |
-| Air-gapped OCR | `export TESSDATA_PREFIX=/path/to/tessdata` or `--tessdata-path` |
-| `ParseError` on bytes | Ensure input is valid PDF bytes (Office bytes need a file path + conversion) |
+| Air-gapped OCR | Populate all language files first, then set `TESSDATA_PREFIX` or `--tessdata-path` |
+| `ParseError` on bytes | Use valid PDF bytes; format detection also handles supported binary formats, but a named path is clearer for conversion failures |
 
 ---
 
@@ -292,7 +302,7 @@ Files are converted to PDF internally, then parsed. If conversion tools are miss
 
 - **GitHub**: https://github.com/run-llama/liteparse
 - **Docs**: https://developers.llamaindex.ai/liteparse/
-- **PyPI**: https://pypi.org/project/liteparse/2.0.0/
+- **PyPI**: https://pypi.org/project/liteparse/2.15.0/
 - **npm**: https://www.npmjs.com/package/@llamaindex/liteparse
 - **OCR API spec**: https://github.com/run-llama/liteparse/blob/main/OCR_API_SPEC.md
 

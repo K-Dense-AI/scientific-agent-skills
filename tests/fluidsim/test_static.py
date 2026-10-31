@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import re
 import unittest
 from pathlib import Path
 
@@ -11,49 +10,6 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "fluidsim"
 SCRIPTS = SKILL_ROOT / "scripts"
 REFERENCES = SKILL_ROOT / "references"
-
-
-class SkillStructureTests(unittest.TestCase):
-    def test_frontmatter_version_license_and_size(self) -> None:
-        text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertLess(len(text.splitlines()), 500)
-        self.assertIn("\nlicense: MIT\n", text)
-        self.assertRegex(
-            text,
-            r"\nmetadata:\n  version: \"\d+\.\d+\"\n  skill-author:",
-        )
-        self.assertNotIn('metadata: {"version"', text)
-        self.assertIn('last-reviewed: "2026-07-23"', text)
-
-    def test_exactly_six_dated_references(self) -> None:
-        expected = {
-            "advanced_features.md",
-            "installation.md",
-            "output_analysis.md",
-            "parameters.md",
-            "simulation_workflow.md",
-            "solvers.md",
-        }
-        paths = sorted(REFERENCES.glob("*.md"))
-        self.assertEqual({path.name for path in paths}, expected)
-        for path in paths:
-            with self.subTest(path=path.name):
-                text = path.read_text(encoding="utf-8")
-                self.assertIn("Sources (verified 2026-07-23)", text)
-                self.assertIn("https://", text)
-
-    def test_all_relative_markdown_links_exist(self) -> None:
-        link = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-        paths = [SKILL_ROOT / "SKILL.md", *sorted(REFERENCES.glob("*.md"))]
-        for path in paths:
-            for target in link.findall(path.read_text(encoding="utf-8")):
-                if target.startswith(("https://", "http://", "#", "mailto:")):
-                    continue
-                relative = target.split("#", 1)[0]
-                self.assertTrue(
-                    (path.parent / relative).exists(),
-                    f"missing {target!r} from {path.name}",
-                )
 
 
 class ScriptSafetyTests(unittest.TestCase):

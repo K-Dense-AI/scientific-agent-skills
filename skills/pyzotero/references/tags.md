@@ -4,7 +4,7 @@
 
 ```python
 # All tags in the library
-tags = zot.tags()
+tags = zot.everything(zot.tags())
 # Returns list of strings: ['climate change', 'machine learning', ...]
 
 # Tags for a specific item
@@ -14,7 +14,7 @@ item_tags = zot.item_tags('ITEMKEY')
 col_tags = zot.collection_tags('COLKEY')
 
 # Filter tags by prefix (e.g. all tags starting with 'bio')
-filtered = zot.tags(q='bio')
+filtered = zot.tags(q='bio', qmode='startsWith')
 ```
 
 ## Adding Tags to Items
@@ -22,11 +22,12 @@ filtered = zot.tags(q='bio')
 ```python
 # Add one or more tags to an item (retrieves item first)
 item = zot.item('ITEMKEY')
-updated = zot.add_tags(item, 'tag1', 'tag2', 'tag3')
+success = zot.add_tags(item, 'tag1', 'tag2', 'tag3')  # Boolean, not updated data
 
 # Add a list of tags
 tag_list = ['reviewed', 'high-priority', '2024']
-updated = zot.add_tags(item, *tag_list)
+item = zot.item('ITEMKEY')  # re-fetch after the earlier write
+success = zot.add_tags(item, *tag_list)
 ```
 
 ## Deleting Tags
@@ -50,7 +51,7 @@ items = zot.items(tag='machine learning')
 items = zot.items(tag=['climate', 'adaptation'])
 
 # Items with any of these tags (OR logic)
-items = zot.items(tag='climate OR sea level')
+items = zot.items(tag='climate || sea level')
 
 # Items NOT having a tag
 items = zot.items(tag='-retracted')
@@ -71,7 +72,11 @@ for item in old_tag_items:
     item['data']['tags'].append({'tag': 'new-name'})
     # Remove old tag
     item['data']['tags'] = [t for t in item['data']['tags'] if t['tag'] != 'old-name']
-zot.update_items(old_tag_items)
+# Capture per-object status rather than update_items()'s coarse Boolean.
+for start in range(0, len(old_tag_items), 50):
+    result = zot.create_items([i['data'] for i in old_tag_items[start:start + 50]])
+    if result.get('failed'):
+        raise RuntimeError(result['failed'])
 ```
 
 ## Tag Types
@@ -85,3 +90,5 @@ item = zot.item('ITEMKEY')
 for tag in item['data']['tags']:
     print(tag['tag'], tag.get('type', 0))
 ```
+
+Tag deletion removes the named tags throughout the library (up to 50 per call); it does not delete the items. `tags()` returns strings and discards API tag metadata. Use each item's `data.tags` to inspect tag types.

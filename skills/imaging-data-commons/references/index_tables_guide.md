@@ -45,7 +45,7 @@ startup.
 | `ct_index` | 1 row = 1 CT series | CT acquisition/reconstruction parameters: pixel spacing, slice thickness, kVp, convolution kernel, tube current (min/max for dose-modulated), exposure, spiral pitch, scan options |
 | `mr_index` | 1 row = 1 MR series | MR acquisition/sequence parameters: field strength, scanning sequence, TE (array for multi-echo), TR, flip angle, DiffusionBValue (array for DWI), pixel bandwidth, receive coil, number of temporal positions |
 | `pt_index` | 1 row = 1 PET series | PET acquisition/reconstruction/radiopharmaceutical parameters: series type, units, decay/scatter/attenuation correction, reconstruction method, radionuclide, injected dose, frame duration (array for dynamic PET) |
-| `prior_versions_index` | 1 row = 1 DICOM series | **Reproducibility only.** Contains series permanently removed from IDC (all `max_idc_version` < current version; zero overlap with `index`). Use ONLY when a user explicitly needs to reproduce work from a prior IDC version using data no longer in the current release. Do NOT use for version history or "what's new" questions — those use `series_init_idc_version`/`series_revised_idc_version` in the main `index` table. Column names `min_idc_version`/`max_idc_version` here are NOT equivalent to `series_init_idc_version`/`series_revised_idc_version` in `index`. |
+| `prior_versions_index` | 1 row = 1 historical CRDC series version | Historical content, including revised versions with a SeriesInstanceUID still in `index`. Use `crdc_series_uuid` plus `min_idc_version`/`max_idc_version` to pin a revision. For current-release additions use `series_init_idc_version`/`series_revised_idc_version` in `index`; those fields have different semantics. |
 
 ## Accessing Index Tables
 
@@ -79,7 +79,9 @@ sm_df = client.sm_index
 
 ## Discovering Table Schemas
 
-The `indices_overview` dictionary contains complete schema information for all tables. **Always consult this when writing queries or exploring data structure.**
+The `indices_overview` dictionary contains complete schema information for all tables.
+Schema `mode: REPEATED` means a list-valued column; `type: STRING` alone does not imply
+a scalar string. Inspect both fields, or use `DESCRIBE` after fetching the table. **Always consult this when writing queries or exploring data structure.**
 
 **DICOM attribute mapping:** Many columns are populated directly from DICOM attributes in the source files. The column description in the schema indicates when a column corresponds to a DICOM attribute (e.g., "DICOM Modality attribute" or references a DICOM tag). This allows leveraging DICOM knowledge when querying — standard DICOM attribute names like `PatientID`, `StudyInstanceUID`, `Modality`, `BodyPartExamined` work as expected.
 
@@ -174,7 +176,7 @@ Use this table to identify join columns between index tables. Always call `clien
 | `index` | `seg_index` | `index.SeriesInstanceUID = seg_index.segmented_SeriesInstanceUID` |
 | `index` | `ann_index` | `index.SeriesInstanceUID = ann_index.SeriesInstanceUID` |
 | `ann_index` | `ann_group_index` | `ann_index.SeriesInstanceUID = ann_group_index.SeriesInstanceUID` |
-| `index` | `clinical_index` | `index.collection_id = clinical_index.collection_id` (then filter by patient) |
+| `index` | `clinical_index` | `index.collection_id = clinical_index.collection_id` (dictionary only; actual clinical rows join by PatientID within the collection) |
 | `index` | `contrast_index` | `index.SeriesInstanceUID = contrast_index.SeriesInstanceUID` |
 | `index` | `volume_geometry_index` | `index.SeriesInstanceUID = volume_geometry_index.SeriesInstanceUID` |
 | `index` | `rtstruct_index` | `index.SeriesInstanceUID = rtstruct_index.SeriesInstanceUID` |

@@ -1,138 +1,108 @@
-# Chunking and Compression
+# Chunking and compression
 
-How to size chunks for an access pattern, sharding, the available codecs and Blosc
-compressors, and recommended settings for numeric scientific data, for speed, and for
-compression ratio.
+Targets Zarr-Python 3.4.0. These examples are local synthetic roundtrips, not benchmarks.
 
-## Chunking Strategies
+## Match layout to queries and memory
 
-Chunking is critical for performance. Choose chunk sizes and shapes based on access patterns.
+A chunk is the unit decoded for a read; a shard packs multiple chunks into one stored
+object. Count the chunks touched by representative slices and benchmark latency,
+throughput, object requests, and peak memory. Approximately 1 MiB uncompressed per chunk
+is a useful starting experiment for Blosc, not a universal minimum or optimum. For
+float32, `(512, 512)` is 1 MiB. Larger cloud objects can amortize requests; sharding lets
+small read chunks coexist with larger stored objects. There is no universal 5–100 MB
+cloud optimum or fixed codec ranking.
 
-### Chunk Size Guidelines
+For row reads, `(small_rows, all_columns)` often reduces touched chunks; for column
+reads, reverse that geometry. For a full `[:, y, x]` trace, long time-axis chunks can
+help; for `[t, :, :]` images, short time-axis chunks can help. State the selection before
+claiming a layout is faster. Budget concurrent decoded chunks, output buffers, codec
+scratch memory, and compressed shard buffers; do not assume only one chunk is resident.
 
-- **Minimum chunk size**: 1 MB recommended for optimal performance
-- **Balance**: Larger chunks = fewer metadata operations; smaller chunks = better parallel access
-- **Memory consideration**: Entire chunks must fit in memory during compression
-
-```python
-# Configure chunk size (aim for ~1MB per chunk)
-# For float32 data: 1MB = 262,144 elements = 512×512 array
-z = zarr.zeros(
-    shape=(10000, 10000),
-    chunks=(512, 512),  # ~1MB chunks
-    dtype='f4'
-)
-```
-
-### Aligning Chunks with Access Patterns
-
-**Critical**: Chunk shape dramatically affects performance based on how data is accessed.
+## Sharding
 
 ```python
-# If accessing rows frequently (first dimension)
-z = zarr.zeros((10000, 10000), chunks=(10, 10000))  # Chunk spans columns
+import numpy as np
+import zarr
 
-# If accessing columns frequently (second dimension)
-z = zarr.zeros((10000, 10000), chunks=(10000, 10))  # Chunk spans rows
-
-# For mixed access patterns (balanced approach)
-z = zarr.zeros((10000, 10000), chunks=(1000, 1000))  # Square chunks
+expected = np.arange(256, dtype="i4").reshape(16, 16)
+z = zarr.create_array("sharded.zarr", data=expected, chunks=(2, 2), shards=(8, 8))
+assert z.chunks == (2, 2) and z.shards == (8, 8)
+z.oindex[[1, 3], [2, 4]] = [[1000, 1001], [1002, 1003]]
+expected[np.ix_([1, 3], [2, 4])] = [[1000, 1001], [1002, 1003]]
+np.testing.assert_array_equal(zarr.open_array("sharded.zarr", mode="r")[:], expected)
 ```
 
-**Performance example**: For a (200, 200, 200) array, reading along the first dimension:
-- Using chunks (1, 200, 200): ~107ms
-- Using chunks (200, 200, 1): ~1.65ms (65× faster!)
+Shard dimensions must be multiples of chunk dimensions. Assign a single writer to each
+shard even when workers update different inner chunks. Partial writes may rewrite a
+shard; backend byte-range reads and coalescing affect performance. Measure with the
+actual backend rather than promising fewer requests for every selection.
 
-### Rectilinear Chunks and Sharding
+## Rectilinear chunks are experimental
 
-Zarr 3.2 supports **rectilinear chunks** for uneven grids. Pass nested chunk lengths when a dimension has variable tile sizes:
+Nested per-axis lengths require an explicit opt-in. They are not ordinary Dask regular
+chunks; use `dask_array.chunksize` for a regular grid, not its nested `.chunks` tuple.
+An unsharded rectilinear array has no single uniform `Array.chunks` shape.
 
 ```python
-z = zarr.create_array(
-    store="rectilinear.zarr",
-    shape=(60, 100),
-    chunks=([10, 20, 30], [50, 50]),
-    dtype="f4",
-)
+import numpy as np
+import zarr
+
+with zarr.config.set({"array.rectilinear_chunks": True}):
+    rect = zarr.create_array(
+        "rectilinear.zarr", shape=(6, 10), dtype="f4",
+        chunks=([1, 2, 3], [5, 5]),
+    )
+    rect[:] = np.arange(60, dtype="f4").reshape(6, 10)
+    np.testing.assert_array_equal(rect[1:4], np.arange(60).reshape(6, 10)[1:4])
 ```
 
-When arrays have millions of small chunks, use **sharding** to group chunks into larger storage objects:
+Validate consumer compatibility before choosing this extension. Resize uses the grid's
+own rules: explicit lengths preserve rectilinear identity even if initially uniform.
+
+## Codec selection
+
+Format-3 numeric defaults use `BytesCodec` plus `ZstdCodec(level=0)` in this release.
+`compressors="auto"` selects defaults. `compressors=None` removes compression while
+retaining serialization. A format-3 codec must implement the relevant Zarr codec
+interface; plain format-2 `numcodecs.Blosc` is not accepted as a format-3 compressor.
 
 ```python
-# Create array with sharding
-z = zarr.create_array(
-    store='data.zarr',
-    shape=(100000, 100000),
-    chunks=(100, 100),  # Small chunks for access
-    shards=(1000, 1000),  # Groups 100 chunks per shard
-    dtype='f4'
-)
+import numpy as np
+import zarr
+from zarr.codecs import BloscCodec, GzipCodec, ZstdCodec
+
+values = np.linspace(-1, 1, 64, dtype="f4").reshape(8, 8)
+codecs = [
+    BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle"),
+    BloscCodec(cname="lz4", clevel=1),
+    GzipCodec(level=6), ZstdCodec(level=3), None,
+]
+for codec in codecs:
+    arr = zarr.create_array(None, data=values, chunks=(4, 4), compressors=codec)
+    np.testing.assert_array_equal(arr[:], values)
+    print(arr.compressors)
 ```
 
-**Benefits**:
-- Reduces file system overhead from millions of small files
-- Improves cloud storage performance (fewer object requests)
-- Prevents filesystem block size waste
+These codecs are lossless for the tested numeric data. Benchmark speed and stored bytes;
+Gzip is not inherently the best compression ratio. Available Blosc backends depend on
+the build; inspect `numcodecs.blosc.list_compressors()` instead of assuming Snappy exists.
+Lossy quantization/casting needs a declared error budget and downstream scientific
+validation; byte checksums alone cannot validate the resulting measurements.
 
-**Important**: Entire shards must fit in memory before writing.
-
-## Compression
-
-Zarr applies compression per chunk to reduce storage while maintaining fast access.
-
-### Configuring Compression
+For format 2, use NumCodecs:
 
 ```python
-from zarr.codecs import BloscCodec, BloscShuffle, GzipCodec
+import numpy as np
+import zarr
+from numcodecs import Blosc
 
-# Default: Blosc with Zstandard
-z = zarr.zeros((1000, 1000), chunks=(100, 100))  # Uses default compression
-
-# Configure Blosc compression
-z = zarr.create_array(
-    store='data.zarr',
-    shape=(1000, 1000),
-    chunks=(100, 100),
-    dtype='f4',
-    compressors=BloscCodec(cname='zstd', clevel=5, shuffle=BloscShuffle.bitshuffle)
+legacy = zarr.create_array(
+    "format2.zarr", data=np.arange(12, dtype="i4"), chunks=(4,), zarr_format=2,
+    compressors=Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE),
 )
-
-# Available Blosc compressors: 'blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd'
-
-# Use Gzip compression
-z = zarr.create_array(
-    store='data.zarr',
-    shape=(1000, 1000),
-    chunks=(100, 100),
-    dtype='f4',
-    compressors=GzipCodec(level=6)
-)
-
-# Disable compression
-z = zarr.create_array(
-    store='data.zarr',
-    shape=(1000, 1000),
-    chunks=(100, 100),
-    dtype='f4',
-    compressors=None
-)
+np.testing.assert_array_equal(zarr.open_array("format2.zarr", mode="r")[:], np.arange(12))
 ```
 
-### Compression Performance Tips
-
-- **Blosc** (default): Fast compression/decompression, good for interactive workloads
-- **Zstandard**: Better compression ratios, slightly slower than LZ4
-- **Gzip**: Maximum compression, slower performance
-- **LZ4**: Fastest compression, lower ratios
-- **Shuffle**: Enable shuffle filter for better compression on numeric data
-
-```python
-# Optimal for numeric scientific data
-compressors=BloscCodec(cname='zstd', clevel=5, shuffle=BloscShuffle.bitshuffle)
-
-# Optimal for speed
-compressors=BloscCodec(cname='lz4', clevel=1)
-
-# Optimal for compression ratio
-compressors=GzipCodec(level=9)
-```
+Sources: [performance](https://zarr.readthedocs.io/en/stable/user-guide/performance/),
+[rectilinear example](https://zarr.readthedocs.io/en/stable/user-guide/examples/rectilinear_chunks/),
+[released array implementation](https://github.com/zarr-developers/zarr-python/blob/v3.4.0/src/zarr/core/array.py).

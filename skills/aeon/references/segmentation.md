@@ -7,7 +7,7 @@ Aeon provides algorithms to partition time series into regions with distinct cha
 ### Binary Segmentation
 - `BinSegmenter` - Recursive binary segmentation
   - Iteratively splits series at most significant change points
-  - Parameters: `n_segments`, `cost_function`
+  - Parameters: `n_cps`, `model`, `min_size`, `jump` (requires ruptures)
   - **Use when**: Known number of segments, hierarchical structure
 
 ### Classification-Based
@@ -66,7 +66,7 @@ y = np.concatenate([
 ])
 
 # Segment the series
-segmenter = ClaSPSegmenter()
+segmenter = ClaSPSegmenter(period_length=20, n_cps=2)
 change_points = segmenter.fit_predict(y)
 
 print(f"Detected change points: {change_points}")
@@ -74,10 +74,12 @@ print(f"Detected change points: {change_points}")
 
 ## Output Format
 
-Segmenters return change point indices:
+Output depends on the estimator. ClaSPSegmenter and BinSegmenter return change-point locations; HMMSegmenter and InformationGainSegmenter return a dense state/segment label per timepoint. In this API `returns_dense=True` denotes boundary locations and `False` denotes per-timepoint labels. Check the concrete estimator and convert label changes before calling boundary metrics:
 
 ```python
-# change_points = [100, 200]  # Boundaries between segments
+# Dense labels to boundaries (when labels is a label per timepoint):
+change_points = np.flatnonzero(np.diff(labels) != 0) + 1
+# e.g. change_points = [100, 200]
 # This divides series into: [0:100], [100:200], [200:end]
 ```
 
@@ -85,11 +87,13 @@ Segmenters return change point indices:
 
 - **Speed priority**: FLUSSSegmenter, BinSegmenter
 - **Accuracy priority**: ClaSPSegmenter, HMMSegmenter
-- **Known segment count**: BinSegmenter with n_segments parameter
-- **Unknown segment count**: ClaSPSegmenter, InformationGainSegmenter
+- **Known segment count**: BinSegmenter(n_cps=number_of_segments - 1)
+- **Chosen boundary budget**: ClaSPSegmenter uses n_cps; InformationGainSegmenter uses k_max. Defaults do not infer an unconstrained number of regimes
 - **Pattern changes**: FLUSSSegmenter, ClaSPSegmenter
 - **Statistical changes**: InformationGainSegmenter, GreedyGaussianSegmenter
 - **State transitions**: HMMSegmenter
+
+The snippets using domain variables are illustrative templates; the synthetic ClaSP, information-gain, and HMM examples were exercised on aeon 1.6.
 
 ## Common Use Cases
 
@@ -99,8 +103,11 @@ Identify when time series behavior fundamentally changes:
 ```python
 from aeon.segmentation import InformationGainSegmenter
 
-segmenter = InformationGainSegmenter(k=3)  # Up to 3 change points
-change_points = segmenter.fit_predict(stock_prices)
+segmenter = InformationGainSegmenter(k_max=3)
+# Positive multivariate channels; single-channel entropy is uninformative.
+sensor_channels = np.random.default_rng(42).uniform(0.1, 1, (2, 100))
+labels = segmenter.fit_predict(sensor_channels, axis=1)
+change_points = np.flatnonzero(np.diff(labels) != 0) + 1
 ```
 
 ### Activity Segmentation
@@ -109,18 +116,24 @@ Segment sensor data into activities:
 ```python
 from aeon.segmentation import ClaSPSegmenter
 
-segmenter = ClaSPSegmenter()
-boundaries = segmenter.fit_predict(accelerometer_data)
+segmenter = ClaSPSegmenter(period_length=20, n_cps=2)
+boundaries = segmenter.fit_predict(sensor_magnitude)  # one univariate series
 ```
 
 ### Seasonal Boundary Detection
-Find season transitions in time series:
+Decode a two-state example with known emission and transition probabilities. HMMSegmenter does not learn those parameters from observations:
 
 ```python
 from aeon.segmentation import HMMSegmenter
+from scipy.stats import norm
 
-segmenter = HMMSegmenter(n_states=4)  # 4 seasons
-segments = segmenter.fit_predict(temperature_data)
+segmenter = HMMSegmenter(
+    emission_funcs=[(norm.pdf, {"loc": 0, "scale": 0.5}),
+                    (norm.pdf, {"loc": 5, "scale": 0.5})],
+    transition_prob_mat=np.array([[0.95, 0.05], [0.05, 0.95]]),
+)
+observations = np.array([0.1, -0.1, 0.2, 4.9, 5.1, 5.0])
+segments = segmenter.fit_predict(observations)
 ```
 
 ## Evaluation Metrics
@@ -161,3 +174,5 @@ for cp in change_points:
 plt.legend()
 plt.show()
 ```
+
+Sources: [segmentation API](https://www.aeon-toolkit.org/en/stable/api_reference/segmentation.html), [release source](https://github.com/aeon-toolkit/aeon/tree/v1.6.0/aeon/segmentation).

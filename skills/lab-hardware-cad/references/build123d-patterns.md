@@ -1,7 +1,9 @@
-# build123d 0.11.1 patterns
+# build123d 0.13.0 patterns
 
-An API cookbook for the geometry this skill actually needs. Every snippet here was run against
-build123d 0.11.1 on Python 3.12.
+An API cookbook for the geometry this skill needs, reviewed against build123d 0.13.0
+on Python 3.12 with OCCT 8.0.1. The complete carrier, cage model, exports, selectors,
+counterbore and native gauges are exercised in the repository suite. Snippets with
+undefined surrounding variables are illustrative fragments to adapt to the model.
 
 ## Builder mode or algebra mode
 
@@ -129,7 +131,7 @@ def checks() -> list[dict]:
          "clear": {"cylinder": 5.0, "axis": "x", "at": [(0.0, 15.0)]}},
         # a gauge part that must drop into a pocket: the mating part at MMC
         {"feature": "SLAS plate at MMC drops into the pocket",
-         "clear": {"box": (128.01, 85.73, pocket_depth_mm()),
+         "clear": {"box": (128.26, 85.98, pocket_depth_mm()),
                    "at": [(0.0, 0.0, floor_t_mm + pocket_depth_mm() / 2)]}},
         # a counterbore that really is a counterbore: recess open, seat present.
         # The second entry is what catches a recess that punched through.
@@ -152,8 +154,12 @@ Semantics:
 | `clear` / `material` | region that must contain no material / must contain material |
 | `{"cylinder": DIA, "axis": "x"\|"y"\|"z", "at": [(a, b), ...], "span": (lo, hi)}` | `at` is 2D in the plane perpendicular to the axis — axis `z`: (x, y); axis `x`: (y, z); axis `y`: (x, z). Omit `span` to run through the whole part |
 | `{"box": (dx, dy, dz), "at": [(x, y, z), ...]}` | axis-aligned box gauges centred at each position |
-| `tol_mm3` / `min_mm3` | pass thresholds per position (both default 0.01) |
+| `tol_mm3` / `min_mm3` | pass thresholds per position (both default 0.01); choose from the feature volume, not blindly |
 | `bbox_x`…`bbox_z`, `bbox_min/mid/max` | `{"min": mm, "max": mm}` bounds on the measured bounding box |
+
+A `material` gauge asserts only that its overlap exceeds `min_mm3`, not that the
+whole region is filled. Set a requirement-based minimum; 0.01 mm³ alone does not
+prove a full ridge or screw seat. Empty positions and non-finite inputs are rejected.
 
 Size the gauges from the same named constants as the geometry **only when the requirement is
 relational** (the recess sits above the seat). When the requirement is absolute — a mating part's
@@ -307,12 +313,17 @@ exporter.add_shape(profile, layer="CUT")
 exporter.write("part.dxf")
 ```
 
-Cut the section through material, not at `z = 0`: a part modelled sitting on the build plate has
-only a degenerate face there. `gen.py --dxf` defaults to the part's mid-height and takes `--dxf-z`
+Prefer a section strictly inside the material. A section coincident with an outer face
+can be ambiguous or omit features; do not assume `z = 0` intersects the desired profile. `gen.py --dxf` defaults to the part's mid-height and takes `--dxf-z`
 to override.
 
 STEP preserves exact BREP geometry; STL is a triangulated approximation. **Always keep STEP as the
 source of truth** and regenerate meshes from it, never the reverse.
+
+The STL exporter's `angular_tolerance` is in **radians** (0.1 ≈ 5.7°), although
+most modeling rotations use degrees. STL carries no unit metadata; this skill
+exports/imports its mesh coordinates as mm. `import_stl` returns a triangulated
+Face in 0.13.0, not a watertight BREP solid: use STEP for volume, gauges and fit.
 
 ## Measuring in code
 
@@ -322,7 +333,7 @@ Useful for asserting an interface inside the model itself:
 bbox = part.bounding_box()
 print(bbox.size.X, bbox.size.Y, bbox.size.Z)
 print(part.volume, part.area)
-print(part.is_valid)          # a property in 0.11.1, not a method
+print(part.is_valid)          # a property in 0.13.0, not a method
 print(part.center(CenterOf.MASS))
 ```
 
@@ -334,7 +345,7 @@ some documentation. Access it without parentheses.
 - **`is_valid` is a property.** `part.is_valid()` raises `TypeError: 'bool' object is not callable`.
 - **`section()` is a module-level operation, not a method.** `part.section(Plane.XY)` raises
   `AttributeError`. Call `section(part, plane, mode=Mode.PRIVATE)`.
-- **`intersect()` returns a `ShapeList`** with no `.volume`; the `&` operator returns a `Solid` that
+- **`intersect()` returns a `ShapeList`** with no `.volume`; the `&` operator returns a shape/part that
   has one. `check.py clearance` handles both.
 - **Never name a script `inspect.py`** in a directory that lands on `sys.path`. It shadows the
   standard library `inspect` module, which breaks `typing_extensions` and therefore build123d
@@ -357,7 +368,14 @@ some documentation. Access it without parentheses.
 
 ## Sources
 
-- build123d documentation — <https://build123d.readthedocs.io/en/latest/>
+- build123d documentation — <https://build123d.readthedocs.io/en/stable/>
 - Introductory examples (builder vs algebra, selectors, fillets) —
-  <https://build123d.readthedocs.io/en/latest/introductory_examples.html>
-- Import/export reference — <https://build123d.readthedocs.io/en/latest/import_export.html>
+  <https://build123d.readthedocs.io/en/stable/introductory_examples.html>
+- Import/export reference — <https://build123d.readthedocs.io/en/stable/import_export.html>
+
+- OpenCascade cylindrical surface parameter bounds — <https://occt3d.com/dev/doc/refman/html/class_b_rep_adaptor___surface.html>
+- build123d 0.13.0 release — <https://github.com/gumyr/build123d/releases/tag/v0.13.0>
+
+`bores` reports cylindrical UV bounds. For irregularly trimmed faces the parameter
+rectangle may contain gaps; a 360° bound does not prove an uninterrupted bore or
+distinguish a bore from a boss. Use sections or clear gauges for that claim.

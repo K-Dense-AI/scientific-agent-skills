@@ -37,8 +37,8 @@ python -B scripts/validate_manifest.py poster.json
 Run:
 
 ```bash
-uv run --with "python-pptx==1.0.2" --with "Pillow==12.3.0" \
-  --with "lxml==6.1.1" \
+uv run --no-project --with "python-pptx==1.0.2" --with "Pillow==12.3.0" \
+  --with "lxml==6.1.3" \
   python -B scripts/generate_poster.py poster.json --output poster.pptx
 ```
 
@@ -172,7 +172,9 @@ Automated XML inspection cannot certify these manual checks.
 - [ ] Export uses PowerPoint's Standard/high print quality, not Minimum size.
 - [ ] No audio, video, linked media, OLE, ActiveX, embedded file, or external
       relationship was introduced after generation.
-- [ ] Exported PDF page size equals the final artboard expected by the printer.
+- [ ] Exporter/settings and any online conversion route are recorded and permitted.
+- [ ] Actual PDF page size is measured against canvas and final artboard separately;
+      printer scaling or a full-size PDF derivative is confirmed when they differ.
 - [ ] Exported PDF is checked independently for tags, reading order, alt text,
       links, fonts, clipping, image quality, and page dimensions.
 - [ ] RGB is distinguished from any printer-required CMYK conversion.

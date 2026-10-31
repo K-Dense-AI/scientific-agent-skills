@@ -48,7 +48,7 @@ GET esummary.fcgi?db=snp&id=334&retmode=json
 ```
 Response includes: `snp_id`, `chr`, `chrpos`, `genes`, `clinical_significance`, `global_mafs`, `docsum`.
 
-### 3. EFetch -- Fetch SNP details (XML only)
+### 3. EFetch -- Fetch SNP details
 ```
 GET efetch.fcgi?db=snp&id=IDS&rettype=json&retmode=text
 ```
@@ -112,13 +112,13 @@ GET /variation/v0/hgvs/{hgvs}/contextuals
 GET https://api.ncbi.nlm.nih.gov/variation/v0/hgvs/NC_000011.10:g.5227003T>A/contextuals
 ```
 
-### 4. Batch rsID lookup (POST)
-```
-POST /variation/v0/refsnp/batch
-Content-Type: application/json
+### 4. Multiple rsIDs
 
-{"refsnp_ids": ["334", "1805007", "7412"]}
-```
+The current Variation Services schema has no `/refsnp/batch` route. For a small
+set, issue bounded individual `/refsnp/{numeric_id}` requests. For large sets,
+use [dbSNP bulk JSON](https://ftp.ncbi.nlm.nih.gov/snp/latest_release/JSON/).
+RefSNP records can be merged or withdrawn; inspect status and resolve current IDs
+before using `primary_snapshot_data`.
 
 ## Common E-utilities Search Patterns
 ```

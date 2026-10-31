@@ -8,7 +8,7 @@ import spikeinterface.curation as sc
 import spikeinterface.widgets as sw
 ```
 
-All examples target SpikeInterface ≥ 0.104. Set global parallelization once:
+Targets SpikeInterface 0.105.0 (reviewed 2026-10-01). Real-data and sorter examples are illustrative. Set global parallelization once:
 
 ```python
 si.set_global_job_kwargs(n_jobs=-1, chunk_duration="1s", progress_bar=True)
@@ -26,7 +26,7 @@ stream_names, stream_ids = si.get_neo_streams("spikeglx", "/path/to/run_g0/")
 ### Readers
 
 ```python
-si.read_spikeglx(folder_path, stream_name="imec0.ap", load_sync_channel=False)
+si.read_spikeglx(folder_path, stream_name="imec0.ap")
 si.read_openephys(folder_path, stream_name=None)
 si.read_nwb(file_path)
 ```
@@ -49,7 +49,7 @@ recording.frame_slice(start_frame, end_frame)
 ```python
 si.highpass_filter(recording, freq_min=400.0)
 si.bandpass_filter(recording, freq_min=300.0, freq_max=6000.0)
-si.phase_shift(recording)                                  # ADC phase correction (NP 1.0)
+si.phase_shift(recording)                                  # Requires inter_sample_shift metadata
 si.detect_bad_channels(recording)                          # -> (bad_channel_ids, channel_labels)
 recording.remove_channels(bad_channel_ids)
 si.common_reference(recording, operator="median", reference="global")
@@ -66,8 +66,7 @@ recording.save(folder="preprocessed/", format="binary")
 from spikeinterface.sortingcomponents.peak_detection import detect_peaks
 from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
-peaks = detect_peaks(rec, method="locally_exclusive", noise_levels=noise_levels,
-                     detect_threshold=5, radius_um=50.0)
+peaks = detect_peaks(rec, method='locally_exclusive', method_kwargs={'noise_levels': noise_levels, 'detect_threshold': 5, 'radius_um': 50.0})
 peak_locations = localize_peaks(rec, peaks, method="center_of_mass")
 
 # One-call correction with a preset
@@ -75,7 +74,7 @@ rec_corrected = si.correct_motion(rec, preset="nonrigid_fast_and_accurate", fold
 ```
 
 **Presets:** `rigid_fast`, `kilosort_like`, `nonrigid_accurate`,
-`nonrigid_fast_and_accurate` (recommended default), `dredge`, `dredge_fast`.
+`nonrigid_fast_and_accurate`, `dredge`, `dredge_fast` (upstream default), `medicine`.
 
 ## Spike sorting
 
@@ -103,7 +102,7 @@ sorting = si.read_sorter_folder("ks4_output")
 
 ```python
 sorting.unit_ids
-sorting.get_total_num_spikes()
+sorting.count_total_num_spikes()
 sorting.get_unit_spike_train(unit_id)
 sorting.select_units(unit_ids)
 sorting.to_spike_vector()
@@ -125,6 +124,7 @@ analyzer.compute("waveforms", ms_before=1.0, ms_after=2.0)
 analyzer.compute("templates", operators=["average", "std"])
 analyzer.compute("noise_levels")
 analyzer.compute("spike_amplitudes")
+analyzer.compute("amplitude_scalings")
 analyzer.compute("correlograms", window_ms=50.0, bin_ms=1.0)
 analyzer.compute("unit_locations", method="monopolar_triangulation")
 analyzer.compute("spike_locations", method="center_of_mass")
@@ -158,7 +158,7 @@ metrics = si.compute_quality_metrics(analyzer, metric_names=metric_names)
 
 **Common columns:** `snr`, `firing_rate`, `presence_ratio`, `amplitude_cutoff`,
 `isi_violations_ratio`, `isi_violations_count`. PCA-based metrics
-(`isolation_distance`, `l_ratio`, `d_prime`, `nn_hit_rate`) require
+(`mahalanobis`, `d_prime`, `nearest_neighbor` metric names) require
 `analyzer.compute("principal_components")` first.
 
 ## Curation
@@ -219,11 +219,19 @@ si.export_to_phy(analyzer, output_folder="phy_export/",
                  compute_pc_features=True, compute_amplitudes=True, copy_binary=True)
 si.export_report(analyzer, "report/", format="png")
 
-from spikeinterface.exporters import export_to_nwb
-export_to_nwb(analyzer, "output.nwb")
-
 si.read_phy("phy_export/")   # load Phy curation back
 ```
 
 > Note: `export_to_phy` / `export_report` take `output_folder` — this is correct and
 > distinct from `run_sorter`/`create_sorting_analyzer`, which take `folder`.
+
+NWB writing is a separate NeuroConv workflow; there is no SI `export_to_nwb` API.
+See [ANALYSIS.md](ANALYSIS.md). Use `metric_params` for per-metric options;
+see [QUALITY_METRICS.md](QUALITY_METRICS.md) for metric-name/output-column mapping.
+UnitRefine examples require checking model feature/version compatibility first;
+see [AUTOMATED_CURATION.md](AUTOMATED_CURATION.md).
+
+SpikeInterface 0.105.0 has an observed `read_phy` bug for exported nonnumeric
+unit IDs (`np.isnan` TypeError). Phy export preserves `cluster_si_unit_ids.tsv`;
+keep that mapping and use a validated importer/fixed release for string-ID
+readback. Numeric-ID Phy export/reload was tested on synthetic data.

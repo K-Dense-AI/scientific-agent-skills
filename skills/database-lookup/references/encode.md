@@ -8,7 +8,7 @@ https://www.encodeproject.org
 ## Auth
 No auth required. Append `?format=json` or set `Accept: application/json`.
 
-## Every portal URL returns JSON when requested with the right header.
+## Portal data objects and search support JSON; file download URLs return file content.
 
 ## Key Endpoints
 
@@ -45,3 +45,5 @@ JSON-LD. Search: `@graph` array + `total` + `facets`. Use `frame=object` or `fra
 
 ## Rate Limits
 No published limits. Use `limit=` and `field=` to reduce payload.
+
+Search pagination uses `limit` and `from`; verify `@graph` length against `total`. Preserve file assembly, output_type, status and audit flags before selecting a download. Public reads need no key, while restricted/unreleased objects require authorized access.

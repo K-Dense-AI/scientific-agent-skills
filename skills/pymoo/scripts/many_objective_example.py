@@ -21,10 +21,11 @@ def run_many_objective_optimization():
     problem = get_problem("dtlz2", n_obj=n_obj)
 
     # Generate reference directions for NSGA-III
-    # Das-Dennis method for uniform distribution.
+    # Das-Dennis simplex lattice: C(3 + 5 - 1, 5 - 1) = 35 directions.
+    # This bounded demo does not establish convergence or full front coverage.
     # The dimension is positional: the factory's first argument is n_dim, and
     # passing it as n_obj= raises TypeError.
-    ref_dirs = get_reference_directions("das-dennis", n_obj, n_partitions=12)
+    ref_dirs = get_reference_directions("das-dennis", n_obj, n_partitions=3)
 
     print(f"Number of reference directions: {len(ref_dirs)}")
 
@@ -38,7 +39,7 @@ def run_many_objective_optimization():
     result = minimize(
         problem,
         algorithm,
-        ('n_gen', 300),
+        ('n_gen', 60),
         seed=1,
         verbose=True
     )
@@ -49,7 +50,7 @@ def run_many_objective_optimization():
     print("="*60)
     print(f"Number of objectives: {n_obj}")
     print(f"Number of solutions: {len(result.F)}")
-    print(f"Number of generations: {result.algorithm.n_gen}")
+    print(f"Completed generations: {result.algorithm.n_gen - 1}")
     print(f"Number of function evaluations: {result.algorithm.evaluator.n_eval}")
 
     # Show objective space statistics

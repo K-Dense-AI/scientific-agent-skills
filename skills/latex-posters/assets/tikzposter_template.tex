@@ -18,6 +18,15 @@
 
 % Packages
 \usepackage{graphicx}
+
+% Missing figures deliberately render as visible draft placeholders.
+% Replace every placeholder and resolve these warnings before delivery.
+\newcommand{\posterfigure}[2]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}{%
+    \PackageWarningNoLine{poster}{Draft placeholder: #2}%
+    \fbox{\parbox[c][4cm][c]{\dimexpr#1-2\fboxsep-2\fboxrule\relax}{%
+      \centering\small DRAFT FIGURE\\\texttt{\detokenize{#2}}}}}}
+
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{qrcode}
@@ -31,10 +40,10 @@
 % \usetheme{Default}      % Professional with lines
 
 % Color style (uncomment your choice)
-\usecolorstyle{Denmark}   % Professional blue
-% \usecolorstyle{Australia} % Warm colors
-% \usecolorstyle{Sweden}    % Cool tones
-% \usecolorstyle{Britain}   % Earth tones
+\usecolorstyle{Denmark}   % Built-in Denmark style
+% \usecolorstyle{Australia} % Built-in Australia style
+% \usecolorstyle{Sweden}    % Built-in Sweden style
+% \usecolorstyle{Britain}   % Built-in Britain style
 
 % Custom color scheme (optional - comment out if using built-in)
 % \definecolorstyle{CustomStyle}{
@@ -69,9 +78,9 @@
 
 % Title matter (logos)
 \titlegraphic{
-  \includegraphics[width=0.1\textwidth]{logo1.pdf}
+  \IfFileExists{logo1.pdf}{\includegraphics[width=0.1\textwidth]{logo1.pdf}}{\fbox{Logo}}
   \hspace{3cm}
-  \includegraphics[width=0.1\textwidth]{logo2.pdf}
+  \IfFileExists{logo2.pdf}{\includegraphics[width=0.1\textwidth]{logo2.pdf}}{\fbox{Logo}}
 }
 
 \begin{document}
@@ -129,7 +138,7 @@
     \textbf{Analysis}
     \begin{itemize}
       \item Statistical methods used
-      \item Software/tools (e.g., R 4.3, Python)
+      \item Software/tools (e.g., R, Python; record versions used)
       \item Significance threshold (p < 0.05)
     \end{itemize}
     
@@ -137,7 +146,7 @@
     
     % Optional: Methods flowchart
     \begin{tikzfigure}
-      \includegraphics[width=0.9\linewidth]{methods_diagram.pdf}
+      \posterfigure{0.9\linewidth}{methods_diagram.pdf}
     \end{tikzfigure}
   }
   
@@ -150,17 +159,17 @@
     Brief description of your first main result. What did you observe?
     
     \begin{tikzfigure}
-      \includegraphics[width=0.95\linewidth]{figure1.pdf}
+      \posterfigure{0.95\linewidth}{figure1.pdf}
     \end{tikzfigure}
     
-    \textbf{Figure 1:} Descriptive caption explaining the figure. Include key statistics (Mean ± SD, n=X, **p<0.01).
+    \textbf{Figure 1:} Descriptive caption explaining the figure. Include key statistics (Mean $\pm$ SD, n=X, **p<0.01).
   }
   
   \block{Results: Finding 2}{
     Brief description of your second main result.
     
     \begin{tikzfigure}
-      \includegraphics[width=0.95\linewidth]{figure2.pdf}
+      \posterfigure{0.95\linewidth}{figure2.pdf}
     \end{tikzfigure}
     
     \textbf{Figure 2:} Another key result showing comparison, trend, or correlation.
@@ -175,7 +184,7 @@
     Brief description of your third main result or validation.
     
     \begin{tikzfigure}
-      \includegraphics[width=0.95\linewidth]{figure3.pdf}
+      \posterfigure{0.95\linewidth}{figure3.pdf}
     \end{tikzfigure}
     
     \textbf{Figure 3:} Additional important finding or supporting data.
@@ -208,7 +217,7 @@
   
   \block{Scan for More}{
     \begin{center}
-      \qrcode[height=5cm]{https://doi.org/10.1234/your-paper}\\
+      \qrcode[height=5cm]{https://example.org/replace-with-paper}\\
       \vspace{0.5cm}
       \large Full paper, code, and data
     \end{center}
@@ -220,9 +229,9 @@
 % FOOTER (Full Width)
 % ==============================================================================
 
-\block[width=1.0\linewidth]{}{
+\block{}{
   \footnotesize
-  \begin{minipage}{0.7\textwidth}
+  \begin{minipage}{0.7\linewidth}
     \textbf{References}
     \begin{enumerate}
       \item Author A et al. (2023). Title of paper. \textit{Journal Name}, 10(2), 123-145. doi:10.xxxx/xxxxx
@@ -239,7 +248,7 @@
     \textbf{Contact:} presenter.email@university.edu | Twitter: @labname | Website: labname.university.edu
   \end{minipage}%
   \hfill
-  \begin{minipage}{0.25\textwidth}
+  \begin{minipage}{0.25\linewidth}
     \raggedleft
     Conference Name 2024\\
     Location, Dates\\

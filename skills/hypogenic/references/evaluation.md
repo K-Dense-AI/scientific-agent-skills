@@ -1,5 +1,6 @@
 # Local output inspection and evaluation
 
+Reviewed 2026-10-01 against the unchanged 0.3.5 output serializer.
 All bundled operations in this reference are deterministic and model-free.
 They do not establish scientific truth.
 
@@ -25,7 +26,8 @@ python3 scripts/inspect_outputs.py hypotheses \
 
 The report includes file SHA-256, bank size, normalized duplicate counts,
 length/statistic ranges, and a bounded sample of hypothesis SHA-256 values.
-Candidate strings are never printed or interpreted.
+Candidate strings are never printed or interpreted, including duplicate-key
+error messages.
 
 Stored `acc` and `reward` are algorithm state from the generation/update
 workflow. They are not an independently reproduced evaluation and should not
@@ -55,7 +57,8 @@ schema:
 ```
 
 `prediction` may be `null` for an abstention or extraction failure. IDs must be
-unique. Do not store prompts, chain-of-thought, provider responses, credentials,
+unique; duplicate-ID errors identify the record index without printing the ID.
+Do not store prompts, chain-of-thought, provider responses, credentials,
 or raw sensitive features in this file. Replace the placeholder hashes in
 `assets/result.example.json` with hashes of the exact reviewed artifacts.
 

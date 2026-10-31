@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -131,9 +132,27 @@ def _safe_json(path: Path, max_bytes: int):
             max_records=100_000,
         )
     ]
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise SafetyError("JSON numeric metadata must be finite")
+        return number
+
+    def reject_constant(value):
+        raise SafetyError("JSON numeric metadata must be finite")
+
+    def unique_keys(pairs):
+        mapping = {}
+        for key, value in pairs:
+            if key in mapping:
+                raise SafetyError("duplicate JSON metadata key")
+            mapping[key] = value
+        return mapping
+
     try:
-        return json.loads("\n".join(lines))
-    except json.JSONDecodeError as exc:
+        return json.loads("\n".join(lines), parse_float=finite_float,
+                          parse_constant=reject_constant, object_pairs_hook=unique_keys)
+    except (ValueError, RecursionError) as exc:
         raise SafetyError("invalid JSON metadata") from exc
 
 
@@ -301,9 +320,9 @@ def inspect(args: argparse.Namespace) -> tuple[dict, int]:
     if isinstance(config, dict):
         vocab_size = config.get("vocab_size")
         embedding_dim = config.get("embedding_dim", config.get("embedding_size"))
-        if not isinstance(vocab_size, int) or vocab_size <= 0:
+        if type(vocab_size) is not int or vocab_size <= 0:
             errors["config:invalid_vocab_size"] += 1
-        if not isinstance(embedding_dim, int) or embedding_dim <= 0:
+        if type(embedding_dim) is not int or embedding_dim <= 0:
             errors["config:invalid_embedding_dim"] += 1
         if "embedding_size" in config and "embedding_dim" not in config:
             warnings["config:deprecated_embedding_size_key"] += 1

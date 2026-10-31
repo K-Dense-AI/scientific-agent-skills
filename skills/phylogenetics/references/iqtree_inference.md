@@ -1,181 +1,154 @@
-# IQ-TREE 2 Phylogenetic Inference Reference
+# IQ-TREE inference reference
 
-## Basic Command Syntax
+Reviewed 2026-10-01 against IQ-TREE 3.1.4 official documentation, release source
+and executable help. Commands below use `iqtree3`; use the actual installed
+binary name. Basic DNA/protein inference, ancestral reconstruction, gCF and
+partition commands were exercised on small synthetic inputs. Codon inference,
+LSD2 dating, sCF, standard bootstrap and `-bnni` examples are **illustrative,
+documentation/source-checked**, not executed validation on biological datasets.
 
-```bash
-iqtree2 -s alignment.fasta --prefix output -m TEST -B 1000 -T AUTO --redo
-```
-
-## Key Parameters
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-s` | Input alignment file | Required |
-| `--prefix` | Output file prefix | alignment name |
-| `-m` | Substitution model (or TEST) | GTR+G |
-| `-B` | Ultrafast bootstrap replicates | Off |
-| `-b` | Standard bootstrap replicates (slow) | Off |
-| `-T` | Number of threads (or AUTO) | 1 |
-| `-o` | Outgroup taxa name(s) | None (unrooted) |
-| `--redo` | Overwrite existing results | Off |
-| `-alrt` | SH-aLRT test replicates | Off |
-
-## Model Selection
+## Basic inference and models
 
 ```bash
-# Full model testing (automatically selects best model)
-iqtree2 -s alignment.fasta -m TEST --prefix test_run -B 1000 -T 4
-
-# Specify model explicitly
-iqtree2 -s alignment.fasta -m GTR+G4 --prefix gtr_run -B 1000
-
-# Protein sequences
-iqtree2 -s protein.fasta -m TEST --prefix prot_tree -B 1000
-
-# Codon-based analysis
-iqtree2 -s codon.fasta -m GY --prefix codon_tree -B 1000
+iqtree3 -s aligned.fasta -st DNA --prefix dna -m MFP -B 1000 --alrt 1000 -T 1 --seed 42
+iqtree3 -s protein_aligned.fasta -st AA --prefix protein -m LG+G4 -B 1000 --alrt 1000 -T 1 --seed 42
 ```
 
-## Bootstrapping Methods
+| Option | Meaning |
+|---|---|
+| `-s FILE` | Alignment (FASTA, PHYLIP, NEXUS, CLUSTAL or MSF) |
+| `-st DNA` / `-st AA` | Explicit sequence alphabet |
+| `--prefix NAME` | Prefix for results and checkpoints |
+| `-m MFP` | ModelFinder Plus and tree search; includes FreeRate models |
+| `-m MF` | Model selection only |
+| `-m TEST` | Legacy narrower model selection and tree search |
+| `-B 1000` | UFBoot, at least 1000 replicates |
+| `--alrt 1000` | SH-aLRT, at least 1000 replicates |
+| `-T 1` / `-T AUTO` | Fixed threads / data-dependent thread selection |
+| `--seed 42` | Record the random seed, executable version and thread count |
+| `-o TAXON` | Orient output using an outgroup; does not establish a biological root |
+| `--redo` | Explicitly restart, overwriting prior results; not a routine default |
 
-### Ultrafast Bootstrap (UFBoot, recommended)
-```bash
-iqtree2 -s alignment.fasta -B 1000  # 1000 replicates
-# Values ≥95 are reliable
-# ~10× faster than standard bootstrap
-```
+ModelFinder is the current default, but specify `-m` for clarity. The general
+command-reference page retains some historical defaults: consult installed
+`iqtree3 -h` and the resulting `.iqtree` report before relying on defaults.
+DNA options include `JC`, `HKY+G4`, `TN+G4` and `GTR+G4`; protein options include
+`LG+G4`, `WAG+G4`, `JTT+G4` and `Q.pfam+G4`. No protein model is universally best.
+`Q.bird` was estimated for birds, not vertebrates generally.
 
-### Standard Bootstrap
-```bash
-iqtree2 -s alignment.fasta -b 100  # 100 replicates (very slow)
-```
-
-### SH-aLRT Test (fast alternative)
-```bash
-iqtree2 -s alignment.fasta -alrt 1000 -B 1000  # Both SH-aLRT and UFBoot
-# SH-aLRT ≥80 AND UFBoot ≥95 = well-supported branch
-```
-
-## Branch Support Interpretation
-
-| Bootstrap Value | Interpretation |
-|----------------|----------------|
-| ≥ 95 | Well-supported (strongly supported) |
-| 70–94 | Moderately supported |
-| 50–69 | Weakly supported |
-| < 50 | Unreliable (not supported) |
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `{prefix}.treefile` | Best ML tree in Newick format |
-| `{prefix}.iqtree` | Full analysis report |
-| `{prefix}.log` | Computation log |
-| `{prefix}.contree` | Consensus tree from bootstrap |
-| `{prefix}.splits.nex` | Network splits |
-| `{prefix}.bionj` | BioNJ starting tree |
-| `{prefix}.model.gz` | Saved model parameters |
-
-## Advanced Analyses
-
-### Molecular Clock (Dating)
+Codon models require `-st CODON` (or `CODON` plus the genetic-code number),
+verified reading frames, no internal stop codons and a codon-aware alignment:
 
 ```bash
-# Temporal analysis with sampling dates
-iqtree2 -s alignment.fasta -m GTR+G \
-        --date dates.tsv \           # Tab-separated: taxon_name  YYYY-MM-DD
-        --clock-test \               # Test for clock-like evolution
-        --date-CI 95 \              # 95% CI for node dates
-        --prefix dated_tree
+iqtree3 -s codon_aligned.fasta -st CODON -m GY+F3X4 --prefix codon -T 1 --seed 42
 ```
 
-### Concordance Factors
+## Support is method-specific
 
 ```bash
-# Gene concordance factor (gCF) - requires multiple gene alignments
-iqtree2 --gcf gene_trees.nwk \
-        --tree main_tree.treefile \
-        --cf-verbose \
-        --prefix cf_analysis
+# Illustrative standard nonparametric bootstrap, distinct from UFBoot.
+iqtree3 -s aligned.fasta -st DNA -m GTR+G4 -b 100 --prefix standard -T 1 --seed 42
+# Illustrative UFBoot refinement to reduce overestimation under model violations.
+iqtree3 -s aligned.fasta -st DNA -m MFP -B 1000 -bnni --prefix bnni -T 1 --seed 42
 ```
 
-### Ancestral Sequence Reconstruction
+Check UFBoot convergence in the log. >=95 UFBoot and >=80 SH-aLRT are common
+screening thresholds, conditional on the analysis assumptions. Neither threshold
+makes a branch “reliable” automatically. Do not combine different methods into
+one universal support table. Combined labels are slash-separated; their order
+is stated in `.iqtree`. ETE3 must use `Tree(path, format=1)` to preserve them.
+
+## Files and resumption
+
+- `.treefile`: inferred ML tree and requested branch labels.
+- `.iqtree`: readable model, likelihood and support report; inspect warning sections.
+- `.log`: execution log; `.ckp.gz`: resumable analysis checkpoint.
+- `.model.gz`: model-selection checkpoint/cache, present when model selection runs.
+- `.contree` and `.splits.nex`: support/consensus outputs when bootstrapping requests them.
+
+Rerunning an identical interrupted command resumes from the checkpoint. A completed
+run is not restarted unless requested. Use a fresh prefix for changed inputs.
+Do not parse every numerical field from `.log` by a fixed `split(':')`: content
+and trailing uncertainty text vary. Preserve the original `.iqtree` report.
+
+## Multi-locus partitions and concordance
+
+An example partition file for a 1000-column concatenated DNA alignment:
+
+```text
+DNA, gene1 = 1-500
+DNA, gene2 = 501-1000
+```
 
 ```bash
-iqtree2 -s alignment.fasta -m LG+G4 \
-        -asr \                      # Marginal ancestral state reconstruction
-        --prefix anc_tree
-# Output: {prefix}.state (ancestral sequences per node)
+iqtree3 -s concat_alignment.fasta -p partitions.txt -m MFP \
+  -B 1000 --prefix partition_tree -T 1 --seed 42
+# Gene trees must be inferred independently for the intended loci.
+iqtree3 -t main_tree.treefile --gcf gene_trees.nwk --cf-verbose --prefix cf_analysis
+# Illustrative likelihood-based site concordance; -te fixes the reference tree.
+iqtree3 -te main_tree.treefile -s concat_alignment.fasta --scfl 100 \
+  --prefix scf_analysis -T 1 --seed 42
 ```
 
-### Partition Model (Multi-Gene)
+`-p` uses an edge-linked proportional partition model. gCF expects a set of
+Newick **gene trees**, not gene alignments; it measures agreement among decisive
+gene trees. `--scfl` is the current likelihood-based sCF implementation, whereas
+`--scf` is the original parsimony version. Concordance is not bootstrap support.
+Results include `.cf.tree`, `.cf.branch` and `.cf.stat`; preserve branch IDs to
+join the table with the tree. Account for gene-tree uncertainty, missing taxa,
+recombination and locus definitions before interpreting discordance.
+
+## Ancestral reconstruction
 
 ```bash
-# Create partition file (partitions.txt):
-# DNA, gene1 = 1-500
-# DNA, gene2 = 501-1000
-
-iqtree2 -s concat_alignment.fasta \
-        -p partitions.txt \
-        -m TEST \
-        -B 1000 \
-        --prefix partition_tree
+iqtree3 -s protein_aligned.fasta -st AA -m LG+G4 --ancestral \
+  --prefix ancestral -T 1 --seed 42
 ```
 
-## IQ-TREE Log Parsing
+`--ancestral` (alias `-asr`) writes `.state`, with node/site/state and posterior
+probabilities. `-te TREE` reconstructs on a supplied fixed tree. Retain the
+probabilities and node mapping; point estimates are uncertain and conditioned
+on topology, alignment and model. Reversible models do not recover the root.
 
-```python
-def parse_iqtree_log(log_file: str) -> dict:
-    """Extract key results from IQ-TREE log file."""
-    results = {}
-    with open(log_file) as f:
-        for line in f:
-            if "Best-fit model" in line:
-                results["best_model"] = line.split(":")[1].strip()
-            elif "Log-likelihood of the tree:" in line:
-                results["log_likelihood"] = float(line.split(":")[1].strip())
-            elif "Number of free parameters" in line:
-                results["free_params"] = int(line.split(":")[1].strip())
-            elif "Akaike information criterion" in line:
-                results["AIC"] = float(line.split(":")[1].strip())
-            elif "Bayesian information criterion" in line:
-                results["BIC"] = float(line.split(":")[1].strip())
-            elif "Total CPU time used" in line:
-                results["cpu_time"] = line.split(":")[1].strip()
-    return results
+## Dating with LSD2
 
-# Example:
-# results = parse_iqtree_log("output.log")
-# print(f"Best model: {results['best_model']}")
-# print(f"Log-likelihood: {results['log_likelihood']:.2f}")
+Illustrative dated analysis after establishing temporal signal and choosing a
+biologically defensible root. A date file has a taxon and date per line, separated
+by whitespace; dates can be decimal years or `YYYY-MM-DD`:
+
+```text
+sample_A 2020-01-29
+sample_B 2020-03-06
 ```
-
-## Common Issues and Solutions
-
-| Issue | Likely Cause | Solution |
-|-------|-------------|---------|
-| All bootstrap values = 0 | Too few taxa | Need ≥4 taxa for bootstrap |
-| Very long branches | Alignment artifacts | Re-trim alignment; check for outliers |
-| Memory error | Too many sequences | Use FastTree; or reduce `-T` to 1 |
-| Poor model fit | Wrong alphabet | Check nucleotide vs. protein specification |
-| Identical sequences | Duplicate sequences | Remove duplicates before alignment |
-
-## MAFFT Alignment Guide
 
 ```bash
-# Accurate (< 200 sequences)
-mafft --localpair --maxiterate 1000 input.fasta > aligned.fasta
-
-# Medium (200-1000 sequences)
-mafft --auto input.fasta > aligned.fasta
-
-# Fast (> 1000 sequences)
-mafft --fftns input.fasta > aligned.fasta
-
-# Very large (> 10000 sequences)
-mafft --retree 1 input.fasta > aligned.fasta
-
-# Using multiple threads
-mafft --thread 8 --auto input.fasta > aligned.fasta
+iqtree3 -s aligned.fasta -st DNA -m GTR+G4 --date dates.tsv \
+  --date-ci 100 --prefix dated_tree -T 1 --seed 42
 ```
+
+`--date-ci 100` means **100 resampling replicates**, not a confidence percentage.
+The option is lowercase. `--clock-test` is not a supported IQ-TREE 3.1.4 flag;
+do not use it as evidence of clock validation. Inspect the LSD2 diagnostics,
+calibrations, temporal-signal assessment, root choice and sensitivity to outliers.
+Dating does not prove who infected whom. A relaxed-clock parameter and narrow
+conditional interval cannot repair absent temporal signal.
+
+## Scientific checks
+
+Check taxon sampling, orthology, orientation, gaps, composition and recombination.
+Identical sequences may be biologically meaningful: IQ-TREE normally removes
+redundant copies during computation and restores them afterward. Keep the original
+sample mapping rather than silently deleting observations. A long branch is a
+reason to investigate biology and data quality, not an instruction to trim until
+it vanishes. For SNP-only alignments, assess ascertainment bias and the appropriate
+`+ASC` model; do not combine an ascertainment correction with retained constant
+sites without checking its assumptions.
+
+## Primary sources
+
+- [Quickstart](https://iqtree.github.io/doc/Quickstart)
+- [Command reference](https://iqtree.github.io/doc/Command-Reference)
+- [Substitution models](https://iqtree.github.io/doc/Substitution-Models)
+- [Concordance factors](https://iqtree.github.io/doc/Concordance-Factor)
+- [Dating](https://iqtree.github.io/doc/Dating)
+- [IQ-TREE 3.1.4 CLI parser and help](https://github.com/iqtree/iqtree3/blob/v3.1.4/utils/tools.cpp)

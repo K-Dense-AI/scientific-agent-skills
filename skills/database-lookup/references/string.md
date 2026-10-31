@@ -26,7 +26,7 @@ No API key required. All endpoints are public.
 Map protein names/identifiers to STRING internal IDs. Always do this first to get canonical STRING IDs.
 
 ```
-GET /api/json/resolve?identifier={query}&species={taxid}
+GET /api/json/get_string_ids?identifiers={query}&species={taxid}
 ```
 
 | Parameter    | Type   | Description |
@@ -36,7 +36,7 @@ GET /api/json/resolve?identifier={query}&species={taxid}
 
 **Example:**
 ```
-https://string-db.org/api/json/resolve?identifier=TP53&species=9606
+https://string-db.org/api/json/get_string_ids?identifiers=TP53&species=9606
 ```
 
 **Response:**
@@ -66,7 +66,7 @@ GET /api/json/interaction_partners?identifiers={proteins}&species={taxid}
 | `species`           | int    | NCBI taxonomy ID. |
 | `limit`             | int    | Max number of interaction partners to return (per input protein). |
 | `required_score`    | int    | Minimum combined score (0-1000). Default: 400. Common thresholds: 400 (medium), 700 (high), 900 (highest). |
-| `network_type`      | string | `functional` (default, all associations) or `physical` (physical binding only). |
+| `network_type`      | string | `functional` (default, all associations) or `physical` (predicted physical associations, which need not prove direct binding). |
 
 **Example:**
 ```
@@ -210,7 +210,7 @@ https://string-db.org/api/json/get_string_ids?identifiers=CDK2%0dp53&species=960
 ### 7. Get homology / best-hit in another species
 
 ```
-GET /api/json/homology?identifiers={proteins}&species={taxid}&species_b={taxid_b}
+GET /api/json/homology_best?identifiers={proteins}&species={taxid}&species_b={taxid_b}
 ```
 
 | Parameter   | Type | Description |
@@ -221,7 +221,7 @@ GET /api/json/homology?identifiers={proteins}&species={taxid}&species_b={taxid_b
 
 **Example:**
 ```
-https://string-db.org/api/json/homology?identifiers=TP53&species=9606&species_b=10090
+https://string-db.org/api/json/homology_best?identifiers=TP53&species=9606&species_b=10090
 ```
 
 ---
@@ -281,3 +281,5 @@ https://string-db.org/api/json/ppi_enrichment?identifiers=TP53%0dBRCA1%0dATM%0dC
 - Returns HTTP 404 if no matching protein is found.
 - Empty JSON array `[]` if the query is valid but returns no results (e.g., no interactions above the threshold).
 - Include `species` parameter whenever possible to avoid ambiguous identifier resolution.
+
+Current [STRING API contract](https://string-db.org/help/api/) also supports regulatory networks. Pin the returned STRING version and network type; best sequence similarity does not by itself establish orthology.

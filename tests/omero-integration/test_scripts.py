@@ -10,6 +10,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "omero-integration"
@@ -23,6 +25,7 @@ from omero_common import (  # noqa: E402
     ConfigError,
     atomic_write_json,
     config_summary,
+    gateway_session,
     json_safe,
     load_connection_config,
     take_bounded,
@@ -185,6 +188,39 @@ class ConfigTests(unittest.TestCase):
             )
 
 
+class SessionLifecycleTests(unittest.TestCase):
+    def test_shared_session_is_released_without_being_killed(self):
+        config = load_connection_config(
+            require_auth=True,
+            environ={"OMERO_HOST": "omero.example.org", "OMERO_SESSION_KEY": "synthetic-key"},
+        )
+        gateway = Mock()
+        gateway.connect.return_value = True
+        module = ModuleType("omero.gateway")
+        module.BlitzGateway = Mock(return_value=gateway)
+        with patch.dict(sys.modules, {"omero.gateway": module}):
+            with self.assertRaises(RuntimeError):
+                with gateway_session(config, allow_insecure_transport=False):
+                    raise RuntimeError("synthetic failure")
+        gateway.connect.assert_called_once_with(sUuid="synthetic-key")
+        gateway.close.assert_called_once_with(hard=False)
+
+    def test_owned_session_is_closed_after_failed_login(self):
+        config = load_connection_config(
+            require_auth=True,
+            environ={"OMERO_HOST": "omero.example.org", "OMERO_USER": "test", "OMERO_PASSWORD": "test"},
+        )
+        gateway = Mock()
+        gateway.connect.return_value = False
+        module = ModuleType("omero.gateway")
+        module.BlitzGateway = Mock(return_value=gateway)
+        with patch.dict(sys.modules, {"omero.gateway": module}):
+            with self.assertRaises(RuntimeError):
+                with gateway_session(config, allow_insecure_transport=False):
+                    self.fail("failed login must not yield a gateway")
+        gateway.close.assert_called_once_with(hard=True)
+
+
 class OutputTests(unittest.TestCase):
     def test_atomic_json_refuses_overwrite_and_uses_private_mode(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -261,6 +297,15 @@ class InventoryTests(unittest.TestCase):
 
 
 class RedactionTests(unittest.TestCase):
+    def test_annotation_type_falls_back_when_upstream_class_is_none(self):
+        annotation_class = type("FileAnnotationWrapper", (FakeAnnotation,), {"OMERO_CLASS": None})
+        record = export_image_metadata.annotation_record(
+            annotation_class(), include_values=False, include_owner_names=False,
+            include_file_names=False, max_string_length=128, max_value_items=10,
+        )
+        self.assertEqual(record["type"], "FileAnnotation")
+        self.assertEqual(record["file"]["original_file_id"], 77)
+
     def test_annotation_value_and_filename_not_read_when_redacted(self):
         annotation = FakeAnnotation()
         record = export_image_metadata.annotation_record(
@@ -275,6 +320,69 @@ class RedactionTests(unittest.TestCase):
         self.assertTrue(record["value_redacted"])
         self.assertTrue(record["file"]["name_redacted"])
         self.assertNotIn("sensitive", json.dumps(record))
+
+
+class RoiTests(unittest.TestCase):
+    def test_roi_call_uses_selected_group_context(self):
+        image = FakeImage(123)
+        image.listAnnotations = lambda: iter(())
+        connection = Mock(SERVICE_OPTS={"omero.group": "42"})
+        connection.getObject.return_value = image
+        service = Mock()
+        service.findByImage.return_value = SimpleNamespace(rois=[])
+        args = export_image_metadata.build_parser().parse_args(
+            ["--image-id", "123", "--output", "result.json"]
+        )
+        result = export_image_metadata.export_one_image(connection, service, 123, args)
+        service.findByImage.assert_called_once_with(123, None, connection.SERVICE_OPTS)
+        self.assertEqual(result["returned_rois"], 0)
+
+    def test_transform_and_truncated_points_are_reported(self):
+        transform = SimpleNamespace(**{
+            "get" + field: lambda value=value: value
+            for field, value in zip(("A00", "A01", "A02", "A10", "A11", "A12"), (0, -1, 10, 1, 0, 20))
+        })
+        shape = type("PolygonI", (), {
+            "getTransform": lambda self: transform,
+            "getPoints": lambda self: "1,2 3,4 5,6 " * 20,
+            "getTheZ": lambda self: None,
+        })()
+        record = export_image_metadata.shape_record(shape, include_labels=False, max_string_length=32)
+        self.assertEqual(record["transform"], {"a00": 0, "a01": -1, "a02": 10, "a10": 1, "a11": 0, "a12": 20})
+        self.assertIsNone(record["the_z"])
+        self.assertTrue(record["geometry_truncated"])
+        self.assertTrue(record["label_redacted"])
+
+    def test_actual_omero_shape_and_annotation_models_when_installed(self):
+        try:
+            from omero.model import AffineTransformI, RectangleI, TagAnnotationI
+            from omero.rtypes import rdouble, rlong, rstring
+            from omero.gateway import TagAnnotationWrapper
+        except ImportError:
+            self.skipTest("optional OMERO.py and IcePy not installed")
+        shape = RectangleI()
+        shape.setX(rdouble(1.5))
+        shape.setY(rdouble(2.5))
+        shape.setWidth(rdouble(10))
+        shape.setHeight(rdouble(20))
+        transform = AffineTransformI()
+        for field, value in zip(("A00", "A01", "A02", "A10", "A11", "A12"), (1, 0, 10, 0, 1, 20)):
+            getattr(transform, "set" + field)(rdouble(value))
+        shape.setTransform(transform)
+        record = export_image_metadata.shape_record(shape, include_labels=False, max_string_length=32)
+        self.assertEqual(record["geometry"]["x"], 1.5)
+        self.assertEqual(record["transform"]["a12"], 20)
+        self.assertFalse(record["geometry_truncated"])
+        model = TagAnnotationI()
+        model.setId(rlong(9))
+        model.setTextValue(rstring("private-label"))
+        annotation = TagAnnotationWrapper(obj=model)
+        record = export_image_metadata.annotation_record(
+            annotation, include_values=False, include_owner_names=False,
+            include_file_names=False, max_string_length=128, max_value_items=10,
+        )
+        self.assertEqual(record["type"], "TagAnnotation")
+        self.assertNotIn("private-label", json.dumps(record))
 
 
 class TransferPlannerTests(unittest.TestCase):
@@ -301,10 +409,25 @@ class TransferPlannerTests(unittest.TestCase):
                 )
             ]
             for command in commands:
+                self.assertEqual(command[command.index("--depth") + 1], "4")
                 self.assertNotIn("--password", command)
                 self.assertNotIn("-w", command)
                 self.assertNotIn("-k", command)
             self.assertFalse(plan["commands_executed"])
+
+    def test_skipped_symlink_prevents_ready_import_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "a.tif"
+            source.write_bytes(b"a")
+            try:
+                (root / "linked.tif").symlink_to(source)
+            except OSError:
+                self.skipTest("symlinks unavailable")
+            args = argparse.Namespace(paths=[str(root)], target=None, max_paths=1, max_files=1, scan_depth=4)
+            plan = plan_transfer.plan_import(args)
+            self.assertEqual(plan["skipped_symlinks"], 1)
+            self.assertFalse(plan["ready_for_remote_import_review"])
 
     def test_export_plan_reports_collision(self):
         with tempfile.TemporaryDirectory() as directory:

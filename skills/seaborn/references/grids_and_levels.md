@@ -13,7 +13,7 @@ Create subplots based on categorical variables. Most useful when called through 
 
 ```python
 g = sns.FacetGrid(df, col='time', row='sex', hue='smoker')
-g.map(sns.scatterplot, 'total_bill', 'tip')
+g.map_dataframe(sns.scatterplot, x='total_bill', y='tip')
 g.add_legend()
 ```
 
@@ -66,9 +66,9 @@ sns.kdeplot(data=df, x='x', y='y', ax=axes[1, 1])
 
 ### Figure-Level Functions
 - Manage entire figure including all subplots
-- Built-in faceting via `col` and `row` parameters
+- `relplot`, `displot`, `catplot`, and `lmplot` facet via `col`/`row`; `jointplot`/`pairplot` use their own grid layouts
 - Return `FacetGrid`, `JointGrid`, or `PairGrid` objects
-- Use `height` and `aspect` for sizing (per subplot)
+- Use `height` and usually `aspect` for sizing; `jointplot` has square figure height and no `aspect`
 - Cannot be placed in existing figure
 - Examples: `relplot`, `displot`, `catplot`, `lmplot`, `jointplot`, `pairplot`
 
@@ -83,3 +83,5 @@ sns.kdeplot(data=df, x='x', y='y', ax=axes[1, 1])
 sns.relplot(data=df, x='x', y='y', col='category', row='group',
             hue='type', height=3, aspect=1.2)
 ```
+
+For direct grids, set a shared `hue_order` and palette mapping when subsets could omit levels. Prefer `map_dataframe` for Seaborn keyword-oriented functions. See [FacetGrid](https://seaborn.pydata.org/generated/seaborn.FacetGrid.html) and [function overview](https://seaborn.pydata.org/tutorial/function_overview.html) (reviewed 2026-10-01).

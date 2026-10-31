@@ -1,6 +1,6 @@
 # Alignment Files: SAM, BAM, and CRAM
 
-This reference targets pysam 0.24.0. All numeric coordinates shown here are
+This reference targets pysam 0.24.1. All numeric coordinates shown here are
 0-based, half-open.
 
 ## Open Modes and Handles
@@ -61,7 +61,9 @@ with pysam.AlignmentFile("input.bam", "rb") as bam:
 Use `check_index()` when a missing index should be an error. It raises for SAM,
 closed files, or unusable indexes. `get_index_statistics()` exposes per-contig
 mapped/unmapped counts recorded in an available index; these are index
-statistics, not a fresh scan of every record.
+statistics, not a fresh scan of every record. CRAI does not store these counts:
+CRAM `mapped`, `unmapped`, `nocoordinate`, and index-statistic values return zero
+and must not be interpreted as an empty CRAM. Use a sequential scan for counts.
 
 ## Iteration Choices
 
@@ -77,7 +79,11 @@ with pysam.AlignmentFile("input.bam", "rb") as bam:
 - Returns reads overlapping the interval, including reads that start before it
   or end after it.
 - Records are returned in coordinate/index order.
-- `fetch()` with no region still requires an index and returns mapped records.
+- BAM/CRAM `fetch()` with no region requires an index and visits placed records
+  by reference. Placed unmapped records can appear in both this and region
+  queries; test `read.is_unmapped`. Unplaced reads need sequential scanning.
+- SAM `fetch()` without a region is sequential; SAM region access is unsupported
+  by `AlignmentFile` even though standalone samtools can index BGZF SAM.
 
 ### Sequential scan
 
@@ -120,7 +126,7 @@ when possible.
 - `query_alignment_sequence`: query bases participating in the alignment
 - `query_alignment_qualities`
 - `get_forward_sequence()` / `get_forward_qualities()`: original sequencer
-  orientation
+  orientation of the retained sequence (hard-clipped bases cannot be recovered)
 
 Assigning `query_sequence` invalidates `query_qualities`. Save and reassign
 qualities after changing sequence.
@@ -162,7 +168,10 @@ def keep_primary(read: pysam.AlignedSegment) -> bool:
 ```
 
 State whether supplementary alignments and duplicates are intentionally
-excluded; there is no universal filter for every analysis.
+excluded; there is no universal filter for every analysis. MAPQ 255 denotes
+unavailable quality, and the numeric threshold above keeps it. Exclude it
+explicitly when the assay requires measured MAPQ. Proper-pair flags describe
+the aligner's criteria, not independent proof of a valid biological fragment.
 
 ## CIGAR Operations and Alignment Geometry
 
@@ -189,7 +198,7 @@ release.
 Useful geometry methods:
 
 ```python
-blocks = read.get_blocks()  # aligned reference blocks; gaps at D/N
+blocks = read.get_blocks()  # M/=/X blocks; D/N gaps, I can split adjacent blocks
 pairs = read.get_aligned_pairs(matches_only=False, with_cigar=True)
 reference_positions = read.get_reference_positions(full_length=True)
 ```
@@ -217,12 +226,15 @@ for (canonical_base, strand, modification), calls in (
     read.modified_bases or {}
 ).items():
     for query_position, quality in calls:
-        probability = None if quality < 0 else quality / 256.0
+        probability_lower_bound = None if quality < 0 else quality / 256.0
 ```
 
 The key is `(canonical base, strand, modification)`, where strand is `0`
 forward or `1` reverse. pysam 0.24 removed the earlier five-modification-type
-limit and fixed crashes on degenerate empty MM calls.
+limit and fixed crashes on degenerate empty MM calls. ML values are quantized:
+`quality / 256` is a lower bound, not an exact posterior. These query positions
+refer to stored SEQ; use `modified_bases_forward` with `get_forward_sequence()`
+when the original orientation is required.
 
 ## Counting and Coverage
 
@@ -265,9 +277,13 @@ a, c, g, t = bam.count_coverage(
 depth = [sum(values) for values in zip(a, c, g, t)]
 ```
 
-The result has exactly `stop - start` positions and therefore represents zero
-coverage. Only A/C/G/T bases are counted; ambiguous query bases do not
-contribute.
+For `0 <= start < stop <= contig_length`, the result has `stop - start`
+positions, including zero coverage. Validate these bounds: an end past the
+contig is clipped. In 0.24.1, the array allocation does not derive its span
+from `region=` or the `end=` alias; use numeric `contig`, `start`, and `stop`
+for this method. Only A/C/G/T bases count. Deletions, reference skips, and
+ambiguous query bases do not contribute. Overlapping mates count separately;
+this method does not apply pileup BAQ or pair-overlap adjustments.
 
 ## Pileup Semantics
 
@@ -301,17 +317,24 @@ Key defaults and behaviors:
 - Without `truncate=True`, columns outside the requested interval can appear
   when overlapping reads extend beyond the interval.
 - `stepper="all"` filters unmapped, secondary, QC-fail, and duplicate reads.
-- `stepper="nofilter"` disables read filtering.
+- `stepper="nofilter"` disables the read callback's flag/MAPQ filtering;
+  base-quality thresholds, the depth cap, and overlap handling still apply.
 - `stepper="samtools"` applies samtools-style processing; provide `fastafile`
   for full BAQ/reference behavior.
 - Default `min_base_quality` is 13.
 - Default `max_depth` is 8000.
 - Paired overlap detection and orphan filtering are enabled by default.
-- `nsegments` counts reads in the pileup column before base-level exclusions;
-  `get_num_aligned()` is often the clearer aligned-base depth.
+- `nsegments` precedes the base-quality filter. Despite its name,
+  `get_num_aligned()` also counts deletion/reference-skip entries that pass the
+  quality check in 0.24.1. For observed base depth, count `column.pileups` entries
+  with `not is_del`, `not is_refskip`, and a non-`None` `query_position`.
+- Overlap handling adjusts base qualities; with `min_base_quality=0`, a
+  zero-quality mate can reappear. It does not universally remove one record.
 
-`PileupColumn` and `PileupRead` proxy objects are valid only while their
-iterator remains alive. Do not retain a column after iteration ends.
+Consume each `PileupColumn` before advancing the iterator: its backing buffer
+changes on advance, not only on iterator destruction. Copy primitive values
+needed later. For concurrent CRAM pileups open separate file handles;
+`multiple_iterators=True` is not implemented for CRAM pileup.
 
 For SNP support, inspect base and quality. For insertions/deletions, use
 `PileupRead.indel`, deletion/refskip state, CIGAR, and normalized alleles.
@@ -330,8 +353,12 @@ with pysam.AlignmentFile("input.bam", "rb") as source, pysam.AlignmentFile(
             destination.write(read)
 ```
 
-The output retains input order. Only index it if that order is coordinate
-sorted and unmapped records remain in a valid location.
+The output retains input order and `@SQ`, `@RG`, `@PG`, and optional tags.
+Keep the reference order intact: record reference IDs are numeric. Check each
+`RG` tag against a defined `@RG ID` and its intended sample before combining
+files. Per-record filters can drop one mate; they do not repair flags, mate
+coordinates, TLEN, or fetch a mate outside a requested region. Only index
+coordinate-sorted output with unmapped records in valid positions.
 
 ### Construct a new record
 

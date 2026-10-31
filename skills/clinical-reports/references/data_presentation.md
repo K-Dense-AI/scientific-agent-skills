@@ -31,7 +31,7 @@ Every table should identify:
 
 ## Dates and time
 
-- Use ISO 8601 in structured manifests.
+- Use `YYYY-MM-DD` calendar dates for the date checker; it rejects compact and week-date forms so precision and representation are not silently changed.
 - Preserve source timezone and precision.
 - Distinguish event date, collection date, database cut, report date, and verification date.
 - Flag start-after-end and conflicting dates.
@@ -64,6 +64,8 @@ Never convert a blank to zero. State small-cell suppression rules and ensure tot
 ## Adverse-event tables
 
 For term-level aggregate tables:
+
+- use each required CSV header exactly once, with no surrounding whitespace; duplicate headers can overwrite values during dictionary parsing and are rejected;
 
 - state MedDRA version and language;
 - state analysis set and denominator;

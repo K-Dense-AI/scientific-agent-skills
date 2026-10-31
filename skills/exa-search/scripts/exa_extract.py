@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["exa-py>=1.14.0"]
+# dependencies = ["exa-py>=2.23.0,<3"]
 # ///
 """Fetch and extract content from URLs using Exa's /contents endpoint.
 
@@ -53,6 +53,9 @@ def _build_contents(text: bool, highlights: bool) -> dict[str, Any]:
         contents["text"] = True
     if highlights:
         contents["highlights"] = True
+        if not text:
+            # get_contents otherwise inserts default text even with highlights=True.
+            contents["text"] = False
     if not contents:
         # Default to full text when the caller doesn't pick anything.
         contents["text"] = True
@@ -72,6 +75,10 @@ def _to_typed(item: Any) -> ExtractedDocument:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if not 1 <= len(args.urls) <= 100:
+        raise ValueError("Supply 1-100 URLs; split larger lists into separate calls.")
+    if args.max_age_hours is not None and not -1 <= args.max_age_hours <= 720:
+        raise ValueError("--max-age-hours must be between -1 and 720.")
     api_key = os.environ.get("EXA_API_KEY")
     if not api_key:
         print("EXA_API_KEY environment variable is not set.", file=sys.stderr)
@@ -81,6 +88,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     client.headers["x-exa-integration"] = EXA_INTEGRATION_HEADER
 
     contents = _build_contents(args.text, args.highlights)
+    if args.max_age_hours is not None:
+        contents["max_age_hours"] = args.max_age_hours
     response = client.get_contents(urls=args.urls, **contents)
 
     typed = [_to_typed(item) for item in getattr(response, "results", []) or []]
@@ -88,6 +97,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "urls": list(args.urls),
         "num_results": len(typed),
         "results": [asdict(doc) for doc in typed],
+        "statuses": [
+            {key: getattr(status, key, None) for key in ("id", "status", "source")}
+            for status in getattr(response, "statuses", None) or []
+        ],
     }
 
 
@@ -96,13 +109,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("urls", nargs="+", help="One or more URLs to extract.")
     parser.add_argument("--text", action="store_true", help="Return full-text content.")
     parser.add_argument("--highlights", action="store_true", help="Return extracted highlight snippets.")
+    parser.add_argument("--max-age-hours", type=int, default=None,
+                        help="Cache age limit (-1 to 720): 0 fetches fresh; -1 uses cache only; omitted uses API fallback policy.")
     parser.add_argument("-o", "--output", default=None, help="Write JSON to this file (default: stdout).")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    payload = run(args)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        payload = run(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     text = json.dumps(payload, indent=2, ensure_ascii=False)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:

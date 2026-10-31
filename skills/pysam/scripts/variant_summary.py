@@ -102,6 +102,7 @@ def is_symbolic_or_breakend(allele: str) -> bool:
         or allele.startswith("<")
         or "[" in allele
         or "]" in allele
+        or (allele != "." and (allele.startswith(".") or allele.endswith(".")))
     )
 
 
@@ -111,6 +112,11 @@ def classify_record(record: pysam.VariantRecord) -> str:
         return "no_alt"
     if any(is_symbolic_or_breakend(alt) for alt in alts):
         return "symbolic_or_breakend"
+    if any(
+        not allele or any(base not in "ACGTN" for base in allele.upper())
+        for allele in (record.ref, *alts)
+    ) or all(alt.upper() == record.ref.upper() for alt in alts):
+        return "other"
     if len(record.ref) == 1 and all(len(alt) == 1 for alt in alts):
         return "snv"
     if all(len(alt) == len(record.ref) for alt in alts):
@@ -138,7 +144,10 @@ def update_substitution_counts(
         return
     ref = record.ref.upper()
     alt = alts[0].upper()
-    if ref not in "ACGT" or alt not in "ACGT" or len(ref) != 1 or len(alt) != 1:
+    if (
+        ref not in "ACGT" or alt not in "ACGT"
+        or len(ref) != 1 or len(alt) != 1 or ref == alt
+    ):
         return
 
     pair = frozenset((ref, alt))
@@ -156,12 +165,13 @@ def update_genotype_counts(
     for call in record.samples.values():
         genotype = call.get("GT")
         counts["genotypes_seen"] += 1
+        if genotype:
+            ploidy_counts[len(genotype)] += 1
 
         if genotype is None or all(allele is None for allele in genotype):
             counts["missing_genotypes"] += 1
             continue
 
-        ploidy_counts[len(genotype)] += 1
         if any(allele is None for allele in genotype):
             counts["partially_missing_genotypes"] += 1
             continue
@@ -306,7 +316,12 @@ def summarize_variants(args: argparse.Namespace) -> dict[str, Any]:
             "semantics": (
                 "PASS, unfiltered '.', and failed FILTER states are distinct. "
                 "Record classes are mutually exclusive; indel_or_mixed can "
-                "include multiallelic records with mixed allele lengths."
+                "include multiallelic records with mixed allele lengths. "
+                "SNV/MNV classes describe literal allele lengths, including N. "
+                "Substitution counts use distinct biallelic A/C/G/T alleles. "
+                "Called allele totals exclude partially missing genotypes. "
+                "Observed ploidy counts include missing GT slots, which do not "
+                "establish biological ploidy."
             ),
         }
         if args.include_sample_names:

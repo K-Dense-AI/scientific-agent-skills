@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Slide image generation using Nano Banana Pro.
+Slide image generation using Nano Banana 2.
 
 Generate presentation slides or visuals by describing them in natural language.
-Nano Banana Pro handles everything automatically with smart iterative refinement.
+Nano Banana 2 handles everything automatically with smart iterative refinement.
 
 Two modes:
 - Default (full slide): Generate complete slides with title, content, visuals (for PDF workflow)
 - Visual only: Generate just images/figures to place on slides (for PPT workflow)
 
-Supports attaching reference images for context (Nano Banana Pro will see these).
+Supports attaching reference images for context (Nano Banana 2 will see these).
 
 Usage:
     # Generate full slide for PDF workflow
@@ -91,15 +91,15 @@ def build_subprocess_env(api_key):
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
-        description="Generate presentation slides or visuals using Nano Banana Pro AI",
+        description="Generate presentation slides or visuals using Nano Banana 2 AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 How it works:
   Describe your slide or visual in natural language.
-  Nano Banana Pro generates it automatically with:
+  Nano Banana 2 generates it automatically with:
   - Smart iteration (only regenerates if quality is below threshold)
-  - Quality review by Gemini 3.6 Flash
-  - Publication-ready output
+  - Quality review by Gemini 3.7 Flash
+  - PNG draft for visual and scientific verification
 
 Modes:
   Default (full slide):  Generate complete slide with title, content, visuals
@@ -109,7 +109,7 @@ Modes:
                          Use for PPT workflow where you add text separately
 
 Attachments:
-  Use --attach to provide reference images that Nano Banana Pro will see.
+  Use --attach to provide reference images that Nano Banana 2 will see.
   This allows you to say "create a slide about this chart" and attach the chart.
 
 Examples:
@@ -144,6 +144,10 @@ Environment Variables:
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     
     args = parser.parse_args()
+    if not 1 <= args.iterations <= 2:
+        parser.error("--iterations must be 1 or 2")
+    if Path(args.output).suffix.lower() != ".png":
+        parser.error("--output must end in .png; format conversion is not supported")
     
     # Check for API key — resolves --api-key, the environment, then any .env file
     api_key = resolve_api_key(args.api_key)
@@ -176,10 +180,7 @@ Environment Variables:
     if args.visual_only:
         cmd.append("--visual-only")
     
-    # Enforce max 2 iterations
-    iterations = min(args.iterations, 2)
-    if iterations != 2:
-        cmd.extend(["--iterations", str(iterations)])
+    cmd.extend(["--iterations", str(args.iterations)])
     
     if args.verbose:
         cmd.append("-v")

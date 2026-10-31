@@ -11,6 +11,7 @@ from _common import (
     ValidationError,
     error_exit,
     parse_currency,
+    parse_iso_date,
     parse_number,
     parse_year,
     read_csv_records,
@@ -127,6 +128,9 @@ def check(rows: list[dict[str, str]]) -> dict[str, Any]:
                     f"{context}.period must be YYYY, YYYY-Qn, YYYY-Mnn, "
                     "or YYYY-MM-DD"
                 )
+            parse_year(period[:4], f"{context}.period year")
+            if len(period) == 10:
+                parse_iso_date(period, f"{context}.period")
             taxonomy = require_text(
                 row["taxonomy"], f"{context}.taxonomy", allow_empty=True
             )

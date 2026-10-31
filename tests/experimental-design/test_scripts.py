@@ -40,8 +40,8 @@ DemoBlockTests = skill_contract.cli.demo_test_case(
 
 
 def doe():
-    """Import the DOE module, skipping when pyDOE3 is absent."""
-    pytest.importorskip("pyDOE3", reason="doe_designs needs pyDOE3")
+    """Import the DOE module, skipping when pydoe is absent."""
+    pytest.importorskip("pydoe", reason="doe_designs needs pydoe")
     import doe_designs
 
     return doe_designs
@@ -128,8 +128,8 @@ class SimpleRandomizationTests(unittest.TestCase):
 
 class BlockRandomizationTests(unittest.TestCase):
     def test_each_complete_block_is_exactly_balanced(self) -> None:
-        # This is the entire point of permuted blocks: balance holds throughout
-        # enrollment, not only at the end.
+        # This is the entire point of permuted blocks: the requested ratio holds at
+        # completed-block boundaries, not necessarily at interim prefixes.
         frame = randomization.block_randomization(24, block_size=4, seed=1)
         for block, rows in frame.groupby("block"):
             with self.subTest(block=block):
@@ -167,6 +167,15 @@ class BlockRandomizationTests(unittest.TestCase):
 
 
 class StratifiedTests(unittest.TestCase):
+    def test_interleaved_strata_keep_each_original_units_label(self) -> None:
+        labels = ["south", "north", "south", "north", "north", "south", "north", "south"]
+        frame = randomization.stratified_block_randomization(labels, block_size=4, seed=8)
+        self.assertEqual(list(frame["unit_id"]), list(range(1, 9)))
+        self.assertEqual(list(frame["stratum"]), labels)
+        for _, rows in frame.groupby("stratum"):
+            self.assertEqual(rows["arm"].value_counts().to_dict(),
+                             {"treatment": 2, "control": 2})
+
     def test_every_stratum_is_balanced_independently(self) -> None:
         frame = randomization.stratified_block_randomization(
             {"siteA": 8, "siteB": 12}, block_size=4, seed=1
@@ -271,6 +280,38 @@ class BalanceReportTests(unittest.TestCase):
 
 
 class DesignMatrixTests(unittest.TestCase):
+    def test_fraction_has_expected_resolution_four_aliases(self) -> None:
+        factors = {name: (-1, 1) for name in "ABCD"}
+        design = doe().fractional_factorial(factors, "a b c abc", randomize=False)
+        np.testing.assert_array_equal(design["A"] * design["B"],
+                                      design["C"] * design["D"])
+        np.testing.assert_allclose(design.to_numpy().T @ design.to_numpy(),
+                                   8 * np.eye(4))
+
+    def test_central_composite_geometry_and_quadratic_rank(self) -> None:
+        factors = {"x": (-1, 1), "y": (-1, 1)}
+        for face in ("circumscribed", "inscribed", "faced"):
+            with self.subTest(face=face):
+                design = doe().central_composite(factors, center=(2, 2), face=face,
+                                                 randomize=False)
+                x, y = design["x"].to_numpy(), design["y"].to_numpy()
+                model = np.column_stack((np.ones(len(x)), x, y, x*y, x*x, y*y))
+                self.assertEqual(np.linalg.matrix_rank(model), 6)
+                self.assertEqual(int(((x == 0) & (y == 0)).sum()), 4)
+                if face == "circumscribed":
+                    self.assertGreater(np.abs(design.to_numpy()).max(), 1)
+                else:
+                    self.assertLessEqual(np.abs(design.to_numpy()).max(), 1)
+
+    def test_latin_hypercube_uses_each_interval_exactly_once(self) -> None:
+        for criterion in (None, "center", "maximin", "centermaximin", "correlation"):
+            with self.subTest(criterion=criterion):
+                design = doe().latin_hypercube({"x": (0, 1), "y": (0, 1)}, 12,
+                                               criterion=criterion, seed=8)
+                for column in design:
+                    self.assertEqual(sorted(np.floor(12 * design[column]).astype(int)),
+                                     list(range(12)))
+
     def test_full_factorial_covers_every_combination(self) -> None:
         design = doe().full_factorial(
             {"temp": [20, 40, 60], "catalyst": ["A", "B"]}, randomize=False
@@ -338,6 +379,58 @@ class DesignMatrixTests(unittest.TestCase):
         factors = {"a": (0, 1), "b": (0, 1)}
         design = doe().two_level_factorial(factors, randomize=False)
         self.assertNotIn("run_order", design.columns)
+
+
+@pytest.mark.parametrize("n", [-1, 2.5, True])
+def test_invalid_allocation_counts_are_rejected(n):
+    for method in (randomization.simple_randomization, randomization.block_randomization):
+        with pytest.raises(ValueError, match="n must be an integer"):
+            method(n)
+
+
+@pytest.mark.parametrize("block_size", [0, -4, 4.5, True])
+def test_nonpositive_or_fractional_blocks_cannot_hang(block_size):
+    with pytest.raises(ValueError, match="block_size must be an integer"):
+        randomization.block_randomization(8, block_size=block_size)
+
+
+@pytest.mark.parametrize("arms", [[], ["a"], ["a", "a"], ["a", None]])
+def test_arms_must_identify_distinct_nonmissing_groups(arms):
+    with pytest.raises(ValueError, match="arms must contain"):
+        randomization.block_randomization(8, arms=arms)
+
+
+def test_missing_stratum_cannot_silently_drop_a_subject():
+    with pytest.raises(ValueError, match="strata must contain"):
+        randomization.stratified_block_randomization(["a", None, "b"])
+
+
+def test_duplicate_cluster_ids_cannot_assign_one_cluster_twice():
+    with pytest.raises(ValueError, match="clusters must contain"):
+        randomization.cluster_randomization(["clinic1", "clinic1"])
+
+
+def test_zero_subjects_produce_empty_schedules():
+    assert randomization.simple_randomization(0).empty
+    assert randomization.block_randomization(0).empty
+    for strata in ([], {}, {"a": 0}):
+        frame = randomization.stratified_block_randomization(strata)
+        assert frame.empty
+        assert list(frame) == ["unit_id", "stratum", "block", "arm"]
+
+
+@pytest.mark.parametrize("levels", [(1, 1), (5, 2), (1, 2, 3), (0, np.inf), (np.nan, 1)])
+def test_invalid_ranges_cannot_silently_change_the_design(levels):
+    with pytest.raises(ValueError, match="exactly two finite numeric levels"):
+        doe().two_level_factorial({"x": levels})
+
+
+def test_plackett_burman_current_supported_and_unsupported_run_counts():
+    design = doe().plackett_burman({f"x{i}": (-1, 1) for i in range(11)}, randomize=False)
+    assert design.shape == (12, 11)
+    np.testing.assert_allclose(design.to_numpy().T @ design.to_numpy(), 12 * np.eye(11))
+    with pytest.raises(ValueError):
+        doe().plackett_burman({f"x{i}": (-1, 1) for i in range(25)}, randomize=False)
 
 
 if __name__ == "__main__":

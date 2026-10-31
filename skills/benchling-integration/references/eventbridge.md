@@ -1,6 +1,9 @@
 # Benchling Events via AWS EventBridge
 
-Real-time integrations that react to Benchling changes (entity registration, inventory transfers, workflow updates, and more).
+Integrations that react to supported Benchling changes, including entity registration and
+workflow updates. Reviewed 2026-09-30. Payloads and AWS deployment snippets are illustrative;
+no tenant subscription or deployment was tested. Event names below were checked against
+the current EventBridge reference and SDK 1.25.0 event models.
 
 **Official docs:**
 - [Getting Started with Events](https://docs.benchling.com/docs/events-getting-started)
@@ -30,32 +33,32 @@ Subscription statuses: `Pending` (needs bus association), `Active`, `Expired` (r
 
 ## EventBridge event envelope
 
-All EventBridge deliveries share this top-level shape. The resource body lives under `detail` under a key that varies by event (for example `entry`, `assayRun`, `dnaSequence`).
+All EventBridge deliveries share this top-level shape. The resource body lives under `detail` under a key that varies by event (for example `entry`, `assayRun`, `request`).
 
 ```json
 {
   "version": "0",
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "detail-type": "v2.dnaSequence.created",
+  "detail-type": "v2.request.created",
   "source": "aws.partner/benchling.com/your-tenant/your-subscription-name",
   "account": "123456789012",
-  "time": "2025-10-20T14:30:00.000000+00:00",
+  "time": "2026-09-29T14:30:00.000000+00:00",
   "region": "us-west-2",
   "resources": [],
   "detail": {
     "id": "evt_abc123",
-    "eventType": "v2.dnaSequence.created",
-    "createdAt": "2025-10-20T14:30:00.000000+00:00",
+    "eventType": "v2.request.created",
+    "createdAt": "2026-09-29T14:30:00.000000+00:00",
     "deprecated": false,
     "excludedProperties": [],
     "schema": {
       "id": "ts_abc123",
-      "name": "Plasmid"
+      "name": "Validated Request"
     },
-    "dnaSequence": {
-      "id": "seq_xyz789",
-      "name": "My Plasmid",
-      "apiURL": "https://your-tenant.benchling.com/api/v2/dna-sequences/seq_xyz789"
+    "request": {
+      "id": "req_example",
+      "name": "Sequencing request",
+      "apiURL": "https://your-tenant.benchling.com/api/v2/requests/req_example"
     }
   }
 }
@@ -65,7 +68,9 @@ All EventBridge deliveries share this top-level shape. The resource body lives u
 
 **Do not treat payloads as authoritative.** Events may arrive late or out of order. Re-fetch objects with the SDK/API when you need current state.
 
-**Oversized events (>256 KB):** Dropped fields appear in `detail.excludedProperties`. Use `apiURL` on the resource object to fetch the full record.
+**Truncated events:** Benchling documents a 256 KB EventBridge payload threshold.
+Inspect `detail.excludedProperties`. Re-fetch by ID through the configured tenant SDK;
+do not send credentials to an arbitrary `apiURL` from an event.
 
 ---
 
@@ -122,9 +127,9 @@ Resources:
 
 ```json
 {
-  "detail-type": ["v2.assayRun.updated"],
+  "detail-type": ["v2.assayRun.updated.fields"],
   "detail": {
-    "updates": ["my_field"]
+    "updates": ["fields.my_field"]
   }
 }
 ```
@@ -147,16 +152,13 @@ Resources:
 ## Lambda handler skeleton (Python)
 
 ```python
-import json
 import logging
-import os
-
-import boto3
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Optional: re-fetch via SDK when payload may be stale or truncated
+# import os
 # from benchling_sdk.benchling import Benchling
 # from benchling_sdk.auth.api_key_auth import ApiKeyAuth
 #
@@ -188,14 +190,14 @@ def handler(event, context):
             "truncated_payload excluded=%s", detail.get("excludedProperties")
         )
 
-    if detail_type == "v2.dnaSequence.created":
-        sequence = detail.get("dnaSequence") or {}
-        sequence_id = sequence.get("id")
-        if not sequence_id:
-            raise ValueError("missing dnaSequence.id in event detail")
+    if detail_type == "v2.request.created":
+        request = detail.get("request") or {}
+        request_id = request.get("id")
+        if not request_id:
+            raise ValueError("missing request.id in event detail")
         # Prefer API lookup for authoritative data:
-        # seq = benchling.dna_sequences.get_by_id(sequence_id)
-        return {"status": "ok", "sequence_id": sequence_id}
+        # current = benchling.requests.get_by_id(request_id)
+        return {"status": "observed", "request_id": request_id}
 
     if detail_type == "v2.workflowTask.updated.status":
         task = detail.get("workflowTask") or {}
@@ -205,7 +207,13 @@ def handler(event, context):
     return {"status": "ignored", "detail_type": detail_type}
 ```
 
-For serverless timeouts: SDK `wait_for_task` defaults to 600s — keep Lambda timeouts and EventBridge retry/DLQ settings aligned with expected processing time.
+This skeleton only validates/routes a payload. Add persistent deduplication keyed by
+`detail.id` before side effects: delivery is at least once and can be out of order. Mark
+an event complete only after processing succeeds. Configure retries and a dead-letter
+queue; do not rely on a Lambda return value to acknowledge a business operation.
+
+For serverless timeouts, `benchling.tasks.wait_for_task` defaults to 600 seconds. Use a
+shorter explicit deadline or enqueue work; a server-side job continues after polling times out.
 
 ---
 
@@ -228,18 +236,23 @@ Benchling does **not** replay EventBridge deliveries. After an outage:
 2. List historical events with the [List Events API](https://benchling.com/api/reference#/Events/listEvents) (retained ~2 weeks).
 3. Re-route recovered events through your own infrastructure.
 
-SDK example (ISO 8601 timestamp; see API reference for filters):
+SDK 1.25.0 example (`created_atgte` is the actual parameter spelling):
 
 ```python
 events = benchling.events.list(
-    created_atgte="2025-10-20T00:00:00+00:00",
-    event_types="v2.dnaSequence.created",
+    created_atgte="2026-09-29T00:00:00+00:00",
+    event_types="v2.request.created",
 )
 
 for page in events:
     for evt in page:
         print(evt.event_type, evt.id)
 ```
+
+Events are ordered by processing order, not `createdAt`. Persist `starting_after`
+checkpoints only after successful processing and deduplicate overlapping recovery
+windows. Historical API results are event objects, not AWS envelopes; if feeding the
+handler above, explicitly adapt them to its `detail` and `detail-type` structure.
 
 ---
 
@@ -253,3 +266,10 @@ for page in events:
 | Permissions | Not permissioned at delivery | Inherited from app |
 
 For new Benchling Apps, Benchling recommends **webhooks** unless you already standardize on EventBridge in AWS. See [Getting Started with Webhooks](https://docs.benchling.com/docs/getting-started-with-webhooks).
+
+Do not assume event names are interchangeable between delivery mechanisms. Stable
+EventBridge uses `v2.entry.updated.fields`, not a generic `v2.entry.updated`; the current
+EventBridge reference does not list `v2.dnaSequence.created` or `v2.dnaSequence.updated`.
+For entity registration use `v2.entity.registered` and its `entity` payload. For webhooks,
+verify the signature and app-specific payload against the separate
+[webhook reference](https://benchling.com/webhooks/reference).

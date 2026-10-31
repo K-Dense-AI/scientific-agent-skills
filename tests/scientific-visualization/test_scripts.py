@@ -348,5 +348,153 @@ class ExportTests(unittest.TestCase):
 # for real under `python tests/run_all.py --isolated`.
 CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 
+
+@unittest.skipUnless(
+    all(importlib.util.find_spec(p) is not None for p in ("matplotlib", "PIL", "pypdf")),
+    "requires the isolated visualization environment",
+)
+class CurrentFormatRegressionTests(unittest.TestCase):
+    def test_pdf_physical_size_accounts_for_user_unit_and_rotation(self):
+        from pypdf import PdfWriter
+        from pypdf.generic import NameObject, NumberObject, RectangleObject
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'rotated.pdf'
+            writer = PdfWriter()
+            page = writer.add_blank_page(width=144, height=72)
+            page[NameObject('/UserUnit')] = NumberObject(2)
+            page.rotate(90)
+            page.cropbox = RectangleObject([0, 0, 108, 36])
+            writer.write(path)
+            metadata = image_metadata.inspect_file(path)['metadata']
+            self.assertAlmostEqual(metadata['width_mm'], 50.8)
+            self.assertAlmostEqual(metadata['height_mm'], 101.6)
+            self.assertAlmostEqual(metadata['crop_width_mm'], 25.4)
+            self.assertTrue(metadata['cropbox_differs_from_mediabox'])
+
+    def test_svg_requires_actual_svg_and_finite_positive_dimensions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'invalid.svg'
+            for xml in ('<other width="2in" height="1in"/>',
+                        '<svg width="1e999in" height="1in"/>',
+                        '<svg width="-2in" height="1in"/>'):
+                with self.subTest(xml=xml):
+                    path.write_text(xml)
+                    with self.assertRaises(_common.CliError):
+                        image_metadata.inspect_file(path)
+
+    def test_plos_600_dpi_uses_final_dimensions_not_raw_pixel_limit(self):
+        from PIL import Image
+        plan = export_plan.build_plan('plos', figure_type='photo', width='full')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'high-resolution.tiff'
+            Image.new('RGB', (4500, 2000), 'white').save(
+                path, dpi=(600, 600), compression='tiff_lzw')
+            report = export_plan.validate_against_plan(plan, path)
+            self.assertEqual(report['screening_summary']['fail'], 0)
+            finding = next(x for x in report['findings'] if x['name'] == 'pixel_width_snapshot')
+            self.assertAlmostEqual(finding['actual'], 2250)
+
+    def test_plos_tiff_alpha_pages_and_compression_are_checked(self):
+        from PIL import Image
+        plan = export_plan.build_plan('plos', figure_type='photo', width='full')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'invalid.tiff'
+            picture = Image.new('RGBA', (2250, 100), 'white')
+            picture.save(path, dpi=(300, 300), save_all=True,
+                         append_images=[picture], compression='raw')
+            findings = {x['name']: x['status'] for x in export_plan.validate_against_plan(plan, path)['findings']}
+            self.assertEqual(findings['tiff_has_alpha'], 'fail')
+            self.assertEqual(findings['tiff_frames'], 'fail')
+            self.assertEqual(findings['tiff_compression'], 'fail')
+
+    def test_target_only_dpi_and_external_caption_require_review(self):
+        from PIL import Image
+        plan = export_plan.build_plan('bmc', figure_type='photo', width='half')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'low.png'
+            Image.new('RGB', (20, 20), 'white').save(path)
+            findings = {x['name']: x['status'] for x in export_plan.validate_against_plan(plan, path)['findings']}
+            self.assertEqual(findings['effective_raster_dpi'], 'review')
+            self.assertEqual(findings['final_height_mm'], 'review')
+
+    def test_recommended_height_does_not_become_binding_maximum(self):
+        from PIL import Image
+        plan = export_plan.build_plan('cell', figure_type='photo', width='single')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'tall.tiff'
+            Image.new('RGB', (1100, 3000), 'white').save(path, dpi=(330, 330))
+            findings = {x['name']: x['status'] for x in export_plan.validate_against_plan(plan, path)['findings']}
+            self.assertEqual(findings['final_height_mm'], 'review')
+
+    def test_wrong_phase_is_a_visible_review_finding(self):
+        from PIL import Image
+        plan = export_plan.build_plan('plos', figure_type='photo', phase='initial')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'phase.tiff'
+            Image.new('RGB', (900, 400), 'white').save(path, dpi=(300, 300), compression='tiff_lzw')
+            findings = {x['name']: x['status'] for x in export_plan.validate_against_plan(plan, path)['findings']}
+            self.assertEqual(findings['submission_phase'], 'review')
+
+    def test_tiff_export_preserves_opaque_pixels_dpi_and_icc(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory) / 'rgb'
+            fig, ax = plt.subplots(figsize=(2, 1))
+            ax.plot([0, 1], [0, 1])
+            try:
+                figure_export.export_figure(fig, base, formats=['tiff'], dpi=100,
+                    tiff_rgb=True, savefig_kwargs={'pil_kwargs': {'icc_profile': b'synthetic-profile'}})
+                with Image.open(base.with_suffix('.tiff')) as rendered:
+                    rendered.load()
+                    self.assertEqual(rendered.mode, 'RGB')
+                    self.assertEqual(rendered.size, (200, 100))
+                    self.assertEqual(rendered.info['compression'], 'tiff_lzw')
+                    self.assertEqual(rendered.info['dpi'], (100, 100))
+                    self.assertEqual(rendered.info['icc_profile'], b'synthetic-profile')
+                with self.assertRaises(_common.CliError):
+                    figure_export.export_figure(fig, Path(directory) / 'transparent',
+                        formats=['tiff'], transparent=True, tiff_rgb=True)
+            finally:
+                plt.close(fig)
+
+    def test_atomic_report_preserves_concurrent_destination(self):
+        from unittest.mock import patch
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'report.json'
+            original_link = os.link
+            def race(source, target):
+                Path(target).write_bytes(b'other writer')
+                return original_link(source, target)
+            with patch.object(_common.os, 'link', side_effect=race):
+                with self.assertRaises(_common.CliError):
+                    _common.atomic_write_bytes(destination, b'new content')
+            self.assertEqual(destination.read_bytes(), b'other writer')
+            self.assertEqual(len(list(Path(directory).iterdir())), 1)
+
+    def test_atomic_export_preserves_concurrent_destination(self):
+        from unittest.mock import patch
+        import os
+        import matplotlib.pyplot as plt
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory) / 'race'
+            fig, _ = plt.subplots()
+            original_link = os.link
+            def race(source, target):
+                Path(target).write_bytes(b'other writer')
+                return original_link(source, target)
+            try:
+                with patch.object(figure_export.os, 'link', side_effect=race):
+                    with self.assertRaises(_common.CliError):
+                        figure_export.export_figure(fig, base, formats=['png'])
+                self.assertEqual(base.with_suffix('.png').read_bytes(), b'other writer')
+                self.assertEqual(len(list(Path(directory).iterdir())), 1)
+            finally:
+                plt.close(fig)
+
+
 if __name__ == "__main__":
     unittest.main()

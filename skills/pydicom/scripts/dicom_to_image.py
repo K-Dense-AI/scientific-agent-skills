@@ -55,6 +55,10 @@ METADATA_TAGS = [
     "WindowWidth",
     "VOILUTFunction",
     "PresentationLUTShape",
+    "PresentationLUTSequence",
+    "SharedFunctionalGroupsSequence",
+    "PerFrameFunctionalGroupsSequence",
+    "RealWorldValueMappingSequence",
     "RedPaletteColorLookupTableDescriptor",
     "GreenPaletteColorLookupTableDescriptor",
     "BluePaletteColorLookupTableDescriptor",
@@ -128,6 +132,12 @@ def _apply_grayscale_transforms(
     )
 
     applied: list[str] = []
+    if ("RescaleSlope" in dataset) != ("RescaleIntercept" in dataset):
+        raise ToolError("Rescale Slope and Intercept must be supplied together")
+    if modality_transform == "none" and voi != "none" and (
+        "ModalityLUTSequence" in dataset or "RescaleSlope" in dataset
+    ):
+        raise ToolError("VOI requires the modality transform; use --voi none to bypass both")
     if modality_transform == "auto" and (
         "ModalityLUTSequence" in dataset
         or "RescaleSlope" in dataset
@@ -198,6 +208,14 @@ def render_frame(args: argparse.Namespace) -> dict[str, Any]:
         force=False,
         specific_tags=METADATA_TAGS,
     )
+    if any(keyword in metadata for keyword in (
+        "SharedFunctionalGroupsSequence", "PerFrameFunctionalGroupsSequence",
+        "RealWorldValueMappingSequence",
+    )):
+        raise ToolError(
+            "functional-group or real-world-value mapping objects require a "
+            "validated frame-specific pipeline; this preview helper supports top-level transforms only"
+        )
     frames, frame_warnings = frame_count(metadata)
     if not 0 <= args.frame < frames:
         raise ToolError("requested frame is outside the declared frame range")
@@ -207,13 +225,17 @@ def render_frame(args: argparse.Namespace) -> dict[str, Any]:
         max_decompressed_bytes=HARD_MAX_DECOMPRESSED_BYTES,
     )
     photometric = str(metadata.get("PhotometricInterpretation", ""))
+    if photometric not in {
+        "MONOCHROME1", "MONOCHROME2", "RGB", "YBR_FULL", "YBR_FULL_422", "PALETTE COLOR"
+    }:
+        raise ToolError("photometric interpretation is not supported by this preview helper")
     processing_samples = (
         3 if photometric == "PALETTE COLOR" else plan["samples_per_pixel"]
     )
     # Processing can require a float64 working copy in addition to the decoded
     # frame, masks, and output. Bound peak working memory conservatively.
     working_estimate = plan["bytes_per_frame"] + (
-        plan["rows"] * plan["columns"] * processing_samples * 12
+        plan["rows"] * plan["columns"] * processing_samples * 40
     )
     if working_estimate > max_decompressed_bytes:
         raise ToolError(
@@ -221,7 +243,7 @@ def render_frame(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     _, numpy, Image = require_pixel_stack()
-    from pydicom.pixels import apply_color_lut, pixel_array
+    from pydicom.pixels import apply_color_lut, apply_presentation_lut, pixel_array
 
     decoding_plugin = (
         safe_plugin_name(args.decoding_plugin) if args.decoding_plugin else ""
@@ -289,10 +311,16 @@ def render_frame(args: argparse.Namespace) -> dict[str, Any]:
     else:
         if array.ndim != 2:
             raise ToolError("decoded grayscale frame has an unexpected shape")
+        has_presentation = (
+            "PresentationLUTSequence" in metadata or "PresentationLUTShape" in metadata
+        )
+        if has_presentation:
+            array = apply_presentation_lut(array, metadata)
+            transforms.append("presentation LUT/shape")
         normalized, scale_report = _normalize(
             array, numpy=numpy, bit_depth=args.bit_depth
         )
-        if photometric == "MONOCHROME1":
+        if photometric == "MONOCHROME1" and not has_presentation:
             maximum = 255 if args.bit_depth == 8 else 65535
             normalized = maximum - normalized
             transforms.append("MONOCHROME1 inversion")

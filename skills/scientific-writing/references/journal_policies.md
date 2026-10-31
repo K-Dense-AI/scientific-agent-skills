@@ -35,6 +35,12 @@ Do not guess an absent policy. Ask the journal or leave the decision unresolved.
 - PLOS Biology's data policy illustrates how sharing expectations interact with
   consent, privacy, legal, ethical, and sensitive-data restrictions [SW-S26].
 
+JAMA's live instructions prohibit AI/LLM drafting of Opinion manuscripts, Letters to
+the Editor, and Online Comments, and advise against AI generation or formatting of
+references; standard reference managers may be used [SW-S25]. A disclosure does not
+make a prohibited use permissible. Check article-type restrictions at intake, before
+drafting. These restrictions are not universal publisher rules.
+
 These are examples, not defaults for other journals. Publisher-level policy and
 journal-level instructions may both apply.
 

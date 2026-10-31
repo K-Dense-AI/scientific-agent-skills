@@ -1,6 +1,6 @@
 # Spectroscopy and Analytical Chemistry Formats
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Executable scope:** No spectroscopy-native parser is bundled. General
 CSV/TSV/JSON/NumPy/HDF5 inspectors apply only when a file is truly one of those
 registered formats and do not add spectroscopy semantics.
@@ -23,8 +23,12 @@ regular-file CLIs. No archive or compressed stream is unpacked.
 
 HUPO-PSI identifies mzML 1.1.0 as the long-term stable format; its index schema
 and controlled vocabulary continue to receive compatible updates. mzML is XML
-with encoded binary arrays and controlled-vocabulary metadata. A generic XML
-parser is not sufficient.
+with encoded binary arrays and controlled-vocabulary metadata. The current
+official links use main schema 1.1.1 and optional indexed wrapper 1.1.3; distinguish
+the stable specification from schema revision numbers. The IM-MS/DIA proposal
+updated August 2026 has not yet entered the PSI Document Process. A generic XML
+parser is not sufficient. Use a local validator: PSI reports the former online
+validators no longer function.
 
 Use pinned pymzML, Pyteomics, OpenMS, or ProteoWizard tooling and inspect:
 
@@ -46,8 +50,8 @@ the converter/version/options and retain the original.
 
 IUPAC describes JCAMP-DX as a family of standards for spectral data exchange.
 It has technique- and version-specific specifications (IR, NMR, MS, IMS, and
-others); active core development stopped in 2006, although the format remains
-in use.
+others). Choose the applicable published recommendation instead of assuming
+all JCAMP files share one interchangeable schema.
 
 Before parsing, identify the technique and specification/version. Validate:
 
@@ -174,7 +178,8 @@ instrumental assays:
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
 - HUPO-PSI, [mzML specification/status](https://www.psidev.info/mzml)
   (mzML 1.1.0 long-term stable; current schema/CV links and 2026 IM-MS/DIA

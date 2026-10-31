@@ -7,65 +7,27 @@ date and publication-type filters, and worked query examples.
 
 ### Google Scholar Best Practices
 
-**Finding Seminal and High-Impact Papers** (CRITICAL):
+Use [Google Scholar's documented search controls](https://scholar.google.com/intl/en/scholar/help.html):
+quoted titles/phrases, `author:`, exclusion terms, and the Advanced Search
+publication/title/date fields. Use year controls or script arguments rather
+than `2020..2024`; Scholar does not offer a global `sort:citations` operator.
+Citation counts reflect age, field, and database coverage; they are discovery
+signals, not evidence-quality thresholds.
 
-Always prioritize papers based on citation count, venue quality, and author reputation:
+```bash
+# Find recent reviews; examples are illustrative searches.
+python scripts/search_google_scholar.py 'CRISPR review' --year-start 2023 --year-end 2024
 
-**Citation Count Thresholds:**
-| Paper Age | Citations | Classification |
-|-----------|-----------|----------------|
-| 0-3 years | 20+ | Noteworthy |
-| 0-3 years | 100+ | Highly Influential |
-| 3-7 years | 100+ | Significant |
-| 3-7 years | 500+ | Landmark Paper |
-| 7+ years | 500+ | Seminal Work |
-| 7+ years | 1000+ | Foundational |
+# Author and topic
+python scripts/search_google_scholar.py 'author:Church "synthetic biology"'
 
-**Venue Quality Tiers:**
-- **Tier 1 (Prefer):** Nature, Science, Cell, NEJM, Lancet, JAMA, PNAS
-- **Tier 2 (High Priority):** Impact Factor >10, top conferences (NeurIPS, ICML, ICLR)
-- **Tier 3 (Good):** Specialized journals (IF 5-10)
-- **Tier 4 (Sparingly):** Lower-impact peer-reviewed venues
-
-**Author Reputation Indicators:**
-- Senior researchers with h-index >40
-- Multiple publications in Tier-1 venues
-- Leadership at recognized institutions
-- Awards and editorial positions
-
-**Search Strategies for High-Impact Papers:**
-- Sort by citation count (most cited first)
-- Look for review articles from Tier-1 journals for overview
-- Check "Cited by" for impact assessment and recent follow-up work
-- Use citation alerts for tracking new citations to key papers
-- Filter by top venues using `source:Nature` or `source:Science`
-- Search for papers by known field leaders using `author:LastName`
-
-**Advanced Operators** (full list in `references/google_scholar_search.md`):
-```
-"exact phrase"           # Exact phrase matching
-author:lastname          # Search by author
-intitle:keyword          # Search in title only
-source:journal           # Search specific journal
--exclude                 # Exclude terms
-OR                       # Alternative terms
-2020..2024              # Year range
+# Citation sorting applies only to the retrieved sample.
+python scripts/search_google_scholar.py '"deep learning"' \
+  --year-start 2012 --year-end 2015 --sort-by citations --limit 50
 ```
 
-**Example Searches**:
-```
-# Find recent reviews on a topic
-"CRISPR" intitle:review 2023..2024
-
-# Find papers by specific author on topic
-author:Church "synthetic biology"
-
-# Find highly cited foundational work
-"deep learning" 2012..2015 sort:citations
-
-# Exclude surveys and focus on methods
-"protein folding" -survey -review intitle:method
-```
+For global citation-count ordering over API search matches, use the bundled
+OpenAlex client (`--sort-by citations`); document the different database coverage.
 
 ### PubMed Best Practices
 
@@ -101,7 +63,8 @@ AND "Clinical Trial"[Publication Type] AND 2020:2024[Publication Date]
 ```
 
 **E-utilities for Automation**:
-The scripts use NCBI E-utilities API for programmatic access:
+The bundled PubMed script uses ESearch and EFetch. Other E-utilities are documented
+manual alternatives:
 - **ESearch**: Search and retrieve PMIDs
 - **EFetch**: Retrieve full metadata
 - **ESummary**: Get summary information

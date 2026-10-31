@@ -1,389 +1,179 @@
 # Paperclip CLI reference
 
-Every command and flag below is transcribed from `paperclip --help` and `paperclip <cmd> --help`, and
-checked against **0.7.14 and 0.7.15**. Commands marked *(not exercised here)* are documented by the
-CLI but were not run while writing this file — verify with `--help` before relying on exact behavior.
+Reviewed against installed **0.7.92**, its native help/source, and the current
+[official core reference](https://paperclip.gxl.ai/skills/full_skill.md) and
+[web documentation](https://paperclip.gxl.ai/docs). Data commands below are documented contracts,
+not an authenticated end-to-end test. Run the relevant help for the actual deployed version.
 
-`paperclip <command> --help` is authoritative and cheap. Use it.
-
-## Before anything: auth and interactivity
-
-Prefix every invocation, since shell state does not survive between tool calls:
-
-```bash
-[ -f .env ] && { set -a; . ./.env; set +a; }; paperclip <command>
-```
-
-Without it Paperclip silently falls back to stored OAuth instead of erroring. See
-[installation.md](installation.md) for why the guard is mandatory.
-
-**Commands that block on a prompt or a browser** — never run these bare from a tool call:
-
-| Command | Non-interactive form |
-|---|---|
-| `login`, `setup` | None. Ask the user to run it |
-| `uninstall` | None. Ask the user |
-| `install` | `printf '1\n\n' \| paperclip install --dir <path>` |
-| `fetch` | Works unattended, but acts with the user's browser cookies — explicit request only |
-
-`results` with no arguments is safe: it prints the list rather than prompting.
+Use the environment-loading guidance in [installation.md](installation.md) when necessary.
+Native `--help` exits before action callbacks. Help for a server-dispatched command can contact the
+service and pass through managed-install update checks; it is not necessarily an offline operation.
 
 ## Global options
 
 ```text
 paperclip [OPTIONS] COMMAND [ARGS]...
-
-  --version       Show the version and exit
-  --debug         Enable debug logging
-  --repo-only     Restrict search/map to the active repo's papers (default: full corpus)
-  --repo TEXT     Use this repo for one invocation, without changing sticky state
-  --api-key TEXT  API key (alternative to OAuth); also read from PAPERCLIP_API_KEY
+  --version
+  --debug
+  --repo-only                    Restrict search/map to the active repo
+  --repo NAME                    Use a repo for this invocation
+  -f, --folder NAME              Aliases of --repo
+  --api-key TEXT                 Prefer PAPERCLIP_API_KEY to a secret argument
   --help
 ```
 
-Note that `--repo-only` and `--repo` go **before** the subcommand:
-`paperclip --repo-only search -s pmc "query"`.
+Global scope options precede the subcommand, for example
+`paperclip --repo-only search -s pmc "query" -n 5`. Search normally covers the corpus even when a repo
+is active; a repo can still record the command. Do not use an unrelated sticky checkout.
 
-## Two families of commands
+`paperclip --help` mainly lists local/account/workspace commands. Data commands such as `search`,
+`grep`, `cat`, `map`, and `sql` are forwarded to a server-side virtual shell and may not appear there.
 
-`paperclip --help` lists only the account and workspace commands (`login`, `config`, `repo`, `sync`,
-`upload`, …). The data commands — `search`, `grep`, `cat`, `map`, `sql` and friends — are dispatched
-to the sandboxed virtual shell and do not appear in that listing. They still take `--help`:
+## Search and reading
 
-```bash
-paperclip grep --help
-paperclip map --help
-```
-
-## Search and discovery
-
-### `search`
-
-```bash
-paperclip search -s SOURCE [OPTIONS] "QUERY"
-paperclip search "QUERY" /fda/us          # a virtual directory works in place of -s
-```
-
-`-s` is required; omitting it prints the source list and exits non-zero.
-
-| Option | Meaning |
+| Command | Common options and behavior |
 |---|---|
-| `-n, --limit N` | Number of results |
-| `-s, --source S` | Source or comma-separated sources (see search-and-retrieval.md) |
-| `-e, --exact` | Exact-phrase matching |
-| `--since DATE` | Restrict to documents after a date |
-| `--sort relevance\|date` | Result ordering |
-| `--author`, `--journal`, `--year` | Metadata filters |
-| `--ranking hybrid\|bm25\|vector\|analogical` | Retrieval strategy |
-| `--corpus` | Search the whole corpus even with a repo active |
+| `search -s SOURCE "QUERY"` | `-n/--limit`, `-e/--exact`, `--year`, `--author`, `--journal`, `--sort relevance\|date`, `--ranking hybrid\|bm25\|vector\|analogical`, `--corpus` |
+| `search "QUERY" /trials/us` | A supported virtual directory supplies the source |
+| `lookup FIELD VALUE` | `-n N`; supported fields include `doi`, `pmc`, `pmid`, `arxiv`, `title`, `author`, `journal`, `year` |
+| `grep PATTERN PATH` | Full text within a document or corpus; see options below |
+| `scan FILE PATTERN...` | Several patterns in one request; `-i`, `-C N` |
+| `sql "SELECT ..."` | Metadata aggregation; `-s proteins` selects the protein SQL surface |
+| `filter --from s_ID "QUERY"` | LLM relevance filter; overwrites cohort; `--require N` fails if too few survive |
+| `cat FILE` | Use for `meta.json` or selected text; `--lines N` or `--lines START-END` bounds a text read |
+| `head -n N FILE` / `head -N FILE` | Opening lines |
+| `tail -n N FILE` / `tail -N FILE` | Ending lines |
+| `ls PATH`, `tree PATH`, `wc FILE` | Discover paths, sections, figures, and sizes |
+| `cd PATH`, `pwd` | Session-relative commands; use absolute paths across independent calls |
 
-Every search prints a result id (`s_5bcc8044`) that `filter`, `map`, and `results` consume.
+Search requires explicit source selection. Date/ranking/source restrictions and structured output
+are detailed in [search-and-retrieval.md](search-and-retrieval.md). `--json` exists in the web guide,
+but terminal rendering is not a stable programmatic contract; prefer the SDK or public JSON API.
 
-### `grep`
-
-```text
-grep [OPTIONS] PATTERN [FILE...]
-
-  -i          Ignore case
-  -n          Show line numbers
-  -c          Count matches only
-  -v          Invert match
-  -o          Print only the matching part
-  -w          Whole words only
-  -l          List only filenames with matches
-  -h          Suppress filename prefix
-  -m NUM      Stop after NUM matches
-  -e PATTERN  Explicit pattern; repeat for multi-pattern OR
-  -F          Fixed strings (literal, no regex)
-  -A NUM      NUM lines after each match
-  -B NUM      NUM lines before each match
-  -C NUM      NUM lines of context either side
-```
-
-Two distinct modes:
-
-```bash
-paperclip grep -n "off-target" /papers/PMC12345/content.lines   # within one document
-paperclip grep -l "SLC30A8" /papers/                            # across the whole corpus
-```
-
-The corpus mode returns matched paragraphs grouped by paper plus a result id, and is **time-bounded**.
-On an empty result for a genuinely rare term, retry with `--exhaustive`.
-
-### `scan`
+Common grep options documented by the current guide:
 
 ```text
-scan [OPTIONS] FILE "pattern1" "pattern2" ...
-
-  -i      Case insensitive
-  -C N    Context lines per match (default 5)
+-i              Ignore case
+-n              Display line numbers (not a result limit)
+-c              Count matching file lines; corpus document counts can be approximate
+-v              Invert match
+-l              List filenames with matches
+-m N            Bound matches
+-e PATTERN      Explicit pattern
+-F              Literal rather than regex matching
+-A N / -B N     Context after/before
+-C N            Context on both sides
+--from s_ID     Restrict to a saved cohort
+--exhaustive    Allow a longer corpus scan; not a completeness guarantee
 ```
 
-One request instead of several sequential greps; output is grouped by pattern.
-
-### `lookup`
-
-```text
-lookup [OPTIONS] FIELD VALUE
-
-Fields: doi, author, title, abstract, source, date, pmc, pmid, arxiv,
-        journal, publisher, type, keywords, category, license, year,
-        volume, issue, issn
-
-  -n N      Limit results (default 25)
-  --json    Output as JSON  — documented, but observed to return rendered text anyway
-```
-
-```bash
-paperclip lookup doi 10.1073/pnas.2307796121
-paperclip lookup pmc PMC7194329
-paperclip lookup author "James Zou" -n 10
-```
-
-### `sql`
-
-```bash
-paperclip sql "SELECT source, COUNT(*) FROM documents GROUP BY source"
-paperclip sql -s proteins "SELECT COUNT(*) FROM uniprot_v.proteins"
-```
-
-`SELECT` only. 15 s timeout, 200-row cap. Schemas are in search-and-retrieval.md.
-
-### `filter`
-
-```bash
-paperclip filter --from s_abc123 "cardiovascular outcomes"
-```
-
-LLM relevance pass over a result set, **overwriting it in place**. If `--require N` cannot be met,
-re-run `search` with broader terms for a fresh id rather than filtering again.
-
-## Reading
-
-| Command | Notes |
-|---|---|
-| `cat [-n] FILE...` | Whole file. `-n` numbers output. The only way to read `meta.json` |
-| `head [-n N \| -N] FILE` | First N lines (default 10). `.lines` files only |
-| `tail [-n N \| -N] FILE` | Last N lines. `.lines` files only |
-| `ls PATH` | Directory listing; on a paper root it also reports the line count |
-| `tree PATH` | Recursive listing |
-| `wc FILE` | Line/word/character counts |
-| `cd PATH` / `pwd` | Exist, but **cwd does not persist between invocations** — use absolute paths |
-
-`head -40 file.lines` and `head -n 40 file.lines` are equivalent.
-
-### `ask-image`
-
-```text
-ask-image PATH "question"
-ask-image --list
-
-  --fn describe       Describe the figure
-  --fn extract-data   Extract data from the figure
-```
-
-Figure filenames are publisher-specific, so `ls` the directory before calling this — `--list` needs a
-persistent `cd`, which the CLI does not have.
-
-```bash
-paperclip ls /papers/PMC10945750/figures/
-paperclip ask-image /papers/PMC10945750/figures/pnas.2307796121fig01.jpg "What are the axes and the effect size?"
-```
+Corpus grep can return a result ID for later map. Repeated time-bounded scans may differ in order
+or membership. Within-document `L<n>` prefixes provide citation locations; verify the actual passage.
 
 ## Analysis
 
-### `map` — LLM reader over a result set
-
-```text
-map --from RESULTS_ID [OPTIONS] "query"
-
-  --from ID              Result id from a previous search (required)
-  --worker NAME          quick-reader (default) | eligibility-screen | exhaustive-extraction
-  --output_schema JSON   Structured output schema
-  --claim-schema JSON    JSON Schema for each exhaustive claim
-  --repo NAME            Shared repo receiving validated exhaustive claims
-  --resume MAP_ID        Continue pending work; never reruns successful papers
-  --retry-failed         With --resume, also retry failures
-  --cancel MAP_ID        Durably request cancellation
-  -n, --limit N          Limit papers processed
-  --offset N             Skip the first N papers
-  -j, --max-concurrent N Concurrent extraction subagents (default 100, server cap 256)
+```bash
+paperclip map --from s_ID "What outcomes and sample sizes were reported?"
+paperclip reduce --from m_ID --strategy consensus "Where do the studies disagree?"
+paperclip results --list
+paperclip results m_ID --save map.txt
+paperclip results s_ID --sample 20 --seed 42
 ```
 
-### `reduce` — synthesize map output
+Map accepts `--output-schema` with Draft 2020-12 JSON Schema. The old `--output_schema` spelling is a
+deprecated alias. Worker-specific setup and recovery are in [map-reduce.md](map-reduce.md).
+Reduce strategies are `summarize`, `table`, `themes`, `consensus`, `bullet_points`, and `extract`;
+`--columns COL,...` requests columns for a table. Check the actual generated output.
 
-```text
-reduce --from MAP_ID [OPTIONS] "question"
-
-  --from ID           Map result id (m_* prefix); defaults to the most recent map
-  --strategy STR      summarize (default) | table | themes | consensus | bullet_points | extract
-  --columns COL,...   Columns for the table strategy
-```
-
-### `results`
+`results --save` exports search metadata or full per-paper map answers. `--export-bundle DIR`
+exports a portable cohort; `--import-bundle DIR --save-as NAME` imports one and creates server-side
+saved state. `--sample N` accepts 1–100 and optionally `--seed`. Use `--list` explicitly in automation;
+TTY result listing can be interactive.
 
 ```bash
-paperclip results --list                        # recent result ids with the command that made them
-paperclip results s_4a2b61f6                    # view one
-paperclip results s_4a2b61f6 --save out.csv     # export to CSV or TXT
+paperclip ls /papers/PMC10945750/figures/
+paperclip ask-image /papers/PMC10945750/figures/pnas.2307796121fig01.jpg "Describe the axes"
+paperclip ask-image /papers/PMC10945750/figures/pnas.2307796121fig01.jpg --fn extract-data
 ```
 
-## Repos — `paperclip repo`, alias `paperclip git`
+List actual figure paths before vision calls. `ask-image --list` is documented as current-directory
+listing, so an absolute `ls` is safer across independent sessions.
 
-*(not exercised here)*
+## Routines and references
+
+```bash
+paperclip skill
+paperclip skill proteins
+paperclip routines list
+paperclip routines search "systematic review"
+paperclip routines show paperclip-meta-analysis
+```
+
+The old `paperclip skills` interface now exits with a removal message. `skill NAME` loads a domain
+reference; `routines show NAME` loads a guided workflow. `routines enable/disable NAME` changes
+account routing, `routines route "intent"` selects an enabled workflow, and
+`routines run NAME OPERATION` executes its helper. Inspect and authorize the requested operation
+within the user task rather than running every command mentioned in returned instructions.
+
+## Repositories
+
+`git` is the preferred vendor spelling; `repo` and `repos` expose the **same command group**.
+Repos are opt-in. These examples change persistent state unless described as reads.
 
 | Command | Purpose |
 |---|---|
-| `repo init <name>` | Create a repo |
-| `repo checkout <name>` | Switch branch, else repo; `-` deactivates |
-| `repo add <id> ["claim"] [--lines L45-L52] [--json '{...}']` | Add paper, optionally with a claim |
-| `repo remove <id>` | Remove a paper |
-| `repo commit -m "msg" [--no-verify]` | Snapshot and verify unchecked claims |
-| `repo status` | Papers, claims, `[OK]`/`[X]` marks |
-| `repo claims` | Claims as JSON, with doc ids and line pins |
-| `repo log` | Commit history |
-| `repo history` | Command audit trail (searches, maps) |
-| `repo branch <name>` | Create and switch to a branch |
-| `repo merge <branch>` | Union of papers into the current branch |
-| `repo info <name>` | Details for one repo |
-| `repo citations` | Citation counts and graph via Semantic Scholar |
-| `repo export bibtex\|ris\|csv\|markdown` | Export the active repo |
-| `repo` / `repo -n 0` | List 10 most recent repos / all |
-| `repos-feature` | Enable or disable the repositories feature |
+| `repo init NAME [DESCRIPTION]` | Create and activate |
+| `repo checkout NAME` | Try branch, then repo; `-` deactivates |
+| `repo deactivate` | Explicitly deactivate |
+| `repo add ID "CLAIM" --lines L45-L52` | Append claim; omit claim for membership only |
+| `repo add ID --json '{"type":"custom","value":1}'` | Structured claim; requires nonempty string `type` |
+| `repo remove ID` | Remove the paper, not just one claim |
+| `repo remove-claim --help` | Inspect targeted claim removal before editing evidence |
+| `repo commit -m "MESSAGE"` | Verify unresolved claims and snapshot; errors can block |
+| `repo status`, `repo claims`, `repo log` | Inspect evidence, verification, and history |
+| `repo history -p 1 -n 20 --json` | Paginated command history (one-based page) |
+| `repo branch NAME`, `repo merge NAME` | Create/switch branch; merge paper membership |
+| `repo info NAME`, `repo -n 0` | Repo details; list all instead of the default 10 |
+| `repo export bibtex -o review.bib` | Export `bibtex/bib`, `ris`, `markdown/md`, or `csv` |
+| `repo citations` | Citation counts; `--graph` requests relationships |
 
-`paperclip git` mirrors the core subset: `init`, `add`, `commit`, `status`, `log`, `branch`, `merge`,
-`switch`.
+A snapshot containing an advisory `[X]` claim is not a fully verified evidence set. See
+[repos-and-workspace.md](repos-and-workspace.md) for verification and artifact boundaries.
 
-## Clipboard and workspace
+## Clipboard and account commands
 
-*(not exercised here)*
-
-| Command | Purpose |
+| Command | Scope |
 |---|---|
-| `upload FILES... --into FOLDER` | Persist a generated file into `/clipboard/<folder>/` |
-| `cp /papers/<id> /clipboard/<folder>/` | Zero-copy corpus link to a paper |
-| `cp ~/local/path /clipboard/` | Copy local PDFs up |
-| `mkdir /clipboard/<folder>` | Create a folder |
-| `rm /clipboard/<folder> -R` | Soft-delete a folder |
-| `sync upload PATH` | Upload a PDF or folder of PDFs |
-| `sync add\|run\|list\|remove\|status\|rm\|import` | Registered-folder sync |
-| `import SOURCE` | Import PDFs, `.bib`/`.ris`, or a paper's references |
-| `library [PAPER_ID]` | Personal library; `--matched`, `--unmatched`, `--rematch`, `--remove`, `-s` |
-| `fetch URL_OR_DOI [--into FOLDER]` | Download a paper using your browser cookies |
-| `share FOLDER EMAIL [--role viewer\|editor]` | Share a clipboard folder |
-| `unshare` | Revoke access |
+| `upload FILES... --into FOLDER` | Upload named generated artifacts |
+| `cp /papers/ID /clipboard/FOLDER/` | Corpus link; a local source path instead uploads PDFs |
+| `sync upload PATH` | One-shot upload of a PDF or folder |
+| `sync add FOLDER [--prefix NAME]` | Register a local folder |
+| `sync run [--dry-run]` | Upload changes and detect local deletions |
+| `sync list`, `sync status` | Inspect sync state |
+| `sync remove FOLDER` | Unregister without deleting remote documents |
+| `sync rm TARGET` | Remove remote clipboard content; `--all` is broad deletion |
+| `import SOURCE [--dry-run]` | PDFs, `.bib/.ris`, or a paper's references |
+| `library [ID]` | Imported records; use `-s`, `--matched`, `--unmatched` to inspect |
+| `fetch URL_OR_DOI [--into FOLDER]` | Uses browser cookies and uploads the downloaded paper |
+| `share FOLDER EMAIL [--role viewer\|editor]` | Grant access to a named recipient |
+| `unshare FOLDER EMAIL` | Revoke access |
+| `login`, `setup`, `install` | Interactive login/setup; see installation reference |
+| `update`, `uninstall`, `logout` | Installation or account mutations |
 
-`import` options: `--doi`, `-n/--limit`, `--min-cites`, `--dry-run`, `--init NAME`, `--add-to-repo`,
-`--into /clipboard/<folder>`.
+Import also supports `--doi`, `-n/--limit`, `--min-cites`, `--init`, `--add-to-repo`, and `--into`.
+Do not execute import/upload/share/sync/fetch just to establish that a flag exists.
 
-## Account and meta
+## Shell and historical limitations
 
-| Command | Purpose |
-|---|---|
-| `login` / `logout` | Browser OAuth |
-| `setup` | `login` + `install`, for uv installs |
-| `install [--dir]` | Write Paperclip skill files into a project |
-| `config` | Diagnostics and settings |
-| `update` | Upgrade CLI and refresh agent skills |
-| `uninstall` | Remove Paperclip from the machine |
-| `skill` | Print the full vendor documentation |
-| `skills [list\|search\|show\|system]` | Browse bundled domain workflows |
-
-## The sandboxed shell
-
-Data commands execute in a server-side virtual shell (`vsh`), not your local one. An unknown command
-returns `vsh: <name>: command not found. Available: ask_image, awk, cat, cd, curl, cut, echo, egrep,
-env, export...` — the list is truncated server-side, so that error is the only enumeration available.
-Note `curl` appears in it, contradicting the upstream claim that it is blocked; treat the vendor's
-allowed/blocked lists as approximate.
-
-`for`/`while` loops and `xargs` are unsupported. Issue several calls instead.
-
-### Pipes and redirection do not work — verified on 0.7.14 and 0.7.15
-
-Upstream documentation says to use `paperclip bash '...'` for pipes and redirection. Neither works in
-this version:
+The server offers a restricted virtual shell, not a general local shell. Local pipes are explicit:
 
 ```bash
-paperclip bash 'grep IC50 /papers/PMC12345/content.lines'
-# ERR: vsh: grep IC50 /papers/PMC12345/content.lines: command not found. [exit 126]
-
-paperclip "grep IC50 /papers/PMC12345/content.lines | head -2"
-# ERR: vsh: grep: |: Cannot read path: /papers/|   [exit 2]
-
-paperclip "grep nanoparticle /papers/PMC12345/content.lines > /.gxl/hits.txt"
-# ERR: vsh: grep: >: Cannot read path: /papers/>   [exit 2]
+paperclip grep -n "IC50" /papers/PMC10945750/content.lines | head -20
+paperclip cat /papers/PMC10945750/meta.json > meta.json
 ```
 
-`bash` passes its whole argument as a single command name, and `|` / `>` reach `grep` as literal file
-arguments. The SDK's `client.bash()` fails identically — this is server-side, not a CLI quirk.
-
-What does work: quoting an entire command as one argument is equivalent to passing it as separate
-arguments, and **your own shell** handles pipes and redirection fine, because the CLI writes to
-stdout.
-
-```bash
-paperclip "grep -c CRISPR /papers/PMC10945750/content.lines"           # → 62
-paperclip grep IC50 /papers/PMC12345/content.lines | head -20          # local pipe
-paperclip cat /papers/PMC12345/sections/Abstract.lines > abstract.txt  # local redirect, text
-```
-
-### Binary files cannot be retrieved
-
-Text redirects fine. Images do not — every byte that is not valid UTF-8 comes back as `U+FFFD`:
-
-```bash
-paperclip cat /papers/PMC10945750/figures/pnas.2307796121fig01.jpg > fig01.jpg
-file fig01.jpg          # → data   (not "JPEG image data")
-xxd fig01.jpg | head -1 # → efbf bdef bfbd efbf bdef bfbd 0010 4a46  ("....JF")
-```
-
-The JPEG SOI/APP0 marker `FF D8 FF E0` arrived as four replacement characters. The file is the right
-order of magnitude in size and completely unusable.
-
-No alternative works on 0.7.14 or 0.7.15:
-
-| Attempt | Result |
-|---|---|
-| `paperclip pull <path>` | `vsh: pull: command not found` — no CLI `pull` |
-| `client.pull(path, dest)` (SDK) | Returns `exit_code 0`, `download_url` `None`, writes no file |
-| `paperclip cp <figure> <local path>` | `vsh: cp: permission denied` |
-
-Analyze figures in place with `ask-image`, which runs server-side and is unaffected. When the user
-genuinely needs the image file, give them the publisher URL from `meta.json`.
-
-### `/.gxl/` is effectively unreadable
-
-`/.gxl/` is described in-band as "Session files (E2B sandbox). Files here persist to GCS." Every
-`search`, `grep`, `map`, and `reduce` writes a transcript there, and `ls /.gxl/` lists them:
-
-```text
--rw-r--r--  2349  Jul 28 01:32  reduce_r_36626b45.txt
--rw-r--r--   904  Jul 28 01:32  map_m_4b4632df.txt
--rw-r--r--  1939  Jul 28 01:31  search_s_aaadaa84.txt
-```
-
-But reading one fails, so the `Full results: /.gxl/map_<id>.txt` pointer that `map` prints cannot be
-followed:
-
-```bash
-paperclip cat /.gxl/map_m_4b4632df.txt
-# ERR: vsh: cat: /.gxl/map_m_4b4632df.txt: No such file  [exit 1]
-```
-
-Each invocation is a new session, and writing there is impossible anyway without redirection. **Use
-`paperclip results <id>` or `paperclip results <id> --save out.csv`** to retrieve full output.
-
-### `cd` does not persist
-
-Every invocation resolves relative paths from `/papers/`, whatever a previous `cd` did:
-
-```bash
-paperclip cd /.gxl
-paperclip pwd                       # → /papers/
-paperclip cat map_m_4b4632df.txt    # → Cannot read path: /papers/map_m_4b4632df.txt
-paperclip cd /                      # → vsh: cd: /: Permission denied
-```
-
-Always pass absolute paths. This also makes `ask-image --list`, which upstream documents as requiring
-a `cd` into a paper directory, unusable — list figures with `ls /papers/<id>/figures/` instead.
+The vendor documents `paperclip bash '...'` for server pipelines and scratch redirection, but those
+failed in old 0.7.14–0.7.15 tests and were not re-tested authenticated here. Do not advertise either
+universal support or permanent failure. Do not assume local shell utilities, loops, network tools,
+or session state are available in the virtual shell. Use direct commands and local composition.
+Text transport is not a binary download contract; validate any retrieved file before delivering it.

@@ -1,6 +1,6 @@
 ---
 name: matlab
-description: Build, review, migrate, and safely plan MATLAB or GNU Octave numerical workflows, including arrays, tabular/time data, tests, projects, graphics, MAT files, and explicit Python interoperability.
+description: Builds, reviews, migrates, and plans MATLAB or GNU Octave numerical workflows. Use for arrays, tabular/time data, tests, projects, graphics, MAT files, and explicit Python interoperability.
 license: MIT
 compatibility: >-
   Documentation is pinned where noted to proprietary MATLAB R2026a and free
@@ -8,9 +8,9 @@ compatibility: >-
   without MATLAB or Octave; optional MAT inventory uses scipy and/or h5py.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # MATLAB and GNU Octave
@@ -19,6 +19,15 @@ Use this skill to design or review numerical code, migrate MATLAB releases,
 prepare reproducible projects, and plan trusted execution. MATLAB and GNU
 Octave are distinct products: compatibility is partial, not a license or
 behavior guarantee.
+
+## Review scope
+
+Reviewed against current MathWorks R2026b documentation and GNU Octave 11.3.0
+sources on 2026-10-01. The bundled Engine planner and MATLAB examples retain
+an explicit R2026a baseline. R2026b supports CPython 3.10-3.14; do not reuse
+the R2026a Engine package for it. MATLAB/Octave examples are illustrative and
+were not executed in this review; the Python helpers have local synthetic tests.
+This skill uses local runtime APIs, with no remote service endpoint or API key.
 
 ## Product and license gate
 
@@ -92,7 +101,8 @@ Python Engine, a compiler, or a subprocess.
 - Avoid `clear all`, broad `addpath(genpath(...))`, dependence on `pwd`, global
   variables, and silent name shadowing. Use project roots and `fullfile`.
 - Validate sizes, classes, and values in `arguments` blocks. Remember that
-  type declarations can convert inputs; validators check without converting.
+  type declarations can convert inputs and size declarations can reshape or
+  expand compatible inputs; validators check without converting.
 - A main function file should match the main function name. Local functions
   are private to the file; since R2024a they can appear anywhere in a script
   outside conditional contexts.
@@ -154,8 +164,8 @@ Use explicit figure/axes handles and `tiledlayout`; label units; set limits,
 color scales, font sizes, and colormaps deliberately. Prefer `exportgraphics`
 over `saveas` for publication output. In R2026a it exports raster, PDF/EPS/EMF,
 SVG, GIF, and interactive HTML; format capabilities differ. Specify
-`ContentType="vector"` for suitable PDF/SVG-style output and `Resolution` for
-raster output. Review accessibility and embedded-raster behavior.
+`ContentType="vector"` for PDF/EPS/EMF; SVG is selected by its extension.
+Use `Resolution` for raster output. Review accessibility and embedded-raster behavior.
 
 Read [graphics and export](references/graphics-visualization.md).
 
@@ -163,6 +173,8 @@ Read [graphics and export](references/graphics-visualization.md).
 
 - Version 7 is the normal `save` default; `matfile` creates 7.3 by default.
   Versions 4/6/7/7.3 differ in types, compression, and per-variable limits.
+  Users can change the `save` default in settings, so specify `-v7` or `-v7.3`
+  explicitly in reproducible exchange workflows.
 - Version 7.3 is HDF5-based, not an arbitrary HDF5 interchange contract.
   Partial access and chunking can help large arrays.
 - Never load an untrusted MAT file. Inventory headers/datasets first. Objects
@@ -224,6 +236,8 @@ Every helper is network-free, bounded, symlink-rejecting, and nonexecuting.
 Run from this skill directory with Python 3.11+. Bash is allowed only to invoke
 these Python CLIs and validation commands; never use it to execute a generated
 MATLAB/Octave argv plan or untrusted artifact.
+The helpers deliberately limit identifiers to 63 characters for conservative
+portability; MATLAB itself allows up to 2048 since R2025a, subject to filesystem limits.
 
 | Helper | Purpose |
 |---|---|
@@ -268,11 +282,11 @@ Bundled JSON assets are the [project manifest](assets/project_manifest_template.
 `templates/` directory and no Markdown file is loaded from `assets/`;
 local-link tests enforce this package contract.
 
-## Primary sources (verified 2026-07-23)
+## Primary sources (reviewed 2026-10-01)
 
-- [MATLAB R2026a documentation](https://www.mathworks.com/help/matlab/)
-- [MATLAB R2026a release notes](https://www.mathworks.com/help/matlab/release-notes.html)
-- [R2026a system requirements](https://www.mathworks.com/support/requirements/matlab-system-requirements.html)
+- [Current MATLAB documentation (R2026b)](https://www.mathworks.com/help/matlab/)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [Current system requirements](https://www.mathworks.com/support/requirements/matlab-system-requirements.html)
 - [Python compatibility by release](https://www.mathworks.com/support/requirements/python-compatibility.html)
 - [MATLAB Engine installation](https://www.mathworks.com/help/matlab/matlab_external/install-the-matlab-engine-for-python.html)
 - [GNU Octave 11.3.0 release](https://octave.org/)

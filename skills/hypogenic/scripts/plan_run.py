@@ -95,8 +95,9 @@ def make_plan(
             * Decimal(str(pricing["output_usd_per_million_tokens"]))
             / million
         )
-        estimated_cost = _money(input_cost + output_cost)
-        cost_cap_ok = Decimal(str(estimated_cost)) <= Decimal(
+        exact_cost = input_cost + output_cost
+        estimated_cost = _money(exact_cost)
+        cost_cap_ok = exact_cost <= Decimal(
             str(limits["max_cost_usd"])
         )
 
@@ -196,6 +197,7 @@ def make_plan(
         "caveats": [
             "This is a conservative arithmetic bound, not tokenizer output or a provider quote.",
             "The pinned upstream CLI does not enforce this dollar budget.",
+            "This plan does not verify model compatibility or the SDK endpoint actually used.",
             "Verify current model limits, prices, account limits, and retention before execution.",
             "Candidate hypotheses and benchmark metrics are not scientific validation.",
         ],

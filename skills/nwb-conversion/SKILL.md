@@ -4,10 +4,12 @@ description: Converts neuroscience acquisition data to Neurodata Without Borders
 license: MIT
 compatibility: Requires Python 3.12 with neuroconv[tiff] 0.10.2, PyNWB 4.2.0, NWB Inspector 0.7.2, roiextractors 0.10.0, tifffile 2026.9.20, zarr 2.18.7 and hdmf-zarr 0.11.3. Local HDF5 file access is required. Network is needed only for installation; no credentials.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
   upstream-neuroconv: "0.10.2"
   upstream-pynwb: "4.2.0"
+  upstream-nwbinspector: "0.7.2"
 ---
 
 # Validated NWB conversion
@@ -38,6 +40,9 @@ Keep both Zarr pins even for an HDF5-only conversion: NeuroConv 0.10.2 imports i
 configuration modules at startup, and the tested unconstrained Zarr 3.4.0 installation failed on
 `zarr.codec_registry`. The pinned environment ran the real conversion, PyNWB validation and
 Inspector successfully on macOS ARM64. The dependency resolver supplies NumPy and HDF5 support.
+These are compatibility pins, not claims that Zarr 2 and hdmf-zarr 0.11.3 are the latest releases.
+Current interface checks and the tested dependency exception are recorded in
+[references/upstream-review.md](references/upstream-review.md).
 
 ## Workflow
 
@@ -57,7 +62,9 @@ Inspector successfully on macOS ARM64. The dependency resolver supplies NumPy an
    the pulse range. It never estimates synchronization from coincident-looking neural/behavioral
    signals. Clock resets or nonlinear drift require an explicitly validated piecewise mapping.
 4. Execute the converter. Inputs must have finite, strictly increasing timestamps and matching
-   image/timestamp counts. The acquisition samples stay intact; only coordinate units and, when
+   image/timestamp counts. Explicitly declare one channel and one plane; known TIFF channel/plane
+   metadata must agree. Grayscale pages alone cannot exclude undocumented interleaving.
+   The acquisition samples stay intact; only coordinate units and, when
    evidenced, behavior timestamps are transformed.
 5. Read the `.validation.json` alongside the NWB file. Schema compliance, Inspector findings and
    data equality answer different questions. The script exits with an error for schema failures
@@ -76,10 +83,16 @@ nwb-env/bin/python scripts/convert_session.py /path/to/session.json --output /pa
 ```
 
 `nwb-env` must point to the environment created above; the absolute example input paths are
-illustrative. The command refuses to overwrite an existing NWB. Output contains source checksums,
+illustrative. The command requires a `.nwb` output and refuses to overwrite an existing NWB or
+validation report. Output contains source and converter checksums,
 package versions, full supplied metadata, units and clock-fit provenance in both a scratch record
 and the validation report. When adapting this command for large data, TIFF writes are iterative
 and equality checking loads one frame at a time; position CSV currently loads into memory.
+Round-trip checks also verify dtype, unit scaling, optical-channel links, subject metadata,
+position reference frame, common time origin and embedded provenance. Inspector findings requiring
+review appear in the CLI summary; exit zero alone does not mean the file is scientifically correct.
+An exception during writing or round-trip checks can leave an incomplete NWB without a report;
+retain the error and use a fresh output path after correcting the cause.
 
 The real-library test converts eight non-square uint16 images with irregular frame timing plus
 four position samples, asserts exact pixel and timestamp round trips, and checks centimeter-to-meter

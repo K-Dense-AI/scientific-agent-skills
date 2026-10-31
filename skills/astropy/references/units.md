@@ -88,6 +88,13 @@ u.mass_energy()
 u.parallax()
 ```
 
+A Jy is spectral flux density per frequency, not integrated flux. To convert
+between frequency- and wavelength-based densities, specify the reference
+wavelength with `u.spectral_density(wavelength)`. Doppler conversions require
+an explicit rest frequency/wavelength and optical, radio or relativistic
+convention; do not mix their velocities. Radians remain angle units unless a
+calculation explicitly uses `to_value(u.rad)` or `u.dimensionless_angles()`.
+
 ## Logarithmic Units
 
 Special units for magnitudes, decibels, and dex:
@@ -97,7 +104,7 @@ Special units for magnitudes, decibels, and dex:
 flux = -2.5 * u.mag(u.ct / u.s)
 
 # Decibels
-power_ratio = 3 * u.dB(u.W)
+power_level = 3 * u.dB(u.W)  # Absolute level relative to 1 W; u.dB alone is a ratio
 
 # Dex (base-10 logarithm)
 abundance = 8.5 * u.dex(u.cm**-3)
@@ -131,7 +138,9 @@ abundance = 8.5 * u.dex(u.cm**-3)
 
 ## Performance Optimization
 
-Pre-compute composite units for array operations:
+Pre-compute composite units for array operations. These illustrative performance
+fragments assume a NumPy array named `array`; benchmark on the actual workload.
+A no-copy quantity can alias the input, so mutations may affect both.
 
 ```python
 # Slow (creates intermediate quantities)
@@ -142,7 +151,7 @@ UNIT_COMPOSITE = u.m / u.s / u.kg / u.sr
 result = array * UNIT_COMPOSITE
 
 # Fastest (avoid copying with <<)
-result = array << UNIT_COMPOSITE  # 10000x faster
+result = array << UNIT_COMPOSITE  # May share memory with array; no universal speedup
 ```
 
 ## String Formatting
@@ -163,7 +172,8 @@ f"{velocity.unit:FITS}" # 'm s-1'
 bakers_fortnight = u.def_unit('bakers_fortnight', 13 * u.day)
 
 # Enable in string parsing
-u.add_enabled_units([bakers_fortnight])
+with u.add_enabled_units([bakers_fortnight]):
+    duration = u.Quantity('2 bakers_fortnight')
 ```
 
 ## Constants

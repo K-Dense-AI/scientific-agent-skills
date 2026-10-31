@@ -1,125 +1,102 @@
 # Official Source Ledger
 
-**Research date: 2026-07-27.** Every framework claim in this skill traces to an entry below.
-Re-check each source before operational use — guidelines are revised, editions change, and regional
-implementation dates differ from adoption dates.
+**Review date: 2026-09-30.** This is a source baseline, not a regional applicability decision.
+The offline helpers make no service/API calls, require no credentials, and have no endpoint,
+authentication, pagination or response contract to refresh. The collection-citation lookup is
+separate from the analytical workflow. Retain controlled editions, raw data and calculation outputs.
 
-This ledger is a version baseline. It is not legal advice, an applicability determination, or a
-substitute for a controlled copy held under the laboratory's document control.
+## ICH primary sources
 
-## Documents read directly
+The full public PDFs were downloaded and inspected during this review. Copyright belongs to ICH;
+these summaries and script tables are adaptations, not ICH-endorsed implementations. ICH permits
+reuse with acknowledgement under the legal notice in each guideline.
 
-These were downloaded and read as full text on the research date, so the requirements encoded in
-`scripts/_catalog.py` and summarised in `references/ich-q2r2.md` and
-`references/ich-m10-bioanalytical.md` come from the primary source rather than from secondary
-summaries.
+| Source | Reviewed baseline and scope |
+| --- | --- |
+| [Q2(R2)](https://database.ich.org/sites/default/files/ICH_Q2%28R2%29_Guideline_2023_1130.pdf) | Step 4 adopted 1 Nov 2023; 30 Nov correction. Sections 2–3, Tables 1–2 and Annex 2 checked against catalogue and references. |
+| [Q14](https://database.ich.org/sites/default/files/ICH_Q14_Guideline_2023_1116.pdf) | Final adopted 1 Nov 2023. Minimal/enhanced approaches, optional formal ATP (section 3), robustness, established conditions, lifecycle and multivariate development. |
+| [M10](https://database.ich.org/sites/default/files/M10_Guideline_Step4_2022_0524.pdf) | Step 4, 24 May 2022. Chromatographic section 3 and LBA section 4 numerical criteria, ISR section 5, partial/cross validation section 6 and biomarker exclusion checked. |
+| [EMA Q2(R2) landing page](https://www.ema.europa.eu/en/scientific-guidelines/ich-q2r2-validation-analytical-procedures) | Lists current R2, effective 14 Jun 2024. This regional date is not a universal implementation date. |
+| [ICH training map](https://database.ich.org/sites/default/files/ICH_Q2%28R2%29Q14_TrainingMat_MapofContents_2025_0620.pdf) | Training modules are interpretation support, not replacement guideline editions. |
 
-### ICH Q2(R2) Validation of Analytical Procedures
+Material corrections from this review:
 
-- Source read: <https://database.ich.org/sites/default/files/ICH_Q2%28R2%29_Guideline_2023_1130.pdf>
-- Verified metadata: Final Version, adopted by the ICH Assembly Regulatory Members under Step 4 on
-  **1 November 2023**. Step 2 endorsement 24 March 2022. Supersedes Q2(R1) (November 2005).
-- Verified detail: an **error correction dated 30 November 2023** covers Table 5 (dissolution with
-  HPLC, reportable range linearity formulae, page 25) and Tables 6–11 (pages 26–32).
-- Content taken: section structure; Table 1 (tests by measured attribute); Table 2 (reportable range
-  examples); recommended data for specificity, response, lower range limits, accuracy, precision,
-  and robustness; sections 2.1–2.5; Annex 1 and Annex 2 table inventory; the relative response factor
-  0.8–1.2 rule from Annex 2 Table 3.
-- Licence: ICH permits use, reproduction, adaptation and distribution under a public licence provided
-  ICH's copyright is acknowledged. Acknowledged here and in `scripts/_catalog.py`.
-- Limitation: **adoption is not implementation.** Confirm the date from which your regional regulator
-  expects Q2(R2) with that regulator.
+- M10 LBA selectivity uses ten individual matrix sources, not the chromatographic six (4.2.2).
+  LBA medium QC is near the geometric mean of the calibration range (4.2.4.1).
+- Calibration acceptance requires six **passing** levels, not six attempted levels. Exclusion
+  requires curve refitting/re-evaluation; routine sample/QC bracketing and plate/batch checks remain
+  outside this checker. Anchor exclusion is LBA-specific. The percent pass rules do not themselves
+  establish run acceptability.
+- Q2 3.2.3.3 names the SD of intercepts of regression lines. The SE of one intercept is a different
+  statistic and is no longer substituted. Q2 does not provide generic 20% QL confirmation limits.
+- Table 2's shared dissolution upper-range cell is 130% of the highest strength's declared content.
+- M10 ISR has a study-size minimum; the availability qualification in cross validation is not an
+  ISR exemption. Section 6.2 names bias/agreement methods, not a mandatory TOST equivalence test.
 
-### ICH M10 Bioanalytical Method Validation and Study Sample Analysis
+## Publisher metadata and public previews only
 
-- Source read: <https://database.ich.org/sites/default/files/M10_Guideline_Step4_2022_0524.pdf>
-- Verified metadata: Step 4, dated **24 May 2022**.
-- Content taken: chromatographic criteria (section 3) — calibration levels and tolerances, QC
-  placement at four levels with the low/medium/high definitions, within-run and between-run accuracy
-  and precision design and criteria, routine-run QC pass rules, carry-over, selectivity source count,
-  dilution integrity, stability; ligand binding assay criteria (section 4) — calibration tolerances
-  including anchor point exclusion, five QC levels, run and replicate structure, accuracy and
-  precision criteria at LLOQ and ULOQ, and the total error criterion; incurred sample reanalysis
-  (section 5) including the percent-difference basis and the pass fractions.
-- Verified distinction: the **total error criterion (≤30%, ≤40% at LLOQ and ULOQ) appears for ligand
-  binding assays**. No equivalent criterion was found for chromatographic assays.
-- Licence: as for Q2(R2).
-- Limitation: regional implementation dates differ. Confirm with the regional regulator.
+No subscription standard was accessed. Do not reconstruct the full standard from this skill.
+Public catalogue scopes/edition metadata are cited below; operational requirements come from the
+laboratory's authorised controlled text.
 
-### ICH Q14 Analytical Procedure Development
+### USP
 
-- Source read: <https://database.ich.org/sites/default/files/ICH_Q14_Guideline_2023_1116.pdf>
-- Content taken: section structure; the minimal versus enhanced approaches (section 2.1); the
-  analytical target profile (section 3) and that its formal documentation and submission is
-  **optional**; robustness and parameter ranges (section 5); established conditions (section 6.1);
-  lifecycle management and post-approval change (section 7); multivariate procedures (section 8).
-- Adopted alongside Q2(R2) by the ICH Assembly in the same session.
-- Licence: as for Q2(R2).
+- [1220 preview](https://doi.usp.org/USPNF/USPNF_M10975_02_01.html) identifies the lifecycle chapter.
+  [USP Council of Experts report](https://www.usp.org/sites/default/files/usp/document/about/expert-volunteers/fy-22-coe-report-to-bot.pdf)
+  confirms it became official 1 May 2022. Current revision status still requires USP–NF access.
+- [1225 preview](https://doi.usp.org/USPNF/USPNF_M99945_40101_01.html) explicitly describes a **2025
+  proposal** based on the chapter official from 1 Aug 2017. It proposes Q2(R2) alignment and discusses
+  a proposed 1221 chapter. A DOI page or proposal is not proof of an official effective revision.
+- [1226 preview](https://doi.usp.org/USPNF/USPNF_M870_03_01.html) describes selected-characteristic
+  verification for first use; it distinguishes verification from repeating full validation.
+- 1224, 1010, 621, 711 and 1092 are pointers only; no adjustment allowances, thresholds or current
+  revision dates are supplied. Verify those in [USP–NF](https://www.uspnf.com/).
 
-## Documents identified but not read (paywalled)
+### CLSI
 
-Designation, title, and scope only. **No requirement, threshold, or study design from any of these is
-reproduced anywhere in this skill.** Where a numeric criterion is needed, read it from an authorised
-copy.
+Current publisher pages were read for every listed document. Full standards were not read.
 
-### USP–NF general chapters
+| Document | Source | Listed edition |
+| --- | --- | --- |
+| EP05 | <https://clsi.org/shop/standards/ep05-plus/> | 4th, 11 Dec 2025; Plus includes Quick Guide |
+| EP06 | <https://clsi.org/shop/standards/ep06/> | 2nd, 24 Nov 2020 |
+| EP07 | <https://clsi.org/shop/standards/ep07-plus/> | 3rd, 30 Apr 2018; additional guide 17 Mar 2026 |
+| EP09 | <https://clsi.org/shop/standards/ep09/> | corrected 3rd, 20 Jun 2018 |
+| EP15 | <https://clsi.org/shop/standards/ep15/> | 3rd, 11 Sep 2014 |
+| EP17 | <https://clsi.org/shop/standards/ep17/> | 2nd |
+| EP25 | <https://clsi.org/shop/standards/ep25/> | 2nd |
+| EP28 | <https://clsi.org/shop/standards/ep28/> | 3rd; EP28IG companion listed |
 
-- Official pages: `<1220>` <https://doi.usp.org/USPNF/USPNF_M10975_02_01.html>;
-  `<1225>` <https://doi.usp.org/USPNF/USPNF_M99945_40101_01.html>;
-  `<1226>` <https://doi.usp.org/USPNF/USPNF_M870_03_01.html>
-- Verified metadata for `<1220>`: incorporated into USP–NF 2022 Issue 1 on **1 November 2021**,
-  **official 1 May 2022**. It brings the concepts of `<1224>`, `<1225>` and `<1226>` into a single
-  three-stage lifecycle. `<1225>` covers validation, particularly Stage 2 activities under `<1220>`;
-  `<1226>` covers verification of compendial procedures.
-- Provenance limitation: this metadata came from **secondary sources** (publisher notices and trade
-  press) rather than from the USP–NF text, which is behind subscription. Marked
-  **[confirm in USP–NF]**. Confirm the current official text, revision, and any subsequent change.
-- Chapters referenced by designation only, not read: `<1224>`, `<1010>`, `<621>`, `<711>`, `<1092>`.
+The [publisher's May 2026 update](https://clsi.org/resources/insights-blog/purpose-driven-content-for-ep-documents-a-strategic-update/)
+discusses modular guides and EP09 revision work. These are not evidence of a new technical edition.
 
-### CLSI EP series
+### ISO and clinical regulatory context
 
-- Publisher: <https://clsi.org/standards/products/method-evaluation/>
-- Designations and subjects recorded in `references/compendial-and-clsi.md`: EP05, EP06, EP07, EP09,
-  EP15, EP17, EP25, EP28 (formerly C28), plus the EP17IG and EP28IG implementation guides.
-- Provenance limitation: designations, titles and edition numbers were taken from **clsi.org product
-  listings and secondary sources** on the research date, not read from the documents. Every edition
-  number carries **[confirm edition]** in the reference file. Editions change; verify on clsi.org
-  before designing a study.
+- [ISO/IEC 17025:2017 catalogue](https://www.iso.org/standard/66912.html): edition 3, published
+  November 2017, current catalogue stage confirmed. Clause labels identify the subject only;
+  full requirements were not read. ISO 15189, ISO 21748 and ISO 5725 remain scope pointers, without
+  asserted editions or detailed requirements.
+- [CMS CLIA regulation entrypoint](https://www.cms.gov/medicare/health-safety-standards/clinical-laboratory-improvement-amendments-clia/clia-regulations-compliance)
+  and [CMS performance-specification interpretation](https://www.cms.gov/Medicare/Provider-Enrollment-and-Certification/SurveyCertificationGenInfo/Downloads/Survey-and-Cert-Letter-15-17.pdf)
+  support the distinction between establishment and verification for unmodified FDA-cleared or
+  approved tests. Do not infer US CLIA applicability from CE marking.
 
-### ISO standards
+## Statistical implementation and validation boundaries
 
-- ISO/IEC 17025:2017 — <https://www.iso.org/standard/66912.html>. Edition 3; supersedes the 2005
-  edition. Relevant clauses: 7.2 (selection, verification and validation of methods), 7.6
-  (measurement uncertainty). Not read; identified by catalogue metadata.
-- ISO 15189, ISO 21748, ISO 5725 series — referenced by designation and scope only.
-- Provenance limitation: ISO catalogue pages have historically refused automated access. Confirm
-  edition and status on iso.org or with a national member body. **[confirm on iso.org]**
-- See this repository's `iso-standards-readiness` skill and its own source ledger for the
-  accreditation-level treatment of these standards.
+These are general statistical methods, not framework-prescribed universal decisions.
+[NIST weighted least squares](https://itl.nist.gov/div898/handbook/pmd/section1/pmd143.htm),
+[NIST weighted fitting](https://www.itl.nist.gov/div898/handbook/pmd/section4/pmd432.htm), and
+[NIST calibration model checking](https://www.itl.nist.gov/div898/handbook/mpc/section3/mpc365.htm)
+were checked for variance-model and calibration assumptions. The routines implement t, chi-square
+and F distributions, weighted linear regression with replicate lack-of-fit, approximate residual
+runs diagnostics, one-way variance components, Deming/jackknife, a bounded Passing–Bablok subset,
+Bland–Altman and paired TOST. Tests exercise published quantiles and synthetic numerical cases.
 
-## Statistical methods
-
-The statistical procedures in `references/statistics.md` and `scripts/_common.py` are standard
-published methods, not requirements of any framework:
-
-- Incomplete beta and gamma function implementations follow the standard continued-fraction and series
-  algorithms; the t, chi-square and F distributions are derived from them.
-- Lack-of-fit F test against pure error: standard regression ANOVA.
-- Wald–Wolfowitz runs test: standard non-parametric test of randomness in a sequence of signs.
-- One-way random-effects variance components with the standard unbalanced expected-mean-square
-  coefficient; Satterthwaite approximation for effective degrees of freedom of the total.
-- Deming regression with jackknife standard errors; Passing–Bablok with the rank-based slope interval.
-- Bland–Altman bias and limits of agreement.
-- Two one-sided tests (TOST) for equivalence.
-
-Implementations are verified against published quantiles and hand-checkable cases in
-`tests/analytical-method-validation/test_scripts.py`. Where a framework prescribes a specific
-statistical treatment, the framework governs — these are the general-purpose tools.
-
-## What is deliberately absent
-
-- No numeric acceptance criteria are supplied for ICH Q2(R2) work. The guideline does not set them and
-  neither does this skill; they come from the specification, the analytical target profile, or
-  development data.
-- No text, table, threshold, or study design from any USP, CLSI, or ISO document.
-- No claim that a procedure is validated, a run acceptable, or an investigation closed.
+- The scripts are not certified statistical software or a full implementation of any CLSI document.
+- Small-sample, normality, independence and variance-model assumptions require review. Grouped
+  accuracy intervals use equal-weight independent group means; a single grouping factor cannot
+  separate confounded day, analyst and instrument effects.
+- TOST tests mean-difference equivalence. Individual agreement and decision-point bias need
+  additional pre-stated criteria. Passing–Bablok does not remove all statistical assumptions.
+- Synthetic fixtures validate computation, not physical selectivity, robustness, stability, assay
+  performance, instrument integration or regulatory acceptability.

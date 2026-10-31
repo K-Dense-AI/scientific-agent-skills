@@ -22,7 +22,7 @@ to look like a rounding error and large enough to prevent assembly.**
 | Tapped hole | M6 x 1.0 | 1/4-20 UNC |
 | Typical border | 12.5 mm | 12.7 mm |
 
-Over a four-hole span the grids differ by **1.6 mm** — far more than any clearance hole absorbs.
+Over four pitches (five hole centres) the grids differ by **1.6 mm** — far more than any clearance hole absorbs.
 There is no way to infer which the user has from the request. Ask. If the answer is unavailable,
 model the mounting features as **slots along the bolt line** rather than round holes, which
 tolerates both, and say that is what you did and why.
@@ -30,8 +30,8 @@ tolerates both, and say that is what you did and why.
 ## Mounting to the table
 
 - Use **clearance holes, not tapped holes**, in the part. The table is tapped; the part is
-  clearanced. For M6 use 6.6 mm (normal fit) in a printed part rather than 6.4 mm — printed holes
-  come out undersize.
+  clearanced. For M6 use 6.6 mm is a common normal-clearance planning value. Add the calibrated process
+  allowance and confirm the actual screw drawing; printed holes may come out undersize.
 - **Counterbore for the screw head** if the part surface must stay clear: roughly 11 mm diameter
   for an M6 socket head cap screw, 11.2 mm for 1/4-20.
 - **Never rely on more than two holes to locate a part.** Grid tolerance plus print tolerance means
@@ -66,8 +66,8 @@ The dominant convention for small free-space assemblies:
 
 For a custom cage plate: place four bores on a 30 mm square, put the aperture at the **centroid**
 of those four bores, and bore them for a free-sliding fit **at your process's clearance**
-(fabrication-limits.md): about 6.2 mm CNC, 6.4 mm SLA, 6.8 mm FDM. 6.1 mm is a reamed-metal
-number — printed bores come out undersize, and four bores on a common square over-constrain each
+(fabrication-limits.md): about 6.2 mm CNC, 6.4 mm SLA, 6.8 mm FDM. A 6.1 mm bore may work after reaming, but is not
+a reliable uncalibrated printed fit; printed bores may come out undersize, and four bores on a common square over-constrain each
 other, so tighter is not better here. A cage plate that binds on the rods is worse than useless
 because it transmits stress into the whole assembly.
 
@@ -95,9 +95,9 @@ likely to fail.
 - **Never clamp an optic on its clear aperture.** Contact only the outer annulus of the face or the
   edge. Define `clear_aperture_mm` as a named parameter and confirm in the snapshot that nothing
   intrudes on it.
-- Three-point contact is kinematically correct and does not deform the optic. A continuous
-  circular seat over-constrains it and induces stress birefringence, which matters for
-  polarisation work.
+- Three-point support can reduce constraint, but support geometry, preload and contact
+  stress still matter. Neither three points nor a continuous annular seat guarantees
+  freedom from deformation or stress birefringence; validate the mounting load.
 - Leave clearance for thermal expansion. A metal-in-polymer mount that is a press fit at 20 °C can
   crack or bind across a temperature swing.
 - Retaining forces should be light and distributed. A single set screw pressing on glass is a way
@@ -130,9 +130,9 @@ Declare the grid pitch, rod spacing, and bore diameters in the model's `interfac
 `optical-breadboard-metric`, `optical-breadboard-imperial`, or `cage-system-30mm`, so the check
 catches a 25.0-for-25.4 substitution rather than leaving it to a reader.
 
-There is still **no automatic bolt-pattern check** — the interface check compares dimensions, not
-hole positions. Compute the pattern in the model from a named `grid_pitch_mm` constant, and confirm
-in the snapshot that:
+The interface check compares declared dimensions, not hole positions. Use cylindrical
+`clear` gauges at requirement-derived coordinates to test the actual bolt pattern.
+Compute the model from `grid_pitch_mm`, then also confirm the visible layout:
 
 1. All mounting holes are present and pass fully through.
 2. The optic aperture is centred where you intended, and unobstructed.
@@ -142,7 +142,7 @@ in the snapshot that:
 ## Sources
 
 - Thorlabs imperial and metric threading — <https://www.thorlabs.com/imperial-and-metric-threading>
-- Thorlabs standard 30 mm cage plates — <https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_ID=2273>
-- Thorlabs SM1 lens tube compatible cage plates — <https://www.thorlabs.com/newgrouppage9.cfm?objectgroup_id=4114>
+- Thorlabs standard 30 mm cage plates — <https://www.thorlabs.com/standard-30-mm-cage-plates>
+- Thorlabs SM1 lens tube compatible cage plates — <https://www.thorlabs.com/sm1-lens-tube-compatible-cage-plates>
 - Post dimensions, beam heights, and vendor-specific thread conventions in this file are common
   conventions rather than published standards. Confirm against the catalogue.

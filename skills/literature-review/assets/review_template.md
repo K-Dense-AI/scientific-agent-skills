@@ -56,8 +56,8 @@
 
 **Search String Example:**
 ```
-("CRISPR"[Title/Abstract] OR "Cas9"[Title/Abstract]) AND 
-("disease"[MeSH Terms]) AND ("2015/01/01"[Date] : "2024/12/31"[Date])
+("CRISPR"[Title/Abstract] OR "Cas9"[Title/Abstract]) AND
+("disease"[MeSH Terms]) AND ("2015/01/01"[Publication Date] : "2024/12/31"[Publication Date])
 ```
 
 **Dates:** [YYYY-MM-DD to YYYY-MM-DD] | **Executed:** [Date]  
@@ -94,11 +94,16 @@
 
 **PRISMA Flow:**
 ```
-Records identified: n=[X] → Deduplicated: n=[Y] → 
-Title/abstract screened: n=[Y] → Full-text assessed: n=[Z] → Included: n=[N]
+Records identified (by source): n=[X]
+Removed before screening (duplicates/other reasons): n=[D]
+Records screened: n=[X-D]; records excluded: n=[E]
+Reports sought: n=[S]; reports not retrieved: n=[U]
+Reports assessed: n=[S-U]; reports excluded with reasons: n=[F]
+Reports included: n=[S-U-F]; studies included: n=[N from study-report map]
 ```
 
-**Exclusion reasons:** [List with counts]
+**Exclusion reasons:** [List with counts; distinguish reports not retrieved]
+**Study-report map:** [Study ID -> all reports, versions, trial IDs, and outcome sources]
 
 ### 2.6 Data Extraction
 
@@ -111,9 +116,9 @@ Title/abstract screened: n=[Y] → Full-text assessed: n=[Z] → Included: n=[N]
 
 ### 2.7 Quality Assessment
 
-**Tool:** [Cochrane RoB 2.0 / ROBINS-I / Newcastle-Ottawa / AMSTAR 2 / JBI]  
+**Tool:** [Cochrane RoB 2 / ROBINS-I / Newcastle-Ottawa / AMSTAR 2 / JBI]\
 **Method:** [2 independent reviewers; third for conflicts]  
-**Rating:** [Low/Moderate/High risk of bias]  
+**Rating:** [Use tool-specific domain and overall judgments; RoB 2: low/some concerns/high]\
 **Publication bias:** [Funnel plots, Egger's test - if meta-analysis]
 
 ### 2.8 Synthesis and Analysis
@@ -121,7 +126,7 @@ Title/abstract screened: n=[Y] → Full-text assessed: n=[Z] → Included: n=[N]
 **Approach:** [Narrative / Meta-analysis / Both]  
 **Statistics** (if meta-analysis): Effect measures, heterogeneity (I², τ²), sensitivity analyses, subgroups  
 **Software:** [RevMan, R, Stata]  
-**Certainty:** [GRADE framework; factors: bias, inconsistency, indirectness, imprecision]
+**Certainty:** [GRADE per outcome/body of evidence; risk of bias, inconsistency, indirectness, imprecision, publication bias]\
 
 ---
 
@@ -129,7 +134,7 @@ Title/abstract screened: n=[Y] → Full-text assessed: n=[Z] → Included: n=[N]
 
 ### 3.1 Study Selection
 
-**Summary:** [X records → Y deduplicated → Z full-text → N included (M in meta-analysis)]  
+**Summary:** [Records screened; reports sought/not retrieved/assessed/excluded/included; N distinct studies (M in meta-analysis)]\
 **Study types:** [RCTs: n=X, Observational: n=Y, Reviews: n=Z]  
 **Years:** [Range; peak year]  
 **Geography:** [Countries represented]  
@@ -143,9 +148,9 @@ Title/abstract screened: n=[Y] → Full-text assessed: n=[Z] → Included: n=[N]
 
 | Study | Year | Design | Sample Size | Key Methods | Main Findings | Quality |
 |-------|------|--------|-------------|-------------|---------------|---------|
-| First Author et al. | 2023 | [Type] | n=[X] | [Methods] | [Brief findings] | [Low/Mod/High RoB] |
+| First Author et al. | 2023 | [Type] | n=[X] | [Methods] | [Brief findings] | [Tool-specific judgment] |
 
-**Quality:** Low RoB: n=X ([%]); Moderate: n=Y ([%]); High: n=Z ([%])
+**Risk of bias:** [Report tool-specific outcome/domain judgments and denominators]
 
 ### 3.4 Thematic Synthesis
 
@@ -294,6 +299,8 @@ Vancouver: Author AA, Author BB. Title. J Abbrev. Year;volume(issue):pages. doi:
 
 ### Appendix B: PRISMA Checklist
 
+[Summary below is not the complete checklist. Attach the official PRISMA 2020 checklist, including all applicable items/subitems, or the appropriate extension.]
+
 | Section | Item | Reported? | Page |
 |---------|------|-----------|------|
 | Title | Identify as systematic review | Yes/No | # |
@@ -313,11 +320,11 @@ Vancouver: Author AA, Author BB. Title. J Abbrev. Year;volume(issue):pages. doi:
 
 ### Appendix D: Quality Assessment
 
-**Tool:** [Cochrane RoB 2.0 / ROBINS-I / Newcastle-Ottawa / etc.]
+**Tool:** [Cochrane RoB 2 / ROBINS-I / Newcastle-Ottawa / etc.]\
 
 | Study | Domain 1 | Domain 2 | Domain 3 | Overall |
 |-------|----------|----------|----------|---------|
-| Study 1 | Low | Low | Some concerns | Low |
+| Study 1 | Low | Low | Some concerns | Some concerns |
 | Study 2 | [Score] | [Score] | [Score] | [Overall] |
 
 ### Appendix E: Data Extraction Form
@@ -329,7 +336,7 @@ POPULATION: n=_____ Age_____ Setting_____
 INTERVENTION/EXPOSURE: _____
 OUTCOMES: Primary_____ Secondary_____
 RESULTS: Effect size_____ 95%CI_____ p=_____
-QUALITY: □Low □Moderate □High RoB
+RISK OF BIAS: Tool______ Outcome______ Judgment______ Rationale______
 FUNDING/COI: _____
 ```
 
@@ -368,7 +375,7 @@ FUNDING/COI: _____
 **Version:** [1.0] | **Last updated:** [Date]
 
 **Quality checks:**
-- [ ] Citations verified with verify_citations.py
+- [ ] DOI registration checked; identity, claim support, and correction/retraction status manually reviewed
 - [ ] PRISMA checklist completed
 - [ ] Search reproducible
 - [ ] Independent data verification
@@ -391,7 +398,7 @@ FUNDING/COI: _____
 3. Pre-register when feasible (PROSPERO/OSF)
 4. Use thematic synthesis, not study-by-study
 5. Be transparent and reproducible
-6. Verify all DOIs before submission
+6. Verify reference identity and claim support, including items without DOIs
 7. Make data/code openly available
 
 **Common pitfalls to avoid:**
@@ -402,7 +409,7 @@ FUNDING/COI: _____
 - Don't skip publication bias assessment
 
 **Resources:**
-- PRISMA 2020: http://prisma-statement.org/
+- PRISMA 2020: https://www.prisma-statement.org/
 - PROSPERO: https://www.crd.york.ac.uk/prospero/
 - Cochrane Handbook: https://training.cochrane.org/handbook
 - GRADE: https://www.gradeworkinggroup.org/

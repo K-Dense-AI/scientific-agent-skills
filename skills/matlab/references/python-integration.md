@@ -1,8 +1,14 @@
 # MATLAB and Python Integration
 
-This reference is pinned to MATLAB R2026a as reviewed on 2026-07-23.
+The executable planner is pinned to MATLAB R2026a, reviewed on 2026-10-01.
 Calling Python from MATLAB and calling MATLAB from Python are different
 interfaces with different process, data, and license behavior.
+
+Current R2026b documentation lists CPython 3.10-3.14. At review time, PyPI
+still publishes `matlabengine==26.1.12` for R2026a, not R2026b. For R2026b use
+the Engine distributed with that installed release and verify its requirements;
+the bundled planner deliberately rejects R2026b rather than applying the
+R2026a package pin. No MATLAB or Engine runtime was started in this review.
 
 ## Exact R2026a compatibility
 
@@ -98,6 +104,10 @@ finally:
 check out a MATLAB license. Never call it merely to probe availability.
 Review startup paths/actions and confirm entitlement first.
 
+Engine transfers are limited to 2 GB including supporting information.
+Python `None`, Python class objects, and recursive containers are unsupported
+Engine input types. These limits are separate from MATLAB-to-Python conversion.
+
 `connect_matlab()` connects to a deliberately shared local MATLAB session;
 `find_matlab()` lists shared sessions. Sharing changes the trust boundary and
 must be explicitly approved. Do not connect to an unknown session.
@@ -127,7 +137,7 @@ Scalar automatic mappings include:
 | integer scalar | `int` |
 | logical scalar | `bool` |
 | string scalar/character vector | `str` |
-| missing string | `None`-like string conversion documented by MathWorks |
+| missing string through `py.str` | Python string `"None"`, not the Python `None` singleton |
 | `dictionary`/scalar `struct` | `dict` |
 | `table`/`timetable` | pandas `DataFrame` |
 | `datetime` | `datetime.datetime` |
@@ -144,6 +154,12 @@ R2026a additions:
 - `pystringarray` converts MATLAB string arrays to NumPy `StringDType`
   arrays;
 - missing string entries need explicit round-trip tests.
+
+The table above concerns Python called **from MATLAB**. Engine calls from
+Python use their own conversion table and `matlab.*` array classes; do not
+assume pandas, datetime, or dictionary conversions are symmetric. R2026b adds
+GPU interchange through CuPy, DLPack, and PyTorch with Parallel Computing
+Toolbox; those features are outside the R2026a planner's compatibility claim.
 
 No automatic conversion is documented for multidimensional character/cell
 arrays or M-by-N string arrays where both dimensions exceed one. Sparse
@@ -232,7 +248,7 @@ Collect only named facts:
 Do not ask for `env`, `set`, complete `PATH`, complete `sys.path`, license
 files, tokens, home-directory listings, or credentials.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [Python Compatibility by MATLAB Release](https://www.mathworks.com/support/requirements/python-compatibility.html)
 - [Install MATLAB Engine API for Python](https://www.mathworks.com/help/matlab/matlab_external/install-the-matlab-engine-for-python.html)
@@ -245,4 +261,4 @@ files, tokens, home-directory listings, or credentials.
 - [Pass Data from Python to MATLAB](https://www.mathworks.com/help/matlab/matlab_external/pass-data-between-matlab-and-python-from-python.html)
 - [Python Interface Limitations](https://www.mathworks.com/help/matlab/matlab_external/limitations-to-python-support.html)
 - [MATLAB Engine Limitations](https://www.mathworks.com/help/matlab/matlab_external/limitations-to-the-matlab-engine-for-python.html)
-- [R2026a Release Highlights](https://www.mathworks.com/products/new_products/latest_features.html)
+- [Current release highlights](https://www.mathworks.com/products/new_products/latest_features.html)

@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import Any
 
 try:
+    from ._profiles import PROFILES
     from ._common import (
         MAX_CPU_CORES,
         MAX_DIMENSION,
@@ -26,6 +27,7 @@ try:
         validate_keys,
     )
 except ImportError:  # Direct script execution.
+    from _profiles import PROFILES
     from _common import (
         MAX_CPU_CORES,
         MAX_DIMENSION,
@@ -48,7 +50,7 @@ FLUIDSIM_VERSION = "0.9.0"
 FLUIDFFT_VERSION = "0.4.5"
 PYFFTW_VERSION = "0.15.1"
 MPI4PY_VERSION = "4.1.2"
-REVIEW_DATE = "2026-07-23"
+REVIEW_DATE = "2026-10-01"
 
 # Static allowlist from FluidSim 0.9.0 pyproject entry points. No module name is
 # ever derived from user text.
@@ -101,8 +103,8 @@ STATE_FIELD_COUNTS = {
     "ns3d.bouss": (4, 5),
     "ns3d.strat": (4, 5),
     "plate2d": (3, 3),
-    "sw1l": (3, 4),
-    "sw1l.exactlin": (3, 4),
+    "sw1l": (4, 4),
+    "sw1l.exactlin": (4, 4),
     "sw1l.modified": (3, 4),
     "sw1l.onlywaves": (3, 4),
     "waves2d": (2, 3),
@@ -337,6 +339,23 @@ def validate_config(document: Any) -> dict[str, Any]:
 
     parameters = require_mapping(config["parameters"], context="parameters")
     _validate_parameter_structure(parameters)
+    for path, value in flatten_parameters(parameters):
+        if not (value is None or isinstance(value, (str, bool, int, float))):
+            raise ToolError(f"parameters.{'.'.join(path)} must be a scalar")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            finite_float(value, name=f"parameters.{'.'.join(path)}")
+    profile = PROFILES.get(solver)
+    if profile:
+        for key in {"N", "beta", "c2", "f"} & parameters.keys():
+            if key not in profile["physics"]:
+                _record(errors, "unsupported_solver_parameter", f"{solver} has no {key} parameter")
+        if solver.startswith("ns3d") and "NO_KY0" in parameters["oper"]:
+            _record(errors, "unsupported_solver_parameter", f"{solver} has no oper.NO_KY0 parameter")
+        if solver == "waves2d" and parameters.get("init_fields", {}).get("noise"):
+            _record(errors, "unsupported_solver_parameter", "waves2d noise has a different parameter surface")
+        for key in parameters.get("output", {}).get("periods_save", {}):
+            if key not in profile["outputs"]:
+                _record(errors, "unsupported_solver_output", f"{solver} has no periods_save.{key}")
     oper = require_mapping(parameters["oper"], context="parameters.oper")
     time = require_mapping(
         parameters["time_stepping"], context="parameters.time_stepping"
@@ -442,14 +461,19 @@ def validate_config(document: Any) -> dict[str, Any]:
                 "invalid_max_elapsed",
                 "max_elapsed must use bounded HH:MM:SS text",
             )
-        if time["type_time_scheme"] not in TIME_SCHEMES:
+        if not isinstance(time["type_time_scheme"], str) or time["type_time_scheme"] not in TIME_SCHEMES:
             _record(errors, "unknown_time_scheme", "unsupported FluidSim 0.9 time scheme")
         if not time["USE_T_END"]:
-            _record(
-                warnings,
-                "iteration_termination",
-                "USE_T_END is false; verify it_end is explicit and bounded",
-            )
+            try:
+                bounded_int(time.get("it_end"), name="it_end", minimum=1, maximum=2_000_000)
+            except ToolError as exc:
+                _record(errors, "iteration_termination", str(exc))
+        if isinstance(time["max_elapsed"], str) and _DURATION.fullmatch(time["max_elapsed"]):
+            hours, minutes, seconds = map(int, time["max_elapsed"].split(":"))
+            wall_minutes = config.get("resources", {}).get("wall_time_minutes") if isinstance(config.get("resources"), Mapping) else None
+            elapsed = 3600 * hours + 60 * minutes + seconds
+            if elapsed <= 0 or (isinstance(wall_minutes, int) and elapsed > wall_minutes * 60):
+                _record(errors, "wall_time_mismatch", "max_elapsed must be positive and within declared wall time")
 
     for key in ("nu_2", "nu_4", "nu_8", "nu_m4"):
         if key in parameters:
@@ -460,7 +484,7 @@ def validate_config(document: Any) -> dict[str, Any]:
 
     init = require_mapping(parameters.get("init_fields", {}), context="init_fields")
     init_type = init.get("type")
-    if init_type not in INIT_TYPES:
+    if not isinstance(init_type, str) or init_type not in (profile["initializations"] if profile else INIT_TYPES):
         _record(errors, "unknown_initialization", "init_fields.type is not recognized")
     if init_type == "from_file":
         try:
@@ -479,7 +503,7 @@ def validate_config(document: Any) -> dict[str, Any]:
     if not isinstance(forcing_enabled, bool):
         _record(errors, "invalid_forcing_enable", "forcing.enable must be a boolean")
     if forcing_enabled:
-        if forcing.get("type") not in FORCING_TYPES:
+        if not isinstance(forcing.get("type"), str) or forcing.get("type") not in (profile["forcing"] if profile else FORCING_TYPES):
             _record(errors, "unknown_forcing", "forcing.type is not recognized")
         for key in ("forcing_rate", "nkmin_forcing", "nkmax_forcing"):
             if key not in forcing:
@@ -510,6 +534,14 @@ def validate_config(document: Any) -> dict[str, Any]:
                     "missing_time_correlation",
                     "forcing.tcrandom.time_correlation must be explicit",
                 )
+            elif tcrandom["time_correlation"] == "based_on_forcing_rate":
+                if forcing.get("forcing_rate") == 0:
+                    _record(errors, "invalid_forcing", "rate-derived correlation requires positive forcing_rate")
+            else:
+                try:
+                    finite_float(tcrandom["time_correlation"], name="time_correlation", minimum=1e-15)
+                except ToolError as exc:
+                    _record(errors, "invalid_time_correlation", str(exc))
 
     output = require_mapping(parameters.get("output", {}), context="output")
     for key in ("HAS_TO_SAVE", "ONLINE_PLOT_OK"):
@@ -535,7 +567,7 @@ def validate_config(document: Any) -> dict[str, Any]:
             "disable online plotting for unattended/HPC runs",
         )
     if output.get("HAS_TO_SAVE") and isinstance(periods_save, Mapping):
-        if float(periods_save.get("phys_fields", 0.0)) <= 0:
+        if isinstance(periods_save.get("phys_fields", 0.0), (int, float)) and periods_save.get("phys_fields", 0.0) <= 0:
             _record(
                 warnings,
                 "no_restart_checkpoint",
@@ -643,7 +675,7 @@ def validate_config(document: Any) -> dict[str, Any]:
         context="execution",
     )
     mode = execution["mode"]
-    if mode not in {"serial", "mpi-preview"}:
+    if not isinstance(mode, str) or mode not in {"serial", "mpi-preview"}:
         _record(errors, "execution_mode", "mode must be serial or mpi-preview")
     try:
         safe_slug(execution["output_root"], name="execution.output_root")
@@ -837,7 +869,7 @@ def example_config() -> dict[str, Any]:
         },
         "provenance": {
             "config_id": "replace-with-study-config-id",
-            "created_utc": "2026-07-23T00:00:00Z",
+            "created_utc": "2026-10-01T00:00:00Z",
             "dependency_lock_sha256": "replace-with-uv-lock-sha256",
             "fluidfft": FLUIDFFT_VERSION,
             "fluidsim": FLUIDSIM_VERSION,

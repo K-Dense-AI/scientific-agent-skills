@@ -53,8 +53,11 @@ def assess(args):
             if not 2 <= len(core) <= 60:
                 raise ValueError(f"{entry['oligo_id']}: core length must be 2..60 for this nearest-neighbor workflow")
             entry["annealing_tm_c"] = p3.calc_tm(core, **chemistry, tm_method=args.tm_method, salt_corrections_method=args.salt_corrections_method)
-            if not math.isfinite(entry["annealing_tm_c"]):
-                raise ValueError("Thermodynamic engine returned nonfinite core Tm")
+            if not math.isfinite(entry["annealing_tm_c"]) or entry["annealing_tm_c"] <= -273.15:
+                raise ValueError(
+                    "Thermodynamic engine returned an invalid core Tm (nonfinite or at/below absolute zero); "
+                    "check salt, dNTP and DNA concentrations and their units"
+                )
             entry["core_hairpin"] = structure(p3.calc_hairpin(core, **thermo_args, output_structure=True))
             entry["core_homodimer"] = structure(p3.calc_homodimer(core, **thermo_args, output_structure=True))
             entry["core_self_three_prime"] = structure(p3.calc_end_stability(core, core, **thermo_args))

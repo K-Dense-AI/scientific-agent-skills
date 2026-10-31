@@ -324,6 +324,178 @@ class ScriptTests(unittest.TestCase):
         self.assertIn("/api/v4/protocols/example-protocol/v2", plan["url"])
         self.assertNotIn("Authorization", json.dumps(plan))
 
+    def test_documented_full_doi_reads_preserve_version_path(self) -> None:
+        for command in ("get", "steps"):
+            args = protocols_read.build_parser().parse_args(
+                [command, "--id", "10.17504/protocols.io.example/v2"]
+            )
+            plan = protocols_read._plan(args)
+            suffix = "/steps" if command == "steps" else ""
+            self.assertEqual(
+                plan["url"],
+                "https://www.protocols.io/api/v4/protocols/"
+                f"10.17504/protocols.io.example/v2{suffix}?content_format=json",
+            )
+        for identifier in (
+            "10.99999/protocols.io.example/v1",
+            "example/../../oauth/token",
+        ):
+            args = protocols_read.build_parser().parse_args(["get", "--id", identifier])
+            with self.subTest(identifier=identifier), self.assertRaises(SafetyError):
+                protocols_read._plan(args)
+
+    def test_offline_validator_accepts_current_v4_and_legacy_envelopes(self) -> None:
+        protocol = json.loads((FIXTURES / "protocol_response.json").read_text())[
+            "protocol"
+        ]
+        for payload in (
+            protocol,
+            {"payload": protocol, "status_code": 0},
+            {"payload": {"protocol": protocol}, "status_code": 0},
+            {"protocol": protocol, "status_code": 0},
+        ):
+            report = validate_protocol_json.validate_and_summarize(
+                payload,
+                require_version=True,
+                max_steps=100,
+            )
+            self.assertEqual(report["protocol"]["counts"]["steps"]["count"], 2)
+            self.assertEqual(report["protocol"]["identifiers"]["id"], 12345)
+        protocol["doi"] = ""
+        report = validate_protocol_json.validate_and_summarize(
+            {"payload": protocol},
+            require_version=True,
+            max_steps=100,
+        )
+        self.assertIsNone(report["protocol"]["identifiers"]["doi"])
+        for bad_doi in (0, False, []):
+            with self.subTest(doi=bad_doi), self.assertRaises(SafetyError):
+                validate_protocol_json.validate_and_summarize(
+                    {"payload": {**protocol, "doi": bad_doi}},
+                    require_version=True,
+                    max_steps=100,
+                )
+
+    def test_mutation_plans_use_endpoint_specific_identifiers_and_encoding(
+        self,
+    ) -> None:
+        common = {
+            "origin": "https://www.protocols.io",
+            "tenant_origin": None,
+            "upload_file": None,
+            "local_max_upload_bytes": 1_000_000,
+            "confirmation": None,
+        }
+        for operation, target, payload, encoding in (
+            ("create-protocol", "A" * 32, {}, "application/x-www-form-urlencoded"),
+            (
+                "add-comment",
+                "example",
+                {"body": "Reviewed comment"},
+                "application/x-www-form-urlencoded",
+            ),
+            ("trash-files", None, {"ids": [123]}, "application/x-www-form-urlencoded"),
+            (
+                "update-protocol",
+                "example",
+                {"title": "Reviewed title"},
+                "application/json",
+            ),
+            ("delete-comment", "123", {}, None),
+        ):
+            plan = plan_write_request.build_plan(
+                operation=operation,
+                target=target,
+                payload=payload,
+                **common,
+            )
+            self.assertEqual(plan["headers"].get("Content-Type"), encoding)
+            self.assertFalse(plan["execution_supported"])
+        for target in (
+            "10.17504/protocols.io.example/v2",
+            "protocols.io.example",
+            "example/v2",
+            "example/latest",
+        ):
+            with self.subTest(target=target), self.assertRaises(SafetyError):
+                plan_write_request.build_plan(
+                    operation="update-protocol",
+                    target=target,
+                    payload={"title": "Reviewed title"},
+                    **common,
+                )
+        common["confirmation"] = "CONFIRM publish-protocol example"
+        plan = plan_write_request.build_plan(
+            operation="publish-protocol",
+            target="example",
+            payload={"prepublish": 1},
+            **common,
+        )
+        self.assertTrue(plan["confirmation"]["confirmed"])
+        self.assertFalse(plan["ready_for_separate_execution_review"])
+        self.assertNotIn("Content-Type", plan["headers"])
+
+    def test_step_plan_supports_current_optional_fields(self) -> None:
+        step = {
+            "guid": "A" * 32,
+            "previous_guid": None,
+            "step": "Reviewed step",
+            "section_color": "#A1B2C3",
+            "is_substep": True,
+        }
+        plan_write_request._validate_steps({"steps": [step]}, deleting=False)
+        for field, bad in (("section_color", "not a color"), ("is_substep", "true")):
+            with self.subTest(field=field), self.assertRaises(SafetyError):
+                plan_write_request._validate_steps(
+                    {"steps": [{**step, field: bad}]}, deleting=False
+                )
+
+    def test_pdf_rejects_doi_and_marks_filtered_export_partial(self) -> None:
+        with tempfile.TemporaryDirectory(dir=TESTS_DIR) as directory:
+            output = str((Path(directory) / "subset.pdf").relative_to(REPO_ROOT))
+            args = protocols_read.build_parser().parse_args(
+                [
+                    "export-pdf",
+                    "--id",
+                    "10.17504/protocols.io.example/v2",
+                    "--output",
+                    output,
+                ]
+            )
+            with self.assertRaises(SafetyError):
+                protocols_read._plan(args)
+            args = protocols_read.build_parser().parse_args(
+                [
+                    "--execute",
+                    "export-pdf",
+                    "--id",
+                    "example",
+                    "--only",
+                    "steps",
+                    "--anonymous",
+                    "--output",
+                    output,
+                ]
+            )
+            plan = protocols_read._plan(args)
+            self.assertTrue(plan["url"].endswith(".pdf?only_steps=1"))
+            opener = SequenceOpener(
+                [
+                    FakeResponse(
+                        b"%PDF-1.7\nmock",
+                        url=plan["url"],
+                        headers={"Content-Type": "application/pdf"},
+                    )
+                ]
+            )
+            report = protocols_read.execute(
+                args, plan, environ={}, opener=opener, sleep=lambda _: None
+            )
+            self.assertTrue(report["partial_export"])
+            self.assertEqual(report["pdf_filter"], "steps")
+            self.assertEqual(report["source_url"], plan["url"])
+            self.assertIsNone(opener.requests[0].get_header("Authorization"))
+
     def test_mocked_get_uses_named_token_without_emitting_it(self) -> None:
         credential = "-".join(("unit", "test", "bearer"))
         body = (FIXTURES / "protocol_response.json").read_bytes()

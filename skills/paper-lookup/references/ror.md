@@ -3,7 +3,7 @@
 Open registry of research organizations. Use it to turn an affiliation string
 into a ROR ID (`https://ror.org/05a0ya142`) or to look up one org. It is not
 a paper database. OpenAlex and Crossref already *carry* ROR IDs on works;
-this API is how you mint or check the ID itself.
+this API is how you resolve or check an existing ID.
 
 All figures below verified 2026-09-10. Use the **v2** routes.
 
@@ -51,7 +51,7 @@ Unquoted common words explode. Verified:
 Never take `items[0]` as the match without reading `names` and `status`.
 Quote the string (`%22…%22`) when the user gave a proper name.
 
-Default page is 20 active records. Filter and page per
+Pages contain at most 20 active records. `page` is 1-based and capped at 500 (10,000 results); exceeding it can return HTTP 200 with `errors`. Use the ROR dump for the whole registry. Filter and page per
 https://ror.readme.io/docs/api-filtering and
 https://ror.readme.io/docs/api-paging. Pass `all_status=true` if you need
 inactive / withdrawn orgs in a list.
@@ -106,7 +106,7 @@ the schema under you.
 
 1. Proper name or GRID/ISNI → `?query="…"` and inspect the shortlist.
 2. Messy affiliation line → `?affiliation=` and keep rows with
-   `chosen: true` (or a high `score` you are willing to stand behind).
+   `chosen: true`. If none is chosen, report the candidates for review; neither a high score nor the first position establishes a match.
 3. Known ROR ID → GET the record and confirm `status: active`.
 4. Then, if the user wanted papers from that org, search OpenAlex /
    Crossref with the ROR ID. Do not search ROR for papers.
@@ -119,3 +119,9 @@ the schema under you.
 | Read `items[0].id` on an affiliation response | `null` | Use `items[0].organization.id` |
 | Wrote an inactive ROR from a single-id GET | Record exists, `status` is not `active` | Read `status` |
 | Used v1 field `name` | Missing | Use `names[].value` |
+
+## Official sources reviewed 2026-09-30
+
+- https://ror.readme.io/docs/rest-api
+- https://ror.readme.io/docs/api-paging
+- https://ror.readme.io/docs/api-affiliation

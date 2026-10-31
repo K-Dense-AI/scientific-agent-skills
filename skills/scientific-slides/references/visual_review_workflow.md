@@ -4,34 +4,17 @@
 
 Visual review is a critical quality assurance step for presentations, allowing you to identify and fix layout issues, text overflow, element overlap, and design problems before presenting. This guide covers converting presentations to images, systematic visual inspection, common issues, and iterative improvement strategies.
 
-## ⚠️ CRITICAL RULE: NEVER READ PDF PRESENTATIONS DIRECTLY
+## Render for layout; extract text for content checks
 
-**MANDATORY: Always convert presentation PDFs to images FIRST, then review the images.**
+Render every slide with `pdf_to_images.py` to inspect layout, cropping, and labels.
+Use PDF text extraction separately to check citations and wording; it cannot detect
+visual overlap. Work in page batches if tool/image limits require it. A past tool buffer
+failure is not a property of all PDFs and does not prohibit direct PDF inspection.
 
-### Why This Rule Exists
-
-- **Buffer Overflow Prevention**: Presentation PDFs (especially multi-slide decks) cause "JSON message exceeded maximum buffer size" errors when read directly
-- **Visual Accuracy**: Images show exactly what the audience will see, including rendering issues
-- **Performance**: Image-based review is faster and more reliable than PDF text extraction
-- **Consistency**: Ensures uniform review process for all presentations
-
-### The ONLY Correct Workflow for Presentations
-
-1. ✅ Generate PDF from PowerPoint/Beamer source
-2. ✅ **Convert PDF to images** using the pdf_to_images.py script
-3. ✅ **Review the image files** systematically
-4. ✅ Document issues by slide number
-5. ✅ Fix issues in source files
-6. ✅ Regenerate PDF and repeat
-
-### What NOT To Do
-
-- ❌ NEVER use read_file tool on presentation PDFs
-- ❌ NEVER attempt to read PDF slides as text
-- ❌ NEVER skip the image conversion step
-- ❌ NEVER assume PDF is "small enough" to read directly
-
-**If you're reviewing a presentation and haven't converted to images yet, STOP and convert first.**
+1. Export PDF from PowerPoint/Beamer.
+2. Render pages and review them visually.
+3. Check the source text, citations, original figures and reading order separately.
+4. Correct source files, export again and recheck affected pages.
 
 ## Why Visual Review Matters
 
@@ -74,7 +57,7 @@ The script uses PyMuPDF, a self-contained Python library - no poppler or other s
 
 **Installation**:
 ```bash
-# PyMuPDF is included as a project dependency
+# Install in your task environment (the repository environment omits scientific dependencies)
 uv pip install pymupdf
 ```
 
@@ -113,17 +96,16 @@ python skills/scientific-slides/scripts/pdf_to_images.py presentation.pdf review
 python skills/scientific-slides/scripts/pdf_to_images.py presentation.pdf output/presentation --dpi 150
 ```
 
-### Method 2: Using PowerPoint Thumbnail Script
+### Method 2: Exporting PowerPoint Through LibreOffice
 
-For PowerPoint presentations, use the pptx skill's thumbnail tool:
+For PowerPoint presentations, export to PDF with LibreOffice, then render as in Method 1:
 
 ```bash
-# Create thumbnail grid
-python scripts/thumbnail.py presentation.pptx output --cols 4
-
-# Individual slides
-python scripts/thumbnail.py presentation.pptx slides/slide --individual
+soffice --headless --convert-to pdf --outdir review presentation.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py review/presentation.pdf review/slide --dpi 150
 ```
+
+LibreOffice substitutes fonts that are not installed, so confirm final text fit in PowerPoint.
 
 **Advantages**:
 - Optimized for PowerPoint files
@@ -131,7 +113,7 @@ python scripts/thumbnail.py presentation.pptx slides/slide --individual
 - Handles .pptx format directly
 - Customizable layout
 
-### Method 3: Using ImageMagick
+### Method 3: Using ImageMagick 7 (Optional)
 
 **Installation**:
 ```bash
@@ -142,32 +124,29 @@ sudo apt-get install imagemagick
 brew install imagemagick
 ```
 
-**Conversion**:
+**Conversion** (PDF reading also requires Ghostscript and an enabled PDF security policy; prefer PyMuPDF if unavailable):
 ```bash
 # Convert PDF to images
-convert -density 150 presentation.pdf slide.jpg
+magick -density 150 presentation.pdf slide.jpg
 
 # Higher quality
-convert -density 300 presentation.pdf slide.jpg
+magick -density 300 presentation.pdf slide.jpg
 
 # Specific format
-convert -density 150 presentation.pdf slide.png
+magick -density 150 presentation.pdf slide.png
 ```
 
 ### Method 4: Using Python (Programmatic)
 
 ```python
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 
 # Open PDF
 doc = fitz.open('presentation.pdf')
 
 # Convert each page to image
-zoom = 200 / 72  # 200 DPI (72 is base DPI)
-matrix = fitz.Matrix(zoom, zoom)
-
 for i, page in enumerate(doc, start=1):
-    pixmap = page.get_pixmap(matrix=matrix)
+    pixmap = page.get_pixmap(dpi=200)
     pixmap.save(f'slide-{i:03d}.jpg', output='jpeg')
 
 doc.close()
@@ -371,12 +350,12 @@ Slide 8: text problem
   \end{itemize}
 \end{frame}
 
-% Adjust margins
-\newgeometry{margin=1.5cm}
+% Set Beamer margins in the preamble
+\setbeamersize{text margin left=8mm,text margin right=8mm}
 \begin{frame}
   Content with wider margins
 \end{frame}
-\restoregeometry
+% Recompile and inspect the resulting frame
 
 % Smaller font for specific element
 {\small
@@ -633,41 +612,35 @@ def detect_edge_content(image_path, threshold=10):
 
 # Usage
 for slide_num in range(1, 26):
-    issues = detect_edge_content(f'slide-{slide_num}.jpg')
+    issues = detect_edge_content(f'slide-{slide_num:03d}.jpg')
     if issues:
         print(f"Slide {slide_num}: Content near {', '.join(issues)}")
 ```
 
 ### Contrast Checking
 
+Check each actual foreground/background color pair. Whole-slide bright/dark percentiles
+cannot determine text contrast. For sRGB hex colors, use the WCAG relative luminance
+formula (normal text >=4.5:1; large text >=3:1). Projection may warrant greater contrast.
+
 ```python
-from PIL import Image
-import numpy as np
+def contrast_ratio(foreground, background):
+    def luminance(hex_color):
+        values = [int(hex_color.lstrip("#")[i:i+2], 16) / 255 for i in (0, 2, 4)]
+        linear = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in values]
+        return sum(v * w for v, w in zip(linear, (0.2126, 0.7152, 0.0722)))
+    light, dark = sorted((luminance(foreground), luminance(background)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
 
-def check_contrast(image_path):
-    """
-    Estimate contrast ratio in image.
-    Simple version: compare lightest and darkest regions.
-    """
-    img = Image.open(image_path).convert('L')
-    arr = np.array(img)
-    
-    # Get brightness values
-    bright = np.percentile(arr, 95)
-    dark = np.percentile(arr, 5)
-    
-    # Rough contrast ratio
-    contrast = (bright + 0.05) / (dark + 0.05)
-    
-    if contrast < 4.5:
-        return f"Low contrast: {contrast:.1f}:1 (minimum 4.5:1)"
-    return f"OK: {contrast:.1f}:1"
-
-# Usage
-for slide_num in range(1, 26):
-    result = check_contrast(f'slide-{slide_num}.jpg')
-    print(f"Slide {slide_num}: {result}")
+assert contrast_ratio("#000000", "#FFFFFF") == 21.0
+assert contrast_ratio("#FFFFFF", "#FFFFFF") == 1.0
+print(contrast_ratio("#003366", "#FFFFFF"))
 ```
+
+Source: [WCAG 2.2 contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html).
+The edge-content example above is an illustrative white-background heuristic;
+it flags dark backgrounds and intentional full-bleed images and cannot certify overflow.
+Its filenames must match the renderer's zero padding (for example `slide-001.jpg`).
 
 ## Manual Review Best Practices
 

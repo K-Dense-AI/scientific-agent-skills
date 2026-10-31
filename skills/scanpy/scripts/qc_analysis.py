@@ -16,7 +16,7 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata
+from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata, die, prepare_counts, ensure_categories
 
 
 def annotate_gene_classes(adata):
@@ -44,6 +44,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     add_io_args(p, default_output="qc_filtered.h5ad")
+    p.add_argument("--counts-layer", default=None, help="Explicit raw-count layer instead of X")
+    p.add_argument("--batch-key", default=None, help="Capture/library ID for separate Scrublet runs")
     p.add_argument("--min-genes", type=int, default=200, help="Min genes per cell (default 200)")
     p.add_argument("--max-genes", type=int, default=None, help="Max genes per cell (upper outliers)")
     p.add_argument("--min-counts", type=int, default=None, help="Min total counts per cell")
@@ -56,6 +58,9 @@ def main():
 
     sc = configure_scanpy(figdir=args.figdir)
     adata = load_anndata(args.input)
+    prepare_counts(adata, args.counts_layer)
+    if args.batch_key:
+        ensure_categories(adata, args.batch_key)
     adata.var_names_make_unique()
     info(f"Loaded {adata.n_obs} cells x {adata.n_vars} genes")
 
@@ -64,7 +69,7 @@ def main():
                                log1p=False, inplace=True)
     info(f"Mean genes/cell={adata.obs['n_genes_by_counts'].mean():.0f}  "
          f"mean counts/cell={adata.obs['total_counts'].mean():.0f}  "
-         f"mean pct_mt={adata.obs.get('pct_counts_mt', 0).mean():.1f}")
+         f"mean pct_mt={(adata.obs['pct_counts_mt'].mean() if 'pct_counts_mt' in adata.obs else 0):.1f}")
 
     if not args.no_plots:
         make_qc_plots(sc, adata, "qc_before")
@@ -81,12 +86,15 @@ def main():
         adata = adata[adata.obs["pct_counts_mt"] < args.mt_threshold, :].copy()
     sc.pp.filter_genes(adata, min_cells=args.min_cells)
 
+    if min(adata.shape) == 0:
+        die("QC removed all cells or genes; inspect thresholds")
+
     if args.scrublet:
         info("Running Scrublet doublet detection...")
         try:
-            sc.pp.scrublet(adata)
+            sc.pp.scrublet(adata, batch_key=args.batch_key, random_state=0)
         except (ImportError, ValueError) as e:
-            die(f"Scrublet failed ({e}). Install with: uv pip install scikit-image")
+            die(f"Scrublet failed ({e}). Check raw counts, library size and scikit-image installation")
         n_dbl = int(adata.obs["predicted_doublet"].sum())
         adata = adata[~adata.obs["predicted_doublet"], :].copy()
         info(f"Removed {n_dbl} predicted doublets")

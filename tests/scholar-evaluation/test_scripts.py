@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import copy
+from collections import Counter
 import json
 import sys
 import tempfile
@@ -147,6 +149,35 @@ class StaticSafetyTests(unittest.TestCase):
 
 
 class RubricAndInputTests(unittest.TestCase):
+    def test_malformed_enum_fields_return_validation_failures(self) -> None:
+        rubric = load_json_asset("rubric_template.json")
+        rubric["provenance"]["content_validity_status"] = []
+        rubric["rater_protocol"]["inter_rater_reliability_status"] = {}
+        self.assertTrue(_common.error_issues(_common.validate_rubric(rubric)))
+        rubric = load_json_asset("rubric_template.json")
+        evaluation = rated_evaluation()
+        evaluation["data_classification"] = []
+        evaluation["ratings"][0]["status"] = {}
+        self.assertTrue(_common.error_issues(_common.validate_evaluation(evaluation, rubric)))
+        manifest = load_json_asset("evidence_manifest_template.json")
+        manifest["evidence"][0].update(criterion_ids=None, source_type=[], access_status=[], verification_status={})
+        self.assertEqual(check_traceability.check_traceability(rubric, rated_evaluation(), manifest)["status"], "fail")
+        self.assertEqual(check_process.check_process([])["status"], "invalid")
+
+    def test_anchor_steps_and_duplicates_are_rejected(self) -> None:
+        rubric = load_json_asset("rubric_template.json")
+        rubric["scale"]["step"] = 2
+        self.assertIn("ANCHOR_STEP_MISMATCH", {issue.code for issue in _common.validate_rubric(rubric)})
+        rubric = load_json_asset("rubric_template.json")
+        rubric["criteria"][0]["anchors"].append(copy.deepcopy(rubric["criteria"][0]["anchors"][0]))
+        self.assertIn("ANCHOR_SCORE_DUPLICATE", {issue.code for issue in _common.validate_rubric(rubric)})
+
+    def test_nonfinite_numeric_values_fail_direct_validation(self) -> None:
+        for value in (float("nan"), float("inf"), 10**1000):
+            rubric = load_json_asset("rubric_template.json")
+            rubric["scale"]["maximum"] = value
+            self.assertTrue(_common.error_issues(_common.validate_rubric(rubric)))
+
     def test_template_rubric_is_structurally_valid_with_warning(self) -> None:
         rubric = load_json_asset("rubric_template.json")
         issues = _common.validate_rubric(rubric)
@@ -303,6 +334,11 @@ class SensitivityAgreementAndProcessTests(unittest.TestCase):
     def setUp(self) -> None:
         self.rubric = load_json_asset("rubric_template.json")
 
+    def test_agreement_tolerance_does_not_collapse_distinct_small_anchors(self) -> None:
+        report = summarize_agreement._summary(Counter({1e-10: 1, 2e-10: 1}), 1e-10)
+        self.assertEqual(report["exact_agreement_rate"], 0)
+        self.assertEqual(report["within_one_scale_step_rate"], 0.5)
+
     def test_weight_sensitivity_detects_order_instability(self) -> None:
         first = rated_evaluation(
             "WORK-SYNTHETIC-A",
@@ -330,6 +366,89 @@ class SensitivityAgreementAndProcessTests(unittest.TestCase):
         rendered = json.dumps(report)
         self.assertNotIn("RATER-SYNTHETIC", rendered)
         self.assertIn("not a psychometric validation", report["limitations"][1])
+
+    def test_agreement_keeps_rounds_separate_and_is_order_invariant(self) -> None:
+        rows = [
+            {"evaluation_id": evaluation_id, "work_id": "WORK-A", "rater_id": rater_id,
+             "criterion_id": "question_scope", "status": "rated", "score": score}
+            for evaluation_id, rater_id, score in (
+                ("ROUND-A", "RATER-A", 0), ("ROUND-A", "RATER-B", 4),
+                ("ROUND-B", "RATER-A", 3), ("ROUND-B", "RATER-B", 3),
+            )
+        ]
+        report = summarize_agreement.summarize(self.rubric, rows)
+        self.assertEqual(report, summarize_agreement.summarize(self.rubric, rows[::-1]))
+        self.assertEqual(report["overall"]["pair_observations"], 2)
+        self.assertEqual(report["overall"]["exact_agreement_rate"], 0.5)
+        self.assertEqual(report["overall"]["mean_absolute_difference"], 2)
+        self.assertEqual(report["criteria"][0]["evaluations_with_rater_overlap"], 2)
+        self.assertEqual(report["criteria"][0]["works_with_rater_overlap"], 1)
+
+    def test_agreement_cannot_create_pairs_across_rounds(self) -> None:
+        rows = [
+            {"evaluation_id": "ROUND-" + suffix, "work_id": "WORK-A", "rater_id": "RATER-" + suffix,
+             "criterion_id": "question_scope", "status": "rated", "score": 3}
+            for suffix in ("A", "B")
+        ]
+        report = summarize_agreement.summarize(self.rubric, rows)
+        self.assertEqual(report["overall"]["pair_observations"], 0)
+        self.assertIn("MINIMUM_RATERS_NOT_MET_FOR_SOME_CRITERIA_EVALUATIONS", report["warnings"])
+
+    def test_agreement_histogram_handles_maximum_rows(self) -> None:
+        rows = [
+            {"evaluation_id": "ROUND-A", "work_id": "WORK-A", "rater_id": f"RATER-{index}",
+             "criterion_id": "question_scope", "status": "rated", "score": index % 2}
+            for index in range(_common.MAX_CSV_ROWS)
+        ]
+        overall = summarize_agreement.summarize(self.rubric, rows)["overall"]
+        self.assertEqual(overall["pair_observations"], 199_990_000)
+        self.assertEqual(overall["within_one_scale_step_rate"], 1)
+        self.assertAlmostEqual(overall["mean_absolute_difference"], 100_000_000 / 199_990_000, places=6)
+
+    def test_agreement_rejects_evaluation_reused_for_another_work(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ratings.csv"
+            path.write_text(
+                ",".join(summarize_agreement.CSV_FIELDS) + "\n"
+                "ROUND-A,WORK-A,RATER-A,question_scope,rated,3\n"
+                "ROUND-A,WORK-B,RATER-B,question_scope,rated,3\n"
+            )
+            with self.assertRaisesRegex(_common.ValidationError, "EVALUATION_WORK_MISMATCH"):
+                summarize_agreement.read_rows(path, self.rubric)
+
+    def test_sensitivity_does_not_round_before_order_comparison(self) -> None:
+        weights = [0.2 + 1e-8, 0.2 - 1e-8, 0.2, 0.2, 0.2]
+        for criterion, weight in zip(self.rubric["criteria"], weights, strict=True):
+            criterion["weight"] = weight
+        first = rated_evaluation("WORK-A", "EVAL-A", [4, 0, 2, 2, 2])
+        second = rated_evaluation("WORK-B", "EVAL-B", [0, 4, 2, 2, 2])
+        report = weight_sensitivity.analyze(self.rubric, [first, second], 1e-8)
+        self.assertFalse(report["rank_instability_detected"])
+        self.assertEqual(report["base_tied_work_pairs"], [])
+        self.assertEqual(report["scenarios"][0]["item_scores"][0]["normalized_score"], 2)
+
+    def test_sensitivity_warns_for_different_applicable_sets(self) -> None:
+        first = rated_evaluation("WORK-A", "EVAL-A")
+        second = rated_evaluation("WORK-B", "EVAL-B")
+        second["ratings"][0].update(status="not_applicable", score=None, uncertainty=None, evidence_ids=[])
+        report = weight_sensitivity.analyze(self.rubric, [first, second], 0.2)
+        self.assertIn("DIFFERENT_CRITERION_STATUS_PATTERNS_LIMIT_COMPARABILITY", report["warnings"])
+
+    def test_scaffold_requires_actual_companion_evaluation_membership(self) -> None:
+        first = rated_evaluation("WORK-A", "EVAL-A")
+        second = rated_evaluation("WORK-B", "EVAL-B")
+        sensitivity = weight_sensitivity.analyze(self.rubric, [first, second], 0.2)
+        report = generate_report_scaffold.generate_scaffold(self.rubric, first, sensitivity=sensitivity)
+        self.assertEqual(report["quality_assurance"]["weight_sensitivity_status"], "provided")
+        stale = copy.deepcopy(first)
+        stale["evaluation_id"] = "EVAL-LATER"
+        with self.assertRaisesRegex(_common.ValidationError, "COMPANION_EVALUATION_NOT_INCLUDED"):
+            generate_report_scaffold.generate_scaffold(self.rubric, stale, sensitivity=sensitivity)
+        agreement = summarize_agreement.summarize(
+            self.rubric, summarize_agreement.read_rows(ASSETS / "ratings_template.csv", self.rubric)
+        )
+        with self.assertRaisesRegex(_common.ValidationError, "COMPANION_EVALUATION_NOT_INCLUDED"):
+            generate_report_scaffold.generate_scaffold(self.rubric, first, agreement=agreement)
 
     def test_agreement_rejects_extra_csv_column(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

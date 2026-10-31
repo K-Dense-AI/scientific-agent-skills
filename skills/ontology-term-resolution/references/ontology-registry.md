@@ -1,7 +1,8 @@
 # Ontology registry
 
 Which ontology owns which kind of term, what OLS calls it, and a branch root to constrain against.
-Every ontology id and branch label below was resolved against OLS in July 2026.
+Branch IDs/labels below were rechecked through public OLS on 2026-10-01. These are
+starting points, not a substitute for the target schema's ontology/release constraints.
 
 ## Prefix to OLS ontology id
 
@@ -31,9 +32,10 @@ The OLS ontology id is almost always the lowercased CURIE prefix. Note the excep
 | `BAO` | `bao` | BioAssay descriptions |
 | `Orphanet` | **`ordo`** | Rare diseases — id is `ordo`, prefix in CURIEs is `Orphanet`, and OLS reports `preferredPrefix: ORDO` |
 
-Not in OLS at all: **Cellosaurus** (cell line identity, RRID `CVCL_*`) — query
-`https://api.cellosaurus.org` instead. Vendor and instrument vocabularies generally are not there
-either.
+For **Cellosaurus** cell-line identity and contamination information, use the
+[official Cellosaurus API documentation](https://api.cellosaurus.org/) when OLS does not
+carry the needed record. Check service coverage rather than assuming every scientific
+vocabulary or accession is an OLS class.
 
 ## Branch roots for constraint checks
 
@@ -62,8 +64,8 @@ Pass these to `--branch` to assert a term is the right *kind* of thing.
 | `NCIT:C7057` | Disease, Disorder or Finding | NCIT disease subtree |
 | `DOID:4` | disease | DOID subtree |
 
-`MONDO:0000001` resolves (label `disease`) but only through the IRI fallback described in
-`ols4-api.md`; prefer `MONDO:0700096` as a human-disease root.
+`MONDO:0000001` (`disease`) now resolves by `obo_id`; `MONDO:0700096` is the narrower
+human-disease root. Neither is a universal root for nonhuman studies.
 
 A branch check does not substitute for a prefix check. CARO places `cell` under
 `anatomical structure`, so cell types pass an anatomy branch test. Constrain both.
@@ -82,20 +84,23 @@ A branch check does not substitute for a prefix check. CARO places `cell` under
   OBI is better for general laboratory assay classes.
 - **Chemicals: ChEBI** for anything with a structure. Drug products by trade name belong in
   a drug vocabulary (RxNorm, DrugBank), not ChEBI.
-- **Sex: PATO** (`PATO:0000384` male, `PATO:0000383` female). Not NCIT, not free text.
-- **"Normal" / healthy control:** `PATO:0000461` (`normal`) is the conventional filler for a
-  disease field with no disease, and is what several submission schemas require.
+- **Sex: PATO** (`PATO:0000384` male, `PATO:0000383` female) when required by the target
+  schema. Preserve distinctions among phenotypic sex, chromosomal sex and gender; do not
+  infer one from another or guess from ambiguous codes.
+- **"Normal" / healthy control:** some schemas explicitly permit `PATO:0000461` (`normal`)
+  for a documented non-diseased state. It is not a filler for missing disease data. A control
+  arm, untreated sample, or unknown diagnosis is not sufficient evidence of health.
 
 ## Common metadata fields and their expected ontology
 
-Field names differ per archive, but the ontology behind each concept is stable:
+These are common choices; both field names and permitted ontologies can change by archive:
 
 | Concept | Ontology |
 | --- | --- |
 | tissue / organ / anatomical site | UBERON |
 | cell type | CL |
 | cell line | CLO, or Cellosaurus for identity and contamination status |
-| disease | MONDO (`PATO:0000461` when none) |
+| disease | MONDO; schema-specific normal/missing values |
 | phenotype | HP |
 | organism | NCBITaxon |
 | assay / platform | EFO |
@@ -106,5 +111,7 @@ Field names differ per archive, but the ontology behind each concept is stable:
 
 Submission schemas — CELLxGENE, HCA, ENA/BioSamples checklists, ISA-Tab configurations — pin both
 the field names and the permitted ontologies, and they revise them. Read the schema version the
-submission targets rather than relying on this table or on memory; the ontology choices above are
-the stable part, the field names are not.
+submission targets rather than relying on this table or on memory. A currently valid OLS term can fail a schema
+pinned to an older release or restricted subset. For example, consult the current
+[CELLxGENE schema source](https://github.com/chanzuckerberg/single-cell-curation/tree/main/schema)
+and the specific version used by the submission.

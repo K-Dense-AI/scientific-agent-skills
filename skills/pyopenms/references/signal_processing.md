@@ -1,444 +1,113 @@
-# Signal Processing
+# Signal processing (pyOpenMS 3.6.0)
 
-## Overview
+## Decide what the signal represents
 
-PyOpenMS provides algorithms for processing raw mass spectrometry data including smoothing, filtering, peak picking, centroiding, normalization, and deconvolution.
+Use `spec.getType()` and acquisition/conversion provenance. Its enum is
+`ms.SpectrumSettings.SpectrumType.PROFILE`, `CENTROID`, or `UNKNOWN`.
+`isSorted()` tests m/z ordering only. `getType(True)` can estimate type from the
+signal when metadata is insufficient, but an estimate is not acquisition proof.
 
-## Algorithm Pattern
+`process_spectra.py` applies smoothing, picking, normalization, S/N filtering,
+then intensity thresholding to selected MS levels; chromatograms pass through.
+It rejects centroid spectra for smoothing/picking and requires
+`--assume-profile` for independently verified unknown-type spectra.
+The native tests check a synthetic Gaussian profile, selected-level isolation,
+metadata/peak-array retention and writeback of filtered spectra.
 
-Most signal processing algorithms follow a standard pattern:
+```bash
+python scripts/process_spectra.py profile.mzML picked.mzML --ms-level 1 --pick
+python scripts/process_spectra.py spectra.mzML scaled.mzML --ms-level 2 --normalize to_one --threshold 0.01
+```
+
+These are file-dependent templates. Parameters need representative instrument
+QC; smoothing can distort narrow peaks. `PeakPickerHiRes` is for well sampled
+high-resolution profile peaks. Do not repeatedly centroid already picked data.
+
+## API patterns
 
 ```python
 import pyopenms as ms
-
-# 1. Create algorithm instance (GaussFilter shown as a concrete example)
-algo = ms.GaussFilter()
-
-# 2. Get and modify parameters
-params = algo.getParameters()
-params.setValue("gaussian_width", 0.2)
-algo.setParameters(params)
-
-# 3. Apply to data
-algo.filterExperiment(exp)  # or filterSpectrum(spec)
-```
-
-> **Tip:** `scripts/process_spectra.py` runs a configurable smoothing →
-> centroiding → normalization → thresholding chain from the command line, so you
-> rarely need to wire these steps up by hand.
-
-## Smoothing
-
-### Gaussian Filter
-
-Apply Gaussian smoothing to reduce noise:
-
-```python
-# Create Gaussian filter
-gaussian = ms.GaussFilter()
-
-# Configure parameters
-params = gaussian.getParameters()
-params.setValue("gaussian_width", 0.2)  # Width in m/z or RT units
-params.setValue("ppm_tolerance", 10.0)  # For m/z dimension
-params.setValue("use_ppm_tolerance", "true")
-gaussian.setParameters(params)
-
-# Apply to experiment
-gaussian.filterExperiment(exp)
-
-# Or apply to single spectrum
-spec = exp.getSpectrum(0)
-gaussian.filterSpectrum(spec)
-```
-
-### Savitzky-Golay Filter
-
-Polynomial smoothing that preserves peak shapes:
-
-```python
-# Create Savitzky-Golay filter
-sg_filter = ms.SavitzkyGolayFilter()
-
-# Configure parameters
-params = sg_filter.getParameters()
-params.setValue("frame_length", 11)  # Window size (must be odd)
-params.setValue("polynomial_order", 4)  # Polynomial degree
-sg_filter.setParameters(params)
-
-# Apply smoothing
-sg_filter.filterExperiment(exp)
-```
-
-## Peak Picking and Centroiding
-
-### Peak Picker High Resolution
-
-Detect peaks in high-resolution data:
-
-```python
-# Create peak picker
-peak_picker = ms.PeakPickerHiRes()
-
-# Configure parameters
-params = peak_picker.getParameters()
-params.setValue("signal_to_noise", 3.0)  # S/N threshold
-params.setValue("spacing_difference", 1.5)  # Minimum peak spacing
-peak_picker.setParameters(params)
-
-# Pick peaks
-exp_picked = ms.MSExperiment()
-peak_picker.pickExperiment(exp, exp_picked)
-```
-
-### Iterative Peak Picker
-
-The CWT-based `PeakPickerCWT` was removed in modern OpenMS. For data where
-`PeakPickerHiRes` struggles (e.g. broader or low-resolution peaks), use
-`PeakPickerIterative`, which refits peak widths over several iterations:
-
-```python
-# Create iterative peak picker
-it_picker = ms.PeakPickerIterative()
-
-# Configure parameters
-params = it_picker.getParameters()
-params.setValue("signal_to_noise_", 1.0)
-params.setValue("peak_width", 0.15)         # expected peak width
-params.setValue("nr_iterations_", 5)
-it_picker.setParameters(params)
-
-# Pick peaks
-exp_picked = ms.MSExperiment()
-it_picker.pickExperiment(exp, exp_picked)
-```
-
-## Normalization
-
-### Normalizer
-
-Normalize peak intensities within spectra:
-
-```python
-# Create normalizer
-normalizer = ms.Normalizer()
-
-# Configure normalization method
-params = normalizer.getParameters()
-params.setValue("method", "to_one")  # Options: "to_one", "to_TIC"
-normalizer.setParameters(params)
-
-# Apply normalization
-normalizer.filterExperiment(exp)
-```
-
-## Peak Filtering
-
-### Threshold Mower
-
-Remove peaks below intensity threshold:
-
-```python
-# Create threshold filter
-mower = ms.ThresholdMower()
-
-# Configure threshold
-params = mower.getParameters()
-params.setValue("threshold", 1000.0)  # Absolute intensity threshold
-mower.setParameters(params)
-
-# Apply filter
-mower.filterExperiment(exp)
-```
-
-### Window Mower
-
-Keep only highest peaks in sliding windows:
-
-```python
-# Create window mower
-window_mower = ms.WindowMower()
-
-# Configure parameters
-params = window_mower.getParameters()
-params.setValue("windowsize", 50.0)  # Window size in m/z
-params.setValue("peakcount", 2)  # Keep top N peaks per window
-window_mower.setParameters(params)
-
-# Apply filter
-window_mower.filterExperiment(exp)
-```
-
-### N Largest Peaks
-
-Keep only the N most intense peaks:
-
-```python
-# Create N largest filter
-n_largest = ms.NLargest()
-
-# Configure parameters
-params = n_largest.getParameters()
-params.setValue("n", 200)  # Keep 200 most intense peaks
-n_largest.setParameters(params)
-
-# Apply filter
-n_largest.filterExperiment(exp)
-```
-
-## Baseline Reduction
-
-### Morphological Filter
-
-Remove baseline using morphological operations:
-
-```python
-# Create morphological filter
-morph_filter = ms.MorphologicalFilter()
-
-# Configure parameters
-params = morph_filter.getParameters()
-params.setValue("struc_elem_length", 3.0)  # Structuring element size
-params.setValue("method", "tophat")  # Method: "tophat", "bothat", "erosion", "dilation"
-morph_filter.setParameters(params)
-
-# Apply filter
-morph_filter.filterExperiment(exp)
-```
-
-## Spectrum Merging
-
-### Spectra Merger
-
-Combine multiple spectra into one:
-
-```python
-# Create merger
-merger = ms.SpectraMerger()
-
-# Configure parameters
-params = merger.getParameters()
-params.setValue("average_gaussian:spectrum_type", "profile")
-params.setValue("average_gaussian:rt_FWHM", 5.0)  # RT window
-merger.setParameters(params)
-
-# Merge spectra
-merger.mergeSpectraBlockWise(exp)
-```
-
-## Deconvolution
-
-### Charge Deconvolution
-
-Determine charge states and convert to neutral masses:
-
-```python
-# Create feature deconvoluter
-deconvoluter = ms.FeatureDeconvolution()
-
-# Configure parameters
-params = deconvoluter.getParameters()
-params.setValue("charge_min", 1)
-params.setValue("charge_max", 4)
-params.setValue("potential_charge_states", "1,2,3,4")
-deconvoluter.setParameters(params)
-
-# Apply deconvolution. Input is a FeatureMap (not an MSExperiment); the two
-# ConsensusMaps receive the charge groups and the connecting edges.
-feature_map_out = ms.FeatureMap()
-groups = ms.ConsensusMap()
-edges = ms.ConsensusMap()
-deconvoluter.compute(feature_map, feature_map_out, groups, edges)
-```
-
-### Deisotoping a Spectrum
-
-The `IsotopeWaveletTransform` algorithm was removed. To collapse isotope
-envelopes in a centroided spectrum to monoisotopic peaks, use the static
-`Deisotoper.deisotopeAndSingleCharge`:
-
-```python
-spec = exp.getSpectrum(0)
+import numpy as np
+spec = ms.MSSpectrum()
+spec.setType(ms.SpectrumSettings.SpectrumType.PROFILE)
+mz = np.linspace(499.9, 500.1, 101)
+spec.set_peaks((mz, 1000 * np.exp(-0.5 * ((mz - 500) / 0.01) ** 2)))
 spec.sortByPosition()
-# Positional args: spectrum, fragment_tolerance, fragment_unit_ppm, min_charge,
-# max_charge, keep_only_deisotoped, min_isopeaks, max_isopeaks,
-# make_single_charged, annotate_charge, annotate_iso_peak_count,
-# use_decreasing_model, start_intensity_check, add_up_intensity, annotate_features
-ms.Deisotoper.deisotopeAndSingleCharge(
-    spec, 10.0, True, 1, 3, True, 2, 10, True, True, False, True, 3, False, False
-)
+picker = ms.PeakPickerHiRes()
+picked = ms.MSSpectrum()
+picker.pick(spec, picked)
+assert len(picked) == 1
+assert abs(picked[0].getMZ() - 500) < 0.001
 ```
 
-## Retention Time Alignment
+`GaussFilter.filter(spec)` uses `gaussian_width` in m/z units for a
+spectrum; `use_ppm_tolerance` selects `ppm_tolerance` instead. Chromatogram
+widths use seconds. The 3.6 `filterSpectrum` compatibility alias is broken for these two smoothers;
+use their native `filter(spec)` method. `SavitzkyGolayFilter` uses a point-count `frame_length` and
+`polynomial_order`; validate sampling regularity and window size.
+`PeakPickerIterative` has `signal_to_noise_`, `peak_width`, and
+`nr_iterations_` parameters; this alternative was signature/parameter checked,
+not benchmarked on low-resolution instrument data.
 
-### Map Alignment
+Normalization (`Normalizer.filterSpectrum`) supports `to_one` and `to_TIC`.
+Thresholds afterwards are on normalized intensities; a threshold of 10 after
+unit-TIC normalization removes all nonnegative peaks. Within-scan normalization
+usually destroys the abundance information needed for label-free quantification.
 
-Align retention times across multiple runs:
+For filtering, use `spec.select(indices)` to keep float/integer/string data
+arrays synchronized. `set_peaks()` alone does not filter associated arrays.
+Spectra read with `getSpectrum`, indexing or iteration may be copies: explicitly
+replace the full spectrum list with `exp.setSpectra(processed)`.
+
+## Other algorithms and alignment
+
+`ThresholdMower`, `WindowMower`, `NLargest`, and `MorphologicalFilter` expose
+parameters through `getParameters()`; inspect their installed `filterSpectrum`
+signatures before use. Their particular noise/baseline assumptions are not
+validated by a successful call. For `SpectraMerger`, block-wise merging uses
+`block_method:*` options; setting `average_gaussian:*` while calling
+`mergeSpectraBlockWise` does not configure Gaussian averaging.
+
+`Deisotoper.deisotopeAndSingleCharge` acts on a sorted centroided spectrum;
+record tolerance units, charge range, isotope count, and whether intensity is
+summed or masses are converted to singly charged ions. This is not calibration.
+For feature deconvolution use a `FeatureMap` and `FeatureDeconvolution.compute`
+with output map/groups/edges; there is no `potential_charge_states` parameter.
+
+For RT alignment, call `aligner.setReference(reference_map)`,
+`aligner.align(sample_map, trafo)`, then
+`MapAlignmentTransformer().transformRetentionTimes(sample_map, trafo, True)`.
+See the feature reference and bundled alignment script. Retention alignment
+does not correct mass errors.
+
+## Calibration: verified signature, illustrative workflow
+
+`InternalCalibration.calibrate(exp, reference_masses)` is not a valid API.
+First collect calibrants using `fillCalibrants`, then fit/apply a model. The
+following is a template requiring independently established ion m/z values and
+a representative run; it was not validated on instrument data:
 
 ```python
-# Create map aligner
-aligner = ms.MapAlignmentAlgorithmPoseClustering()
-
-# Load multiple experiments
-exp1 = ms.MSExperiment()
-exp2 = ms.MSExperiment()
-ms.MzMLFile().load("run1.mzML", exp1)
-ms.MzMLFile().load("run2.mzML", exp2)
-
-# Create reference
-reference = ms.MSExperiment()
-
-# Align experiments
-transformations = []
-aligner.align(exp1, exp2, transformations)
-
-# Apply transformation
-transformer = ms.MapAlignmentTransformer()
-transformer.transformRetentionTimes(exp2, transformations[0])
-```
-
-## Mass Calibration
-
-### Internal Calibration
-
-Calibrate mass axis using known reference masses:
-
-```python
-# Create internal calibration
 calibration = ms.InternalCalibration()
-
-# Set reference masses
-reference_masses = [500.0, 1000.0, 1500.0]  # Known m/z values
-
-# Calibrate
-calibration.calibrate(exp, reference_masses)
+locks = [ms.InternalCalibration_LockMass(500.0, 1, 1),
+         ms.InternalCalibration_LockMass(1000.0, 1, 1)]
+found, failed = calibration.fillCalibrants(exp, locks, 20.0, False, False, False)
+if found < 2:
+    raise ValueError("Insufficient calibrants; do not fit")
+ok = calibration.calibrate(exp, [1], ms.MZTrafoModel.MODELTYPE.LINEAR,
+                           -1.0, False, 5.0, 5.0)
+if not ok:
+    raise ValueError("Calibration residual criteria failed")
 ```
 
-## Quality Control
+Lock masses include adducts and require correct MS level and charge. Two points
+are merely a minimal algebraic requirement for a line; use adequate mass/RT
+coverage, independent validation ions, outlier diagnostics, isotope checks and
+before/after ppm residuals. Do not calibrate on unverified accurate-mass database
+candidates and then use the reduced error as independent identification evidence.
+Negative `rt_chunk` selects one global model; positive windows are seconds.
+R is needed only for requested calibration plot output, not this no-plot template.
 
-### Spectrum Statistics
-
-Calculate quality metrics:
-
-```python
-# Get spectrum
-spec = exp.getSpectrum(0)
-
-# Calculate statistics
-mz, intensity = spec.get_peaks()
-
-# Total ion current
-tic = sum(intensity)
-
-# Base peak
-base_peak_intensity = max(intensity)
-base_peak_mz = mz[intensity.argmax()]
-
-print(f"TIC: {tic}")
-print(f"Base peak: {base_peak_mz} m/z at {base_peak_intensity}")
-```
-
-## Spectrum Preprocessing Pipeline
-
-### Complete Preprocessing Example
-
-```python
-import pyopenms as ms
-
-def preprocess_experiment(input_file, output_file):
-    """Complete preprocessing pipeline."""
-
-    # Load data
-    exp = ms.MSExperiment()
-    ms.MzMLFile().load(input_file, exp)
-
-    # 1. Smooth with Gaussian filter
-    gaussian = ms.GaussFilter()
-    gaussian.filterExperiment(exp)
-
-    # 2. Pick peaks
-    picker = ms.PeakPickerHiRes()
-    exp_picked = ms.MSExperiment()
-    picker.pickExperiment(exp, exp_picked)
-
-    # 3. Normalize intensities
-    normalizer = ms.Normalizer()
-    params = normalizer.getParameters()
-    params.setValue("method", "to_TIC")
-    normalizer.setParameters(params)
-    normalizer.filterExperiment(exp_picked)
-
-    # 4. Filter low-intensity peaks
-    mower = ms.ThresholdMower()
-    params = mower.getParameters()
-    params.setValue("threshold", 10.0)
-    mower.setParameters(params)
-    mower.filterExperiment(exp_picked)
-
-    # Save processed data
-    ms.MzMLFile().store(output_file, exp_picked)
-
-    return exp_picked
-
-# Run pipeline
-exp_processed = preprocess_experiment("raw_data.mzML", "processed_data.mzML")
-```
-
-## Best Practices
-
-### Parameter Optimization
-
-Test parameters on representative data:
-
-```python
-# Try different Gaussian widths
-widths = [0.1, 0.2, 0.5]
-
-for width in widths:
-    exp_test = ms.MSExperiment()
-    ms.MzMLFile().load("test_data.mzML", exp_test)
-
-    gaussian = ms.GaussFilter()
-    params = gaussian.getParameters()
-    params.setValue("gaussian_width", width)
-    gaussian.setParameters(params)
-    gaussian.filterExperiment(exp_test)
-
-    # Evaluate quality
-    # ... add evaluation code ...
-```
-
-### Preserve Original Data
-
-Keep original data for comparison:
-
-```python
-# Load original
-exp_original = ms.MSExperiment()
-ms.MzMLFile().load("data.mzML", exp_original)
-
-# Create copy for processing
-exp_processed = ms.MSExperiment(exp_original)
-
-# Process copy
-gaussian = ms.GaussFilter()
-gaussian.filterExperiment(exp_processed)
-
-# Original remains unchanged
-```
-
-### Profile vs Centroid Data
-
-Check data type before processing:
-
-```python
-# Check if spectrum is centroided
-spec = exp.getSpectrum(0)
-
-if spec.isSorted():
-    # Likely centroided
-    print("Centroid data")
-else:
-    # Likely profile
-    print("Profile data - apply peak picking")
-```
+Sources: [InternalCalibration release source](https://github.com/OpenMS/OpenMS/blob/5d5cbff4053b281763a1a79bf69e81c27967cfdf/src/openms/include/OpenMS/PROCESSING/CALIBRATION/InternalCalibration.h),
+[OpenMS changes](https://openms.de/documentation/html/ChangeLog.html), and installed
+3.6.0 binding docstrings/defaults.

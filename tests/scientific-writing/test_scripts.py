@@ -142,6 +142,49 @@ class ScriptTests(unittest.TestCase):
         )
         self.assertTrue(any(item.code == "UNTAGGED_NUMERIC_CONTENT" for item in issues))
 
+    def test_claim_audit_detects_changed_text_and_ambiguous_binding(self) -> None:
+        original = "The synthetic count was 2."
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "claims.csv"
+            path.write_text(valid_claim_csv(original), encoding="utf-8")
+            claims, findings = audit_claims.load_claims(str(path), {"E001": True})
+        self.assertEqual(findings, [])
+        for line, expected in (
+            (original + " [claim:C001] [evidence:E001]", set()),
+            ("The\t synthetic count was 2. [claim:C001] [@E001]", set()),
+            ("The synthetic count was 3. [claim:C001] [evidence:E001]",
+             {"CLAIM_TEXT_HASH_MISMATCH"}),
+            (original + " [claim:C001] [claim:C001] [evidence:E001]",
+             {"MULTIPLE_CLAIMS_ON_LINE"}),
+        ):
+            with self.subTest(line=line):
+                issues, _ = audit_claims.audit_markdown(line, claims, {"E001": True})
+                self.assertEqual({item.code for item in issues}, expected)
+                self.assertNotIn("synthetic count", str([i.to_dict() for i in issues]))
+
+    def test_claim_audit_requires_complete_source_verification(self) -> None:
+        for field, value in (("verified_by", ""), ("verified_by", "TBD"),
+                             ("verified_on", "2026-02-30")):
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as temporary:
+                data = valid_source_manifest()
+                data["sources"][0]["verification"][field] = value
+                path = self.write_json(Path(temporary), "sources.json", data)
+                with self.assertRaises(InputError):
+                    audit_claims.load_sources(str(path))
+
+    def test_calendar_dates_are_real_and_canonical(self) -> None:
+        for date_value, valid in (("2024-02-29", True), ("2026-02-29", False),
+                                  ("2026-13-01", False), ("20261001", False)):
+            with self.subTest(date=date_value):
+                source = valid_source_manifest()
+                source["sources"][0]["verification"]["verified_on"] = date_value
+                findings = validate_manifest.validate_source_manifest(source, require_verified=True)
+                self.assertEqual(any(i.code == "INVALID_VERIFICATION_DATE" for i in findings), not valid)
+                authorship = valid_authorship_manifest()
+                authorship["declarations"]["ai_use"]["verified_on"] = date_value
+                findings = validate_authorship.validate_declarations(authorship)
+                self.assertEqual(any(i.code == "INVALID_DECLARATION_DATE" for i in findings), not valid)
+
     def test_consistency_checks_methods_results_and_numbers(self) -> None:
         data = valid_consistency_manifest()
         fact_issues, fact_count = check_consistency.validate_numeric_facts(data)

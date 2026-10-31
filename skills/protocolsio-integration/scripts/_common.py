@@ -41,7 +41,8 @@ MAX_REMOTE_DEPTH = 12
 _CORE_HOSTS = frozenset({"protocols.io", "www.protocols.io"})
 _TENANT_HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.protocols\.io$")
 _PROTOCOL_ID_RE = re.compile(
-    r"^(?:[1-9][0-9]*|[A-Za-z0-9][A-Za-z0-9._-]{0,254})"
+    r"^(?:10\.17504/protocols\.io\.[A-Za-z0-9][A-Za-z0-9._-]{0,240}|"
+    r"[1-9][0-9]*|[A-Za-z0-9][A-Za-z0-9._-]{0,254})"
     r"(?:/(?:v[1-9][0-9]*|latest))?$"
 )
 _GUID_RE = re.compile(r"^[A-Fa-f0-9]{32}$")
@@ -542,7 +543,7 @@ def request_bytes(
 
     request_headers = {
         "Accept": accept,
-        "User-Agent": "scientific-agent-skills/protocolsio-integration-1.1",
+        "User-Agent": "scientific-agent-skills/protocolsio-integration-1.4",
     }
     if token is not None:
         request_headers["Authorization"] = f"Bearer {token}"

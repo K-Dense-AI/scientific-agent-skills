@@ -1,6 +1,6 @@
 # Survival support vector machines
 
-Verified for scikit-survival 0.28.0 on 2026-07-23.
+Verified for scikit-survival 0.28.0 on 2026-10-01.
 
 ## What survival SVMs predict
 
@@ -56,10 +56,11 @@ Key semantics:
   survival/higher event risk.
 - `0 < rank_ratio < 1`: mixed ranking and regression.
 - `rank_ratio=0.0`: regression-only objective.
-- When `rank_ratio < 1`, prediction is time-oriented (internally based on log
-  observed time): lower prediction means shorter survival. For a metric requiring
+- When `rank_ratio < 1`, `predict()` exponentiates the log-time predictor and returns
+  original-time values: lower prediction means shorter survival. For a metric requiring
   higher event risk, use `-prediction` and document the conversion.
-- `alpha` controls regularization; tune it within inner CV.
+- `alpha` weights the data-fit/ranking objective relative to the penalty, so larger
+  values mean less regularization; tune it within inner CV.
 
 Do not use an arbitrary sign simply because a C-index improves. The sign follows
 the model objective and target interpretation.
@@ -187,11 +188,12 @@ special API. Fit the transform on a clearly typed training DataFrame or explicit
 precompute the kernel:
 
 ```python
-from sksurv.kernels import clinical_kernel
+from sksurv.kernels import ClinicalKernelTransform
 from sksurv.svm import FastKernelSurvivalSVM
 
-kernel_train = clinical_kernel(X_train_typed)
-kernel_test = clinical_kernel(X_test_typed, X_train_typed)
+kernel = ClinicalKernelTransform()
+kernel_train = kernel.fit_transform(X_train_typed)
+kernel_test = kernel.transform(X_test_typed)
 
 model = FastKernelSurvivalSVM(
     kernel="precomputed",
@@ -201,6 +203,16 @@ model = FastKernelSurvivalSVM(
 model.fit(kernel_train, y_train)
 risk = model.predict(kernel_test)
 ```
+
+The one-shot `clinical_kernel(X_test, X_train)` infers numeric ranges from both
+arguments, changing normalization with the test cohort. Prefer the fitted transform
+above. The released one-shot Cython routine also allocates its range buffer by
+row count while writing one value per numeric feature: avoid that routine when
+numeric features outnumber rows (source finding; unsafe case not executed).
+Put `ClinicalKernelTransform()` inside the pipeline for CV so its ranges
+and reference rows are learned afresh in every fold. Out-of-training-range values
+can produce negative similarities in the native transform; inspect support and
+define any clipping/extrapolation policy before evaluating.
 
 Any data-dependent kernel typing, scaling, or parameter choice belongs inside the
 training/CV protocol.
@@ -266,7 +278,9 @@ resamples, and censoring assumptions.
 
 ## Sources
 
-Official sources checked 2026-07-23:
+Official sources checked 2026-10-01:
+
+- [Released clinical-kernel implementation](https://github.com/sebp/scikit-survival/blob/v0.28.0/sksurv/kernels/clinical.py) and [Cython ranges](https://github.com/sebp/scikit-survival/blob/v0.28.0/sksurv/kernels/_clinical_kernel.pyx).
 
 - [Survival SVM user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/survival-svm.html)
 - [FastSurvivalSVM API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.svm.FastSurvivalSVM.html)

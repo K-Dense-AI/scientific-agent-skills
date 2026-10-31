@@ -131,9 +131,20 @@ load_from_usi(
 )
 ```
 
-USI loading makes an external network request. Preserve the USI, resolver URL,
-retrieval date, and retrieved metadata with analysis outputs. Handle service
-failures and `None`/invalid responses rather than assuming availability.
+The 0.33.1 helper makes an unauthenticated GET to
+`https://metabolomics-usi.gnps2.org/json/?usi1=<USI>` with a 10-second timeout.
+It expects one JSON object with nonempty `peaks` pairs and `precursor_mz`; there
+is no pagination. It returns one `Spectrum` or `None`, not a generator.
+Only `usi`, `server`, and `precursor_mz` are retained as metadata: the resolver
+also returns fields such as `precursor_charge` and `splash`, which the helper
+does not retain. Save the raw response separately when those fields matter.
+
+The helper handles some invalid/404 responses with `None` but does not fully
+validate HTTP/schema failures; request, header, or malformed-peak exceptions
+can propagate. Check the result before scoring. Use `load_from_usi` directly: the
+generic `load_spectra` has a `.usi` dispatch branch but first checks local file
+existence, so it is not a reliable entry point for a USI string. Preserve USI,
+resolver, retrieval date, and original response alongside analysis outputs.
 
 ### Pickle
 
@@ -189,12 +200,14 @@ call.
 
 ## Metadata Harmonization
 
-The importers default to `metadata_harmonization=True`. This normalizes source
-keys to matchms conventions while constructing each `Spectrum`.
+The importers default to `metadata_harmonization=True`. This harmonizes keys
+and selected values while constructing each `Spectrum`. In 0.33.1, disabling
+this flag skips value harmonization but **still harmonizes keys**, including
+lowercasing and alias replacement; it does not preserve source keys.
 
 Keep harmonization enabled for cross-source comparisons. Disable it only when:
 
-- exact source keys must be preserved;
+- automatic value harmonization must be deferred for inspection;
 - you have a documented custom normalization layer; or
 - you are investigating an importer/harmonization issue.
 
@@ -222,9 +235,12 @@ save_spectra(spectra, file: str,
 ```
 
 Supported export styles are `matchms`, `massbank`, `nist`, `riken`, and `gnps`.
-Not every source metadata field has a lossless representation in every target
-format. Reopen converted data and compare identifiers, precursor values, peak
-counts, and representative peaks.
+Non-matchms export styles retain only their mapped fields, so custom provenance
+fields can disappear. These styles rename metadata; they are not complete
+format-specific validators. In 0.33.1, `massbank`-style MGF/MSP/JSON fails to
+restore `precursor_mz` on matchms reimport in the synthetic roundtrip check.
+Prefer `matchms` style for a local roundtrip; reopen converted data and compare
+identifiers, precursor values, peak counts, and representative peaks.
 
 ### Direct MGF writer
 
@@ -262,9 +278,12 @@ from matchms.exporting import save_as_mzspeclib
 save_as_mzspeclib(spectra, "library.mzspeclib.txt")
 ```
 
-`save_as_mzspeclib()` exports a list of spectra through psims. Validate the
-result with the downstream mzSpecLib consumer because metadata requirements can
-be stricter than MGF/MSP.
+`save_as_mzspeclib()` is a direct text writer; it does not use psims and has no
+matching matchms importer. In 0.33.1 it overwrites an existing file and formats
+intensities to two decimals, so small normalized peaks can become zero. Its
+`collision_energy` handler expects text and labels the extracted number as eV;
+do not pass normalized collision energy or an unconverted unit. Validate the
+result with the downstream mzSpecLib consumer before treating it as an archive.
 
 ### Pickled spectra
 
@@ -290,15 +309,22 @@ scores.to_pickle("scores.pickle")
 Prefer JSON for exchange. Pickled `Scores` objects have the same arbitrary-code
 execution risk as pickled spectra.
 
-Load score JSON using matchms's score loader rather than manually reconstructing
-the sparse stack. Confirm exact loader names with the installed version because
-the importing package exposes both current and compatibility aliases.
+Reload score JSON with the public loader:
+
+```python
+from matchms.importing import scores_from_json
+
+restored = scores_from_json("scores.json")
+assert restored.score_names == scores.score_names
+```
+
+`scores_from_pickle` exists for trusted local caches only.
 
 ## Conversion Pattern
 
 ```python
 from matchms.exporting import save_spectra
-from matchms.importing import load_from_mzml
+from matchms.importing import load_from_mzml, load_spectra
 
 spectra = list(load_from_mzml("sample.mzML", ms_level=2))
 save_spectra(spectra, "sample-ms2.mgf")

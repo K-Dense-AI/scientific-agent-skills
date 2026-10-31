@@ -13,9 +13,7 @@ No API key required.
 | Purpose | URL Pattern |
 |---|---|
 | Gene data by Ensembl ID | `/{ENSEMBL_ID}.json` |
-| Gene data by symbol | `/{GENE_NAME}.json` |
-| Search (JSON) | `/search/{QUERY}?format=json` |
-| Search (XML) | `/search/{QUERY}?format=xml` |
+| Search | `/search/{QUERY}`; use the result page Download control for XML/TSV/JSON |
 
 ## Example Calls
 
@@ -23,11 +21,8 @@ No API key required.
 # Gene data by Ensembl ID
 https://www.proteinatlas.org/ENSG00000141510.json
 
-# Gene data by symbol
-https://www.proteinatlas.org/TP53.json
-
 # Search
-https://www.proteinatlas.org/search/TP53?format=json
+https://www.proteinatlas.org/search/TP53
 ```
 
 ## Response Format (JSON, gene endpoint)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import hashlib
 import json
 import os
@@ -26,6 +27,7 @@ def run_script(
     *arguments: str,
     cwd: Path | None = None,
     environment: dict[str, str] | None = None,
+    site_packages: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         name: value
@@ -36,7 +38,7 @@ def run_script(
     if environment:
         env.update(environment)
     return subprocess.run(
-        [sys.executable, "-S", str(SCRIPTS / name), *arguments],
+        [sys.executable, *([] if site_packages else ["-S"]), str(SCRIPTS / name), *arguments],
         cwd=cwd,
         env=env,
         check=False,
@@ -287,6 +289,45 @@ class SafetyAndHelpTests(unittest.TestCase):
 
 
 class ConfigAndPlanTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("yaml"), "requires reviewed PyYAML")
+    def test_yaml_template_and_restricted_parser(self) -> None:
+        valid = run_script(
+            "validate_config.py", "task", "--input", "assets/task_config.example.yaml",
+            "--root", str(SKILL_ROOT), site_packages=True,
+        )
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertTrue(json.loads(valid.stdout)["ok"])
+        cases = {
+            "duplicate": "private-synthetic-text: a\nprivate-synthetic-text: b\n",
+            "alias": "value: &anchor private-synthetic-text\nother: *anchor\n",
+            "tag": "value: !!str private-synthetic-text\n",
+            "date": "value: 2026-10-01\n",
+            "invalid": 'value: [private-synthetic-text\n',
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, source in cases.items():
+                with self.subTest(case=name):
+                    (root / "task.yaml").write_text(source, encoding="utf-8")
+                    result = run_script(
+                        "validate_config.py", "task", "--input", "task.yaml",
+                        "--root", str(root), site_packages=True,
+                    )
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertNotIn("private-synthetic-text", result.stdout + result.stderr)
+
+    def test_cost_cap_uses_unrounded_amount(self) -> None:
+        config = make_run_config()
+        config["limits"]["max_cost_usd"] = 0.01
+        config["pricing"]["input_usd_per_million_tokens"] = 9.0004
+        # Exact cost = 0.0100004; displayed cost rounds to 0.010000.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_json(root / "run.json", config)
+            result = run_script("plan_run.py", "--config", "run.json", "--root", str(root))
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertFalse(json.loads(result.stdout)["cost_upper_bound"]["within_cost_cap"])
+
     def test_named_env_check_is_boolean_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -407,6 +448,20 @@ class ConfigAndPlanTests(unittest.TestCase):
 
 
 class DatasetAuditTests(unittest.TestCase):
+    def test_zero_evidence_cap_keeps_counts_without_row_indices(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_json(root / "manifest.json", make_manifest(root, duplicate_test=True))
+            result = run_script(
+                "audit_dataset.py", "--manifest", "manifest.json", "--manifest-root", str(root),
+                "--data-root", str(root), "--max-evidence-groups", "0",
+            )
+        self.assertEqual(result.returncode, 3, result.stderr)
+        duplicates = json.loads(result.stdout)["duplicates"]
+        self.assertEqual(duplicates["cross_split_exact_group_count"], 1)
+        self.assertEqual(duplicates["cross_split_exact_evidence"], [])
+        self.assertEqual(duplicates["cross_split_identity_evidence"], [])
+
     def test_manifest_audit_passes_and_does_not_echo_untrusted_text(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -455,6 +510,27 @@ class DatasetAuditTests(unittest.TestCase):
 
 
 class OutputAndEvaluationTests(unittest.TestCase):
+    def test_duplicate_keys_and_record_ids_remain_redacted_on_error(self) -> None:
+        results = json.loads((ASSETS / "result.example.json").read_text())
+        for record in results["records"]:
+            record["id"] = "private-synthetic-id"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_json(root / "results.json", results)
+            duplicate_id = run_script(
+                "inspect_outputs.py", "results", "--input", "results.json", "--root", str(root),
+            )
+            (root / "bank.json").write_text(
+                '{"private-synthetic-hypothesis": {}, "private-synthetic-hypothesis": {}}',
+                encoding="utf-8",
+            )
+            duplicate_key = run_script(
+                "inspect_outputs.py", "hypotheses", "--input", "bank.json", "--root", str(root),
+            )
+        for result in (duplicate_id, duplicate_key):
+            self.assertEqual(result.returncode, 2)
+            self.assertNotIn("private-synthetic", result.stdout + result.stderr)
+
     def test_hypothesis_inspector_redacts_text_and_finds_normalized_duplicate(self) -> None:
         bank = {
             "Candidate Pattern": {

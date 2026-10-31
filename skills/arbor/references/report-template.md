@@ -9,12 +9,14 @@ concise and grounded in the tree.
 
 ## Result
 - **Best artifact**: [git branch/ref of M_best, e.g. `arbor/best`]
-- **Test score**: [S_test of M_best] vs. initial [S_test of M_0]  →  delta [Δ]
+- **Gate score**: [score of M_best] vs. initial [score of M_0] → delta [Δ]
+- **Final untouched evaluation**: [score/protocol, or explicitly not performed]
+- **Evidence**: [commit, evaluator/data versions, seeds, repetitions, raw logs]
 - **How to check it out**: `git checkout [ref]`
 - One-line summary of the change that won.
 
 ## What was tried (audit trail)
-[Paste `python scripts/tree.py status` — the tree shows every direction,
+[Paste `python "$ARBOR_TREE" status` — the tree shows every direction,
 which were pruned, which merged, with dev/test scores.]
 
 ## How understanding evolved
@@ -27,7 +29,8 @@ does — i.e. the constraints the run discovered.
 - Nodes that improved **dev**: [count]
 - Nodes that passed the **test merge gate**: [count]
 - Comment on the gap: were there high-dev / low-test candidates? What did
-  rejecting them tell you? An honest gap here is more trustworthy than a clean
+  rejecting them tell you? How many gate queries were made, and was the
+  same holdout reused for selection? An honest gap here is more trustworthy than a clean
   "everything worked".
 
 ## Open directions

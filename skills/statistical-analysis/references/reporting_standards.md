@@ -1,5 +1,7 @@
 # Statistical Reporting Standards
 
+All numerical prose examples here are illustrative formatting templates, not computed results from a common dataset. Replace numbers, software versions, priors and diagnostic claims with the actual analysis.
+
 This document provides guidelines for reporting statistical analyses according to APA (American Psychological Association) style and general best practices for academic publications.
 
 ## General Principles
@@ -102,7 +104,7 @@ This document provides guidelines for reporting statistical analyses according t
 - Effect size measures used
 
 **Example**:
-> "All analyses were conducted using Python 3.12 with Pingouin 0.6, SciPy 1.16, and statsmodels 0.14.6. An alpha level of .05 was used for all significance tests. Assumptions of normality and homogeneity of variance were assessed using Shapiro-Wilk and Levene's tests, respectively. Missing data (< 2% for all variables) were handled using listwise deletion. Outliers beyond 3 SD from the mean were winsorized. For the primary ANOVA, partial eta-squared (η²_p) is reported as the effect size measure. Post hoc comparisons used Tukey's HSD to control family-wise error rate."
+> "All analyses were conducted using Python 3.12 with Pingouin 0.7.0, SciPy 1.18.1, and statsmodels 0.15.0. An alpha level of .05 was used for all significance tests. Assumptions of normality and homogeneity of variance were assessed using Shapiro-Wilk and Levene's tests, respectively. Missing data (< 2% for all variables) were handled using listwise deletion. Flagged observations were reviewed against source records; valid observations were retained, with prespecified robust sensitivity analyses. For the primary ANOVA, partial eta-squared (η²_p) is reported as the effect size measure. Post hoc comparisons used Tukey's HSD to control family-wise error rate."
 
 ---
 
@@ -134,14 +136,14 @@ This document provides guidelines for reporting statistical analyses according t
 **What to report**:
 - Which assumptions were tested
 - Results of diagnostic tests
-- Whether assumptions were met
+- Evidence of departures, and limits of the checks
 - Actions taken if violated
 
 **Example**:
-> "Normality was assessed using Shapiro-Wilk tests. Data for Group A (W = 0.97, p = .18) and Group B (W = 0.96, p = .12) did not significantly deviate from normality. Levene's test indicated homogeneity of variance, F(1, 98) = 1.23, p = .27. Therefore, assumptions for the independent samples t-test were satisfied."
+> "Normality was assessed using Shapiro-Wilk tests. Data for Group A (W = 0.97, p = .18) and Group B (W = 0.96, p = .12) did not significantly deviate from normality. The median-centered Levene screen did not reject equal variances, F(1, 98) = 1.23, p = .27. Non-rejection did not establish equality; prespecified Welch inference was retained, with Q-Q plots and design reviewed."
 
 **Example (violated)**:
-> "Shapiro-Wilk tests indicated significant departure from normality for Group C (W = 0.89, p = .003). Therefore, the non-parametric Mann-Whitney U test was used instead of the independent samples t-test."
+> "Shapiro-Wilk tests indicated significant departure from normality for Group C (W = 0.89, p = .003). The prespecified estimand and tail behavior were reviewed; any alternative rank analysis was labeled as a separate distributional sensitivity analysis, not a replacement mean test selected by this p-value."
 
 ---
 
@@ -181,7 +183,7 @@ This document provides guidelines for reporting statistical analyses according t
 - p-value
 - Effect size (η², η²_p, or ω²)
 - Means and SDs for all groups
-- Post hoc test results (if significant)
+- Prespecified contrasts and multiplicity-adjusted post hoc families, including non-significant results
 
 **Format**: F(df_effect, df_error) = value, p = value, η²_p = value
 
@@ -189,7 +191,7 @@ This document provides guidelines for reporting statistical analyses according t
 > "There was a significant main effect of treatment condition on test scores, F(2, 147) = 8.45, p < .001, η²_p = .10. Post hoc comparisons using Tukey's HSD revealed that Condition A (M = 78.2, SD = 7.3) scored significantly higher than Condition B (M = 71.5, SD = 8.1, p = .002, d = 0.87) and Condition C (M = 70.1, SD = 7.9, p < .001, d = 1.07). Conditions B and C did not differ significantly (p = .52, d = 0.18)."
 
 **Example (factorial ANOVA)**:
-> "A 2 (feedback: positive vs. negative) × 2 (timing: immediate vs. delayed) between-subjects ANOVA revealed a significant main effect of feedback, F(1, 146) = 12.34, p < .001, η²_p = .08, but no significant main effect of timing, F(1, 146) = 2.10, p = .15, η²_p = .01. Critically, the interaction was significant, F(1, 146) = 6.78, p = .01, η²_p = .04. Simple effects analysis showed that positive feedback improved performance for immediate timing (M_diff = 8.2, p < .001) but not for delayed timing (M_diff = 1.3, p = .42)."
+> "A 2 (feedback: positive vs. negative) × 2 (timing: immediate vs. delayed) between-subjects ANOVA revealed a significant main effect of feedback, F(1, 146) = 12.34, p < .001, η²_p = .08, but no significant main effect of timing, F(1, 146) = 2.10, p = .15, η²_p = .01. The interaction was significant, F(1, 146) = 6.78, p = .01, η²_p = .04. Simple effects analysis showed that positive feedback improved performance for immediate timing (M_diff = 8.2, p < .001) but not for delayed timing (M_diff = 1.3, p = .42)."
 
 **Example (repeated measures ANOVA)**:
 > "Mauchly's test indicated that the assumption of sphericity was violated, χ²(2) = 8.45, p = .01, therefore Greenhouse-Geisser corrected degrees of freedom are reported (ε = 0.87). A one-way repeated measures ANOVA revealed a significant effect of time point on anxiety scores, F(1.74, 85.26) = 15.67, p < .001, η²_p = .24. Pairwise comparisons with Bonferroni correction showed..."
@@ -214,7 +216,7 @@ This document provides guidelines for reporting statistical analyses according t
 > "There was a moderate positive correlation between study time and exam score, r(148) = .42, p < .001, 95% CI [.27, .55], indicating that 18% of the variance in exam scores was shared with study time (r² = .18)."
 
 **Example (Spearman)**:
-> "A Spearman rank-order correlation revealed a significant positive association between class rank and motivation, ρ(118) = .38, p < .001, 95% CI [.21, .52]."
+> "A Spearman rank-order correlation revealed a significant positive association between class rank and motivation, ρ = .38, n = 120, p < .001, 95% CI [.21, .52]."
 
 **Example (non-significant)**:
 > "There was no significant correlation between age and reaction time, r(98) = -.12, p = .23, 95% CI [-.31, .08]."
@@ -354,7 +356,7 @@ This document provides guidelines for reporting statistical analyses according t
 - Box plots: Distributions, outliers
 - Scatter plots: Correlations, relationships
 - Line graphs: Change over time, interactions
-- Violin plots: Distributions (better than box plots)
+- Violin plots: Smoothed distributions; bandwidth and sample size matter, and raw points can be more informative for small samples
 
 **Example figure caption**:
 > "Figure 1. Mean exam scores by study condition. Error bars represent 95% confidence intervals. * p < .05, ** p < .01, *** p < .001."
@@ -416,7 +418,7 @@ This document provides guidelines for reporting statistical analyses according t
 - Exact p-value (not just "ns" or "p > .05")
 - Effect size (shows magnitude even if not significant)
 - Confidence interval (may include meaningful values)
-- Power analysis (was study adequately powered?)
+- Prespecified design power or sensitivity calculation; do not use observed-effect power to explain a null finding
 
 **To claim equivalence**: p > .05 is not evidence of equivalence. Run an equivalence test (TOST) against a pre-specified smallest effect size of interest, or a Bayesian ROPE analysis (see bayesian_statistics.md):
 
@@ -424,11 +426,12 @@ This document provides guidelines for reporting statistical analyses according t
 import pingouin as pg
 
 # TOST: is the group difference within +/- 0.5 raw units?
-print(pg.tost(group_a, group_b, bound=0.5))  # significant pval -> equivalence
+print(pg.tost(group_a, group_b, bound=0.5, correction=True))
+# Reject both one-sided nulls at the prespecified alpha; report bounds and assumptions.
 ```
 
 **Example**:
-> "Contrary to our hypothesis, there was no significant difference in creativity scores between the music (M = 72.1, SD = 8.3) and silence (M = 70.5, SD = 8.9) conditions, t(98) = 0.91, p = .36, d = 0.18, 95% CI [-0.21, 0.57]. A post hoc sensitivity analysis revealed that the study had 80% power to detect an effect of d = 0.57 or larger, suggesting the null finding may reflect insufficient power to detect small effects."
+> "Contrary to our hypothesis, there was no significant difference in creativity scores between the music (M = 72.1, SD = 8.3) and silence (M = 70.5, SD = 8.9) conditions, t(98) = 0.91, p = .36, d = 0.18, 95% CI [-0.21, 0.57]. A post hoc sensitivity analysis revealed that the study had 80% power to detect an effect of d = 0.57 or larger, characterizing design sensitivity; the confidence interval, rather than observed power, shows which effect magnitudes remain compatible with the data."
 
 ---
 
@@ -476,7 +479,9 @@ print(pg.tost(group_a, group_b, bound=0.5))  # significant pval -> equivalence
 ## Additional Resources
 
 - APA Publication Manual (7th edition)
-- CONSORT guidelines (for RCTs)
+- CONSORT 2025 (for randomized trials; use appropriate extensions)
 - STROBE guidelines (for observational studies)
 - PRISMA guidelines (for systematic reviews/meta-analyses)
 - Wilkinson & Task Force on Statistical Inference (1999). Statistical methods in psychology journals.
+
+Reviewed 2026-10-01 against [APA JARS](https://apastyle.apa.org/jars), [CONSORT 2025](https://www.consort-spirit.org/_files/ugd/b5740e_a6856e5e2cf94a1db5a8005853404160.pdf), and [Pingouin TOST](https://pingouin-stats.org/generated/pingouin.tost.html). Statistical reporting does not by itself establish scientific validity, and journal-specific instructions may differ.

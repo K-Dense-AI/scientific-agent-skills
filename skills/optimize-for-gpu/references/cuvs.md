@@ -1,11 +1,15 @@
 # cuVS Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuVS is NVIDIA's GPU-accelerated library for exact and approximate nearest-neighbor search, part
 of the RAPIDS ecosystem. It provides CAGRA, IVF-Flat, IVF-PQ, brute-force, and CPU-serving
 interoperability. Compare equal metrics and exactness requirements, validate ANN recall, and
 benchmark build, search, transfer, and serialization costs separately.
 
-> **Full documentation:** https://docs.rapids.ai/api/cuvs/stable/
+> **Full documentation:** https://docs.nvidia.com/cuvs/home
+> **Reviewed release source:** https://github.com/rapidsai/cuvs/tree/v26.08.00/python/cuvs/cuvs
 
 ## Table of Contents
 
@@ -32,8 +36,8 @@ Use `uv add` in standalone examples; follow the user's existing project package 
 is already configured.
 
 ```bash
-uv add --extra-index-url=https://pypi.nvidia.com "cuvs-cu12==26.6.*"   # For CUDA 12.x
-uv add --extra-index-url=https://pypi.nvidia.com "cuvs-cu13==26.6.*"   # For CUDA 13.x
+uv add --extra-index-url=https://pypi.nvidia.com "cuvs-cu12==26.8.*"   # For CUDA 12.x
+uv add --extra-index-url=https://pypi.nvidia.com "cuvs-cu13==26.8.*"   # For CUDA 13.x
 ```
 
 cuVS wheels (including the companion `libcuvs` wheel) are also published directly to PyPI, so the extra index is optional — but the official cuVS docs still show it and it does no harm.
@@ -88,7 +92,7 @@ Choose build and search parameters from measured latency, throughput, memory, an
 
 ## CAGRA
 
-CAGRA (CUDA Accelerated Graph-based) is a graph-based ANN index optimized for GPU. It's the fastest option for most workloads.
+CAGRA (CUDA Accelerated Graph-based) is a graph-based ANN index optimized for GPU. Treat it as a strong ANN candidate and compare recall, memory, and end-to-end latency.
 
 ### Build
 
@@ -136,6 +140,9 @@ resources.sync()
 ```
 
 ### Save / Load
+
+Persist the exact cuVS release, dtype, metric and dataset identity alongside the index.
+Serialized formats are experimental and not guaranteed portable across releases.
 
 ```python
 cagra.save("my_index.cagra", index)
@@ -342,21 +349,29 @@ For cosine similarity with IVF-PQ, normalize vectors to unit length and use `"in
 cuVS supports pre-filtering search results using bitmaps or bitsets to exclude specific vectors.
 
 ```python
-from cuvs.neighbors import brute_force
+import numpy as np
 import cupy as cp
+from cuvs.neighbors import brute_force, filters
 
-# Bitset filter: exclude specific indices from ALL queries
-# 1 = excluded, 0 = included
-n_samples = 100_000
-bitset = cp.zeros(n_samples, dtype=cp.uint8)
-bitset[0:1000] = 1  # Exclude first 1000 vectors
+def pack_allowed_mask(allowed):
+    """Pack sample inclusion flags into little-endian uint32 words."""
+    allowed = np.asarray(allowed, dtype=np.bool_)
+    if allowed.ndim != 1:
+        raise ValueError("Expected one inclusion flag per indexed vector")
+    padded = np.pad(allowed, (0, (-allowed.size) % 32), constant_values=False)
+    return np.packbits(padded, bitorder="little").view("<u4").astype(np.uint32)
 
-distances, neighbors = brute_force.search(
-    index, queries, k=10, prefilter=bitset
-)
+# 1 = allowed, 0 = excluded. One packed bit per indexed vector, NOT one byte.
+allowed = np.ones(dataset.shape[0], dtype=np.bool_)
+allowed[:1000] = False
+bitset = cp.asarray(pack_allowed_mask(allowed))
+prefilter = filters.from_bitset(bitset)
+distances, neighbors = brute_force.search(index, queries, k=10, prefilter=prefilter)
 ```
 
-CAGRA also supports filtering via the `filter` parameter in `cagra.search()`.
+CAGRA uses `filter=prefilter` rather than `prefilter=`. Keep the bitset/filter alive until
+search completes; validate sentinel results if fewer than k candidates survive.
+`pack_allowed_mask` is CPU-tested; the filtered GPU search remains illustrative.
 
 ---
 
@@ -372,11 +387,13 @@ build_params = mg_cagra.IndexParams(
     intermediate_graph_degree=64,
     graph_degree=32,
 )
-index = mg_cagra.build(build_params, dataset)
+dataset_host = cp.asnumpy(dataset)  # MG CAGRA requires host input
+queries_host = cp.asnumpy(queries)
+index = mg_cagra.build(build_params, dataset_host)
 
 # Search across GPUs
 search_params = mg_cagra.SearchParams()
-distances, neighbors = mg_cagra.search(search_params, index, queries, k=10)
+distances, neighbors = mg_cagra.search(search_params, index, queries_host, k=10)
 ```
 
 Multi-GPU is also available for IVF-Flat and IVF-PQ via `cuvs.neighbors.mg`.
@@ -387,7 +404,7 @@ Multi-GPU is also available for IVF-Flat and IVF-PQ via `cuvs.neighbors.mg`.
 
 ### Supported Data Types
 
-All index types support: `float32`, `float16`, `int8`, `uint8`.
+Dtypes are index-specific. Brute force accepts float32/float16; do not assume the int8/uint8 support of CAGRA or IVF-Flat applies to every index or metric.
 
 Using `float16` halves memory and can speed up both build and search when full float32 precision isn't needed (common for embeddings).
 
@@ -422,7 +439,7 @@ compare recall/ranking metrics and end-to-end performance with float32 before ch
 
 - **CuPy:** Native input — zero-copy via `__cuda_array_interface__`
 - **NumPy:** Accepted as input (auto-transferred to GPU for GPU indexes, used directly for HNSW)
-- **PyTorch / TensorFlow:** Tensors accepted via CUDA array interface — no copy needed
+- **PyTorch / TensorFlow:** Use a supported array-interface or DLPack conversion (e.g. to CuPy), preserving device, layout, ownership and stream ordering.
 - **cuDF:** Convert columns to CuPy with `.values` before passing to cuVS
 - **Faiss:** cuVS powers Faiss GPU under the hood; for direct use, cuVS gives more control
 - **Vector databases:** cuVS is integrated into Milvus, Lucene, and Kinetica
@@ -447,7 +464,7 @@ search_params = cagra.SearchParams(itopk_size=128)
 distances, neighbors = cagra.search(search_params, index, query_embedding, k=20)
 
 # neighbors[0] contains the indices of the top-20 most similar documents
-top_doc_ids = neighbors[0].get()  # Transfer to CPU
+top_doc_ids = cp.asnumpy(cp.asarray(neighbors)[0])  # Transfer to CPU
 ```
 
 ---
@@ -522,9 +539,12 @@ approx_distances, approx_neighbors = cagra.search(
     cagra.SearchParams(), cagra_index, queries, k=10
 )
 
-# Compute recall
+# Materialize once; default cuVS output containers need not be CuPy arrays.
+gt_neighbors_cpu = cp.asnumpy(cp.asarray(gt_neighbors))
+approx_neighbors_cpu = cp.asnumpy(cp.asarray(approx_neighbors))
+# Ties can admit multiple exact top-k sets; decide a tie policy for duplicate vectors.
 recall = sum(
-    len(set(gt_neighbors[i].get()) & set(approx_neighbors[i].get())) / 10
+    len(set(gt_neighbors_cpu[i]) & set(approx_neighbors_cpu[i])) / 10
     for i in range(len(queries))
 ) / len(queries)
 print(f"Recall@10: {recall:.4f}")
@@ -539,6 +559,8 @@ from cuvs.neighbors import cagra
 # Normalize embeddings to unit length
 embeddings = cp.random.rand(100_000, 768, dtype=cp.float32)
 norms = cp.linalg.norm(embeddings, axis=1, keepdims=True)
+if bool(cp.any(norms == 0)):
+    raise ValueError("Cosine similarity is undefined for zero-norm embeddings")
 embeddings_normalized = embeddings / norms
 
 # Use inner_product on normalized vectors = cosine similarity
@@ -548,7 +570,10 @@ index = cagra.build(
 )
 
 query = cp.random.rand(1, 768, dtype=cp.float32)
-query_normalized = query / cp.linalg.norm(query)
+query_norm = cp.linalg.norm(query)
+if float(query_norm) == 0:
+    raise ValueError("Cosine similarity is undefined for a zero-norm query")
+query_normalized = query / query_norm
 
 distances, neighbors = cagra.search(
     cagra.SearchParams(), index, query_normalized, k=10
@@ -579,14 +604,15 @@ centroids, inertia, n_iter = fit(params, X)
 labels, inertia = predict(params, X, centroids)
 ```
 
-For datasets larger than GPU memory, pass NumPy arrays with `streaming_batch_size`:
+For host-resident datasets, `device_buffer_samples` bounds the device staging batch in 26.08.
+This still requires enough host RAM for the NumPy input:
 
 ```python
 import numpy as np
 from cuvs.cluster.kmeans import fit, KMeansParams
 
 X_host = np.random.rand(10_000_000, 128).astype(np.float32)
-params = KMeansParams(n_clusters=1000, streaming_batch_size=1_000_000)
+params = KMeansParams(n_clusters=1000, device_buffer_samples=1_000_000)
 centroids, inertia, n_iter = fit(params, X_host)
 ```
 

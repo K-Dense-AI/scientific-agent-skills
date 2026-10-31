@@ -153,11 +153,11 @@ Different presentation contexts require different approaches. For comprehensive 
 
 ### 5. Implementation Options
 
-#### Nano Banana Pro PDF (Default - Recommended)
+#### Nano Banana 2 PDF (Conceptual Drafts)
 
-**Best for**: Visually stunning slides, fast creation, non-technical audiences
+**Best for**: Conceptual or overview slides where editable or semantic text is not required
 
-**This is the default and recommended approach.** Generate each slide as a complete image using AI.
+Generate conceptual slides as images when an image-only PDF meets the brief. Embed quantitative figures unchanged with PowerPoint/Beamer; reference-image generation can redraw them.
 
 **Workflow**:
 1. Plan each slide (title, content, visual elements)
@@ -186,18 +186,18 @@ python scripts/slides_to_pdf.py slides/*.png -o presentation.pdf
 - General scientific talks
 - Pitch presentations
 
-#### PowerPoint via PPTX Skill
+#### PowerPoint via PptxGenJS
 
 **Best for**: Editable slides, custom designs, template-based workflows
 
-**Reference**: See `skills/pptx/SKILL.md` for complete documentation
+**Reference**: See `assets/powerpoint_design_guide.md` for complete documentation
 
-Use Nano Banana Pro with `--visual-only` to generate images, then build PPTX with text.
+Use Nano Banana 2 with `--visual-only` to generate images, then build PPTX with text.
 
 **Key Resources**:
 - `assets/powerpoint_design_guide.md`: Complete PowerPoint design guide
-- PPTX skill's `SKILL.md`: Programmatic creation with PptxGenJS, plus template editing
-- PPTX skill's scripts: `thumbnail.py`, `add_slide.py`, `clean.py`, `office/validate.py`
+- PptxGenJS for programmatic creation; python-pptx for template editing
+- `scripts/validate_presentation.py` and `scripts/pdf_to_images.py` for checks and rendering
 
 **Workflow**:
 1. Generate visuals with `generate_slide_image.py --visual-only`
@@ -245,16 +245,13 @@ Implement iterative improvement through visual inspection. For complete workflow
 **Visual Validation Workflow**:
 
 **Step 1: Generate PDF** (if not already PDF)
-- PowerPoint: Export as PDF
+- PowerPoint: Export as PDF (or `soffice --headless --convert-to pdf presentation.pptx`)
 - Beamer: Compile LaTeX source
 
 **Step 2: Convert to Images**
 ```bash
 # Using the pdf_to_images script
 python scripts/pdf_to_images.py presentation.pdf review/slide --dpi 150
-
-# Or use pptx skill's thumbnail tool
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/thumb
 ```
 
 **Step 3: Systematic Inspection**

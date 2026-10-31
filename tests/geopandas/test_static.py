@@ -31,7 +31,7 @@ class SkillStructureTests(unittest.TestCase):
         self.assertRegex(
             text,
             r'\nmetadata:\n  version: "\d+\.\d+"\n  skill-author:'
-            r'.*\n  last-reviewed: "2026-07-23"',
+            r'.*\n  last-reviewed: "\d{4}-\d{2}-\d{2}"',
         )
         self.assertNotIn('metadata: {"version"', text)
 
@@ -49,7 +49,7 @@ class SkillStructureTests(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
-                self.assertIn("Sources (verified 2026-07-23)", text)
+                self.assertRegex(text, r"Sources \(verified \d{4}-\d{2}-\d{2}\)")
                 self.assertIn("https://", text)
 
     def test_relative_markdown_links_resolve(self) -> None:
@@ -167,14 +167,14 @@ class SecurityAndStalenessTests(unittest.TestCase):
                 self.assertIn("==", line)
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         for requirement in (
-            "geopandas==1.1.4",
-            "numpy==2.5.1",
-            "pandas==3.0.5",
+            "geopandas==1.2.0",
+            "numpy==2.5.3",
+            "pandas==3.0.6",
             "shapely==2.1.2",
-            "pyproj==3.7.2",
+            "pyproj==3.8.0",
             "pyogrio==0.13.0",
-            "pyarrow==25.0.0",
-            "packaging==26.2",
+            "pyarrow==25.0.1",
+            "packaging==26.3",
         ):
             self.assertIn(requirement, skill)
 

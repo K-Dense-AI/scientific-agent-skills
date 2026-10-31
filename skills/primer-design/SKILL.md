@@ -4,9 +4,9 @@ description: Designs and audits PCR and RT-qPCR primers with Primer3, explicit t
 license: MIT
 compatibility: Requires Python 3.11+ and primer3-py 2.3.1 for design and thermodynamics. Local exhaustive screening uses the standard library; BLAST screening additionally needs blastn and makeblastdb on PATH. Network access is needed only for installation, reference retrieval, or external Primer-BLAST.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-09-30"
+  last-reviewed: "2026-10-01"
 ---
 
 # Primer design and specificity
@@ -46,7 +46,8 @@ design, and identify them in the report:
   vector backbone, and host sequence in the appropriate screen.
 - **Reaction conditions:** polymerase/buffer, monovalent salt, total divalent salt,
   total dNTP, and oligo concentrations. Primer3 uses mM for salts/dNTP and nM for DNA.
-  Engine defaults are starting assumptions, not a measured formulation.
+  Record the initial reaction concentration separately from Primer3's effective
+  annealing-oligo concentration parameter. Engine defaults are assumptions.
 - **Constraints:** target interval, allowed/excluded binding regions, junctions,
   variant exclusions and their source, fixed primers, tails, or multiplex membership.
   Do not guess exon boundaries or silently substitute another assembly.
@@ -102,6 +103,9 @@ For actual work, substitute the reviewed target FASTA and constraints. A multi-r
 FASTA requires `--record` with its exact ID. The `pcr` preset requests 100–1000 bp;
 `qpcr` requests 70–200 bp. Override these starting ranges in the configuration.
 The example overrides its range to 90–180 bp and includes a specific target interval.
+Multiple `SEQUENCE_TARGET` intervals are alternatives: Primer3 flanks at least one.
+To require coverage of every interval, supply one enclosing target and verify the
+returned product; separate assays require separate design runs.
 
 The tool:
 
@@ -155,6 +159,8 @@ values. Full oligos longer than 60 bases are reported as unresolved; they are ne
 silently truncated. Modified bases and degenerate mixtures require a suitable model.
 Thermodynamic predictions support ranking and experimental planning, not a blanket
 claim of primer quality.
+Nonfinite Tm or a Tm at/below absolute zero is rejected as a calculation/input
+failure; such a result must not be ranked as an ordinary low-Tm primer.
 
 ## 3. Screen amplification products
 

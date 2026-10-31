@@ -96,7 +96,7 @@ assert operator.num_qubits == 2
 # "ZI" means Z on qubit 1 and I on qubit 0.
 ```
 
-This is especially important for optimization variables and graph vertices.
+This is especially important for optimization variables and graph vertices. The reversal above decodes classical bits; qubit interpretation additionally requires the measurement map. Use asymmetric states and reversed measurement operands, plus unequal named registers, to detect errors that Bell/GHZ symmetry hides.
 
 ## Test Parameter Order and Shapes
 
@@ -333,10 +333,8 @@ from qiskit.primitives import (
     StatevectorEstimator,
     StatevectorSampler,
 )
-from qiskit_ibm_runtime import (
-    EstimatorV2,
-    SamplerV2,
-)
+from qiskit_ibm_runtime.executor_estimator import Estimator
+from qiskit_ibm_runtime.executor_sampler import Sampler
 ```
 
 ### Result has no `.quasi_dists` or `.values`
@@ -391,7 +389,7 @@ Use BackendV2 direct attributes and `backend.target`.
 
 ### `qiskit.pulse` import fails
 
-Pulse was removed in Qiskit 2.0. Use fractional gates for supported IBM rotations or Qiskit Dynamics for control-model research.
+Pulse was removed in Qiskit 2.0. Use fractional gates for supported IBM rotations. Qiskit Dynamics is archived and requires a separately validated legacy stack for historical control-model research.
 
 ### Session is rejected
 

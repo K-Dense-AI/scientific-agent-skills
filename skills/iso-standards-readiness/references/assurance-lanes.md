@@ -1,6 +1,6 @@
 # Assurance Lanes: What Each One Actually Decides
 
-Research basis: **2026-07-26**. Read this before preparing evidence for any standard in
+Research basis: **2026-10-01**. Read this before preparing evidence for any standard in
 this skill. Most substantive errors in readiness work are lane confusion, not missing
 documents: an output that is correct for one lane is wrong, and sometimes a false claim,
 in another.
@@ -9,7 +9,7 @@ Every lane below is decided by a different body, against a different basis, prod
 different artifact with a different scope. None of them is a substitute for another, and
 this skill produces none of them.
 
-## The seven lanes
+## Six assurance lanes and the risk-evidence role
 
 | Lane | Who decides | Basis | Artifact | Applies to |
 | --- | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ this skill produces none of them.
 | Mandatory certification/licensure | Government or its agent | Statute | Certificate/licence to operate | CLIA |
 | Regulatory audit programme | Recognized Auditing Organization | Programme audit model | Audit report used by participating regulators | MDSAP |
 | Conformity assessment | Notified body / manufacturer per route | Product regulation | Product certificate, declaration of conformity | EU MDR/IVDR |
-| Assessed-inside-another-lane | Whoever runs the host lane | The standard, as evidence | No artifact of its own | ISO 14971 |
+| Risk evidence within a declared lane | Whoever runs the declared lane | The standard, as evidence | Supporting evidence; no assurance result from this skill | ISO 14971 |
 
 ## Certification and accreditation are not synonyms
 
@@ -54,8 +54,10 @@ Hold these apart in every output:
   requirements; QMSR has been effective and enforced since 2026-02-02, and FDA uses
   Compliance Program 7382.850 rather than the retired QSIT.
 - **ISO 15189 accreditation does not satisfy CLIA.** CLIA certification by CMS is
-  mandatory before a US laboratory may accept human specimens. Deemed status comes only
-  from a CMS-approved accreditation organization's programme, not from ISO 15189.
+  required for applicable clinical testing, subject to the exceptions and exemptions
+  in 42 CFR 493.3. Research-only testing without patient-specific clinical reporting
+  is an explicit exception. The authorized owner must resolve applicability. Deemed
+  status comes from an approved CLIA program, not ISO 15189 by itself.
 - **An MDSAP audit is not generic ISO certification, and an FDA inspection does not
   follow the MDSAP audit plan.**
 - **Accreditation or certification alone is not notified-body designation.** Verify a

@@ -1,12 +1,12 @@
 # Direct Parquet Access Guide for IDC
 
-**Tested with:** idc-index-data 24.2.2 (IDC data version v24), DuckDB 1.5
+**Reviewed 2026-09-30:** idc-index-data 24.2.2 (IDC data version v24), DuckDB 1.5
 
 All idc-index metadata tables are published as Parquet files to a public GCS bucket with unrestricted CORS access. This enables metadata queries with DuckDB or pandas without installing idc-index.
 
 **Limitation:** download helpers (`download_from_selection()`), viewer URLs (`get_viewer_URL()`), and citation generation require the idc-index client and are not available from raw Parquet files.
 
-**This is not the first no-install option to reach for.** It still needs DuckDB installed, and the per-collection clinical tables are not published here — only the `clinical_index` dictionary. For ad-hoc metadata with nothing installed, the REST API (`rest_api_guide.md`) needs no install at all and reaches `clinical.<table>` through `POST /sql`.
+**This is not the first no-install option to reach for.** It still needs DuckDB installed. This GCS artifact set contains only the `clinical_index` dictionary; full clinical and BigQuery tables are exported separately to public S3 (below). For ad-hoc metadata with nothing installed, the REST API (`rest_api_guide.md`) needs no install at all and reaches `clinical.<table>` through `POST /sql`.
 
 ## When to Use This Guide
 
@@ -45,6 +45,8 @@ https://storage.googleapis.com/idc-index-data-artifacts/current/release_artifact
 | `mr_index.parquet` | — | MR sequence/acquisition parameters |
 | `pt_index.parquet` | — | PET acquisition/radiopharmaceutical parameters |
 | `prior_versions_index.parquet` | — | Series from previous IDC releases |
+| `sm_instance_index.parquet` | — | Slide microscopy instance metadata |
+| `version_metadata_index.parquet` | — | IDC release timestamps |
 
 **Note:** the main index file is named `idc_index.parquet`, not `index.parquet`. Reference it with an alias in SQL queries (e.g., `FROM read_parquet(...) AS index`).
 
@@ -93,7 +95,7 @@ import duckdb
 
 BASE = "https://storage.googleapis.com/idc-index-data-artifacts/current/release_artifacts"
 
-# CT series that form a valid 3D volume (can be loaded without resampling)
+# Candidate regularly spaced CT series; verify task-specific geometry before analysis
 duckdb.sql(f"""
     SELECT i.collection_id, i.SeriesInstanceUID, i.BodyPartExamined,
            v.obliquity_degrees, v.regularly_spaced_3d_volume
@@ -187,11 +189,35 @@ Key columns in `rtstruct_index`:
 import duckdb
 
 # Use a specific data release instead of 'current'
-VERSION = "23.10.1"
+VERSION = "24.2.2"
 BASE = f"https://storage.googleapis.com/idc-index-data-artifacts/{VERSION}/release_artifacts"
 
 duckdb.sql(f"SELECT COUNT(*) FROM read_parquet('{BASE}/idc_index.parquet')").df()
 ```
+
+## Full metadata and clinical exports
+
+The separate public bucket `idc-open-metadata` exports BigQuery tables, including per-
+collection clinical rows, per-segment metadata, and SR measurements. No Google account
+is required. Use a pinned dataset such as `idc_v24_clinical`; discover object keys first
+because a table can be one file or a directory of shards. Do not append `.parquet` blindly.
+
+```bash
+s5cmd --no-sign-request ls s3://idc-open-metadata/bigquery_export/idc_v24_clinical/
+s5cmd --no-sign-request ls s3://idc-open-metadata/bigquery_export/idc_v24/
+```
+
+For example, after confirming the key, the clinical table can be queried directly:
+
+```python
+import duckdb
+url = "https://idc-open-metadata.s3.amazonaws.com/bigquery_export/idc_v24_clinical/nlst_canc/000000000000.parquet"
+clinical = duckdb.sql(f"SELECT dicom_patient_id, clinical_stag FROM read_parquet('{url}') LIMIT 5").df()
+```
+
+Full instance tables can be very large. Inspect their schema and estimate resources before
+querying all shards; GoogleSQL from the BigQuery guide needs adaptation to DuckDB syntax.
+See [IDC files and metadata](https://learn.canceridc.dev/data/organization-of-data/files-and-metadata).
 
 ## Resources
 

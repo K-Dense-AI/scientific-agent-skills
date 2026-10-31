@@ -52,10 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--bbox",
         nargs=4,
-        metavar=("WEST_X", "SOUTH_Y", "EAST_X", "NORTH_Y"),
+        metavar=("WEST_DEG", "SOUTH_DEG", "EAST_DEG", "NORTH_DEG"),
         help=(
-            "Optional source-CRS bbox/area-of-interest. For geographic x/y input, "
-            "east < west marks an antimeridian crossing. Values are not emitted."
+            "Optional geographic source bbox in longitude/latitude degrees. "
+            "Projected sources are rejected; east < west marks an antimeridian "
+            "crossing. Values are not emitted."
         ),
     )
     parser.add_argument(
@@ -102,11 +103,23 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
     crosses_antimeridian = False
     area_of_interest = None
     if args.bbox is not None:
+        if not source.is_geographic or not all(
+            str(axis.unit_name).casefold() == "degree"
+            for axis in source.axis_info[:2]
+        ):
+            raise CliError(
+                "--bbox requires a geographic source CRS with degree axes; "
+                "omit it for projected sources rather than treating metres/feet as degrees"
+            )
         bbox_values = [
             finite_number(item, name=f"bbox[{index}]")
             for index, item in enumerate(args.bbox)
         ]
         west, south, east, north = bbox_values
+        if not (-180 <= west <= 180 and -180 <= east <= 180):
+            raise CliError("bbox longitude must be within [-180, 180] degrees")
+        if not (-90 <= south <= 90 and -90 <= north <= 90):
+            raise CliError("bbox latitude must be within [-90, 90] degrees")
         if south > north:
             raise CliError("bbox south must not exceed north")
         crosses_antimeridian = bool(source.is_geographic and east < west)

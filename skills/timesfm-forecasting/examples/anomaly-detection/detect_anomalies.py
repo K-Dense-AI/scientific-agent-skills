@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
-"""
-TimesFM Anomaly Detection Example — Two-Phase Method
+"""Illustrative retrospective Z-score and forecast-band exceedance screens.
 
-Phase 1 (context): Linear detrend + Z-score on 36 months of real NOAA
-  temperature anomaly data (2022-01 through 2024-12).
-  Sep 2023 (1.47 C) is a known critical outlier.
-
-Phase 2 (forecast): TimesFM quantile prediction intervals on a 12-month
-  synthetic future with 3 injected anomalies.
-
-Outputs:
-  output/anomaly_detection.png  -- 2-panel visualization
-  output/anomaly_detection.json -- structured detection records
+Input values have unverified source provenance; no climate or alarm validation.
+CRITICAL/WARNING are illustrative labels, not calibrated anomaly probabilities.
 """
 
 from __future__ import annotations
 
+import argparse
+import sys
 import json
 from pathlib import Path
 
@@ -26,6 +19,9 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from forecast_csv import load_csv, load_model, prepare_inputs, run_preflight, validate_forecast
 
 HORIZON = 12
 DATA_FILE = (
@@ -60,6 +56,9 @@ def detect_context_anomalies(
     residuals  : actual - trend_line
     res_std    : std of residuals (used as sigma for threshold bands)
     """
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 1 or len(values) < 3 or len(dates) != len(values) or not np.isfinite(values).all():
+        raise ValueError("need >=3 finite values with aligned dates")
     n = len(values)
     idx = np.arange(n, dtype=float)
 
@@ -110,10 +109,10 @@ def build_synthetic_future(
     noise = rng.normal(0, 0.1, n)
     future = trend + noise
 
-    injected = [3, 8, 11]
-    future[3] += 0.7  # CRITICAL spike
-    future[8] -= 0.65  # CRITICAL dip
-    future[11] += 0.45  # WARNING spike
+    injected = [i for i in (3, 8, 11) if i < n]
+    for i, offset in ((3, 0.7), (8, -0.65), (11, 0.45)):
+        if i < n:
+            future[i] += offset
 
     return future.astype(np.float32), injected
 
@@ -131,6 +130,11 @@ def detect_forecast_anomalies(
     WARNING  = outside 60% PI (q20-q80) but inside 80% PI
     NORMAL   = inside 60% PI
     """
+    if quant_fc.shape != (10, len(point)) or len(future_values) != len(point) or len(future_dates) != len(point):
+        raise ValueError("misaligned detection inputs")
+    validate_forecast(np.asarray(point)[None, :], np.asarray(quant_fc).T[None, ...], 1, len(point))
+    if not np.isfinite(future_values).all():
+        raise ValueError("nonfinite actuals")
     q10 = quant_fc[IDX_Q10]
     q20 = quant_fc[IDX_Q20]
     q80 = quant_fc[IDX_Q80]
@@ -182,11 +186,11 @@ def plot_results(
     quant_fc: np.ndarray,
     fc_records: list[dict],
 ) -> None:
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10), gridspec_kw={"hspace": 0.42})
     fig.suptitle(
-        "TimesFM Anomaly Detection — Two-Phase Method", fontsize=14, fontweight="bold"
+        "Illustrative Screening -- Retrospective Z Scores and Nominal Forecast Bands", fontsize=14, fontweight="bold"
     )
 
     # -----------------------------------------------------------------------
@@ -204,7 +208,7 @@ def plot_results(
         lw=2,
         marker="o",
         ms=4,
-        label="Observed (context)",
+        label="Illustrative context (source unverified)",
     )
     ax1.plot(ctx_x, trend_line, color="#aaaaaa", lw=1.5, ls="--", label="Linear trend")
     ax1.fill_between(
@@ -253,8 +257,8 @@ def plot_results(
         ms=4,
         label="TimesFM point forecast",
     )
-    ax1.fill_between(fut_x, q10, q90, alpha=0.15, color=CLR["CRITICAL"], label="80% PI")
-    ax1.fill_between(fut_x, q20, q80, alpha=0.25, color=CLR["CRITICAL"], label="60% PI")
+    ax1.fill_between(fut_x, q10, q90, alpha=0.15, color=CLR["CRITICAL"], label="Nominal 80% PI")
+    ax1.fill_between(fut_x, q20, q80, alpha=0.25, color=CLR["CRITICAL"], label="Nominal 60% PI")
 
     seen_fc: set[str] = set()
     for i, rec in enumerate(fc_records):
@@ -312,19 +316,20 @@ def plot_results(
         bar_colors.append(CLR[rec["severity"]])
 
     xs = np.arange(len(all_labels))
-    ax2.bar(xs[:36], bar_heights[:36], color=bar_colors[:36], alpha=0.8)
-    ax2.bar(xs[36:], bar_heights[36:], color=bar_colors[36:], alpha=0.8)
+    n_context = len(ctx_records)
+    ax2.bar(xs[:n_context], bar_heights[:n_context], color=bar_colors[:n_context], alpha=0.8)
+    ax2.bar(xs[n_context:], bar_heights[n_context:], color=bar_colors[n_context:], alpha=0.8)
 
     # threshold lines for context section only
     ax2.hlines(
-        [2 * res_std, -2 * res_std], -0.5, 35.5, colors=CLR["NORMAL"], lw=1.2, ls="--"
+        [2 * res_std, -2 * res_std], -0.5, n_context - 0.5, colors=CLR["NORMAL"], lw=1.2, ls="--"
     )
     ax2.hlines(
-        [3 * res_std, -3 * res_std], -0.5, 35.5, colors=CLR["NORMAL"], lw=1.0, ls=":"
+        [3 * res_std, -3 * res_std], -0.5, n_context - 0.5, colors=CLR["NORMAL"], lw=1.0, ls=":"
     )
 
     # PI bands for forecast section
-    fc_xs = xs[36:]
+    fc_xs = xs[n_context:]
     ax2.fill_between(
         fc_xs,
         q10 - point_fc,
@@ -342,7 +347,7 @@ def plot_results(
         step="mid",
     )
 
-    ax2.axvline(35.5, color="#555555", lw=1.5, ls="--")
+    ax2.axvline(n_context - 0.5, color="#555555", lw=1.5, ls="--")
     ax2.axhline(0, color="black", lw=0.8, alpha=0.6)
 
     ax2.text(
@@ -389,16 +394,19 @@ def plot_results(
 
 
 def main() -> None:
+    global OUTPUT_DIR
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    OUTPUT_DIR = args.output_dir
     print("=" * 68)
-    print("  TIMESFM ANOMALY DETECTION — TWO-PHASE METHOD")
+    print("  TIMESFM ANOMALY DETECTION - TWO-PHASE METHOD")
     print("=" * 68)
 
     # --- Load context data ---------------------------------------------------
-    df = pd.read_csv(DATA_FILE)
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").reset_index(drop=True)
+    df, cols, _ = load_csv(str(DATA_FILE), "date", ["anomaly_c"], "MS")
 
-    context_values = df["anomaly_c"].values.astype(np.float32)
+    context_values = prepare_inputs(df, cols)[0]
     context_dates = [pd.Timestamp(d) for d in df["date"].tolist()]
     start_str = context_dates[0].strftime('%Y-%m') if not pd.isnull(context_dates[0]) else '?'
     end_str   = context_dates[-1].strftime('%Y-%m') if not pd.isnull(context_dates[-1]) else '?'
@@ -419,16 +427,10 @@ def main() -> None:
         print(f"      {r['date']}  {r['value']:+.3f} C  z={r['z_score']:+.2f}")
 
     # --- Load TimesFM --------------------------------------------------------
-    print("\n  Loading TimesFM 1.0 ...")
-    import timesfm
-
-    hparams = timesfm.TimesFmHparams(horizon_len=HORIZON)
-    checkpoint = timesfm.TimesFmCheckpoint(
-        huggingface_repo_id="google/timesfm-1.0-200m-pytorch"
-    )
-    model = timesfm.TimesFm(hparams=hparams, checkpoint=checkpoint)
-
-    point_out, quant_out = model.forecast([context_values], freq=[0])
+    run_preflight()
+    model = load_model(horizon=HORIZON, nonnegative=False)
+    point_out, quant_out = model.forecast(horizon=HORIZON, inputs=[context_values])
+    point_out, quant_out = validate_forecast(point_out, quant_out, 1, HORIZON)
     point_fc = point_out[0]  # shape (HORIZON,)
     quant_fc = quant_out[0].T  # shape (10, HORIZON)
 
@@ -474,9 +476,10 @@ def main() -> None:
     )
 
     # --- Save JSON -----------------------------------------------------------
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = {
         "method": "two_phase",
+        "limitations": "Illustrative input; retrospective context fit and nominal forecast bands, not validated alarm severity",
         "context_method": "linear_detrend_zscore",
         "forecast_method": "quantile_prediction_intervals",
         "thresholds": {

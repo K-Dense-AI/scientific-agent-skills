@@ -7,7 +7,7 @@ These references support local, deterministic drafting and review. They are not 
 - Use only synthetic, de-identified, or aggregate data.
 - Populate drafts only from verified authorized source facts.
 - Do not diagnose, treat, dose, triage, interpret raw observations, fabricate results, sign, file, or submit.
-- Do not use external models, APIs, image tools, or cross-skill calls.
+- Keep data processing local; do not send inputs to external models, APIs, image tools, or other skills. Public guidance can be reviewed separately without patient or unpublished study details.
 - Keep every output marked as a draft requiring qualified review.
 
 ## File map
@@ -27,7 +27,7 @@ These references support local, deterministic drafting and review. They are not 
 
 ## Source handling
 
-`sources.md` records primary or official sources checked on 2026-07-23. Requirements, regional adoption, controlled terminologies, and professional standards can change. Before real-world use, a qualified reviewer must verify the current official source, applicable jurisdiction, institution, sponsor procedure, protocol, statistical analysis plan, and target-journal instructions.
+`sources.md` records primary or official sources checked on 2026-09-30. Requirements, regional adoption, controlled terminologies, and professional standards can change. Before real-world use, a qualified reviewer must verify the current official source, applicable jurisdiction, institution, sponsor procedure, protocol, statistical analysis plan, and target-journal instructions.
 
 ## Terminology
 

@@ -1,5 +1,7 @@
 # Text, Images, and Deep Models
 
+Framework/model integration fragments below are illustrative: they were checked against SHAP 0.52.0 source but not run with pretrained weights or a TensorFlow/PyTorch/Transformers installation during this review. Tiny local text and constant-image masking games are tested separately.
+
 Structured inputs require structured maskers. Token deletion, image inpainting, and neural-network reference activations define different explanation games; do not reduce them to ordinary independent tabular columns without justification.
 
 ## General Pattern
@@ -10,6 +12,8 @@ Structured inputs require structured maskers. Token deletion, image inpainting, 
 4. Inspect result shapes.
 5. Validate output reconstruction when the explainer supports it.
 6. Run masking and baseline sensitivity checks.
+
+The `max_evals`/`outputs` pattern below applies to supported permutation/partition paths; it is not a universal call signature for tree, linear, or deep explainers.
 
 ```python
 explainer = shap.Explainer(
@@ -63,7 +67,8 @@ def model_fn(text_batch):
 
 Decide whether to explain:
 
-- logits/log-odds, where additive evidence is often easier to interpret;
+- raw class logits (multiclass softmax logits are not per-class log-odds);
+- explicit binary or one-versus-rest log-odds, when that is the intended output;
 - probabilities, which stakeholders may understand but couple classes through normalization;
 - another scalar score.
 
@@ -71,7 +76,7 @@ State the choice in every plot.
 
 ### Transformers pipelines
 
-SHAP provides `shap.models.TransformersPipeline`:
+SHAP provides `shap.models.TransformersPipeline`. Configure the existing text-classification pipeline with `top_k=None` so every class score is returned; a top-one pipeline leaves other columns at zero in this wrapper. Validate the complete label mapping and finite output values on a tiny batch before explaining:
 
 ```python
 wrapped = shap.models.TransformersPipeline(
@@ -83,7 +88,9 @@ explainer = shap.Explainer(wrapped, masker, algorithm="partition")
 explanation = explainer(texts)
 ```
 
-`rescale_to_logits=True` changes the explained output. Do not compare these values directly with probability-space explanations.
+`rescale_to_logits=True` applies `log(p / (1-p))` independently to each returned class probability. These are one-versus-rest log-odds, not recovered multiclass model logits; scores at 0 or 1 produce infinities. Prefer an explicit model callable when original logits are required. Do not compare these values directly with probability-space explanations.
+
+SHAP 0.52.0's upstream test extras pin `transformers<4.54.0`; this is a compatibility warning, not proof of current Transformers 5 support. Test a separately locked integration rather than promising compatibility from the wrapper's existence. Generation wrappers below have the same framework-validation requirement.
 
 ### Text masking choices
 
@@ -119,7 +126,7 @@ Do not describe one generation explanation as a general explanation of the langu
 
 ## Image Classification
 
-`shap.maskers.Image` requires OpenCV (`cv2`), which is not installed by the `plots` extra. Add an OpenCV build compatible with the project's platform and dependency lock before using image maskers.
+`shap.maskers.Image` needs OpenCV (`cv2`) for string-based blur/inpainting, not for a numeric constant/array baseline. OpenCV is not installed by the `plots` extra. Add a compatible OpenCV build only when those methods are required. Inpainting converts pixels to `uint8`; use a suitable 0–255 image representation and put the model's normalization inside the callable. Applying it directly to normalized floats can destroy image information.
 
 Wrap preprocessing inside the model callable so masked images receive the same transformations:
 
@@ -221,7 +228,7 @@ explainer = shap.DeepExplainer(
 Requirements:
 
 - model inputs match background tensor structure;
-- output is scalar per row or the multi-output shape is handled explicitly;
+- PyTorch output has shape `(batch, outputs)`, including `(batch, 1)` for one output, rather than a squeezed `(batch,)`;
 - all relevant operations have supported attribution rules;
 - dropout/batch normalization are in inference mode.
 
@@ -272,11 +279,11 @@ Report:
 
 Since SHAP 0.45:
 
-- one input, one output: `(samples, *input_shape)`;
+- one input, one output: `(samples, *input_shape)` or an additional final singleton output axis; the PyTorch Deep 0.52.0 backend stacks even one output;
 - one input, multiple outputs: `(samples, *input_shape, outputs)`;
 - multiple inputs: a list with one array per model input.
 
-For `DeepExplainer(ranked_outputs=k)`, the return is `(values, indexes)`. The indexes tell which outputs were selected for each row.
+For `deep_explainer.shap_values(X, ranked_outputs=k)`, the return is `(values, indexes)`; `ranked_outputs` is not a constructor argument. The indexes tell which outputs were selected for each row.
 
 Always inspect rather than branch on a remembered version:
 
@@ -351,3 +358,8 @@ Text and image plots can reproduce sensitive input content. Before export:
 - DeepExplainer: https://shap.readthedocs.io/en/latest/generated/shap.DeepExplainer.html
 - GradientExplainer: https://shap.readthedocs.io/en/latest/generated/shap.GradientExplainer.html
 - TransformersPipeline: https://shap.readthedocs.io/en/latest/generated/shap.models.TransformersPipeline.html
+
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/pyproject.toml
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/models/_transformers_pipeline.py
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/explainers/_deep/deep_pytorch.py
+- Released source / upstream contract: https://huggingface.co/docs/transformers/main_classes/pipelines#transformers.TextClassificationPipeline

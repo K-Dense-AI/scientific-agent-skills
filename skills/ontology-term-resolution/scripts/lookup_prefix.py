@@ -134,8 +134,7 @@ def lookup_one(value: str) -> dict:
     try:
         payload = resolve_identifiers(compact)
     except IdError:
-        result["identifiers_org"] = ""
-        extra = f"Identifiers.org rejected {compact!r}"
+        extra = f"Identifiers.org resolver unavailable; landing page for {compact!r} unverified"
         result["detail"] = f"{result['detail']}; {extra}" if result["detail"] else extra
         return result
     if payload.get("errorMessage"):

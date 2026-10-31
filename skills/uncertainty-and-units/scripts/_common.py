@@ -18,9 +18,8 @@ MAX_REPORT_BYTES = 4 * 1024 * 1024
 MAX_COMPONENTS = 256
 MAX_VARIABLES = 64
 MAX_TRIALS = 5_000_000
-# JCGM 101:2008 recommends at least 10**6 trials for a 95% coverage
-# interval; below that the interval endpoints are dominated by sampling noise
-# and the clause 8 comparison stops discriminating.
+# A useful initial trial count, not a convergence guarantee. JCGM 101:2008
+# 7.9 and 8.2 require numerical stabilization for a validation claim.
 RECOMMENDED_TRIALS = 1_000_000
 DEFAULT_TRIALS = RECOMMENDED_TRIALS
 DEFAULT_SEED = 20_260_726
@@ -30,8 +29,8 @@ MAX_EXPRESSION_DEPTH = 32
 MAX_LITERAL_EXPONENT = 64
 
 PINNED_INSTALL = (
-    'uv pip install "pint==0.25.3" "uncertainties==3.2.3" '
-    '"numpy==2.5.1" "scipy==1.18.0"'
+    'uv pip install "pint==0.26.1" "uncertainties==3.2.3" '
+    '"numpy==2.5.3" "scipy==1.18.1"'
 )
 
 # Standard uncertainty of a Type B component equals its half-width divided by
@@ -338,9 +337,18 @@ def load_json(value: str | os.PathLike[str]) -> Any:
     def reject_constant(constant: str) -> None:
         raise CliError(f"non-standard JSON constant is not allowed: {constant}")
 
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise CliError(f"duplicate JSON key: {key!r}")
+            result[key] = value
+        return result
+
     try:
         with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle, parse_constant=reject_constant)
+            return json.load(handle, parse_constant=reject_constant,
+                             object_pairs_hook=unique_object)
     except (OSError, json.JSONDecodeError) as exc:
         raise CliError(f"cannot read valid JSON from {path.name}: {exc}") from exc
 
@@ -390,8 +398,11 @@ def parse_expression(text: str) -> ast.Expression:
                 f"expression may not contain {type(node).__name__}; allowed syntax is "
                 "names, numbers, + - * / **, and whitelisted functions"
             )
-        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
-            raise CliError("expression constants must be numbers")
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+                raise CliError("expression constants must be numbers")
+            if not math.isfinite(float(node.value)):
+                raise CliError("expression constants must be finite")
         if isinstance(node, ast.Name):
             if node.id.startswith("_"):
                 raise CliError("expression names must not start with an underscore")
@@ -405,8 +416,9 @@ def parse_expression(text: str) -> ast.Expression:
                 )
             if node.keywords:
                 raise CliError("function calls may not use keyword arguments")
-            if not 1 <= len(node.args) <= 2:
-                raise CliError("functions accept one or two positional arguments")
+            arities = {"atan2": (2,), "hypot": (2,), "log": (1, 2)}
+            if len(node.args) not in arities.get(node.func.id, (1,)):
+                raise CliError(f"wrong number of arguments for {node.func.id}")
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
             exponent = node.right
             if isinstance(exponent, ast.Constant) and isinstance(
@@ -505,14 +517,17 @@ def scalar_functions() -> dict[str, Callable[..., Any]]:
     """Return uncertainty-aware scalar functions with analytic derivatives."""
 
     try:
-        from uncertainties import umath
+        from uncertainties import umath, wrap
     except ImportError as exc:
         raise CliError(
             f"the uncertainties package is unavailable; install with `{PINNED_INSTALL}`"
         ) from exc
-    mapping: dict[str, Callable[..., Any]] = {"abs": abs}
+    # abs(UFloat) and umath.fabs are deprecated in uncertainties 3.2.3.
+    # At zero the derivative is undefined; do not invent a zero uncertainty.
+    absolute = wrap(math.fabs, [lambda x: 1.0 if x > 0 else (-1.0 if x < 0 else math.nan)])
+    mapping: dict[str, Callable[..., Any]] = {"abs": absolute, "fabs": absolute}
     for name in ALLOWED_FUNCTIONS:
-        if name == "abs":
+        if name in {"abs", "fabs"}:
             continue
         handler = getattr(umath, name, None)
         if handler is not None:
@@ -545,7 +560,10 @@ def array_functions() -> dict[str, Callable[..., Any]]:
         "expm1": np.expm1,
         "fabs": np.fabs,
         "hypot": np.hypot,
-        "log": np.log,
+        # np.log's second positional argument is an output buffer, NOT a base.
+        "log": lambda value, base=None: (
+            np.log(value) if base is None else np.log(value) / np.log(base)  # audit-units: ignore UNC003 -- MC arrays
+        ),
         "log10": np.log10,
         "log1p": np.log1p,
         "radians": np.radians,
@@ -637,8 +655,8 @@ def numerical_tolerance(combined_uncertainty: float, significant_digits: int) ->
         raise CliError("numerical tolerance is defined for 1 or 2 significant digits")
     if combined_uncertainty <= 0 or not math.isfinite(combined_uncertainty):
         raise CliError("combined standard uncertainty must be finite and positive")
-    # audit-units: ignore UNC003 -- u_c is a plain float here, never a ufloat
-    decade = math.log10(combined_uncertainty)
+    rounded = float(f"{combined_uncertainty:.{significant_digits}g}")
+    decade = math.log10(rounded)  # audit-units: ignore UNC003 -- plain float
     exponent = math.floor(decade) - (significant_digits - 1)
     return 0.5 * (10.0**exponent)
 
@@ -657,7 +675,8 @@ def shortest_coverage_interval(
     total = int(sorted_sample.size)
     if total < 2:
         raise CliError("a coverage interval needs at least two Monte Carlo trials")
-    inside = int(math.floor(coverage_probability * total))
+    # JCGM 101:2008 7.7.2 rounds p*M to the nearest integer.
+    inside = int(math.floor(coverage_probability * total + 0.5))
     inside = min(max(inside, 1), total - 1)
     lower = sorted_sample[: total - inside]
     upper = sorted_sample[inside:]

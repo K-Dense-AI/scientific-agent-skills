@@ -19,8 +19,10 @@ For multi-output tabular data, select one output:
 ```python
 class_exp = explanation[..., class_index]
 # or, when output names are populated:
-class_exp = explanation[..., "class_name"]
+class_exp = explanation[..., list(explanation.output_names).index("class_name")]
 ```
+
+Verify output names against the model first; 0.52.0 can discard names in permutation dispatch. Use integer output selection to avoid the ellipsis/string slicing bug.
 
 Most tabular plots expect either:
 
@@ -96,7 +98,7 @@ ax = shap.plots.bar(
 )
 ```
 
-`hclust(X, y)` uses outcome-redundancy information and can be expensive. Do not compute it using held-out labels if that would contaminate the analysis.
+`hclust(X, y)` defaults to an XGBoost-based outcome-redundancy metric and requires the optional `xgboost` package. This fragment is illustrative unless that integration is installed and exercised. For unsupervised feature clustering, use an explicit distance such as `shap.utils.hclust(X_background, metric="correlation")`; constant columns require care. Outcome-aware clustering can be expensive. Do not compute it using held-out labels if that would contaminate the analysis.
 
 ## Beeswarm Plot
 
@@ -117,7 +119,7 @@ Current 0.52 controls include:
 
 - `order`: default `explanation.abs.mean(0)`;
 - `clustering` and `cluster_threshold`;
-- `ax`;
+- `ax` (set `plot_size=None` when supplying an existing axis);
 - `log_scale`;
 - `color_bar`;
 - `s` for marker size;
@@ -306,7 +308,7 @@ shap.plots.text(text_explanation)
 For multi-output text:
 
 ```python
-class_text = text_explanation[..., "anger"]
+class_text = text_explanation[..., list(text_explanation.output_names).index("anger")]
 shap.plots.text(class_text)
 ```
 

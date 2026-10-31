@@ -1,6 +1,6 @@
 # Resource Semantics
 
-Research and behavior cut-off: **2026-07-23**. See
+Research and behavior cut-off: **2026-10-01**. See
 [`sources.md`](sources.md) for the official documentation used.
 
 ## Core rule: inventory is not entitlement
@@ -29,12 +29,18 @@ scheduler request.
   multithreading can expose multiple logical CPUs on one physical core.
 - A physical-core count describes topology, not the number of independent
   workers the process may start.
-- `os.cpu_count()` and `psutil.cpu_count(logical=True)` are host/system
-  inventory. They can exceed the CPUs usable by the process.
+- `psutil.cpu_count(logical=True)`, macOS `hw.logicalcpu`, and POSIX
+  `SC_NPROCESSORS_ONLN` provide host/system inventory. They can exceed the
+  CPUs usable by the process. `os.cpu_count()` is a fallback: Python 3.13+
+  `-X cpu_count` or `PYTHON_CPU_COUNT` overrides both Python CPU-count APIs.
+  The detector prefers independent inventory and keeps Python process count
+  as a separate planning input.
 - `os.process_cpu_count()` (Python 3.13+) is process-aware. On supported
   platforms, affinity APIs provide a more explicit process constraint.
 - On Windows systems with multiple processor groups, a system-wide logical
-  count and one process/thread group's usable count can differ.
+  count and one process/thread group's usable count can differ. Windows 11
+  and Server 2022 default affinity spans groups; do not assume every modern
+  Windows process is capped at 64 logical CPUs.
 
 The detector reports host logical and physical counts separately. It never
 derives physical cores from a logical count.
@@ -50,7 +56,10 @@ derives physical cores from a logical count.
   A finite ratio is CPU-time capacity, possibly fractional; it is not a core
   topology count.
 - Parent cgroups also constrain children, so the detector takes the most
-  restrictive finite ancestor quota.
+  restrictive finite visible ancestor quota. Membership is resolved through
+  `/proc/self/mountinfo` cgroup2 root/mountpoint fields. A namespace or delegated
+  mount may hide stronger ancestors. Missing files are not evidence of
+  unlimited capacity; cgroup v1 is outside the collector's implemented scope.
 
 For a `cpu.max` ratio of 1.5, the snapshot reports
 `capacity_cores: 1.5` and a conservative CPU-bound worker ceiling of 1. A
@@ -122,11 +131,17 @@ runtime compatibility as a separate requirement.
 
 AMD SMI or ROCm SMI success likewise does not prove HIP/ROCm runtime usability.
 New deployments should prefer `amd-smi`; `rocm-smi` is retained as a read-only
-fallback. On Linux, AMD recommends `ROCR_VISIBLE_DEVICES`; on Windows it
-recommends `HIP_VISIBLE_DEVICES`.
+fallback. The fixed AMD query selects `--asic --vram`, avoiding unrelated
+static fields. Current JSON nests VRAM size as `{value, unit}`; legacy ROCm SMI
+uses a flat byte field. AMD SMI labels binary MiB values `MB`, confirmed in its
+source conversion. The detector exposes this as `reported_total_bytes` and
+leaves dedicated memory null because APU/shared-memory topology is unresolved.
+On Linux, AMD recommends `ROCR_VISIBLE_DEVICES`; on Windows it recommends
+`HIP_VISIBLE_DEVICES`.
 
-An Apple integrated GPU is a Metal candidate, not a CUDA GPU. AMD GPUs are ROCm
-candidates, not CUDA GPUs. Neural engines, TPUs, FPGAs, and other accelerators
+An Apple integrated GPU is a Metal candidate, not a CUDA GPU. AMD SMI records
+are ROCm candidates; macOS display records are Metal candidates regardless of
+hardware vendor. Neural engines, TPUs, FPGAs, and other accelerators
 must also remain distinct from CUDA devices if another inventory source adds
 them.
 
@@ -142,6 +157,11 @@ Counts derived from those values are only upper bounds. Environment variables
 are not a security boundary and can be reset by an application; device
 namespace/cgroup controls are stronger isolation.
 
+Management counts describe records in a particular query. A physical NVIDIA
+GPU can expose several MIG devices, and AMD partition modes can also change
+runtime enumeration. Use the workload framework in its actual allocation to
+count usable devices; do not infer it from these candidate counts.
+
 ## Slurm and other schedulers
 
 The detector allowlists named Slurm variables and never dumps the environment.
@@ -155,6 +175,12 @@ Important scopes:
 - `SLURM_CPUS_ON_NODE`: CPUs allocated to the current batch step on the node;
   it can be shared among tasks.
 - `SLURM_JOB_CPUS_PER_NODE`: a per-node allocation list, not a process count.
+- `SLURM_TASKS_PER_NODE`: compressed counts such as `1(x2),4`; resolve the
+  current entry with `SLURM_NODEID`. Without that index, only a uniform list
+  is interpretable. Never substitute the first node's task count. The node ID
+  itself is not emitted. Requested `SLURM_NTASKS_PER_NODE` is a fallback only
+  when the allocation list is absent. Step overrides and heterogeneous job
+  components still require application/site-specific interpretation.
 - `SLURM_MEM_PER_CPU`: memory per allocated CPU. It becomes a per-task bound
   only when CPUs per task is known.
 - `SLURM_MEM_PER_NODE`: shared per-node memory upper bound.
@@ -195,7 +221,9 @@ Capacity, free blocks, user-writable blocks, path permission, filesystem quota,
 and actual ability to complete a write are different:
 
 - capacity is the filesystem's total size;
-- free blocks can include blocks reserved from an unprivileged user;
+- POSIX `f_bfree` includes blocks reserved from an unprivileged user;
+- `shutil.disk_usage().free` uses `f_bavail` on POSIX, so the detector reads
+  `statvfs` to keep filesystem free and user-available values separate;
 - POSIX `f_bavail` estimates blocks available to the current user;
 - `os.access(..., os.W_OK)` is a non-writing permission check, not proof that a
   future write will succeed;

@@ -1,336 +1,117 @@
-# gget Database Information
+# gget data sources and adapter contracts
 
-Overview of databases queried by gget modules, including update frequencies and important considerations.
+Reviewed against [gget 0.30.8 source](https://github.com/scverse/gget/tree/v0.30.8/gget)
+and the [current manual](https://scverse.org/gget/), 2026-09-30. Pin
+`gget==0.30.8` in Python >=3.12. A package pin does not freeze remote databases.
+Record query inputs, species, genome assembly, dataset release, retrieval date,
+software versions, warnings, and raw outputs. Most public queries need no key;
+COSMIC downloads and the deprecated GPT wrapper are exceptions.
 
-## Important Note
+## Reference, sequence, and structure services
 
-The databases queried by gget are continuously being updated, which sometimes changes their structure. gget modules are tested automatically on a biweekly basis and updated to match new database structures when necessary. For reproducible environments matching this skill, pin the current verified version:
+| Module | Transport and result contract | Boundaries |
+| --- | --- | --- |
+| `ref` | Reads Ensembl directory listings under `ftp.ensembl.org/pub/` and `ftp.ensemblgenomes.org/pub/`; returns release/file metadata or links. CLI `-d` downloads with curl. | Python has no `download` or `out_dir` parameter. Choose an explicit release; `info`/`seq` do not inherit that release. Non-vertebrate support excludes bacteria. |
+| `search` | Public MySQL (`mysql-eg-publicsql.ebi.ac.uk`, candidate ports 3306/5306/4157/3337/5316), with release discovery via Ensembl listings. Returns `ensembl_id`, `gene_name`, descriptions, `biotype`, `synonym`, `url`. | Matches names/descriptions/synonyms by substring. `limit=1` is not exact symbol resolution; require a unique exact symbol. `limit` is a local result cap, not a cursor. |
+| `info` | Ensembl `POST /lookup/id` (`ids`, `expand`), plus UniProtKB search, NCBI Gene **HTML parsing**, and optional PDBe `GET /pdbe/aggregated-api/mappings/ensembl_to_pdb/{id}`. | Returns a DataFrame indexed by query ID, with `primary_gene_name`/`ensembl_gene_name`, not `gene_name`. `pdb_id` may be a list. Preserve the index. Maximum Ensembl batch is 1000 IDs; versioned IDs are resolved against current data. |
+| `seq` | Ensembl `/sequence/id` for nucleotide sequence; `info` and UniProtKB for protein sequence. Python returns a list of alternating FASTA header/sequence lines or `None`. | Gene nucleotide sequence is genomic, not transcript CDS. Never apply HGVS `c.` positions to that sequence without obtaining the exact versioned transcript CDS. Protein isoforms are distinct records. |
+| `pdb` | Structure text from `files.rcsb.org/download/{id}.pdb` or `.cif`; metadata from `data.rcsb.org/rest/v1/core/{resource}/{id}` with an assembly/entity/chain identifier where required. | Prefer explicit `resource="mmcif"`; default PDB retrieval can fall back to mmCIF. Save with the corresponding extension. No pagination for one object. |
+| `g2p` | Public `GET https://g2p.broadinstitute.org/api/gene/{gene}/protein/{accession}/protein-features`, `/gene-transcript-protein-isoform-structure-map`, or `/{alternative_isoform}/alignment`; TSV parsed to DataFrame. | No pagination. Missing one identifier triggers a UniProt lookup; gene-only resolution picks the first reviewed human match. Supply the exact pair for reproducibility. `residues` filters locally after download. Invalid arguments can raise `ValueError`; network/unknown-pair failures return `None`. |
+| `blast` | NCBI `https://blast.ncbi.nlm.nih.gov/Blast.cgi`, submitting `CMD=Put`, then polling the RID with `CMD=Get`; gget parses the returned hit table. | Search job, not a synchronous database lookup. `limit` controls hit count, not database completeness. Respect [NCBI remote BLAST usage guidance](https://blast.ncbi.nlm.nih.gov/doc/blast-help/developerinfo.html); use local BLAST/DIAMOND for large batches. |
+| `blat` | UCSC `https://genome.ucsc.edu/cgi-bin/hgBlat` with sequence, type, assembly, and JSON output. Returns alignment rows. | Exact assembly matters; UCSC may throttle or return HTML errors. Coordinates/strand must be checked before mapping variants. No gget pagination. |
+| `muscle`, `diamond` | Local bundled/platform binaries; DIAMOND builds a database from supplied reference sequences. | MUSCLE writes `out` or prints alignment and returns `None`; no `save` argument. OpenMP runtime libraries may be required. DIAMOND `diamond_db` names the database to create/save; it does not replace the required `reference`. |
+| `elm` | `gget setup elm` downloads instances/classes/interaction-domain files from `elm.eu.org`; local regex and DIAMOND searches, with UniProt lookup when requested. | Returns `(ortholog_df, regex_df)`; short motif matches alone do not demonstrate function. Setup is a network download, not authentication. |
 
-```bash
-uv pip install "gget==0.30.5"
-```
+The released `info`/`seq` adapter still uses **HTTP** for Ensembl REST. Public
+execution returned HTTP 500 here on 2026-09-30; the equivalent direct HTTPS POST
+also returned 500, so HTTP alone is not established as the cause. Treat this as
+a transport/service failure, not missing biological evidence. Check upstream
+availability and the [Ensembl REST API](https://rest.ensembl.org/) before retrying.
+No SDK transport patch is silently applied by this skill. UniProt search helpers
+prefer reviewed entries and retry without that restriction if none match; they
+do not follow search pagination links. `seq(isoforms=True)` therefore should not
+be treated as an exhaustive, release-frozen protein archive.
 
-## Database Directory
+## Expression, association, and enrichment services
 
-### Genomic Reference Databases
+| Module | Transport and output | Completeness and interpretation |
+| --- | --- | --- |
+| `archs4` correlation | `POST https://maayanlab.cloud/matrixapi/coltop`, JSON `id` and `count`; `rowids`/`values` become `gene_symbol`/`pearson_correlation`. | Human coexpression only; the `species` argument does not select mouse correlations. `gene_count` defaults to 100. No pagination. Correlation is not causation. |
+| `archs4` tissue | `POST https://maayanlab.cloud/archs4/search/loadExpressionTissue.php?search={symbol}&species={human|mouse}&type=tissue`; CSV becomes `id`, `min`, `q1`, `median`, `q3`, `max`. | Tissue labels are hierarchical IDs, not a `tissue` column. Bulk ARCHS4 values and Census counts are different measurements; do not compare their magnitudes as a shared scale. |
+| `cellxgene` | `cellxgene_census.open_soma` + `get_anndata`; `meta_only=True` reads the observation table instead. | Metadata rows are **cells**, not datasets. The gene filter is ignored in metadata-only mode. `is_primary_data=True` by default; use observation filters and a dated Census release. A small gene set can still select millions of cells. Raw-count QC/library normalization needs the full measured feature universe. |
+| `enrichr` human/mouse | Uploads a gene list via multipart `POST https://maayanlab.cloud/speedrichr/api/addList` (`list`, `description`); receives `userListId`. `GET /enrich` uses `userListId`, `backgroundType`. Custom background: multipart `POST /addbackground` -> `backgroundid`; `POST /backgroundenrich` with both IDs and library. | Each call submits the supplied genes to the public service. Response is a library-keyed array, normalized to `rank`, `path_name`, `p_val`, `z_score`, `combined_score`, `overlapping_genes`, `adj_p_val`, `database`. No pagination or automatic significance threshold. |
+| `enrichr` other species | `/{Fly|Yeast|Worm|Fish}Enrichr/addList` and `/enrich` at maayanlab.cloud. | Full species-specific library names required; shortcuts and custom backgrounds are unsupported. Mouse uses the human service; confirm library organism/identifier compatibility. `ensembl=True` and `ensembl_bkg=True` are needed for identifier conversion. |
+| `bgee` | `GET https://bgee.org/api/`, JSON `page=gene, action=general_info` resolves species, `action=homologs` gives orthologs; `page=data, action=expr_calls` returns expression calls. | Orthology accepts one gene; multiple expression IDs must belong to one species. The adapter does not expose pagination. Expression calls describe presence/confidence, not a differential-expression experiment. |
+| `opentargets` | Public `POST https://api.platform.opentargets.org/api/v4/graphql`, JSON `query`/`variables`. Diseases use `associatedDiseases`; drugs use `drugAndClinicalCandidates`; expression uses `baselineExpression`. | All filters are applied **locally after `limit`**. Expression fetches page 0 only, up to 3000 rows. Diseases/drugs/interactions omit explicit pages and therefore use server defaults. No automatic traversal; no claim of exhaustiveness even with `limit=None`. |
+| `cbio_search` | `bravado` client discovers `https://www.cbioportal.org/api/v2/api-docs`, reads `/studies`, then filters keywords locally. | Optional dependency: `gget setup cbio`. Missing dependencies can log an error and return `[]`; this is not proof of no studies. |
+| `cbio_plot` | Downloads public cBioPortal datahub text files and resolves Git LFS objects; caches files locally. Returns a boolean and writes figures. | Does not consume BLAST or AlphaFold output. Pin study IDs/data snapshots and record denominator/missing samples before interpreting heatmaps. |
 
-#### Ensembl
-- **Used by:** gget ref, gget search, gget info, gget seq
-- **Description:** Comprehensive genome database with annotations for vertebrate and invertebrate species
-- **Update frequency:** Regular releases (numbered); new releases approximately every 3 months
-- **Access:** FTP downloads, REST API
-- **Website:** https://www.ensembl.org/
-- **Notes:**
-  - Supports both vertebrate and invertebrate genomes
-  - Can specify release number for reproducibility
-  - Shortcuts available for common species ('human', 'mouse')
+Open Targets disease output uses `score`, `disease.id`, `disease.name`; drug
+output uses `drug.name`, `drug.drugType`, `drug.maximumClinicalStage` (strings such
+as `APPROVAL`/`PHASE2`, not numeric phases). `score` is an overall association
+score, not a causal probability. Associated traits include phenotypes and
+measurements. Expression columns are `median/min/q1/q3/max/unit`,
+`tissueBiosample.*`, `celltypeBiosample.*`, `datasourceId`, `datatypeId`.
+Interactions use `intA`, `targetB.id`, `targetB.approvedSymbol`, `score`.
+The released CLI flag is singular `--filter` and has no OR flag, despite stale upstream manual wording.
+Fields that are entirely null are dropped; singleton lists can collapse to a
+scalar/dictionary. Inspect columns and types before joining or filtering.
 
-#### UCSC Genome Browser
-- **Used by:** gget blat
-- **Description:** Genome browser database with BLAT alignment tool
-- **Update frequency:** Regular updates with new assemblies
-- **Access:** Web service API
-- **Website:** https://genome.ucsc.edu/
-- **Notes:**
-  - Multiple genome assemblies available (hg38, mm39, etc.)
-  - BLAT optimized for vertebrate genomes
+Sources: [Open Targets manual](https://scverse.org/gget/en/opentargets.html),
+[released query/normalization code](https://github.com/scverse/gget/blob/v0.30.8/gget/gget_opentargets.py),
+[Enrichr adapter](https://github.com/scverse/gget/blob/v0.30.8/gget/gget_enrichr.py),
+[Census manual](https://scverse.org/gget/en/cellxgene.html).
 
-### Protein & Structure Databases
+## Downloaded datasets and legacy modules
 
-#### UniProt
-- **Used by:** gget info, gget seq (amino acid sequences), gget elm
-- **Description:** Universal Protein Resource, comprehensive protein sequence and functional information
-- **Update frequency:** Regular releases (weekly for Swiss-Prot, monthly for TrEMBL)
-- **Access:** REST API
-- **Website:** https://www.uniprot.org/
-- **Notes:**
-  - Swiss-Prot: manually annotated and reviewed
-  - TrEMBL: automatically annotated
+- **COSMIC:** local TSV search after a separately licensed download. The adapter
+  authenticates the scripted download URL under
+  `https://cancer.sanger.ac.uk/api/mono/products/v1/downloads/scripted` with COSMIC
+  account credentials; `path` identifies project/release/GRCh version and
+  `bucket=downloads`. The JSON response supplies a signed download URL. Do not
+  log credentials or signed URLs. Use the interactive prompt or explicitly read
+  `COSMIC_EMAIL`/`COSMIC_PASSWORD` in Python; these names are conventions, not
+  automatic SDK environment-variable discovery. `cancer_example` is a public
+  taster exception. Record project, release, assembly, file checksum, and license.
+- **virus:** NCBI Datasets v2 `/virus/{taxon|accession}/{value}/dataset_report`
+  returns `reports` and `next_page_token`; gget iterates using `page_token` and
+  streams metadata. E-utilities `esearch.fcgi`, `epost.fcgi`, `efetch.fcgi` and the
+  NCBI datasets CLI provide discovery/history/sequence and cached-download paths.
+  An optional `api_key` increases applicable NCBI limits; it is not required for
+  public data. Some filters run locally after downloads. Restrict taxa/dates and
+  inspect command summaries, failed downloads, counts, and baseline/merge results.
+  Python uses `baseline_metadata`, `merge_results=True`; CLI uses `--baseline`
+  and `--merge-results`/`--no-merge`.
+- **8cube:** GET `/specificity`, `/psi_block`, `/gene_expression` at
+  `https://eightcubedb.onrender.com/`; CSV response, no exposed pagination or key.
+  Repeat the `gene_list` query parameter for each gene; block/expression additionally use
+  `analysis_level` and `analysis_type`. Python functions are `specificity`,
+  `psi_block`, `gene_expression` and require a list/tuple, not a bare gene string.
+- **mutate:** local sequence transformation. `c.` coordinates assume the supplied
+  sequence is the matching CDS; validate reference bases, transcript versions,
+  strand, and output length. It does not establish clinical/functional impact.
+- **alphafold:** deprecated, unmaintained wrapper since 0.30.7. Setup downloads
+  model/dependency assets; prediction uses local compute and reference sequence
+  resources. `jackhmmer_savedir` selects temporary storage. No prediction was
+  validated in this refresh; increased recycles do not guarantee accuracy.
+- **gpt:** deprecated, unmaintained wrapper using legacy
+  `openai.ChatCompletion.create` and dictionary response access. It is not
+  compatible with the modern OpenAI Python interface. Its model default is a
+  legacy string, not a current recommendation. No paid/authenticated calls were
+  made, and this skill does not recommend reinstalling an obsolete SDK.
 
-#### NCBI (National Center for Biotechnology Information)
-- **Used by:** gget info, gget bgee (for non-Ensembl species)
-- **Description:** Gene and protein databases with extensive cross-references
-- **Update frequency:** Continuous updates
-- **Access:** E-utilities API
-- **Website:** https://www.ncbi.nlm.nih.gov/
-- **Databases:** Gene, Protein, RefSeq
+## Verification boundary
 
-#### RCSB PDB (Protein Data Bank)
-- **Used by:** gget pdb
-- **Description:** Repository of 3D structural data for proteins and nucleic acids
-- **Update frequency:** Weekly updates
-- **Access:** REST API
-- **Website:** https://www.rcsb.org/
-- **Notes:**
-  - Experimentally determined structures (X-ray, NMR, cryo-EM)
-  - Includes metadata about experiments and publications
+Public reads in this review succeeded for ARCHS4 tissue/correlation, Open Targets
+all seven resources, RCSB mmCIF, Bgee orthology/expression, all three G2P resources,
+all three 8cube routes, cBioPortal search after installing bravado, UniProt single
+entry, NCBI viral accession metadata, and Ensembl release-110 links/search. Script tests mock service
+responses with released field names; they do not verify live availability.
+Ensembl REST failed as described above. A local MUSCLE smoke failed with
+`Bad CPU type in executable` on this arm64 macOS host: obtain a compatible local
+aligner rather than assuming the bundled binary works. Optional Census, DIAMOND,
+large viral/ELM/cBioPortal downloads, COSMIC authentication, and legacy prediction
+or generation are not covered by those public successes. A service error or
+partial response must stay distinguishable from a biological negative result.
 
-#### ELM (Eukaryotic Linear Motif)
-- **Used by:** gget elm
-- **Description:** Database of functional sites in eukaryotic proteins
-- **Update frequency:** Periodic updates
-- **Access:** Downloaded database (via gget setup elm)
-- **Website:** http://elm.eu.org/
-- **Notes:**
-  - Requires local download before first use
-  - Contains validated motifs and patterns
-
-### Sequence Similarity Databases
-
-#### BLAST Databases (NCBI)
-- **Used by:** gget blast
-- **Description:** Pre-formatted databases for BLAST searches
-- **Update frequency:** Regular updates
-- **Access:** NCBI BLAST API
-- **Databases:**
-  - **Nucleotide:** nt (all GenBank), refseq_rna, pdbnt
-  - **Protein:** nr (non-redundant), swissprot, pdbaa, refseq_protein
-- **Notes:**
-  - nt and nr are very large databases
-  - Consider specialized databases for faster, more focused searches
-
-### Expression & Correlation Databases
-
-#### ARCHS4
-- **Used by:** gget archs4
-- **Description:** Massive mining of publicly available RNA-seq data
-- **Update frequency:** Periodic updates with new samples
-- **Access:** HTTP API
-- **Website:** https://maayanlab.cloud/archs4/
-- **Data:**
-  - Human and mouse RNA-seq data
-  - Correlation matrices
-  - Tissue expression atlases
-- **Citation:** Lachmann et al., Nature Communications, 2018
-
-#### CZ CELLxGENE Discover
-- **Used by:** gget cellxgene
-- **Description:** Single-cell RNA-seq data from multiple studies
-- **Update frequency:** Continuous additions of new datasets
-- **Access:** Census API (via cellxgene-census package)
-- **Website:** https://cellxgene.cziscience.com/
-- **Data:**
-  - Single-cell RNA-seq count matrices
-  - Cell type annotations
-  - Tissue and disease metadata
-- **Notes:**
-  - Requires gget setup cellxgene
-  - Gene symbols are case-sensitive
-  - May not support latest Python versions
-
-#### Bgee
-- **Used by:** gget bgee
-- **Description:** Gene expression and orthology database
-- **Update frequency:** Regular releases
-- **Access:** REST API
-- **Website:** https://www.bgee.org/
-- **Data:**
-  - Gene expression across tissues and developmental stages
-  - Orthology relationships across species
-- **Citation:** Bastian et al., 2021
-
-### Functional & Pathway Databases
-
-#### Enrichr / modEnrichr
-- **Used by:** gget enrichr
-- **Description:** Gene set enrichment analysis web service
-- **Update frequency:** Regular updates to underlying databases
-- **Access:** REST API
-- **Website:** https://maayanlab.cloud/Enrichr/
-- **Databases included:**
-  - KEGG pathways
-  - Gene Ontology (GO)
-  - Transcription factor targets (ChEA)
-  - Disease associations (GWAS Catalog)
-  - Cell type markers (PanglaoDB)
-- **Notes:**
-  - Supports multiple model organisms
-  - Background gene lists can be provided for custom enrichment
-
-### Disease & Drug Databases
-
-#### Open Targets
-- **Used by:** gget opentargets
-- **Description:** Integrative platform for disease-target associations
-- **Update frequency:** Regular releases (quarterly)
-- **Access:** GraphQL API
-- **Website:** https://www.opentargets.org/
-- **Data:**
-  - Disease associations
-  - Drug information and clinical trials
-  - Target tractability
-  - Pharmacogenetics
-  - Gene expression
-  - DepMap gene-disease effects
-  - Protein-protein interactions
-
-#### cBioPortal
-- **Used by:** gget cbio
-- **Description:** Cancer genomics data portal
-- **Update frequency:** Continuous addition of new studies
-- **Access:** Web API, downloadable datasets
-- **Website:** https://www.cbioportal.org/
-- **Data:**
-  - Mutations, copy number alterations, structural variants
-  - Gene expression
-  - Clinical data
-- **Notes:**
-  - Large datasets; caching recommended
-  - Multiple cancer types and studies available
-
-#### COSMIC (Catalogue Of Somatic Mutations In Cancer)
-- **Used by:** gget cosmic
-- **Description:** Comprehensive cancer mutation database
-- **Update frequency:** Regular releases
-- **Access:** Download (requires account and license for commercial use)
-- **Website:** https://cancer.sanger.ac.uk/cosmic
-- **Data:**
-  - Somatic mutations in cancer
-  - Gene census
-  - Cell line data
-  - Drug resistance mutations
-- **Important:**
-  - Free for academic use
-  - License fees apply for commercial use
-  - Requires COSMIC account credentials
-  - Prefer the interactive prompt or named environment variables over credentials in CLI arguments
-  - Must download database before querying
-
-#### NCBI Virus / INSDC
-- **Used by:** gget virus
-- **Description:** Viral nucleotide sequences and metadata from International Nucleotide Sequence Database Collaboration sources, accessed via NCBI Virus and optionally enriched with GenBank metadata
-- **Update frequency:** Continuous additions and corrections
-- **Access:** NCBI Virus / NCBI datasets APIs and bundled NCBI datasets CLI for optimized SARS-CoV-2 and Alphainfluenza paths
-- **Website:** https://www.ncbi.nlm.nih.gov/labs/virus/
-- **Data:**
-  - Viral nucleotide FASTA sequences
-  - Metadata CSV/JSONL
-  - Optional GenBank XML/CSV metadata and protein/gene annotations
-- **Notes:**
-  - Use restrictive host/completeness/date/length filters for broad taxa
-  - Keep command summaries for reproducibility and recovery
-  - Avoid unfiltered `--download_all_accessions`
-
-#### 8cubeDB
-- **Used by:** gget 8cube
-- **Description:** snRNA-seq-derived gene specificity and normalized expression metrics across mouse strains, tissues, sexes, and individuals
-- **Update frequency:** Project/version dependent
-- **Access:** 8cubeDB web API
-- **Website:** https://eightcubedb.onrender.com/
-- **Data:**
-  - Gene-level specificity metrics
-  - Block-level specificity metrics
-  - Mean and variance of normalized expression
-
-### AI & Prediction Services
-
-#### AlphaFold2 (DeepMind)
-- **Used by:** gget alphafold
-- **Description:** Deep learning model for protein structure prediction
-- **Model version:** Simplified version for local execution
-- **Access:** Local computation (requires model download via gget setup)
-- **Website:** https://alphafold.ebi.ac.uk/
-- **Notes:**
-  - Requires ~4GB model parameters download
-  - Requires OpenMM installation
-  - Computationally intensive
-  - Python version-specific requirements
-
-#### OpenAI API
-- **Used by:** gget gpt
-- **Description:** Large language model API
-- **Update frequency:** New models released periodically
-- **Access:** REST API (requires API key)
-- **Website:** https://openai.com/
-- **Notes:**
-  - Default model: gpt-3.5-turbo
-  - Requires an API key; prefer `OPENAI_API_KEY` in Python workflows and avoid hard-coded keys
-  - Set billing limits to control costs
-
-## Data Consistency & Reproducibility
-
-### Version Control
-To ensure reproducibility in analyses:
-
-1. **Specify database versions/releases:**
-   ```python
-   # Use specific Ensembl release
-   gget.ref("homo_sapiens", release=110)
-
-   # Use specific Census version
-   gget.cellxgene(gene=["PAX7"], census_version="2023-07-25")
-   ```
-
-2. **Document gget version:**
-   ```python
-   import gget
-   print(gget.__version__)
-   ```
-
-   Current verified version for this skill: `0.30.5` (requires Python >=3.8).
-
-3. **Save raw data:**
-   ```python
-   # Always save results for reproducibility
-   results = gget.search(["ACE2"], species="homo_sapiens")
-   results.to_csv("search_results_2025-01-15.csv", index=False)
-   ```
-
-### Handling Database Updates
-
-1. **Regular gget updates:**
-   - Update gget biweekly to match database structure changes
-   - Check release notes for breaking changes
-
-2. **Error handling:**
-   - Database structure changes may cause temporary failures
-   - Check GitHub issues: https://github.com/pachterlab/gget/issues
-   - Update gget if errors occur
-
-3. **API rate limiting:**
-   - Implement delays for large-scale queries
-   - Use local databases (DIAMOND, COSMIC) when possible
-   - Cache results to avoid repeated queries
-   - For `gget virus`, use restrictive filters and resume partial downloads with baseline/merge options
-
-## Database-Specific Best Practices
-
-### Ensembl
-- Use species shortcuts ('human', 'mouse') for convenience
-- Specify release numbers for reproducibility
-- Check available species with `gget ref --list_species`
-
-### UniProt
-- UniProt IDs are more stable than gene names
-- Swiss-Prot annotations are manually curated and more reliable
-- Use PDB flag in gget info only when needed (increases runtime)
-
-### BLAST/BLAT
-- Start with default parameters, then optimize
-- Use specialized databases (swissprot, refseq_protein) for focused searches
-- Consider E-value cutoffs based on query length
-
-### Expression Databases
-- Gene symbols are case-sensitive in CELLxGENE
-- ARCHS4 correlation data is based on co-expression patterns
-- Consider tissue-specificity when interpreting results
-
-### Cancer Databases
-- cBioPortal: cache data locally for repeated analyses
-- COSMIC: download appropriate database subset for your needs
-- Respect license agreements for commercial use
-- Keep COSMIC credentials out of shell history, notebooks, and committed files
-
-### Viral Databases
-- Prefer taxon/accession-specific `gget virus` queries over all-accession downloads
-- Check `command_summary.txt` after each run for errors, software versions, and output paths
-- Use GenBank metadata only when needed because it increases runtime and output size
-
-## Citations
-
-When using gget, cite both the gget publication and the underlying databases:
-
-**gget:**
-Luebbert, L. & Pachter, L. (2023). Efficient querying of genomic reference databases with gget. Bioinformatics. https://doi.org/10.1093/bioinformatics/btac836
-
-**Database-specific citations:** Check references/ directory or database websites for appropriate citations.
+Cite [gget](https://doi.org/10.1093/bioinformatics/btac836) and the databases used.

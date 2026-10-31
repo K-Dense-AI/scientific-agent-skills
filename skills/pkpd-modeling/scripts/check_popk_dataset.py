@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
-"""Validate a NONMEM/nlmixr2-ready population PK dataset before it costs you a run.
+"""Check common NONMEM-style population PK dataset conventions.
 
-Most population analyses lose more time to dataset defects than to modelling.
-The defects that hurt are the silent ones: NONMEM reads a non-numeric DV as
-zero rather than refusing it, a missing II turns ADDL into nothing, records
-that share a timestamp are applied in file order, and a dose with no
-observations contributes an individual whose ETAs are pure prior. None of these
-stop a run. They just change the answer.
+This is a partial sanity checker, not an NM-TRAN emulator. Verify actual event
+ordering, numeric/censored DV conventions, dose history and the model's input
+mapping. Advanced MDV/SS, pure PD and multi-analyte datasets need tailored checks.
 
     python3 check_popk_dataset.py -i nmdata.csv
-    python3 check_popk_dataset.py -i nmdata.csv --covariates WT,AGE,CRCL --time-varying WT
-    python3 check_popk_dataset.py -i nmdata.csv --strict --format json
+    python3 check_popk_dataset.py -i nmdata.csv --covariates WT,CRCL --time-varying WT
 
-Checks are grouped as errors (the run will be wrong), warnings (the run may be
-wrong), and notes (worth confirming). Exit code is 1 if anything at or above
-``--fail-on`` was raised.
+Exit 1 means a finding at or above --fail-on; --strict also fails on warnings.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 from collections import Counter
 from typing import Sequence
 
@@ -49,7 +44,8 @@ def _num(value: str) -> float | None:
     if text.lower() in MISSING:
         return None
     try:
-        return float(text)
+        value = float(text)
+        return value if math.isfinite(value) else None
     except ValueError:
         return None
 
@@ -161,7 +157,7 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
                 mdv_conflict.append(index)
             if amt not in (None, 0.0):
                 obs_with_amt.append(index)
-        if is_dose and (amt is None or amt <= 0):
+        if is_dose and (amt is None or amt <= 0) and not (ss_col and (_num(row.get(ss_col, "")) or 0) > 0 and rate_col and (_num(row.get(rate_col, "")) or 0) > 0):
             dose_without_amt.append(index)
 
         if rate_col and not _is_missing(row.get(rate_col, "")):
@@ -170,7 +166,8 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
                 rate_issues.append(index)
         if ss_col and (row.get(ss_col) or "0").strip() not in {"0", "", "."}:
             ii = _num(row.get(ii_col, "")) if ii_col else None
-            if not ii:
+            constant_infusion = amt in (None, 0.0) and (_num(row.get(rate_col, "")) or 0) > 0
+            if (ii is None or ii <= 0) and not constant_infusion:
                 ss_missing_ii.append(index)
         if addl_col and (_num(row.get(addl_col, "")) or 0) > 0:
             ii = _num(row.get(ii_col, "")) if ii_col else None
@@ -183,8 +180,8 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
         found.add(
             "error",
             "non-numeric DV",
-            "DV contains text (for example 'BLQ' or '<LLOQ'). NM-TRAN does not reject these - it reads "
-            "them as 0, so they enter the fit as genuine zero concentrations. Recode to a numeric "
+            "DV contains nonnumeric or nonfinite text (for example BLQ). Do not rely on parsing or "
+            "automatic recoding to represent censoring. Recode to a numeric "
             "value plus a BLQ flag column and choose an M-method.",
             bad_dv_text,
         )
@@ -209,13 +206,23 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
     if mdv_conflict:
         found.add("warning", "MDV=1 with a DV present", "the observation will be ignored by the estimation", mdv_conflict)
     if rate_issues:
-        found.add("error", "invalid RATE", "RATE must be >0, or -1 (modelled duration), or -2 (modelled rate)", rate_issues)
+        found.add("error", "invalid RATE", "RATE must be 0 (bolus), >0 (known infusion rate), -1 (modelled rate), or -2 (modelled duration)", rate_issues)
     if ss_missing_ii:
         found.add("error", "SS without II", "a steady-state record needs a positive II", ss_missing_ii)
     if addl_missing_ii:
-        found.add("error", "ADDL without II", "ADDL repeats a dose every II; with no II the extra doses never happen", addl_missing_ii)
+        found.add("error", "ADDL without II", "ADDL needs positive II; invalid events must be corrected before NM-TRAN/PREDPP", addl_missing_ii)
     if zero_ii:
         found.add("error", "ADDL with II<=0", "II must be positive for ADDL to place additional doses", zero_ii)
+
+    seen_ids, previous_id = set(), None
+    for row in rows:
+        sid = row.get(id_col, "")
+        if sid != previous_id and sid in seen_ids:
+            found.add("error", "noncontiguous ID", f"subject {sid} occurs in separate blocks")
+        seen_ids.add(sid)
+        previous_id = sid
+        if _num(sid) is None:
+            found.add("error", "ID not numeric", "NONMEM ID must be numeric")
 
     # ---- per-subject checks
     no_obs, no_dose, unsorted, duplicated, first_not_dose = [], [], [], [], []
@@ -234,7 +241,7 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
             if (evid in {"1", "4"}) if evid_col else bool(amt and amt > 0):
                 n_dose += 1
             elif (evid == "0") if evid_col else True:
-                if not _is_missing(row.get(dv_col, "")):
+                if not _is_missing(row.get(dv_col, "")) and (not mdv_col or _num(row.get(mdv_col, "0")) in (0, None)):
                     n_obs += 1
         obs_counts.append(n_obs)
         dose_counts.append(n_dose)
@@ -243,7 +250,16 @@ def check_dataset(rows: list[dict[str, str]], args: argparse.Namespace) -> tuple
         if n_dose == 0:
             no_dose.append(subject)
         numeric = [t for t, _ in times if t is not None]
-        if any(b < a for a, b in zip(numeric, numeric[1:])):
+        previous_time = None
+        decreased = False
+        for _, row in records:
+            current_time = _num(row.get(time_col, ""))
+            reset = evid_col and row.get(evid_col) in {"3", "4"}
+            if current_time is not None and previous_time is not None and current_time < previous_time and not reset:
+                decreased = True
+            if current_time is not None:
+                previous_time = current_time
+        if decreased:
             unsorted.append(subject)
         counts = Counter(numeric)
         if any(v > 1 for v in counts.values()):
@@ -368,6 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     args.covariates = [c.strip() for c in args.covariates.split(",") if c.strip()]
     args.time_varying = [c.strip() for c in args.time_varying.split(",") if c.strip()]
     if args.strict:

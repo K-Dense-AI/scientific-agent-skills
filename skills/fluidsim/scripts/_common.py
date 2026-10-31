@@ -76,7 +76,10 @@ def finite_float(
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ToolError(f"{name} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ToolError(f"{name} must be a finite number") from exc
     if not math.isfinite(number):
         raise ToolError(f"{name} must be a finite number")
     if minimum is not None and number < minimum:

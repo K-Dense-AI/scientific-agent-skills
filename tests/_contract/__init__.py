@@ -23,16 +23,13 @@ Two halves, split by what they need from the environment:
     packages are absent, and runs for real under
     `python tests/run_all.py --isolated`.
 
-`office`
-    The OOXML tree that docx, pptx, and xlsx each ship a byte-identical copy of.
-
 `schematic`
-    The AI schematic generator that scientific-schematics, latex-posters, and
-    literature-review each ship a byte-identical copy of.
+    The AI schematic generator that scientific-schematics, latex-posters,
+    literature-review, and scientific-slides each ship a byte-identical copy of.
 """
 
 from __future__ import annotations
 
-from . import cli, office, schematic, structure
+from . import cli, schematic, structure
 
-__all__ = ["cli", "office", "schematic", "structure"]
+__all__ = ["cli", "schematic", "structure"]

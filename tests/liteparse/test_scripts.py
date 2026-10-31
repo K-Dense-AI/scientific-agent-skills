@@ -5,9 +5,8 @@ error containment. All three are testable with a stub parser -- and the third
 matters most: a batch run over a hundred documents must not abort because one
 of them is corrupt.
 
-`parse_one` names its output from the source *stem*, so two sources whose stems
-collide overwrite each other. That is pinned below as current behaviour rather
-than asserted to be safe.
+Output paths preserve source suffixes and relative directories; existing files
+are reported as failures instead of overwritten.
 """
 
 from __future__ import annotations
@@ -49,9 +48,10 @@ def text_item(text: str = "hello"):
 
 def parse_result(text: str = "hello"):
     page = SimpleNamespace(
-        page_num=1, width=612.0, height=792.0, text=text, text_items=[text_item(text)]
+        page_num=1, width=612.0, height=792.0, text=text, text_items=[text_item(text)],
+        markdown=text, page_label=None
     )
-    return SimpleNamespace(text=text, pages=[page])
+    return SimpleNamespace(text=text, pages=[page], total_pages=1, page_errors=[])
 
 
 class StubParser:
@@ -172,9 +172,9 @@ class ParseOneTests(unittest.TestCase):
             self.parser, Path("paper.pdf"), self.output, "text"
         )
         self.assertTrue(ok)
-        self.assertIn("paper.txt", message)
+        self.assertIn("paper.pdf.txt", message)
         self.assertEqual(
-            (self.output / "paper.txt").read_text(encoding="utf-8"),
+            (self.output / "paper.pdf.txt").read_text(encoding="utf-8"),
             "contents of paper.pdf",
         )
 
@@ -183,8 +183,8 @@ class ParseOneTests(unittest.TestCase):
             self.parser, Path("paper.pdf"), self.output, "json"
         )
         self.assertTrue(ok)
-        self.assertIn("paper.json", message)
-        payload = json.loads((self.output / "paper.json").read_text(encoding="utf-8"))
+        self.assertIn("paper.pdf.json", message)
+        payload = json.loads((self.output / "paper.pdf.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["text"], "contents of paper.pdf")
         self.assertIn("pages", payload)
 
@@ -198,21 +198,54 @@ class ParseOneTests(unittest.TestCase):
         self.assertIn("unreadable document", message)
         self.assertEqual(list(self.output.iterdir()), [])
 
-    def test_the_output_name_comes_from_the_source_stem(self) -> None:
-        # Consequence: report.pdf and report.docx both write report.txt.
-        batch_parse_dir.parse_one(self.parser, Path("report.pdf"), self.output, "text")
-        batch_parse_dir.parse_one(self.parser, Path("report.docx"), self.output, "text")
-        self.assertEqual(
-            [path.name for path in self.output.iterdir()], ["report.txt"]
-        )
-        self.assertEqual(
-            (self.output / "report.txt").read_text(encoding="utf-8"),
-            "contents of report.docx",
-        )
+    def test_same_stem_different_formats_keep_both_outputs(self) -> None:
+        for source in ("report.pdf", "report.docx"):
+            ok, _, _ = batch_parse_dir.parse_one(self.parser, Path(source), self.output, "text")
+            self.assertTrue(ok)
+        self.assertEqual(sorted(p.name for p in self.output.iterdir()),
+                         ["report.docx.txt", "report.pdf.txt"])
 
-    def test_an_unknown_format_falls_back_to_text(self) -> None:
-        batch_parse_dir.parse_one(self.parser, Path("a.pdf"), self.output, "yaml")
-        self.assertTrue((self.output / "a.txt").is_file())
+    def test_existing_output_is_preserved(self) -> None:
+        target = self.output / "report.pdf.txt"
+        target.write_text("earlier extraction", encoding="utf-8")
+        ok, _, message = batch_parse_dir.parse_one(self.parser, Path("report.pdf"), self.output, "text")
+        self.assertFalse(ok)
+        self.assertIn("already exists", message)
+        self.assertEqual(target.read_text(), "earlier extraction")
+        self.assertFalse(self.parser.seen)
+
+    def test_partial_pages_fail_without_writing_any_format(self) -> None:
+        partial = parse_result()
+        partial.page_errors = [SimpleNamespace(page_number=2, message="broken page")]
+        parser = SimpleNamespace(parse=lambda _: partial)
+        for fmt in ("text", "json", "markdown"):
+            with self.subTest(fmt=fmt):
+                ok, _, message = batch_parse_dir.parse_one(parser, Path("paper.pdf"), self.output, fmt)
+                self.assertFalse(ok)
+                self.assertIn("page 2: broken page", message)
+        self.assertFalse(list(self.output.iterdir()))
+
+    def test_page_cap_truncation_is_reported(self) -> None:
+        partial = parse_result()
+        partial.total_pages = 1001
+        parser = SimpleNamespace(parse=lambda _: partial)
+        ok, _, message = batch_parse_dir.parse_one(parser, Path("paper.pdf"), self.output, "json")
+        self.assertFalse(ok)
+        self.assertIn("returned 1 of 1001 source pages", message)
+        self.assertFalse(list(self.output.iterdir()))
+
+    def test_markdown_and_nested_output(self) -> None:
+        out = self.output / "nested"
+        ok, _, _ = batch_parse_dir.parse_one(self.parser, Path("paper.pdf"), out, "markdown")
+        self.assertTrue(ok)
+        self.assertEqual((out / "paper.pdf.md").read_text(), "contents of paper.pdf")
+
+    def test_unknown_format_is_reported_without_parsing(self) -> None:
+        ok, _, message = batch_parse_dir.parse_one(self.parser, Path("a.pdf"), self.output, "yaml")
+        self.assertFalse(ok)
+        self.assertIn("Unsupported output format", message)
+        self.assertFalse(self.parser.seen)
+        self.assertFalse(list(self.output.iterdir()))
 
 
 if __name__ == "__main__":

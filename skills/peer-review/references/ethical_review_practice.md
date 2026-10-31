@@ -1,8 +1,8 @@
 # Ethical and Confidential Peer Review
 
-Verified on **2026-07-23** against COPE, ICMJE, and illustrative publisher policies listed in `assets/source_ledger.csv`.
+Reviewed on **2026-10-01** against COPE, ICMJE, and illustrative publisher policies listed in `assets/source_ledger.csv`. Source-specific access limits and dates are recorded there.
 
-COPE identifies peer review as one of its 10 Core Practices and states that the process should be transparently described and well managed, with policies for conflicts, appeals, and disputes. The target journal’s published process controls the individual assignment.
+COPE’s current membership framework is its [Code of Conduct](https://publicationethics.org/membership/code-of-conduct), published 21 July 2026 with a 12-month implementation transition. It replaces the 2017 Core Practices, which were [retired in 2024](https://publicationethics.org/about/what-we-do/our-story/history-code-conduct). This membership framework is distinct from the still-current reviewer-specific **Ethical Guidelines for Peer Reviewers, version 2 (2017)** used below. The target journal’s published process controls the individual assignment.
 
 ## Role boundary
 
@@ -38,7 +38,7 @@ Disclose actual, potential, or perceived conflicts before proceeding. They can b
 - Intellectual commitments or directly competing work
 - Political, religious, advocacy, or legal interests
 
-The journal decides whether a disclosed conflict permits review. If unresolved, stop. Do not accept merely to gain access to unpublished work.
+The journal decides whether a disclosed conflict permits review. If unresolved, stop. In the intake, `disclosed_to_editor` remains blocked; record `editor_cleared` only after clearance. Do not accept merely to gain access to unpublished work.
 
 ### Capacity and timeliness
 
@@ -76,6 +76,8 @@ Keep processing local. Do not send, paste, upload, transcribe, summarize, or exp
 unless the publisher or author has authorized that specific use, the target venue permits it, and applicable privacy, contract, intellectual-property, and data-governance requirements are satisfied.
 
 Authorization to review is not automatically authorization to disclose material to a service. A tool’s promise not to train on data is not, by itself, authorization.
+
+A hosted assistant reading a file is external processing even when its shell or bundled validator executes locally. Do not confuse the CLI's local-only behavior with the assistant platform's handling of content.
 
 The bundled CLIs:
 
@@ -129,9 +131,9 @@ If permission is absent, the policy is unclear, or confidentiality cannot be ass
 
 Illustrative policies, not universal rules:
 
-- [Nature Portfolio](https://www.nature.com/nature-portfolio/editorial-policies/peer-review) asks reviewers not to upload manuscripts to generative-AI tools and asks for transparent declaration when AI supported claim evaluation.
+- [Nature Portfolio's current AI policy](https://www.nature.com/nature-portfolio/editorial-policies/ai) permits support under human accountability and disclosure, prohibits sharing manuscript content with unsecured/public AI tools, and prohibits delegating critique or judgment. Some [reviewer instructions](https://www.nature.com/nature/for-referees/policies-and-processes) still state a broader no-upload rule. Check the instructions for the actual journal and assignment; seek editor clarification when policies conflict.
 - [BMJ](https://authors.bmj.com/policies/ai-use) requires declaration of AI used for review-language assistance and prohibits placing unpublished material into publicly available tools when confidentiality cannot be guaranteed.
-- [JAMA Network](https://jamanetwork.com/journals/jama/fullarticle/2807956) states that entering manuscript, abstract, or review text into a chatbot or language model violates its confidentiality agreement and requires disclosure of other AI resource use.
+- [JAMA Network's 2023 published guidance](https://jamanetwork.com/journals/jama/fullarticle/2807956) states that entering manuscript, abstract, or review text into a chatbot or language model violates its confidentiality agreement and requires disclosure of other AI resource use. This dated article is an example; verify the current invitation and reviewer instructions.
 
 Always check the current target-venue policy.
 

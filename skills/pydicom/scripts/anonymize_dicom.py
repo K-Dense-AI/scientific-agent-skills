@@ -272,6 +272,8 @@ def transform_dataset(
             if action == "uid":
                 if str(element.VR) != "UI":
                     raise ToolError("uid action is only valid for UI elements")
+                if keyword in STRUCTURAL_UID_KEYWORDS:
+                    raise ToolError("structural UIDs must not be remapped")
                 element.value = _map_uid_value(
                     element.value,
                     key=key,
@@ -282,7 +284,10 @@ def transform_dataset(
                 continue
             if action == "keep":
                 counters["profile_keep_actions"] += 1
-                continue
+                # Keeping a sequence container must not exempt its children
+                # from their own privacy actions.
+                if str(element.VR) != "SQ":
+                    continue
 
             if str(element.VR) == "SQ":
                 for item in reversed(list(element.value)):

@@ -42,7 +42,7 @@ explainer = shap.Explainer(
 explanation = explainer(X_eval)
 ```
 
-Current algorithm names include `auto`, `permutation`, `partition`, `tree`, `linear`, `deep`, `exact`, and `additive`.
+The 0.52.0 selector advertises `auto`, `permutation`, `partition`, `tree`, `linear`, `deep`, `exact`, and `additive`. However, its `algorithm="deep"` dispatch forwards unsupported keywords to `DeepExplainer` and raises `TypeError`; construct `shap.DeepExplainer(model, background)` directly. `auto` is not a general framework detector.
 
 Use the auto-selector when:
 
@@ -60,7 +60,7 @@ Passing a background matrix is shorthand for a standard tabular masker. Prefer a
 
 ## `TreeExplainer`
 
-Current constructor:
+Common constructor arguments (the deprecated `approximate` parameter and unused link controls are intentionally omitted):
 
 ```python
 shap.TreeExplainer(
@@ -90,7 +90,7 @@ These options answer different questions and can allocate credit differently for
 
 - `"raw"`: model-specific raw tree output;
 - `"probability"`: transformed probability output;
-- `"log_loss"`: per-row natural-log loss decomposition;
+- `"log_loss"`: a model-specific loss transform; for supported binary margin models this is negative log likelihood, while squared-error objectives use squared loss;
 - a supported model method name such as `"predict_proba"`.
 
 `"probability"` and `"log_loss"` currently require `feature_perturbation="interventional"` and background data.
@@ -120,7 +120,7 @@ expected = model.predict_proba(X_eval)[:, class_index]
 np.testing.assert_allclose(reconstructed, expected, rtol=1e-5, atol=1e-6)
 ```
 
-The built-in additivity check currently applies only to some output paths, including raw margins. An explicit reconstruction check remains useful.
+The built-in tree additivity check applies to raw output paths; explicitly validate probability and loss reconstructions. Loss baselines can be label-dependent callables: see the concrete loss workflow in [workflows.md](workflows.md). A bare DataFrame background is capped at 100 rows; retain a larger selected sample with `data=shap.maskers.Independent(background, max_samples=len(background))` and record the effective size.
 
 ### Approximate tree values
 
@@ -134,11 +134,18 @@ This uses a single-ordering approximation associated with Saabas values. It does
 
 ### Interaction values
 
-Tree models can compute pairwise interactions:
+Use a separate **raw, tree-path-dependent** explainer for supported tree interactions:
 
 ```python
-interaction = explainer.shap_interaction_values(X_eval)
+interaction_explainer = shap.TreeExplainer(
+    model, feature_perturbation="tree_path_dependent", model_output="raw",
+)
+interaction = interaction_explainer.shap_interaction_values(X_eval)
+ordinary = interaction_explainer(X_eval)
+np.testing.assert_allclose(interaction.sum(axis=2), ordinary.values, atol=1e-6)
 ```
+
+Probability/log-loss explainers reject interaction calls. The interventional C++ path does not implement interactions and can emit zeros with a warning; never interpret those as absent interactions. Compare against ordinary values from this same path-dependent game, not an earlier interventional explanation. Each symmetric off-diagonal cell carries half the pair contribution.
 
 Shapes:
 
@@ -173,6 +180,8 @@ For correlation-aware allocation, use an `Impute` masker:
 masker = shap.maskers.Impute(background, method="linear")
 explainer = shap.LinearExplainer(model, masker)
 ```
+
+For logistic regression, these linear attributions reconstruct `model.decision_function(X_eval)` in log-odds units, not `predict_proba` or predicted class labels. Explain a probability callable with a model-agnostic method when probability-space attribution is required.
 
 Correlation-aware values share credit among correlated inputs and can assign attribution to a feature that the fitted model does not directly use. This is a property of the conditional game, not evidence of a direct model coefficient or causal effect. SHAP 0.52 warns when the estimated covariance matrix is singular.
 
@@ -225,7 +234,25 @@ Cost scales with:
 - background rows;
 - model latency.
 
-Batch the model callable where possible. Preserve the seed and budget.
+Batch the model callable where possible. Preserve the seed and budget. `error_bounds=True` estimates variation across sampled paths; it is not a confidence interval for model correctness or biological effects.
+
+## Links and output units
+
+For a probability callable, a supported model-agnostic link changes the additive units:
+
+```python
+explainer = shap.Explainer(
+    probability_fn, background, algorithm="permutation",
+    link=shap.links.logit, seed=7,
+)
+exp = explainer(X_eval, max_evals=(2 * X_eval.shape[1] + 1) * 5)
+np.testing.assert_allclose(
+    exp.base_values + exp.values.sum(axis=1),
+    shap.links.logit(probability_fn(X_eval)), atol=1e-6,
+)
+```
+
+This fragment assumes a scalar probability strictly between 0 and 1. Check finiteness on masked inputs too; exact endpoints make log-odds infinite. With default link linearization, the baseline is `logit(mean(background probabilities))`, not the mean background logit. Record `linearize_link`; applying a link inside the model callable defines a different game. This is distinct from the force plot's display-only link. `TreeExplainer`'s link constructor arguments are unused in 0.52.0; configure its supported `model_output` instead.
 
 ## `PartitionExplainer`
 
@@ -265,7 +292,9 @@ explainer = shap.KernelExplainer(
     link="identity",
     feature_names=feature_names,
 )
-legacy_values = explainer.shap_values(X_eval, nsamples="auto")
+legacy_values = explainer.shap_values(
+    X_eval, nsamples="auto", l1_reg="num_features(10)",
+)
 ```
 
 Use it when:
@@ -274,7 +303,9 @@ Use it when:
 - a specific identity/logit link behavior is required;
 - another explainer cannot represent the model/masker combination.
 
-For new general tabular work, consider `PermutationExplainer` first because it uses the modern callable interface directly and exposes evaluation budgets clearly.
+`KernelExplainer(X)` also returns an `Explanation`, but its 0.52.0 call signature only exposes `l1_reg` and `silent`; use `.shap_values(..., nsamples=...)` for an explicit sampling budget. The default `l1_reg="num_features(10)"` selects at most ten features (changed in 0.47), so omitted features are not evidence of zero model use. Choose and record regularization; `l1_reg=0` removes this selection when the sampled system is sufficiently determined.
+
+For new general tabular work, consider `PermutationExplainer` for its direct evaluation-budget control.
 
 Kernel SHAP can be slow and may create unrealistic masked samples. Summarizing background data changes the estimand as well as runtime.
 
@@ -307,13 +338,13 @@ Background cost is linear in sample count. Official guidance describes roughly 1
 
 Output shapes since 0.45:
 
-- one input, one output: `(samples, *input_shape)`;
+- one input, one output: inspect for `(samples, *input_shape)` **or a final singleton output axis**; the 0.52.0 PyTorch Deep implementation stacks even a single output;
 - one input, multiple outputs: `(samples, *input_shape, outputs)`;
 - multiple inputs: a list, one array per input.
 
-`ranked_outputs=k` returns both values and selected output indexes. Never assume a binary model returns a two-element list.
+Pass `ranked_outputs=k` to `.shap_values(...)`, not the constructor. It returns both values and selected output indexes. Never assume a binary model returns a two-element list.
 
-Deep explainers support only known operators and architecture patterns. Additivity failures can indicate unsupported operations rather than a tolerance problem.
+For PyTorch, return `(batch, outputs)`, including `(batch, 1)` for a scalar-output wrapper; a squeezed `(batch,)` result fails the Deep backend's output-axis handling. Deep explainers support only known operators and architecture patterns. Additivity failures can indicate unsupported operations rather than a tolerance problem.
 
 ## `GradientExplainer`
 
@@ -339,9 +370,9 @@ It remains an approximation. Report `nsamples`, seed, background, and any smooth
 
 ## Other Public Explainers
 
-- `AdditiveExplainer`: generalized additive models.
+- `AdditiveExplainer`: first-order additive models with an `Independent` masker; do not use for models containing interaction terms.
 - `SamplingExplainer`: Shapley sampling/IME-style approximation; mainly relevant to existing workflows.
-- `CoalitionExplainer`: newer coalition-oriented functionality may evolve; verify against the installed release before adopting it in stable pipelines.
+- `CoalitionExplainer`: custom coalition-tree workflows using Winter (recursive Owen) values; its `partition_tree` contract is separate from `PartitionExplainer`, and text/image inputs are not implemented. Treat a new application as illustrative until checked against 0.52.0 source and a tiny known game.
 - `shap.explainers.other.*`: wrappers and diagnostic baselines, not the default for a SHAP audit.
 
 ## Multi-Output Handling
@@ -354,8 +385,10 @@ print(explanation.output_names)
 
 one_output = explanation[..., output_index]
 # If output_names were supplied:
-one_output = explanation[..., "output_name"]
+one_output = explanation[..., list(explanation.output_names).index("output_name")]
 ```
+
+In 0.52.0, `Explainer(..., algorithm="permutation", output_names=...)` may discard those names during subclass dispatch. Set `explanation.output_names` from the verified model mapping after checking output count. Avoid ellipsis plus a string index, which can raise `IndexError`; resolve the name to an integer as above.
 
 For ranked deep outputs, use the returned indexes; they can differ by sample.
 
@@ -374,3 +407,7 @@ Do not:
 - PartitionExplainer: https://shap.readthedocs.io/en/latest/generated/shap.PartitionExplainer.html
 - DeepExplainer: https://shap.readthedocs.io/en/latest/generated/shap.DeepExplainer.html
 - API reference: https://shap.readthedocs.io/en/latest/api.html
+
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/explainers/_explainer.py
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/explainers/_kernel.py
+- Released source / upstream contract: https://github.com/shap/shap/blob/v0.52.0/shap/explainers/_tree.py

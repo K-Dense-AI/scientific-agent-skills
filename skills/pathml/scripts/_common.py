@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 
-PATHML_VERSION = "3.0.5"
-PINNED_INSTALL = 'uv pip install "pathml==3.0.5"'
+PATHML_VERSION = "3.0.8"
+PINNED_INSTALL = 'uv pip install "pathml==3.0.8"'
 MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_CSV_BYTES = 64 * 1024 * 1024
 MAX_IMAGE_BYTES = 256 * 1024 * 1024
@@ -98,6 +98,20 @@ def _within_root(candidate: Path, root: Path) -> None:
         raise CliError("path escapes the declared root directory") from exc
 
 
+def _reject_links_below_root(path: Path, root: Path) -> None:
+    """Inspect requested components before resolution hides directory links.
+
+    OS aliases above the declared boundary (for example macOS /tmp) are allowed.
+    """
+    current = path
+    while current != current.parent:
+        if current.is_symlink():
+            raise CliError(f"symlink paths are not accepted: {current.name}")
+        if current.resolve() == root:
+            return
+        current = current.parent
+
+
 def _suffix_matches(path: Path, suffixes: Iterable[str]) -> bool:
     name = path.name.lower()
     return any(name.endswith(suffix.lower()) for suffix in suffixes)
@@ -121,6 +135,7 @@ def checked_input_file(
     path = _absolute_lexical(path)
     if path.is_symlink():
         raise CliError(f"input must not be a symlink: {path.name!r}")
+    _reject_links_below_root(path, root_path)
     try:
         resolved = path.resolve(strict=True)
         info = resolved.stat()
@@ -165,6 +180,7 @@ def checked_output_file(
         raise CliError(f"output must not be a symlink: {path.name!r}")
     if path.parent.is_symlink():
         raise CliError("output parent must not be a symlink")
+    _reject_links_below_root(path.parent, root_path)
     try:
         resolved_parent = path.parent.resolve(strict=True)
         parent_info = resolved_parent.stat()

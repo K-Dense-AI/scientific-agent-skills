@@ -3,6 +3,11 @@
 The six stages from planning through final preparation, with the checks that belong at
 each stage.
 
+Treat the section ranges below as planning options, not additive time budgets.
+Choose one concrete allocation whose sum includes transitions, buffer, and any in-slot
+Q&A. The [timing guide](../assets/timing_guidelines.md) gives checked 5-, 15-, and
+45-minute budgets; rehearsal, not slide count, determines whether the deck fits.
+
 ## Workflow for Presentation Development
 
 ### Stage 1: Planning (Before Creating Slides)
@@ -51,12 +56,11 @@ and discussion (slides 13-14) BEFORE creating slides.
 
 **Choose Implementation Method**:
 
-**Option A: PowerPoint (via PPTX skill)**
+**Option A: PowerPoint (PptxGenJS or python-pptx)**
 1. Read `assets/powerpoint_design_guide.md`
-2. Read `skills/pptx/SKILL.md`
-3. Choose approach (programmatic or template-based)
-4. Create master slides with consistent design
-5. Build presentation following outline
+2. Choose approach (programmatic or template-based)
+3. Create master slides with consistent design
+4. Build presentation following outline
 
 **Option B: LaTeX Beamer**
 1. Read `references/beamer_guide.md`
@@ -67,7 +71,7 @@ and discussion (slides 13-14) BEFORE creating slides.
 
 **Design Considerations** (Make It Visually Appealing):
 - **Select MODERN color palette**: Match your topic (biotech=vibrant, physics=sleek, health=warm)
-  - Use pptx skill's color palette examples (Teal & Coral, Bold Red, Deep Purple & Emerald, etc.)
+  - Use the topic-based palettes in `assets/powerpoint_design_guide.md` (Teal & Coral, Bold Red & Orange, Deep Purple & Magenta, etc.)
   - NOT just default blue/gray themes
   - 3-5 colors with high contrast
 - **Choose clean fonts**: Sans-serif, large sizes (24pt+ body)
@@ -122,11 +126,11 @@ and discussion (slides 13-14) BEFORE creating slides.
 
 **Generate Images**:
 ```bash
+# PowerPoint decks: export to PDF first (Beamer already produces one)
+soffice --headless --convert-to pdf presentation.pptx
+
 # Convert PDF to images
 python scripts/pdf_to_images.py presentation.pdf review/slides
-
-# Or create thumbnail grid
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/grid
 ```
 
 **Systematic Review**:

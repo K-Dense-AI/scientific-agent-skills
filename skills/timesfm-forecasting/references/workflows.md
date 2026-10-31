@@ -1,126 +1,59 @@
-# Common Workflows
+# Forecast and evaluate on withheld future observations
 
-End-to-end sequences: the standard single-series forecast, forecasting many series from a
-wide-format CSV, and backtesting with held-out data including interval coverage.
+## Single or many independent series
 
-## 📋 Common Workflows
+Validate inputs before expensive loading. Use `forecast_csv.py` for a regular
+wide CSV. For manually batched arrays preserve IDs/origins separately and pass
+a fresh list to 2.5 `model.forecast` because it appends dummy batch-padding series.
+Use `return_backcast=False` for ordinary forecasting. Do not join different
+series end-to-end or imply a univariate batch is a joint multivariate model.
 
-### Workflow 1: Single Series Forecast
+## Rolling-origin validation
 
-```mermaid
-flowchart TD
-    accTitle: Single Series Forecast Workflow
-    accDescr: Step-by-step workflow for forecasting a single time series with system checking.
-
-    check["1. Run check_system.py"] --> load["2. Load model<br/>from_pretrained()"]
-    load --> compile["3. Compile with ForecastConfig"]
-    compile --> prep["4. Prepare data<br/>pd.read_csv → np.array"]
-    prep --> forecast["5. model.forecast()<br/>horizon=N"]
-    forecast --> extract["6. Extract point + PI"]
-    extract --> plot["7. Plot or export results"]
-
-    classDef step fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
-    class check,load,compile,prep,forecast,extract,plot step
-```
-
-```python
-import torch, numpy as np, pandas as pd, timesfm
-
-# 1. System check (run once)
-# python scripts/check_system.py
-
-# 2-3. Load and compile
-torch.set_float32_matmul_precision("high")
-model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch"
-)
-model.compile(timesfm.ForecastConfig(
-    max_context=512, max_horizon=52, normalize_inputs=True,
-    use_continuous_quantile_head=True, fix_quantile_crossing=True,
-))
-
-# 4. Prepare data
-df = pd.read_csv("weekly_demand.csv", parse_dates=["week"])
-values = df["demand"].values.astype(np.float32)
-
-# 5. Forecast
-point, quantiles = model.forecast(horizon=52, inputs=[values])
-
-# 6. Extract prediction intervals
-forecast_df = pd.DataFrame({
-    "forecast": point[0],
-    "lower_80": quantiles[0, :, 1],
-    "upper_80": quantiles[0, :, 9],
-})
-
-# 7. Plot
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots(figsize=(12, 5))
-ax.plot(values[-104:], label="Historical")
-x_fc = range(len(values[-104:]), len(values[-104:]) + 52)
-ax.plot(x_fc, forecast_df["forecast"], label="Forecast", color="tab:orange")
-ax.fill_between(x_fc, forecast_df["lower_80"], forecast_df["upper_80"],
-                alpha=0.2, color="tab:orange", label="80% PI")
-ax.legend()
-ax.set_title("52-Week Demand Forecast")
-plt.tight_layout()
-plt.savefig("forecast.png", dpi=150)
-print("Saved forecast.png")
-```
-
-### Workflow 2: Batch Forecasting (Many Series)
-
-```python
-import pandas as pd, numpy as np
-
-# Load wide-format CSV (one column per series)
-df = pd.read_csv("all_stores.csv", parse_dates=["date"], index_col="date")
-inputs = [df[col].dropna().values.astype(np.float32) for col in df.columns]
-
-# Forecast all series at once (batched internally)
-point, quantiles = model.forecast(horizon=30, inputs=inputs)
-
-# Collect results
-results = {}
-for i, col in enumerate(df.columns):
-    results[col] = {
-        "forecast": point[i].tolist(),
-        "lower_80": quantiles[i, :, 1].tolist(),
-        "upper_80": quantiles[i, :, 9].tolist(),
-    }
-
-# Export
-import json
-with open("batch_forecasts.json", "w") as f:
-    json.dump(results, f, indent=2)
-print(f"Forecasted {len(results)} series → batch_forecasts.json")
-```
-
-### Workflow 3: Evaluate Forecast Accuracy
+Illustrative pretrained recipe; no pretrained accuracy was evaluated in this refresh.
+Choose origins/horizon before model tuning and keep a final untouched evaluation
+period. Here `values` is a finite regular-grid series and `model` is compiled
+for at least H; it must have `return_backcast=False`.
 
 ```python
 import numpy as np
 
-# Hold out the last H points for evaluation
-H = 24
-train = values[:-H]
-actual = values[-H:]
-
-point, quantiles = model.forecast(horizon=H, inputs=[train])
-pred = point[0]
-
-# Metrics
-mae = np.mean(np.abs(actual - pred))
-rmse = np.sqrt(np.mean((actual - pred) ** 2))
-mape = np.mean(np.abs((actual - pred) / actual)) * 100
-
-# Prediction interval coverage
-lower = quantiles[0, :, 1]
-upper = quantiles[0, :, 9]
-coverage = np.mean((actual >= lower) & (actual <= upper)) * 100
-
-print(f"MAE:  {mae:.2f}")
-print(f"RMSE: {rmse:.2f}")
-print(f"MAPE: {mape:.1f}%")
-print(f"80% PI Coverage: {coverage:.1f}% (target: 80%)")
+H, season = 12, 12
+origins = range(60, len(values) - H + 1, H)
+records = []
+for origin in origins:
+    train = values[:origin].copy()
+    actual = values[origin:origin + H]
+    # Fit any imputation/transformation on this train slice only.
+    point, q = model.forecast(horizon=H, inputs=[train])
+    pred = point[0]
+    baseline = np.tile(train[-season:], int(np.ceil(H / season)))[:H]
+    assert np.isfinite(q).all() and np.isfinite(actual).all()
+    lower, upper = q[0, :, 1], q[0, :, 9]
+    records.append({
+        "origin": origin,
+        "mae": float(np.mean(np.abs(actual - pred))),
+        "rmse": float(np.sqrt(np.mean((actual - pred)**2))),
+        "seasonal_naive_mae": float(np.mean(np.abs(actual - baseline))),
+        "nominal_80_coverage": float(np.mean((actual >= lower) & (actual <= upper))),
+        "mean_interval_width": float(np.mean(upper - lower)),
+    })
+if not records:
+    raise ValueError("not enough history for the prespecified origins")
 ```
+
+Report origin count, observed target count and aggregation units; pooled points,
+series-weighted means and origin-weighted means are different estimands. For
+multiple horizons also report per-horizon MAE, pinball loss, coverage and width.
+Do not divide by zeros/near-zero targets for MAPE. For scaled errors use a
+training-only baseline denominator and report when it is zero.
+
+Overlapping origins generate dependent errors; naive IID confidence intervals
+are not justified. Tune context, feature sets and post-hoc calibration on a
+validation period, then assess the frozen procedure on a later test period.
+Model-pretraining overlap is separate from leakage in your local split.
+
+For interval screening, outside q10-q90 is a nominal 80% band exceedance, not
+“90% confidence of anomaly.” Validate alarm rates, temporal dependence and the
+costs of false alarms in the intended application. The example Z-score screen
+fits on the entire context and is explicitly retrospective.

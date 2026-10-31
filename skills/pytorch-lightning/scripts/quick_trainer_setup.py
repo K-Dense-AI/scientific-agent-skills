@@ -1,7 +1,10 @@
 """
 Quick Trainer Setup Examples for PyTorch Lightning.
 
-This script provides ready-to-use Trainer configurations for common use cases.
+Targets Lightning 2.6.6. Helpers use local loggers and monitor val/loss, matching
+template_lightning_module.py. GPU/FSDP/DeepSpeed configurations are illustrative;
+CPU tests exercise the single-device helper with explicit CPU/full-precision overrides.
+This script provides Trainer configurations for common use cases.
 Copy and modify these configurations for your specific needs.
 """
 
@@ -10,8 +13,6 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
     LearningRateMonitor,
-    DeviceStatsMonitor,
-    RichProgressBar,
 )
 from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.strategies import DDPStrategy, FSDPStrategy
@@ -29,9 +30,9 @@ def basic_trainer():
     trainer = L.Trainer(
         max_epochs=10,
         accelerator="auto",  # Automatically select GPU/CPU
-        devices="auto",      # Use all available devices
+        devices=1,           # Keep the basic smoke run on one device
         enable_progress_bar=True,
-        logger=True,
+        logger=pl_loggers.CSVLogger("logs", name="basic"),
     )
     return trainer
 
@@ -62,7 +63,9 @@ def debug_trainer():
 def production_single_gpu_trainer(
     max_epochs=100,
     log_dir="logs",
-    checkpoint_dir="checkpoints"
+    checkpoint_dir="checkpoints",
+    accelerator="gpu",
+    precision="16-mixed",
 ):
     """
     Production-ready trainer for single GPU with checkpointing and logging.
@@ -71,8 +74,9 @@ def production_single_gpu_trainer(
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
-        filename="{epoch:02d}-{val_loss:.2f}",
-        monitor="val_loss",
+        filename="epoch-{epoch:02d}-step-{step:06d}",
+        auto_insert_metric_name=False,
+        monitor="val/loss",
         mode="min",
         save_top_k=3,
         save_last=True,
@@ -80,7 +84,7 @@ def production_single_gpu_trainer(
     )
 
     early_stop_callback = EarlyStopping(
-        monitor="val_loss",
+        monitor="val/loss",
         patience=10,
         mode="min",
         verbose=True,
@@ -89,7 +93,7 @@ def production_single_gpu_trainer(
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Logger
-    tb_logger = pl_loggers.TensorBoardLogger(
+    csv_logger = pl_loggers.CSVLogger(
         save_dir=log_dir,
         name="my_model",
     )
@@ -97,15 +101,15 @@ def production_single_gpu_trainer(
     # Trainer
     trainer = L.Trainer(
         max_epochs=max_epochs,
-        accelerator="gpu",
+        accelerator=accelerator,
         devices=1,
-        precision="16-mixed",        # Mixed precision for speed
+        precision=precision,        # Mixed precision for speed
         callbacks=[
             checkpoint_callback,
             early_stop_callback,
             lr_monitor,
         ],
-        logger=tb_logger,
+        logger=csv_logger,
         log_every_n_steps=50,
         gradient_clip_val=1.0,       # Clip gradients
         enable_progress_bar=True,
@@ -126,20 +130,21 @@ def multi_gpu_ddp_trainer(
 ):
     """
     Multi-GPU training with Distributed Data Parallel.
-    Use for: Models <500M parameters, standard deep learning models
+    Use when a full replica plus optimizer state and activations fits per GPU
     """
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
-        filename="{epoch:02d}-{val_loss:.2f}",
-        monitor="val_loss",
+        filename="epoch-{epoch:02d}-step-{step:06d}",
+        auto_insert_metric_name=False,
+        monitor="val/loss",
         mode="min",
         save_top_k=3,
         save_last=True,
     )
 
     early_stop_callback = EarlyStopping(
-        monitor="val_loss",
+        monitor="val/loss",
         patience=10,
         mode="min",
     )
@@ -147,8 +152,8 @@ def multi_gpu_ddp_trainer(
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Logger
-    wandb_logger = pl_loggers.WandbLogger(
-        project="my-project",
+    csv_logger = pl_loggers.CSVLogger(
+        name="my-project",
         save_dir=log_dir,
     )
 
@@ -167,7 +172,7 @@ def multi_gpu_ddp_trainer(
             early_stop_callback,
             lr_monitor,
         ],
-        logger=wandb_logger,
+        logger=csv_logger,
         log_every_n_steps=50,
         gradient_clip_val=1.0,
         sync_batchnorm=True,         # Sync batch norm across GPUs
@@ -187,7 +192,7 @@ def large_model_fsdp_trainer(
     checkpoint_dir="checkpoints"
 ):
     """
-    Training for large models (500M+ parameters) with FSDP.
+    Training for memory-constrained models with FSDP.
     Use for: Large transformers, models that don't fit in single GPU
     """
     import torch.nn as nn
@@ -195,8 +200,9 @@ def large_model_fsdp_trainer(
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
-        filename="{epoch:02d}-{val_loss:.2f}",
-        monitor="val_loss",
+        filename="epoch-{epoch:02d}-step-{step:06d}",
+        auto_insert_metric_name=False,
+        monitor="val/loss",
         mode="min",
         save_top_k=3,
         save_last=True,
@@ -205,8 +211,8 @@ def large_model_fsdp_trainer(
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Logger
-    wandb_logger = pl_loggers.WandbLogger(
-        project="large-model",
+    csv_logger = pl_loggers.CSVLogger(
+        name="large-model",
         save_dir=log_dir,
     )
 
@@ -228,7 +234,7 @@ def large_model_fsdp_trainer(
             checkpoint_callback,
             lr_monitor,
         ],
-        logger=wandb_logger,
+        logger=csv_logger,
         log_every_n_steps=10,
         gradient_clip_val=1.0,
         accumulate_grad_batches=4,   # Gradient accumulation
@@ -250,24 +256,27 @@ def deepspeed_trainer(
 ):
     """
     Training for very large models with DeepSpeed.
-    Use for: Models >10B parameters, maximum memory efficiency
+    Use when ZeRO sharding is needed; measure memory and throughput
     """
+    if stage not in (1, 2, 3):
+        raise ValueError("DeepSpeed stage must be 1, 2, or 3")
+
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
         filename="{epoch:02d}-{step:06d}",
-        monitor="val_loss",          # Required: save_top_k > 1 needs a quantity
+        monitor="val/loss",          # Required: save_top_k > 1 needs a quantity
         mode="min",
         save_top_k=3,
         save_last=True,
-        every_n_train_steps=1000,    # Save every N steps
+        every_n_epochs=1,           # Rank using fresh validation metrics
     )
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
     # Logger
-    wandb_logger = pl_loggers.WandbLogger(
-        project="very-large-model",
+    csv_logger = pl_loggers.CSVLogger(
+        name="very-large-model",
         save_dir=log_dir,
     )
 
@@ -285,7 +294,7 @@ def deepspeed_trainer(
             checkpoint_callback,
             lr_monitor,
         ],
-        logger=wandb_logger,
+        logger=csv_logger,
         log_every_n_steps=10,
         gradient_clip_val=1.0,
         accumulate_grad_batches=4,
@@ -353,11 +362,11 @@ def time_limited_trainer(
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoint_dir,
-        monitor="val_loss",          # Required: save_top_k > 1 needs a quantity
+        monitor="val/loss",          # Required: save_top_k > 1 needs a quantity
         mode="min",
         save_top_k=3,
         save_last=True,              # Important for resuming
-        every_n_epochs=5,
+        every_n_epochs=1,
     )
 
     trainer = L.Trainer(
@@ -378,17 +387,18 @@ def time_limited_trainer(
 
 def reproducible_trainer(seed=42, max_epochs=100):
     """
-    Fully reproducible trainer for research papers.
+    Seeded trainer for repeatable runs on the same software/hardware stack.
     Use for: Publications, reproducible results
     """
-    # Set seed
+    # Call this before creating the model and DataModule.
     L.seed_everything(seed, workers=True)
 
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints",
-        filename="{epoch:02d}-{val_loss:.2f}",
-        monitor="val_loss",
+        filename="epoch-{epoch:02d}-step-{step:06d}",
+        auto_insert_metric_name=False,
+        monitor="val/loss",
         mode="min",
         save_top_k=3,
         save_last=True,

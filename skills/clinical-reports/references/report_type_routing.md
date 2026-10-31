@@ -48,7 +48,7 @@ The base statements address standard randomized trials. Check the live official 
 - data: abstracts, harms, outcomes, patient-reported outcomes, surrogate outcomes, equity, and pathology;
 - intervention/population: non-pharmacological, AI, social/psychological, children/adolescents, or other specialty extensions.
 
-Some current extensions were developed against CONSORT 2010 or SPIRIT 2013. Use the current extension with the 2025 base statement, document any conflict, and have a qualified methodologist resolve it. Do not silently renumber or reinterpret extension items.
+The catalogue now distinguishes SPIRIT-C/CONSORT-C children-and-adolescents extensions based on the 2025 statements from extensions based on CONSORT 2010 or SPIRIT 2013. Check each extension’s actual base rather than assuming the old item numbering still matches. Use the current extension with the 2025 base statement, document any conflict, and have a qualified methodologist resolve it. Do not silently renumber or reinterpret extension items.
 
 ## Jurisdiction and role gate
 

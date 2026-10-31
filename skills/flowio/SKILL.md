@@ -1,11 +1,12 @@
 ---
 name: flowio
-description: Read, inspect, and write Flow Cytometry Standard (FCS) 2.0, 3.0, and 3.1 files with FlowIO. Use for low-level FCS metadata and channel inspection, NumPy event extraction, multi-dataset files, table export, and FCS 3.1 creation; use FlowKit for compensation, cytometry transforms, gating, or FlowJo workspaces.
+description: Reads, inspects, and writes Flow Cytometry Standard (FCS) 2.0, 3.0, and 3.1 files with FlowIO. Use for low-level FCS metadata and channel inspection, NumPy event extraction, multi-dataset files, table export, and FCS 3.1 creation; use FlowKit for compensation, cytometry transforms, gating, or FlowJo workspaces.
 allowed-tools: Read Write Bash
 license: BSD-3-Clause license
 compatibility: Requires Python 3.9-3.13, uv, and FlowIO 1.4.0. NumPy is installed with FlowIO; pandas is optional for DataFrame workflows. Runtime parsing is local and needs no credentials or network access.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -15,7 +16,8 @@ metadata:
 
 Use FlowIO as a lightweight, low-level reader and writer for Flow Cytometry
 Standard files. Examples in this skill target **FlowIO 1.4.0**, the current
-stable release verified on 2026-07-23.
+stable release verified on 2026-09-30.
+Standalone FlowIO checks used Python 3.13, NumPy 2.5.3, and pandas 3.0.6.
 
 FlowIO is appropriate for:
 
@@ -53,8 +55,8 @@ FlowIO 1.4.0 supports Python 3.9 through 3.13 and depends on NumPy.
 2. **Inspect before loading events.** Use `only_text=True` for metadata-only
    work, especially with large or unfamiliar files.
 3. **Choose event semantics explicitly.** Use `as_array(preprocess=True)` for
-   gain/log/time scaling from FCS metadata, or `preprocess=False` for values as
-   encoded in the DATA segment. Record the choice.
+   gain/log/time scaling from FCS metadata, or `preprocess=False` for decoded
+   DATA values without those scaling steps. Record the choice.
 4. **Keep parsing strict by default.** Do not automatically suppress offset
    errors. Relax checks only for a known vendor-format defect, and review the
    resulting event data.
@@ -87,14 +89,18 @@ original file when exact metadata fidelity matters.
 
 ### Events have two representations
 
-- `flow.events` is the unprocessed, flattened one-dimensional event array.
-- `flow.as_array()` returns shape `(event_count, channel_count)` as a NumPy
-  `float64` array.
+- `flow.events` is the decoded, flattened one-dimensional event array.
+  Integer parsing already applies PnR range masks; this is not a byte-level
+  copy of the original DATA words.
+- `flow.as_array()` returns a NumPy `float64` array with one column per
+  channel. For valid input its shape is `(event_count, channel_count)`, but
+  FlowIO infers rows from DATA and does not enforce `$TOT`; check the shape.
 - `flow.as_array(preprocess=True)` applies FCS gain, logarithmic, and time
   scaling. It does not apply compensation or logicle/biexponential display
   transforms.
-- `flow.as_array(preprocess=False)` reshapes the encoded event values without
-  those scaling steps.
+- `flow.as_array(preprocess=False)` reshapes the decoded event values without
+  those scaling steps. A recognized, non-null `Time` channel (case-insensitive) has its
+  gain forced to 1.0 by FlowIO; `timestep` still applies when preprocessing.
 
 `as_array()` creates another in-memory array. FlowIO does not provide chunked
 or memory-mapped event access.
@@ -131,6 +137,8 @@ from flowio import FlowData
 
 flow = FlowData(Path("sample.fcs"))
 events = flow.as_array(preprocess=True)
+if events.shape != (flow.event_count, flow.channel_count):
+    raise ValueError("DATA shape disagrees with declared $TOT/$PAR")
 
 print(
     {
@@ -174,6 +182,8 @@ from flowio import read_multiple_data_sets
 datasets = read_multiple_data_sets("legacy-multi-dataset.fcs")
 for index, dataset in enumerate(datasets):
     values = dataset.as_array(preprocess=True)
+    if values.shape != (dataset.event_count, dataset.channel_count):
+        raise ValueError(f"Dataset {index}: DATA shape disagrees with $TOT/$PAR")
     print(index, dataset.event_count, dataset.pnn_labels, values.shape)
 ```
 
@@ -203,7 +213,7 @@ with output.open("xb") as handle:
         pnn_labels,
         opt_channel_names=pns_labels,
         metadata_dict={
-            "date": "23-JUL-2026",
+            "date": "30-SEP-2026",
             "cyt": "Example instrument",
             "src": "Validated NumPy array",
         },
@@ -284,10 +294,15 @@ uv run --no-project --with "flowio==1.4.0" \
 uv run --no-project --with "flowio==1.4.0" \
   python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs --stats
 
-# Compute statistics from encoded values instead
+# Compute statistics from decoded values without gain/log/time scaling
 uv run --no-project --with "flowio==1.4.0" \
   python "$FLOWIO_SKILL_DIR/scripts/inspect_fcs.py" sample.fcs --stats --raw
 ```
+
+The inspector rejects unsupported DATA types/modes and verifies loaded DATA
+length against `$TOT * $PAR` before making the float64 array. Metadata-only
+reports show declared counts; they do not validate DATA contents. Memory limits
+are estimates, not a total process-memory cap.
 
 Use `--help` for output files, input/array memory limits, null-channel labels,
 and controlled offset-recovery options.

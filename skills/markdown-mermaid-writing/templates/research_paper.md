@@ -2,7 +2,7 @@
 
 # Research Paper / Technical Analysis Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
 **Use this template for:** Research papers, technical analyses, literature reviews, data-driven reports, competitive analyses, market research, or any document built around evidence and methodology. Designed for heavy citation, structured argumentation, and reproducible findings.
 
@@ -18,7 +18,7 @@
 2. Replace all `[bracketed placeholders]` with your content
 3. Adjust sections — not every paper needs every section, but the core flow (Abstract → Introduction → Methodology → Findings → Conclusion) should stay intact
 4. **Cite aggressively** — every claim, every statistic, every external methodology reference gets a `[^N]` footnote
-5. Add [Mermaid diagrams](../mermaid_style_guide.md) for any process, architecture, data flow, or comparison
+5. Add [Mermaid diagrams](../references/mermaid_style_guide.md) for any process, architecture, data flow, or comparison
 
 ---
 
@@ -39,7 +39,9 @@
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 
@@ -131,10 +133,10 @@ flowchart LR
     accTitle: Research Methodology Flow
     accDescr: Four-phase research process from data collection through analysis to validation and reporting
 
-    collect[📥 Data **collection**] --> clean[⚙️ Data **cleaning**]
-    clean --> analyze[🔍 **Analysis**]
-    analyze --> validate[🧪 **Validation**]
-    validate --> report[📤 Report **findings**]
+    collect[📥 Data collection] --> clean[⚙️ Data cleaning]
+    clean --> analyze[🔍 Analysis]
+    analyze --> validate[🧪 Validation]
+    validate --> report[📤 Report findings]
 
     classDef process fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
     class collect,clean,analyze,validate,report process

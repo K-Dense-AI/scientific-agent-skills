@@ -15,12 +15,16 @@ def read_map(path: Path, max_voxels: int | None = None):
     import mrcfile
     import numpy as np
     with mrcfile.mmap(path, permissive=False) as handle:
+        if np.iscomplexobj(handle.data):
+            raise ValueError(f'{path}: expected a real-space density map, not complex MRC data')
         if max_voxels is not None and handle.data.size > max_voxels:
             raise ValueError("Python diagnostic limited to 256-cubed maps; use relion_image_handler --fsc for larger maps")
         data = handle.data.copy()
         voxel = tuple(float(handle.voxel_size[axis]) for axis in ('x', 'y', 'z'))
         origin = tuple(float(handle.header.origin[axis]) for axis in ('x', 'y', 'z'))
         axes = tuple(int(handle.header[axis]) for axis in ('mapc', 'mapr', 'maps'))
+        starts = tuple(int(handle.header[axis]) for axis in ('nxstart', 'nystart', 'nzstart'))
+        angles = tuple(float(handle.header.cellb[axis]) for axis in ('alpha', 'beta', 'gamma'))
     if data.ndim != 3 or len(set(data.shape)) != 1 or min(data.shape) < 4 or data.shape[0] % 2:
         raise ValueError(f'{path}: expected an even-sized cubic 3D map')
     if not np.isfinite(data).all() or not all(math.isfinite(x) for x in voxel + origin):
@@ -29,6 +33,8 @@ def read_map(path: Path, max_voxels: int | None = None):
         raise ValueError(f'{path}: positive isotropic voxel size required')
     if axes != (1, 2, 3):
         raise ValueError(f'{path}: noncanonical map axes; explicitly reorder before analysis')
+    if starts != (0, 0, 0) or not np.allclose(angles, 90, rtol=0, atol=1e-4):
+        raise ValueError(f'{path}: this runner requires zero MRC start indices and orthogonal cell angles; verify the grid before conversion')
     return data, voxel[0], origin
 
 
@@ -40,6 +46,8 @@ def validate_star(path: Path, project: Path, check_stacks: bool = True) -> dict:
     if not {'optics', 'particles'}.issubset(blocks):
         raise ValueError('Requires RELION 3.1+ data_optics and data_particles blocks')
     optics, particles = blocks['optics'], blocks['particles']
+    if not hasattr(optics, 'columns') or not hasattr(particles, 'columns'):
+        raise ValueError('Optics and particles must be STAR loop tables')
     needed_optics = {'rlnOpticsGroup', 'rlnVoltage', 'rlnSphericalAberration', 'rlnAmplitudeContrast',
                      'rlnImagePixelSize', 'rlnImageSize', 'rlnImageDimensionality'}
     needed_particles = {'rlnOpticsGroup', 'rlnImageName', 'rlnDefocusU', 'rlnDefocusV', 'rlnDefocusAngle'}
@@ -47,7 +55,10 @@ def validate_star(path: Path, project: Path, check_stacks: bool = True) -> dict:
         raise ValueError('Missing optics/acquisition/CTF columns for a 2D-particle SPA refinement')
     if len(optics) == 0 or len(particles) == 0 or optics.rlnOpticsGroup.duplicated().any():
         raise ValueError('Empty tables or duplicate optics group IDs')
-    for frame, columns in [(optics, needed_optics), (particles, needed_particles - {'rlnImageName'})]:
+    optional_numeric = {'rlnOriginXAngst', 'rlnOriginYAngst', 'rlnAngleRot', 'rlnAngleTilt',
+                        'rlnAnglePsi', 'rlnCoordinateX', 'rlnCoordinateY', 'rlnPhaseShift'}
+    for frame, columns in [(optics, needed_optics),
+                           (particles, (needed_particles - {'rlnImageName'}) | (optional_numeric & set(particles.columns)))]:
         for column in columns:
             values = np.asarray(frame[column], dtype=float)
             if not np.isfinite(values).all():
@@ -75,19 +86,23 @@ def validate_star(path: Path, project: Path, check_stacks: bool = True) -> dict:
     groups = optics.set_index('rlnOpticsGroup')
     stack_cache, canonical_images = {}, set()
     for row in particles.itertuples(index=False):
-        match = re.fullmatch(r'([1-9][0-9]*)@(.+)', str(row.rlnImageName))
-        if not match:
+        match = re.fullmatch(r'([0-9]+)@(.+)', str(row.rlnImageName))
+        if not match or int(match[1]) < 1:
             raise ValueError(f'Expected 1-based index@stack.mrcs: {row.rlnImageName}')
         index, stack_name = int(match[1]), match[2]
         stack = Path(stack_name)
-        stack = stack if stack.is_absolute() else project / stack
-        identity = (index, stack.resolve())
+        stack = (stack if stack.is_absolute() else project / stack).resolve()
+        identity = (index, stack)
         if identity in canonical_images:
             raise ValueError('Duplicate particle image after path normalization')
         canonical_images.add(identity)
         if check_stacks:
             if stack not in stack_cache:
                 with mrcfile.mmap(stack, permissive=False) as handle:
+                    if np.iscomplexobj(handle.data):
+                        raise ValueError(f'{stack}: expected real-space particle images')
+                    if tuple(int(handle.header[a]) for a in ('mapc', 'mapr', 'maps')) != (1, 2, 3):
+                        raise ValueError(f'{stack}: noncanonical particle stack axes')
                     shape = handle.data.shape
                     # MRC may expose a single image as 2D rather than a stack of length one.
                     stack_cache[stack] = ((1, *shape) if len(shape) == 2 else shape)
@@ -101,6 +116,7 @@ def validate_star(path: Path, project: Path, check_stacks: bool = True) -> dict:
     if any(particles.rlnDefocusU > 100000) or any(particles.rlnDefocusV > 100000):
         warnings.append('Defocus exceeds 10 micrometers; inspect CTF fits and units')
     return {'particles': len(particles), 'optics_groups': len(optics), 'half_sets': subsets,
+            'stack_checks_performed': check_stacks,
             'pixel_sizes_angstrom': sorted(set(float(x) for x in optics.rlnImagePixelSize)),
             'box_sizes': sorted(set(int(x) for x in optics.rlnImageSize)), 'warnings': warnings}
 
@@ -113,7 +129,7 @@ def check_halves(first: Path, second: Path, mask: Path | None = None, max_voxels
         raise ValueError('Half maps disagree in grid, pixel size, or origin')
     if np.array_equal(a, b):
         raise ValueError('Half maps are identical; provide independent unfiltered half reconstructions')
-    if np.std(a) == 0 or np.std(b) == 0:
+    if a.min() == a.max() or b.min() == b.max():
         raise ValueError('Constant half map has no measurable signal')
     if mask:
         m, mp, mo = read_map(mask)
@@ -166,7 +182,7 @@ def run_native_command(command: list[str], output: Path, project: Path, executab
         raise ValueError('Use an empty output directory; preserve prior jobs for restart/provenance')
     version = subprocess.run([executable, '--version'], capture_output=True, text=True, check=True)
     version_text = version.stdout + version.stderr
-    if '5.0.1' not in version_text:
+    if not re.search(r'(?<![\w.])5\.0\.1(?![\w.])', version_text):
         raise ValueError('This runner targets RELION5.0.1; verify the installed executable before adapting it')
     output.mkdir(parents=True, exist_ok=True)
     (output/'version.txt').write_text(version_text)
@@ -207,8 +223,11 @@ def main() -> None:
             reference, pixel, _ = read_map(args.reference)
             if result['box_sizes'] != [reference.shape[0]] or any(abs(p-pixel)>1e-5*pixel for p in result['pixel_sizes_angstrom']):
                 raise ValueError('Reference box/pixel size must match all particle optics groups for this bounded runner')
-            if not 0 < args.diameter < reference.shape[0]*pixel or args.initial_lowpass < 2*pixel or args.threads<1 or args.mpi_ranks<3 or args.mpi_ranks%2 == 0:
-                raise ValueError('Invalid diameter, lowpass, threads or MPI ranks (use odd ranks >=3)')
+            if (not math.isfinite(args.diameter) or not math.isfinite(args.initial_lowpass)
+                    or not 0 < args.diameter < reference.shape[0]*pixel or args.initial_lowpass < 2*pixel
+                    or args.threads < 1 or args.mpi_ranks < 3 or args.mpi_ranks % 2 == 0
+                    or not 0 <= args.seed <= 2147483647):
+                raise ValueError('Invalid diameter, lowpass, threads, seed (0..2147483647) or MPI ranks (use odd ranks >=3)')
             if not re.fullmatch(r'(?:[CD][1-9][0-9]*|[TO]|I[1-4]?)', args.symmetry):
                 raise ValueError('Use an explicit supported RELION point-group symmetry such as C1, D2, O, I1')
             command = [args.mpirun, '-np', str(args.mpi_ranks), args.executable, '--o', str(args.output.resolve()/'run'), '--i', str(args.star.resolve()),

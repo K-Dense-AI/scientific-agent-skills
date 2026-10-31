@@ -30,7 +30,7 @@ required rigour follows from it.
 | Analysis population | [ ] |
 | Analyte and matrix | [ ] |
 | Assay and LLOQ | [ ] (see the bioanalytical validation report) |
-| Time reference | actual elapsed time from the most recent dose |
+| Time reference | actual elapsed time from a subject/occasion origin; TAD separate |
 | Dataset specification | [ reference the document ] |
 | Derivation script | [ path / repository ] |
 
@@ -43,7 +43,7 @@ required rigour follows from it.
 - [ ] Other: [ ]
 
 **BLQ handling:** [ M1 / M3 / other ]. Justification: [ ]. Expected BLQ fraction: [ ]%.
-If the observed BLQ fraction exceeds [ ]%, the method changes to M3.
+Prespecified sensitivity analysis for alternative censoring assumptions: [ ].
 
 **Missing covariates:** [ imputation rule, or exclusion ]. Missingness will be tabulated before
 imputation.
@@ -65,10 +65,10 @@ Candidate structures to be evaluated: [ ]
 
 Parameterisation is clearance-based (CL, V, Q, Vp) in all candidates.
 
-Selection criteria, in this order: physiological plausibility; residual patterns; likelihood-ratio
-test for nested models (ΔOFV > [3.84] at 1 df); BIC; parameter precision. **An extra compartment
-whose intercompartmental clearance has RSE above [50]% is not retained regardless of the objective
-function.**
+Selection criteria: [physiological plausibility, residual patterns, uncertainty, predictive checks,
+and justified model-comparison method]. Boundary parameters and unidentified nuisance parameters
+can invalidate a nominal likelihood-ratio reference distribution; specify calibration/simulation
+where needed. Do not replace identifiability assessment with an arbitrary RSE cutoff.
 
 ## 5. Between-subject and between-occasion variability
 
@@ -107,11 +107,11 @@ metric ] by more than [ ]% across the [5th–95th] percentile of the covariate.
 ## 8. Model evaluation
 
 - Goodness-of-fit: DV vs PRED and IPRED; CWRES vs time and vs PRED; |IWRES| vs IPRED
-- Eta shrinkage reported for every eta; covariate plots not interpreted above [30]% shrinkage
+- Eta shrinkage reported for every eta, with SD/variance convention and limitations for covariate plots
 - Prediction-corrected VPC, [ n ] replicates, stratified by [ ]
 - NPDE with tests of mean, variance and normality
 - Parameter uncertainty by [ covariance step / bootstrap (n = ) / SIR / log-likelihood profiling ]
-- Condition number reported; above 1000 is treated as ill-conditioned
+- Sensitivity rank, condition number with scaling, boundaries and profile checks reported
 
 **Acceptance criteria for the final model:** [ ]
 

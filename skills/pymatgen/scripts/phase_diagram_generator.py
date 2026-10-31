@@ -277,7 +277,8 @@ def write_plot_new(
             delete=False,
         ) as handle:
             temporary_path = Path(handle.name)
-        plotter = PDPlotter(diagram, show_unstable=show_unstable)
+        # Matplotlib exports locally without Plotly's optional Kaleido/browser stack.
+        plotter = PDPlotter(diagram, show_unstable=show_unstable, backend="matplotlib")
         plotter.write_image(
             str(temporary_path),
             image_format=suffix.removeprefix("."),

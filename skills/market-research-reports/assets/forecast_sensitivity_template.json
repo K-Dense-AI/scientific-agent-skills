@@ -54,7 +54,7 @@
       ],
       "assumptions": [
         "Demand follows the documented synthetic baseline",
-        "Price basis remains nominal 2025 USD"
+        "Values use each forecast year's nominal USD; 2025 is the historical anchor, not a constant-price base"
       ]
     },
     {

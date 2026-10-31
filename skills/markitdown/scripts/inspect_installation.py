@@ -16,7 +16,7 @@ from importlib.metadata import (
 from typing import Any
 
 
-TARGET_VERSION = "0.1.6"
+TARGET_VERSION = "0.1.8"
 OPTIONAL_DISTRIBUTIONS = (
     "markitdown-ocr",
     "markitdown-mcp",

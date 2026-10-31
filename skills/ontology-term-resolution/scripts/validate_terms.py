@@ -39,10 +39,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ols_client import (  # noqa: E402
     OlsError,
     ancestor_curies,
+    curie_to_ontology_id,
     is_curie,
     iri_to_curie,
     normalize_label,
-    synonyms_of,
+    synonym_scope,
     term_detail,
 )
 
@@ -90,8 +91,10 @@ def read_pairs(args: argparse.Namespace) -> list[tuple[str, str | None]]:
         rows = rows[1:]
 
     for row in rows:
-        if not row or not row[id_index].strip():
+        if not row or row[0].lstrip().startswith("#"):
             continue
+        if len(row) <= id_index or not row[id_index].strip():
+            raise ValueError("input row has a missing or empty identifier column")
         curie = row[id_index].strip()
         if curie.startswith("#"):
             continue
@@ -108,6 +111,7 @@ def check_term(
     *,
     branch: str | None,
     expect_ontologies: set[str] | None,
+    branch_relation: str = "hierarchical",
 ) -> dict:
     """Validate one CURIE and return a result record."""
     result = {
@@ -134,7 +138,10 @@ def check_term(
     result["ontology"] = term.get("ontology_name") or ""
 
     if term.get("is_obsolete"):
-        replacement = iri_to_curie(term.get("term_replaced_by") or "") or ""
+        replacements = term.get("term_replaced_by") or []
+        if isinstance(replacements, str):
+            replacements = [replacements]
+        replacement = "; ".join(iri_to_curie(iri) or iri for iri in replacements)
         result["status"] = "obsolete"
         result["replacement"] = replacement
         result["detail"] = (
@@ -144,10 +151,11 @@ def check_term(
         )
         return result
 
-    if expect_ontologies and result["ontology"] not in expect_ontologies:
+    namespace_ontology = curie_to_ontology_id(curie)
+    if expect_ontologies and namespace_ontology not in expect_ontologies:
         result["status"] = "wrong_ontology"
         result["detail"] = (
-            f"defined by {result['ontology']!r}, expected one of "
+            f"identifier namespace maps to {namespace_ontology!r}, expected one of "
             + ",".join(sorted(expect_ontologies))
         )
         return result
@@ -157,11 +165,12 @@ def check_term(
     if expected_label is not None:
         wanted = normalize_label(expected_label)
         if normalize_label(result["actual_label"]) != wanted:
-            if any(normalize_label(s) == wanted for s in synonyms_of(term)):
+            scope = synonym_scope(expected_label, term)
+            if scope:
                 warnings.append(
                     (
                         "matched_synonym",
-                        f"{expected_label!r} is a synonym; primary label is "
+                        f"{expected_label!r} is a {scope} synonym; primary label is "
                         f"{result['actual_label']!r}",
                     )
                 )
@@ -173,20 +182,20 @@ def check_term(
                 return result
 
     if branch:
-        ancestors = ancestor_curies(curie)
+        ancestors = ancestor_curies(curie, relation=branch_relation) if branch != curie else set()
         if branch not in ancestors and branch != curie:
             result["status"] = "wrong_branch"
             result["detail"] = f"not a descendant of {branch}"
             return result
 
-    # An ID no ontology asserts, surviving only as a copy inside importers, is
-    # stale even though it resolves. Curators reject these.
+    # Importers can hold stale copies; lack of a defining copy requires review,
+    # but does not prove deletion in the source ontology.
     home = term.get("_home_ontology")
-    if not term.get("is_defining_ontology") and result["ontology"] != home:
+    if not term.get("is_defining_ontology"):
         warnings.append(
             (
                 "imported_only",
-                f"{home} does not define this term; found only as a copy in "
+                f"no defining copy verified for {home}; found a copy in "
                 f"{result['ontology']!r}",
             )
         )
@@ -237,6 +246,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--branch", help="require every term to be a descendant of this CURIE"
     )
     parser.add_argument(
+        "--branch-relation", choices=("hierarchical", "is-a"), default="hierarchical",
+        help="hierarchical includes part-of/develops-from; is-a checks subclass ancestry only",
+    )
+    parser.add_argument(
         "--expect-ontology",
         help="comma-separated OLS ontology ids every term must come from",
     )
@@ -252,7 +265,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    pairs = read_pairs(args)
+    try:
+        pairs = read_pairs(args)
+    except (ValueError, OSError) as exc:
+        print(f"Invalid input: {exc}", file=sys.stderr)
+        return 2
     if not pairs:
         print("No terms given. See --help.", file=sys.stderr)
         return 2
@@ -260,6 +277,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.branch and not is_curie(args.branch):
         print(f"--branch expects a CURIE, got {args.branch!r}", file=sys.stderr)
         return 2
+    if args.branch:
+        try:
+            root = term_detail(args.branch)
+        except OlsError as exc:
+            print(f"Could not resolve --branch: {exc}", file=sys.stderr)
+            return 2
+        if not root or root.get("is_obsolete"):
+            print("--branch must resolve to a current OLS term.", file=sys.stderr)
+            return 2
 
     expect_ontologies = (
         {value.strip().lower() for value in args.expect_ontology.split(",") if value.strip()}
@@ -276,6 +302,7 @@ def main(argv: list[str] | None = None) -> int:
                     label,
                     branch=args.branch,
                     expect_ontologies=expect_ontologies,
+                    branch_relation=args.branch_relation,
                 )
             )
         except OlsError as exc:

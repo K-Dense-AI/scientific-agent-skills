@@ -567,7 +567,6 @@ workflow above: Folklore does not process VCFs or somatic variants.
 - `scientific-visualization` - Publication-quality & interactive visualization
 - `scikit-survival` - Survival analysis
 - `pathway-enrichment` - Gene-set and pathway enrichment analysis
-- `xlsx` - Supplementary tables of DE results and subtype assignments
 
 **Starting prompt**:
 
@@ -1192,13 +1191,12 @@ Expected Output:
 - `scientific-writing` - Evidence-traceable research synthesis
 - `market-research-reports` - Claim/source mapping, sizing, and scenario analysis
 - `usfiscaldata` - U.S. federal R&D and economic context data
-- `xlsx` - The trial database and comparison tables as a working spreadsheet
 
 **Starting prompt**:
 
 ```text
-Use the database-lookup, polars, market-research-reports, scientific-writing,
-and xlsx skills.
+Use the database-lookup, polars, market-research-reports, and
+scientific-writing skills.
 
 Goal: a landscape of everything in development for this indication, and where
 the white space is.
@@ -1342,13 +1340,12 @@ Expected Output:
 - `statistical-analysis` - Assumption checks and interval estimation around the model outputs
 - `scientific-visualization` - Concentration-time profiles, VPC-style overlays, attainment curves
 - `matplotlib` - Figures
-- `xlsx` - Parameter tables, cohort summaries, and traceability
 
 **Starting prompt**:
 
 ```text
 Use the pkpd-modeling, experimental-design, uncertainty-and-units,
-statistical-analysis, scientific-visualization, and xlsx skills.
+statistical-analysis, and scientific-visualization skills.
 
 Goal: a proposed Phase 2 regimen for an oral small molecule, with the
 first-in-human starting dose, the PK model it rests on, and the exposure-
@@ -2141,7 +2138,6 @@ Expected Output:
 - `matplotlib` - Plate visualization
 - `scientific-visualization` - Publication-quality & interactive visualization
 - `rdkit` - PAINS filtering for hits
-- `xlsx` - Plate maps and hit lists for the bench
 - `scientific-writing` - Evidence-traceable screening report
 
 **Starting prompt**:
@@ -4147,7 +4143,6 @@ Expected Output:
 - `fluidsim` - Fluid dynamics simulation
 - `openpiv` - Validate simulated mixing against measured velocity fields
 - `scientific-writing` - Engineering reports
-- `pdf` - Technical documentation
 
 **Starting prompt**:
 
@@ -4515,16 +4510,14 @@ Expected Output:
 - `scientific-schematics` - Scientific diagrams
 - `scientific-writing` - Figure caption creation
 - `scientific-slides` - Presentation materials
-- `pptx` - Slide decks and figure-panel layouts
 - `latex-posters` - Conference posters
 - `pptx-posters` - Macro-free `.pptx` posters from approved local manifests
-- `pdf` - PDF report generation
 
 **Starting prompt**:
 
 ```text
 Use the scientific-visualization, scientific-schematics, matplotlib,
-generate-image, scientific-writing, pptx, and pdf skills.
+generate-image, and scientific-writing skills.
 
 Goal: a figure package for submission, plus a talk version of the same figures.
 Criteria: data figures come from the data, always. Generated imagery is
@@ -4655,7 +4648,7 @@ Step 12: Assemble final publication package
 - Organize all figures in publication order
 - Verify the target venue's current dimensions, resolution, color-space, font,
   accessibility, and submission requirements before export
-- Compile into PDF using pdf skill:
+- Compile into PDF:
   * Title page with graphical abstract
   * All figures with captions
   * Supplementary figures section
@@ -4922,16 +4915,13 @@ Expected Output:
 - `scientific-critical-thinking` - Research design
 - `peer-review` - Self-assessment against the review criteria before submission
 - `citation-management` - Reference formatting
-- `xlsx` - Budget spreadsheet and personnel effort tables
-- `docx` - Editable sections for collaborators
-- `pdf` - PDF generation
 
 **Starting prompt**:
 
 ```text
 Use the research-grants, literature-review, hypothesis-generation,
-experimental-design, statistical-power, scientific-writing, peer-review,
-citation-management, xlsx, and pdf skills.
+experimental-design, statistical-power, scientific-writing, peer-review, and
+citation-management skills.
 
 Goal: a complete R01 package, plus an honest internal review of it.
 Criteria: each aim states its hypothesis, its design, its power analysis, and
@@ -6074,13 +6064,12 @@ Expected Output:
 - `dhdna-profiler` - Optional, non-evaluative characterization of reasoning style in a text
 - `citation-management` - Reference formatting
 - `literature-review` - Systematic synthesis
-- `xlsx` - Evidence tables and screening logs
 
 **Starting prompt**:
 
 ```text
 Use the research-lookup, paper-lookup, exa-search, liteparse, markitdown,
-open-notebook, pyzotero, citation-management, literature-review, and xlsx skills.
+open-notebook, pyzotero, citation-management, and literature-review skills.
 
 Goal: a systematic review with an auditable search, not a summary of whatever
 came back first.
@@ -6185,13 +6174,12 @@ Expected Output:
 - `literature-review` - Screening protocol and synthesis structure
 - `citation-management` - Reference formatting and DOI/PMID verification
 - `scientific-writing` - Claim-to-evidence mapping in the final packet
-- `xlsx` - Extraction table, one row per document, with the cited line ranges
 
 **Starting prompt**:
 
 ```text
-Use the paperclip, paper-lookup, literature-review, citation-management,
-scientific-writing, and xlsx skills.
+Use the paperclip, paper-lookup, literature-review, citation-management, and
+scientific-writing skills.
 
 Goal: an evidence packet on a single claim — whether the hepatotoxicity signal
 for <drug class> was visible in the pivotal trials before it appeared in the
@@ -6307,15 +6295,12 @@ Expected Output:
 - `iso-standards-readiness` - Draft scope, controlled-document, and evidence preparation
 - `scientific-writing` - Evidence provenance and accountable draft controls
 - `markdown-mermaid-writing` - Process diagrams and SOP flowcharts
-- `xlsx` - Requirements/evidence traceability matrix
-- `docx` - Formatted Word deliverables
-- `pdf` - Final controlled documents
 
 **Starting prompt**:
 
 ```text
-Use the iso-standards-readiness, scientific-writing, markdown-mermaid-writing,
-xlsx, docx, and pdf skills.
+Use the iso-standards-readiness, scientific-writing, and
+markdown-mermaid-writing skills.
 
 Goal: a draft evidence package for our RA/QA team to assess readiness against.
 Criteria: every statement traces to a document they gave you. Where evidence
@@ -6380,14 +6365,12 @@ Expected Output:
 - `analytical-method-validation` - Framework selection, protocol, and the validation statistics
 - `statistical-analysis` - Supporting diagnostics and assumption checks
 - `scientific-visualization` - Residual plots, recovery plots, Bland-Altman and difference plots
-- `xlsx` - Raw-data and traceability tables
-- `docx` - Formatted protocol and report deliverables
 
 **Starting prompt**:
 
 ```text
-Use the analytical-method-validation, statistical-analysis,
-scientific-visualization, xlsx, and docx skills.
+Use the analytical-method-validation, statistical-analysis, and
+scientific-visualization skills.
 
 Goal: a validation protocol and report for an HPLC related-substances procedure,
 plus a transfer assessment to our second site.
@@ -6476,18 +6459,14 @@ Expected Output:
 - `venue-templates` - LaTeX templates and submission guidelines
 - `markitdown` - Convert drafts/sources to Markdown
 - `citation-management` - Reference formatting and verification
-- `xlsx` - Supplementary data tables
-- `docx` - Word manuscript output
 - `latex-posters` - Conference poster
 - `pptx-posters` - Macro-free PowerPoint poster from an approved local manifest
-- `pdf` - Final compiled outputs
 
 **Starting prompt**:
 
 ```text
 Use the scientific-writing, markdown-mermaid-writing, scientific-schematics,
-infographics, peer-review, venue-templates, citation-management, docx, and
-pdf skills.
+infographics, peer-review, venue-templates, and citation-management skills.
 
 Goal: a submission-ready draft package plus the critique I would get from a
 hostile reviewer.
@@ -6755,7 +6734,7 @@ Zenodo, Figshare, BioStudies, ROR)
 `scientific-writing` · `scientific-visualization` · `scientific-schematics` ·
 `scientific-slides` · `markdown-mermaid-writing` · `infographics` · `generate-image` ·
 `matplotlib` · `seaborn` · `latex-posters` · `pptx-posters` · `venue-templates` ·
-`pdf` · `docx` · `pptx` · `xlsx` · `research-grants` · `market-research-reports`
+`research-grants` · `market-research-reports`
 
 **Clinical pharmacology & pharmacometrics**
 `pkpd-modeling`

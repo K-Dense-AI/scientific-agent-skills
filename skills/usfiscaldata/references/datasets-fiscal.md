@@ -26,46 +26,27 @@ The DTS dataset has **9 data tables**, all under `/v1/accounting/dts/`. Updated 
 |-------|------|-------------|
 | `record_date` | DATE | Business date |
 | `account_type` | STRING | Account/balance type |
-| `open_today_bal` | CURRENCY | Opening balance |
-| `open_month_bal` | CURRENCY | Opening month balance |
-| `open_fiscal_year_bal` | CURRENCY | Opening fiscal year balance |
-| `close_today_bal` | CURRENCY | Closing balance |
-| `transaction_today_amt` | CURRENCY | Today's transaction amount |
-| `transaction_mtd_amt` | CURRENCY | Month-to-date amount |
-| `transaction_fytd_amt` | CURRENCY | Fiscal year-to-date amount |
+| `open_today_bal` | CURRENCY0 | Opening balance |
+| `open_month_bal` | CURRENCY0 | Opening month balance |
+| `open_fiscal_year_bal` | CURRENCY0 | Opening fiscal year balance |
+| `close_today_bal` | CURRENCY0 | Closing balance |
+| `transaction_today_amt` | CURRENCY0 | Today's transaction amount |
+| `transaction_mtd_amt` | CURRENCY0 | Month-to-date amount |
+| `transaction_fytd_amt` | CURRENCY0 | Fiscal year-to-date amount |
 
-```python
-# Get current Treasury General Account (TGA) balance
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance",
-    params={"sort": "-record_date", "page[size]": 5}
-)
-for row in resp.json()["data"]:
-    print(f"{row['record_date']}: ${float(row['close_today_bal']):,.0f}M (closing balance)")
+Since April 18, 2022, `close_today_bal` is null. Select
+`account_type:eq:Treasury General Account (TGA) Closing Balance` and read
+`open_today_bal` for the closing balance (millions of USD). The similarly named
+opening-balance row is a different observation. See [examples.md](examples.md).
 
-# Get deposits and withdrawals for a specific period
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/deposits_withdrawals_operating_cash",
-    params={
-        "filter": "record_date:gte:2024-01-01,record_date:lte:2024-01-31",
-        "sort": "record_date",
-        "page[size]": 1000
-    }
-)
-```
+Table II has category hierarchies; preserve `account_type`, `transaction_type`,
+`transaction_catg` and `transaction_catg_desc` before selecting totals. Use the
+explicit Table I total deposit/withdrawal rows for a daily cash-flow summary.
+Do not add cumulative `transaction_mtd_amt`/`transaction_fytd_amt` across dates.
 
-### Aggregation Example (DTS)
-
-```python
-# Get sum of today's transaction amounts by transaction type
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/deposits_withdrawals_operating_cash",
-    params={
-        "fields": "record_date,transaction_type,transaction_today_amt",
-        "filter": "record_date:eq:2024-01-15"
-    }
-)
-```
+Federal Tax Deposits is historical; the current reporting structure uses
+Inter-Agency Tax Transfers and Table II. Short-Term Cash Investments is
+historical and was removed from the published report in February 2023.
 
 ---
 
@@ -84,7 +65,7 @@ The MTS dataset has **18 data tables**, all under `/v1/accounting/mts/`. Updated
 | `/v1/accounting/mts/mts_table_3` | Summary of receipts and outlays |
 | `/v1/accounting/mts/mts_table_4` | Receipts of the U.S. Government |
 | `/v1/accounting/mts/mts_table_5` | Outlays of the U.S. Government |
-| `/v1/accounting/mts/mts_table_5m` | Receipts and outlays by month |
+| `/v1/accounting/mts/mts_table_5m` | Receipts offset against outlays |
 | `/v1/accounting/mts/mts_table_6` | Means of financing the deficit or disposition of surplus |
 | `/v1/accounting/mts/mts_table_6a` | Analysis of change in excess of liabilities |
 | `/v1/accounting/mts/mts_table_6b` | Securities issued under special financing authorities |
@@ -98,41 +79,31 @@ The MTS dataset has **18 data tables**, all under `/v1/accounting/mts/`. Updated
 | `/v1/accounting/mts/mts_distributed_offsetting_receipts` | Distributed offsetting receipts |
 | `/v1/accounting/mts/mts_receipts_outlays_deficit_surplus` | Receipts, outlays, and deficit/surplus |
 
-### Common MTS Fields
+### MTS field and unit differences
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `record_date` | DATE | Month end date |
-| `record_fiscal_year` | STRING | Fiscal year (Oct–Sep) |
-| `record_fiscal_quarter` | STRING | Fiscal quarter (1–4) |
-| `classification_desc` | STRING | Line item description |
-| `classification_id` | STRING | Line item code |
-| `parent_id` | STRING | Parent classification ID |
-| `current_month_gross_rcpt_amt` | CURRENCY | Current month gross receipts |
-| `current_fytd_gross_rcpt_amt` | CURRENCY | Fiscal year-to-date gross receipts |
-| `prior_fytd_gross_rcpt_amt` | CURRENCY | Prior year fiscal-year-to-date |
+| Table | Amount fields | Interpretation |
+|-------|---------------|----------------|
+| Table 1 | `current_month_gross_rcpt_amt`, `current_month_gross_outly_amt`, `current_month_dfct_sur_amt` | Dollar amounts; each publication includes multiple months, fiscal years and YTD rows |
+| Table 9 | `current_month_rcpt_outly_amt`, `current_fytd_rcpt_outly_amt`, `prior_fytd_rcpt_outly_amt` | Dollar amounts by receipt source/outlay function |
+| Monthly summary | `amt_category`, `mil_amt` | One category per reporting month; amount in millions of USD |
 
-```python
-# MTS Table 1: Summary of receipts and outlays
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_1",
-    params={
-        "filter": "record_fiscal_year:eq:2024",
-        "sort": "record_date"
-    }
-)
-df = pd.DataFrame(resp.json()["data"])
+`record_date` dates the publication, not necessarily the month described by a
+Table 1 row. For a simple monthly budget series use
+`mts_receipts_outlays_deficit_surplus` as shown in [examples.md](examples.md).
+Deficit is positive and surplus negative in its `Deficit/Surplus (-)` category.
 
-# MTS Table 9: Get line 120 (Total Receipts) for most recent period
-resp = requests.get(
-    "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_9",
-    params={
-        "filter": "line_code_nbr:eq:120",
-        "sort": "-record_date",
-        "page[size]": 1
-    }
-)
-```
+Tables have totals, subtotals and structural rows with null values. Reconcile
+`parent_id`/`classification_id` within each publication before aggregating;
+classification IDs change between publications. Do not filter Table 1 for
+"Total Receipts": its receipt and outlay values are columns on month/YTD rows.
+Table 9 line 120 is the documented total-receipts example; inspect its label and
+hierarchy and use `current_month_rcpt_outly_amt`.
+
+The dataset's generic notes describe published reports in millions, but live
+Table 1/9 API amounts are dollar-scale while `mil_amt` explicitly represents
+millions. Validate each field against the matching report; never apply one
+scaling factor to all MTS endpoints. API coverage starts at different dates by
+table; the dataset-wide 1980 start is not every table's first API observation.
 
 ---
 
@@ -150,7 +121,7 @@ Daily tax and non-tax revenue collections.
 
 **Endpoint:** (8 tables)  
 **Frequency:** Annual  
-**Date Range:** September 1995 to present (FY2024 latest)
+**Date Range:** September 1995 onward; inspect the latest published fiscal year
 
 Annual audited financial statements. Includes:
 - Balance sheets
@@ -165,7 +136,7 @@ Annual audited financial statements. Includes:
 **Frequency:** Monthly  
 **Date Range:** October 2013 to present
 
-Monthly federal disbursements data.
+Monthly federal disbursements reports. The current catalog has no REST endpoint for this table; use its dataset-page downloads.
 
 ---
 
@@ -184,7 +155,7 @@ Annual breakdown of federal receipts by department.
 **Frequency:** Quarterly  
 **Date Range:** December 2022 to present (3 data tables)
 
-Treasury-managed trust and special funds account data.
+Agency-level Contract Disputes Receivables, No FEAR Act Receivables and Unclaimed Money balances. This dataset does not identify unclaimed money owed to individual people.
 
 ---
 
@@ -210,3 +181,11 @@ Quarterly financial report covering government finances, public debt, savings bo
 | `/v1/accounting/tb/pdo2_offerings_marketable_securities_other_regular_weekly_treasury_bills` | Other marketable securities offerings |
 | `/v1/accounting/tb/uscc1_amounts_outstanding_circulation` | Amounts outstanding and in circulation |
 | `/v1/accounting/tb/uscc2_amounts_outstanding_circulation` | Amounts outstanding and in circulation (continued) |
+
+## Official sources
+
+Reviewed 2026-09-30 against the current dataset dictionaries and live API responses.
+
+- [Daily Treasury Statement](https://fiscaldata.treasury.gov/datasets/daily-treasury-statement/)
+- [Monthly Treasury Statement](https://fiscaldata.treasury.gov/datasets/monthly-treasury-statement/)
+- [Treasury Bulletin](https://fiscaldata.treasury.gov/datasets/treasury-bulletin/)

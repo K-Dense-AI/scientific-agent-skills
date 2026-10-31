@@ -105,7 +105,10 @@ It is computationally more expensive than `CosineGreedy`.
 
 ### `CosineLinear`
 
-Added in 0.33.0 as a linear-scaling cosine implementation.
+Added in 0.33.0. It first greedily merges nearby peaks using a `2 * tolerance`
+separation criterion, then performs linear-time matching on the merged spectra.
+The score and matched-peak count therefore need not equal `CosineGreedy` on the
+original peaks, even with identical tolerance and intensity powers.
 
 Use when:
 
@@ -184,8 +187,10 @@ metric = BlinkCosine(
 ```
 
 Important parameters include peak preprocessing, precursor cropping, batch
-size, and sparse score minimum. Output contains a float32 score and matched-peak
-count. Validate approximation behavior against `CosineGreedy` on a subset
+size, and sparse score minimum. By default `crop_above_precursor=True` crops
+where a precursor is available; record precursor coverage or disable this
+option when that extra step is inappropriate. Output contains a float32 score
+and matched-peak count. Validate approximation behavior against `CosineGreedy` on a subset
 before changing production workflows.
 
 ### `FlashSimilarity`
@@ -208,16 +213,35 @@ fast_modified_cosine = FlashSimilarity(
 )
 ```
 
-Current choices:
+Current choices and behavior:
 
 - `score_type`: `spectral_entropy` or `cosine`
 - `matching_mode`: `fragment`, `neutral_loss`, or `hybrid`
-- optional preprocessing: precursor removal, noise cutoff, peak merging, dtype,
-  and identity precursor tolerance
+- `use_ppm=True` switches fragment tolerance to symmetric ppm; default is Da
+- `remove_precursor=False`, `noise_cutoff=0.01`, `merge_within=0`, and
+  `normalize_to_half=True` are defaults; entropy weighting is internal
+- neutral-loss/hybrid matching and an identity precursor gate need valid
+  precursor metadata
+- `identity_precursor_tolerance` and `identity_use_ppm` control a separate
+  precursor gate
 
 `pair()` exists but emits a warning because it is not the optimized use. Call
-`calculate_scores()` so matchms uses the matrix path. Flash output is a scalar
-field named `FlashSimilarity`, not a score/matches pair.
+`calculate_scores()` for multi-spectrum matrices. A 1-by-1 `Scores.calculate`
+call still uses `pair()`. Flash output is a scalar field named `FlashSimilarity`,
+not a score/matches pair. Hybrid matching gives unshifted fragment matches
+priority; do not assume equality with greedy or Hungarian modified cosine.
+
+In 0.33.1, `matrix()` allocates a dense output even for `array_type="sparse"`,
+and `is_symmetric=True` does not reduce Flash runtime. Its default worker count
+uses available CPUs on Unix; call `metric.matrix(..., n_jobs=1)` for an explicit
+serial calculation (this returns a raw array, not `Scores`). Do not assume a
+sparse output is a bounded-memory or bounded-CPU search.
+
+**Verified 0.33.1 defect:** `score_type="spectral_entropy"` with
+`matching_mode="neutral_loss"` adds fragment and loss contributions, producing
+a self-score near 2 on the tested three-peak spectrum. Do not use that
+combination as a normalized entropy score; choose fragment entropy or
+`NeutralLossesCosine` as appropriate. Do not silently clip or rescale it.
 
 ### `BinnedEmbeddingSimilarity`
 
@@ -233,9 +257,14 @@ metric = BinnedEmbeddingSimilarity(
 ```
 
 This creates fixed-width binned spectral embeddings. Bin width controls both
-resolution and dimensionality. The class also supports approximate-neighbor
+resolution and dimensionality. Reject empty/all-zero embeddings, including
+spectra with no retained peak below `max_mz`, before scoring. The class also supports approximate-neighbor
 indexing through the current PyNNDescent backend; use it only after checking
-recall against exact neighbors.
+recall against exact neighbors. In 0.33.1 the matrix method accepts only dense
+output and `is_symmetric=True`; use it for all-vs-all input. A normal rectangular
+`calculate_scores` call with its default `is_symmetric=False` raises an error.
+For rectangular embedding comparisons, compute the embeddings explicitly and
+compare those with the intended vector metric.
 
 ## Candidate and Metadata Matches
 
@@ -340,6 +369,8 @@ scores = calculate_scores(
     array_type="sparse",
 )
 scores.filter_by_range(name="PrecursorMzMatch", low=0.5)
+if len(scores.scores.row) == 0:
+    raise ValueError("No candidates passed the precursor gate")
 scores.calculate(
     ModifiedCosineGreedy(tolerance=0.02),
     array_type="sparse",
@@ -347,10 +378,14 @@ scores.calculate(
 )
 ```
 
-After `filter_by_range`, the second calculation can operate on retained
-coordinates. Confirm `scores.score_names` and stored-coordinate counts after
-each stage. An overly narrow precursor gate can remove valid analogs or
-different adducts.
+In 0.33.1, `Scores.calculate` selects its coordinate-only `sparse_array` path
+only with an existing score layer, `join_type="left"` or `"inner"`, and **fewer
+than half** of all coordinates retained. Otherwise it computes the full matrix
+then joins; setting `array_type="sparse"` alone does not change this. A 1-by-1
+input always uses `pair()`, even after a rejecting gate. Stop explicitly when
+no candidate coordinates remain. Confirm score names and coordinate counts
+after each stage. An overly narrow precursor gate removes analogs or different
+adducts; this example is for identity-oriented candidate search.
 
 The `Pipeline` class formalizes the same pattern and can persist a YAML
 workflow. See `workflows.md`.

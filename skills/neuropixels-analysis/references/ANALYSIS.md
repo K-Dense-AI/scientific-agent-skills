@@ -1,6 +1,8 @@
 # Post-Processing & Analysis Reference
 
-Comprehensive guide to quality metrics, visualization, and analysis of sorted Neuropixels data.
+Targets SI 0.105.0 (reviewed 2026-10-01). Recording-dependent examples are illustrative.
+Use [QUALITY_METRICS.md](QUALITY_METRICS.md) for metric dependencies and caveats;
+result columns below are not necessarily computation names.
 
 ## Sorting Analyzer
 
@@ -28,17 +30,18 @@ analyzer.compute('waveforms')           # Extract waveforms
 analyzer.compute('templates')           # Compute templates
 analyzer.compute('noise_levels')        # Noise estimation
 analyzer.compute('principal_components')  # PCA
-analyzer.compute('spike_amplitudes')    # Amplitude per spike
+analyzer.compute('spike_amplitudes')
+analyzer.compute('amplitude_scalings')    # Amplitude per spike
 analyzer.compute('correlograms')        # Auto/cross correlograms
 analyzer.compute('unit_locations')      # Unit locations
 analyzer.compute('spike_locations')     # Per-spike locations
 analyzer.compute('template_similarity') # Template similarity matrix
-analyzer.compute('quality_metrics')     # Quality metrics
+analyzer.compute('quality_metrics', metric_names=['snr', 'isi_violation', 'presence_ratio', 'amplitude_cutoff', 'firing_rate'])     # Quality metrics
 
 # Or compute multiple at once
 analyzer.compute([
     'random_spikes', 'waveforms', 'templates', 'noise_levels',
-    'principal_components', 'spike_amplitudes', 'correlograms',
+    'principal_components', 'spike_amplitudes', 'amplitude_scalings', 'correlograms',
     'unit_locations', 'quality_metrics'
 ])
 ```
@@ -56,7 +59,7 @@ analyzer = si.load_sorting_analyzer('analyzer_saved')
 
 ### Compute Metrics
 ```python
-analyzer.compute('quality_metrics')
+analyzer.compute('quality_metrics', metric_names=['snr', 'isi_violation', 'presence_ratio', 'amplitude_cutoff', 'firing_rate'])
 qm = analyzer.get_extension('quality_metrics').get_data()
 print(qm)
 ```
@@ -66,7 +69,7 @@ print(qm)
 | Metric | Description | Good Values |
 |--------|-------------|-------------|
 | `snr` | Signal-to-noise ratio | > 5 |
-| `isi_violations_ratio` | ISI violation ratio | < 0.01 (1%) |
+| `isi_violations_ratio` | Rate-normalized ISI ratio | < 0.01 (not 1%) |
 | `isi_violations_count` | ISI violation count | Low |
 | `presence_ratio` | Fraction of recording with spikes | > 0.9 |
 | `firing_rate` | Spikes per second | 0.1-50 Hz |
@@ -89,7 +92,7 @@ print(qm)
 ```python
 analyzer.compute(
     'quality_metrics',
-    metric_names=['snr', 'isi_violations_ratio', 'presence_ratio', 'firing_rate']
+    metric_names=['snr', 'isi_violation', 'presence_ratio', 'firing_rate']
 )
 ```
 
@@ -118,10 +121,11 @@ print(f"Good units: {len(good_units)}/{len(qm)}")
 
 ### Extract Waveforms
 ```python
-analyzer.compute('waveforms', ms_before=1.5, ms_after=2.5, max_spikes_per_unit=500)
+analyzer.compute('random_spikes', max_spikes_per_unit=500, seed=42)
+analyzer.compute('waveforms', ms_before=1.5, ms_after=2.5)
 
 # Get waveforms for a unit
-waveforms = analyzer.get_extension('waveforms').get_waveforms(unit_id=0)
+waveforms = analyzer.get_extension('waveforms').get_waveforms_one_unit(unit_id=0)
 print(f"Shape: {waveforms.shape}")  # (n_spikes, n_samples, n_channels)
 ```
 
@@ -195,7 +199,7 @@ si.plot_unit_templates(analyzer, unit_ids=[0, 1, 2])
 si.plot_unit_waveforms(analyzer, unit_ids=[0])
 
 # Waveform density
-si.plot_unit_waveforms_density_map(analyzer, unit_id=0)
+si.plot_unit_waveforms_density_map(analyzer, unit_ids=[0])
 ```
 
 ### Raster Plot
@@ -206,6 +210,7 @@ si.plot_rasters(sorting, time_range=(0, 10))  # First 10 seconds
 ### Amplitudes
 ```python
 analyzer.compute('spike_amplitudes')
+analyzer.compute('amplitude_scalings')
 si.plot_amplitudes(analyzer)
 
 # Distribution
@@ -241,7 +246,8 @@ si.plot_unit_locations(analyzer)
 
 ### Drift Map
 ```python
-si.plot_drift_raster(sorting, recording)
+analyzer.compute("spike_locations", method="center_of_mass")
+si.plot_drift_raster_map(sorting_analyzer=analyzer)
 ```
 
 ### Summary Plot
@@ -271,8 +277,8 @@ lfp_car = si.common_reference(lfp_ds, reference='global', operator='median')
 ```python
 import numpy as np
 
-# Get traces (channels x samples)
-traces = lfp.get_traces(start_frame=0, end_frame=30000)
+# Get traces (samples x channels), in calibrated microvolts
+traces = lfp.get_traces(start_frame=0, end_frame=min(30000, lfp.get_num_samples()), return_in_uV=True)
 
 # Specific channels
 traces = lfp.get_traces(channel_ids=[0, 1, 2])
@@ -284,14 +290,16 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 # Get single channel
-trace = lfp.get_traces(channel_ids=[0]).flatten()
+trace = lfp.get_traces(channel_ids=[lfp.channel_ids[0]],
+                       end_frame=min(lfp.get_num_samples(), int(60 * lfp.get_sampling_frequency())),
+                       return_in_uV=True).flatten()
 fs = lfp.get_sampling_frequency()
 
 # Power spectrum
 freqs, psd = signal.welch(trace, fs, nperseg=4096)
 plt.semilogy(freqs, psd)
 plt.xlabel('Frequency (Hz)')
-plt.ylabel('Power')
+plt.ylabel('PSD (uV squared / Hz)')
 plt.xlim(0, 100)
 ```
 
@@ -320,21 +328,14 @@ si.export_to_phy(
 ```
 
 ### Export to NWB
-```python
-from spikeinterface.exporters import export_to_nwb
 
-export_to_nwb(
-    recording,
-    sorting,
-    'output.nwb',
-    metadata=dict(
-        session_description='Neuropixels recording',
-        experimenter='Name',
-        lab='Lab name',
-        institution='Institution'
-    )
-)
-```
+There is no `spikeinterface.exporters.export_to_nwb` in SI 0.105.0.
+Use [NeuroConv's NWBConverter](https://neuroconv.readthedocs.io/en/main/user_guide/nwbconverter.html)
+with the source recording and sorting interfaces, then validate the NWB output.
+Supply session identity, timezone-aware start time, electrode/probe metadata,
+calibration, and a shared clock for ElectricalSeries and units. A units-only
+conversion does not preserve raw voltage/electrode metadata automatically. This
+optional workflow is documentation-verified, not executed by the bundled scripts.
 
 ### Export Report
 ```python
@@ -342,7 +343,7 @@ si.export_report(
     analyzer,
     output_folder='report',
     remove_if_exists=True,
-    format='html'
+    format='png'
 )
 ```
 
@@ -357,16 +358,16 @@ def analyze_sorting(recording, sorting, output_dir):
     # Create analyzer
     analyzer = si.create_sorting_analyzer(
         sorting, recording,
-        sparse=True,
+        sparse=True, format='binary_folder',
         folder=f'{output_dir}/analyzer'
     )
 
     # Compute all extensions
     print("Computing extensions...")
     analyzer.compute(['random_spikes', 'waveforms', 'templates', 'noise_levels'])
-    analyzer.compute(['principal_components', 'spike_amplitudes'])
+    analyzer.compute(['principal_components', 'spike_amplitudes', 'amplitude_scalings'])
     analyzer.compute(['correlograms', 'unit_locations', 'template_similarity'])
-    analyzer.compute('quality_metrics')
+    analyzer.compute('quality_metrics', metric_names=['snr', 'isi_violation', 'presence_ratio', 'amplitude_cutoff', 'firing_rate'])
 
     # Get quality metrics
     qm = analyzer.get_extension('quality_metrics').get_data()
@@ -390,3 +391,8 @@ def analyze_sorting(recording, sorting, output_dir):
 # Usage
 analyzer, qm, good_units = analyze_sorting(recording, sorting, 'output/')
 ```
+
+SpikeInterface 0.105.0 has an observed `read_phy` bug for exported nonnumeric
+unit IDs (`np.isnan` TypeError). Phy export preserves `cluster_si_unit_ids.tsv`;
+keep that mapping and use a validated importer/fixed release for string-ID
+readback. Numeric-ID Phy export/reload was tested on synthetic data.

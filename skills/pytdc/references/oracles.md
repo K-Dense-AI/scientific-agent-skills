@@ -1,6 +1,6 @@
 # Molecular generation and PyTDC oracles
 
-This reference targets **PyTDC 1.1.15**, verified 2026-07-23. Oracle names and
+This reference targets **PyTDC 1.1.15**, verified 2026-10-01. Oracle names and
 behavior are heterogeneous. Discover the installed registry and classify side
 effects before constructing an `Oracle`.
 
@@ -19,7 +19,7 @@ objective, constraints, validation protocol, and experimental follow-up.
 ## Discover names without calling an oracle
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind oracles --limit 100
 ```
 
@@ -93,7 +93,11 @@ These operate on collections, and several need a training/reference set. They ar
 not interchangeable scalar objectives:
 
 - validity/uniqueness/novelty/diversity are higher by their documented definitions;
-- FCD distance and KL divergence are lower as distance/divergence quantities;
+- `kl_divergence` returns mean `exp(-KL)`, so higher means closer distributions;
+- `fcd_distance` returns transformed similarity with TensorFlow/FCD but raw distance
+  with PyTorch/fcd_torch in 1.1.15; record backend and transformation before ranking;
+- unpatched KL fails on modern SciPy because of removed `scipy.histogram`; see
+  [utilities.md](utilities.md) for the verified compatibility limitation;
 - novelty and distribution comparisons depend on the exact reference corpus and
   canonicalization;
 - optional chemical-model dependencies may be substantial.
@@ -173,7 +177,8 @@ python scripts/molecular_generation.py score \
 The helper:
 
 - accepts at most 500 SMILES and a 1 MiB input file;
-- keeps output in input order;
+- keeps output in input order with a zero-based index and explicit validity flag;
+- emits `score: null` for invalid or zero-atom structures without scoring them;
 - truncates long strings;
 - never ranks candidates or assumes score direction;
 - changes into the safe runtime directory so upstream `./oracle` writes remain
@@ -195,9 +200,9 @@ scores = oracle(["CCO", "c1ccccc1"])
 a network timeout, memory limit, or cost limit.
 
 For list input, PyTDC validates each SMILES with RDKit. Invalid entries can receive
-the oracle's default value (commonly zero) rather than raising. Pre-validate
-structures, preserve an explicit validity flag, and do not interpret the default as
-a measured low score.
+the oracle's default value (commonly zero) rather than raising. The bundled helper pre-validates
+structures and emits an explicit validity flag plus null score for these inputs;
+do not interpret an upstream default as a measured low score.
 
 Oracle results are predictions or computed proxies, not experimental evidence.
 Applicability domains, model training data, stereochemistry, protonation,

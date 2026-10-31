@@ -1,6 +1,6 @@
 # I/O, tokenization, caches, evaluation, and security
 
-Research snapshot: 2026-07-23. API claims below use official documentation,
+Research snapshot: 2026-10-01. API claims below use official documentation,
 PyPI metadata, and the `geniml` v0.8.4 release source. Where current docs and
 release code disagree, the discrepancy is stated explicitly.
 
@@ -25,13 +25,18 @@ sha256 6f429c7c89d06a4c2c378e349d14b3a2d984dc441440ada38473772fce6addb1
 ```
 
 The stable release requires `gtars>=0.2.5` without an upper bound. The
-2026-07-23 verified base smoke resolved `gtars==0.9.2` and successfully
-imported Geniml 0.8.4, `geniml.io.RegionSet`, and
-`gtars.tokenizers.Tokenizer`. Gtars 0.9.2 was released 2026-06-17 and requires
+2026-10-01 synthetic CPU checks used `gtars==0.10.0`, Python 3.12,
+AnnData 0.12.19, Scanpy 1.12.4, Zarr 2.18.7, Gensim 4.4.0, Torch 2.14.1,
+PyArrow 25.0.1, NumPy 2.5.3, pandas 2.3.3, and Hugging Face Hub 2.0.0.
+They exercised Region2Vec/scEmbed training, explicit token/cell pooling,
+local bundles, CC construction, and local BED/token caches. Gtars 0.10.0 was released 2026-09-05 and requires
 Python >=3.10.
 
-Pin both direct packages and retain an `uv.lock`; upstream transitive
-requirements are mostly lower bounds.
+Pin the tested stack and retain `uv.lock`; upstream transitive requirements
+are mostly lower bounds. Geniml's Zarr <3 constraint is incompatible with
+AnnData 0.13 (Zarr >=3). AnnData 0.12.19 works with the tested Zarr 2.18.7.
+The full ml extra resolves but brings additional old pinned components;
+it was resolver-checked only, unlike the selective stack above.
 
 ## BED coordinates and validation
 
@@ -79,7 +84,8 @@ print(len(regions))
 regions.to_bed("work/peaks.copy.bed")
 ```
 
-Gtars 0.9.2 exposes operations including `sort`, `reduce`, `coverage`,
+Gtars 0.10.0 requires the fourth `Region` constructor argument (`rest`),
+including `None` for BED3. It exposes operations including `sort`, `reduce`, `coverage`,
 `count_overlaps`, `jaccard`, `nearest_neighbors`, `to_bed`, `to_bed_gz`, and
 `to_bigbed`. Do not assume these operations validate assembly or coordinate
 semantics. Validate before constructing the object and after writing output.
@@ -119,12 +125,12 @@ encoded = tokenizer(RegionSet("data/peaks.bed"))
 input_ids = encoded["input_ids"]
 ```
 
-Gtars also documents `Tokenizer.from_config` and
-`Tokenizer.from_pretrained`. The latter can access Hugging Face; do not call it
-without explicit network approval, revision pinning, cache bounds, and
-expected hashes.
+Gtars exposes `Tokenizer.from_config(cfg)` and
+`Tokenizer.from_pretrained(path)`. The latter can access Hugging Face and has
+no revision/cache kwargs. For authorized downloads, use the Hub client with
+an immutable revision, then `Tokenizer.from_bed` on verified local bytes.
 
-With Gtars 0.9.2, a two-region universe produced `len(tokenizer) == 9` because
+With Gtars 0.10.0, a two-region universe produced `len(tokenizer) == 9` because
 seven special tokens are included. Preserve:
 
 - universe bytes, row order, and assembly;
@@ -189,12 +195,41 @@ Release defaults:
 - BED sets under `bedsets/`;
 - token cache in `tokens.zarr`.
 
-`load_bed`, `load_bedset`, `add_bed_tokens_to_cache`, and corresponding
-`cache-*` CLI commands may use the network. `add_bed_to_s3` and
-`get_bed_from_s3` accept cloud credentials and endpoints; do not use them
-without an explicit upload/download request and a separate credential review.
-Never read or print the environment broadly. Only consult `BEDBASE_API` and
-`BBCLIENT_CACHE` when the user approves those overrides.
+`load_bed`, `load_bedset`, `load_bed_tokens`, `add_bed_tokens_to_cache`,
+and corresponding `cache-*` CLI commands may use the network on a cache miss.
+`cache_tokens` itself writes local data. The S3 convenience methods
+`add_bed_to_s3` and `get_bed_from_s3` are deprecated; use a separately
+reviewed boto3/s3fs workflow for an explicitly requested cloud transfer.
+
+The released client and current BEDhost source agree on these read routes:
+
+| Operation | Request | Response contract |
+| --- | --- | --- |
+| BED file | `GET /v1/objects/bed.{bed_id}.bed_file/access/http/bytes` | File bytes; server may redirect to its object store. |
+| BEDset members | `GET /v1/bedset/{bedset_id}/bedfiles` | JSON `results`, with each member's `id`; this route declares no pagination arguments. |
+| Token cache location | `GET /v1/bed/{bed_id}/tokens/{universe_id}/info` | JSON `file_path` and `endpoint_url` for a separate S3/Zarr read; missing tokens return 404. |
+
+These methods send no request body or API-authentication header. Public route
+source declares no authentication dependency. No invented bearer-token setup
+or pagination loop is needed. A deployment can impose its own access policy.
+Live `openapi.json` retrieval returned HTTP 403 in this review, so this table
+is source-verified and request-mocked, not a successful production download.
+
+Important release behavior:
+
+- BED and BEDset routes use `self.bedbase_api`; token-location requests use
+  `DEFAULT_BEDBASE_API` captured at import time, ignoring the instance setting.
+  Passing a private endpoint to the constructor does not contain token requests.
+- Calls have no timeout, stream bound, or general retry handling. BEDset
+  loading reads one complete response and downloads every listed BED; bound
+  the requested collection before invoking it. Tokens can contact the separate
+  `endpoint_url` returned by metadata.
+- `BEDBASE_API` and `BBCLIENT_CACHE` defaults are read at module import time;
+  changing them afterward does not update existing defaults. Explicit cache
+  paths are preferable.
+- BEDbase identifiers are content identifiers, not automatically SHA-256
+  checksums of the compressed file. Record your own digest and validate
+  assembly/coordinates after retrieval.
 
 Local-oriented CLI:
 
@@ -234,7 +269,9 @@ sce = ScEmbed.from_pretrained("models/scembed")
 
 These classmethods use local bundle paths. Constructors with
 `model_path="organization/model"` call Hugging Face Hub and download
-`checkpoint.pt`, `universe.bed`, and `config.yaml`.
+`checkpoint.pt`, `universe.bed`, and `config.yaml`. Their constructors silently
+discard revision/cache/offline kwargs; call the Hub download API directly at a
+reviewed commit for authorized downloads, then use the local classmethod.
 
 Geniml's loader uses `torch.load(..., weights_only=True)` and YAML
 `safe_load`. This is safer than unrestricted pickle, but artifacts can still
@@ -270,18 +307,24 @@ Examples:
 ```bash
 geniml eval gdst \
   --model-path /absolute/project/model \
-  --embed-type region2vec \
+  --embed-type exmodel \
   --num-samples 10000 \
   --seed 42
 
 geniml eval npt \
   --model-path /absolute/project/model \
-  --embed-type region2vec \
+  --embed-type exmodel \
   --K 10 \
   --num-samples 1000 \
   --seed 42 \
   --num-workers 4
 ```
+
+`exmodel` selects a modern local bundle; `region2vec` selects a legacy
+Gensim model file. The modern loader and its special-token filtering were
+executed. Full CTT/RCT/GDST/NPT calculations are illustrative templates here.
+Check that every retained region vector was actually trained before a metric
+calculation; removing special vectors alone does not establish that.
 
 The official tutorial's `BaseEmbeddings` and `bin-gen` workflows use pickle
 for binary embedding objects. Generate them locally and never load an
@@ -344,36 +387,36 @@ the protected project, not chat output.
 Package and source:
 
 - [PyPI: geniml 0.8.4](https://pypi.org/project/geniml/0.8.4/) — released
-  2026-01-14; accessed 2026-07-23.
+  2026-01-14; accessed 2026-10-01.
 - [PyPI JSON: geniml 0.8.4](https://pypi.org/pypi/geniml/0.8.4/json) —
   artifact hashes, dependencies, extras, and null `Requires-Python`; accessed
-  2026-07-23.
+  2026-10-01.
 - [GitHub release v0.8.4](https://github.com/databio/geniml/releases/tag/v0.8.4)
   — commit `5e8dd14126c45d14917df74de4fb405f383afb61`; released
-  2026-01-14; accessed 2026-07-23.
+  2026-01-14; accessed 2026-10-01.
 - [Geniml changelog](https://docs.bedbase.org/geniml/changelog/) — through
-  0.8.1 on the rendered page; accessed 2026-07-23.
-- [PyPI: gtars 0.9.2](https://pypi.org/project/gtars/0.9.2/) — released
-  2026-06-17; accessed 2026-07-23.
+  0.8.1 on the rendered page; accessed 2026-10-01.
+- [PyPI: gtars 0.10.0](https://pypi.org/project/gtars/0.10.0/) — released
+  2026-09-05; accessed 2026-10-01.
 
 Official API/ecosystem documentation:
 
 - [Geniml documentation](https://docs.bedbase.org/geniml/) — accessed
-  2026-07-23.
+  2026-10-01.
 - [Geniml I/O API](https://docs.bedbase.org/geniml/api-reference/io/) —
-  accessed 2026-07-23.
+  accessed 2026-10-01.
 - [Gtars RegionSet](https://docs.bedbase.org/gtars/regionSet) — accessed
-  2026-07-23.
+  2026-10-01.
 - [Gtars tokenizers](https://docs.bedbase.org/gtars/tokenizers) — accessed
-  2026-07-23.
+  2026-10-01.
 - [BEDbase reference-genome compatibility](https://docs.bedbase.org/bedbase/user/reference-genome-compatibility/)
-  — accessed 2026-07-23.
+  — accessed 2026-10-01.
 - [BEDbase BBClient and caching](https://docs.bedbase.org/bedbase/user/bbclient/)
-  — accessed 2026-07-23.
+  — accessed 2026-10-01.
 - [Geniml evaluation tutorial](https://docs.bedbase.org/geniml/tutorials/evaluation/)
-  — accessed 2026-07-23.
+  — accessed 2026-10-01.
 - [Official citation map](https://docs.bedbase.org/citations) — accessed
-  2026-07-23.
+  2026-10-01.
 
 Primary papers:
 
@@ -383,3 +426,30 @@ Primary papers:
 - [LeRoy et al. 2024, scEmbed](https://doi.org/10.1093/nargab/lqae073)
 - [Rymuza et al. 2024, consensus universes](https://doi.org/10.1093/nar/gkae685)
 - [Zheng et al. 2024, embedding evaluation](https://doi.org/10.1093/nargab/lqae086)
+
+## Current source and execution boundaries
+
+- [Released Region2Vec implementation](https://github.com/databio/geniml/blob/v0.8.4/geniml/region2vec/main.py),
+  [export/load utilities](https://github.com/databio/geniml/blob/v0.8.4/geniml/region2vec/utils.py),
+  [scEmbed implementation](https://github.com/databio/geniml/blob/v0.8.4/geniml/scembed/main.py),
+  and [tokenization](https://github.com/databio/geniml/blob/v0.8.4/geniml/tokenization/utils.py)
+  were checked against the SHA-256-verified released wheel, not master.
+- [Released BBClient](https://github.com/databio/geniml/blob/v0.8.4/geniml/bbclient/bbclient.py)
+  and [route constants](https://github.com/databio/geniml/blob/v0.8.4/geniml/bbclient/const.py)
+  were checked with mocked requests and a local Zarr cache.
+- Current server source at commit `864eeddab6900249e05f4fc84a171890ac997877`:
+  [objects](https://github.com/databio/bedhost/blob/864eeddab6900249e05f4fc84a171890ac997877/bedhost/routers/objects_api.py),
+  [BEDsets](https://github.com/databio/bedhost/blob/864eeddab6900249e05f4fc84a171890ac997877/bedhost/routers/bedset_api.py),
+  [token metadata](https://github.com/databio/bedhost/blob/864eeddab6900249e05f4fc84a171890ac997877/bedhost/routers/bed_api.py).
+  This does not prove that production runs that commit.
+- [AnnData release notes](https://anndata.readthedocs.io/en/stable/release-notes/)
+  and [0.13.4 metadata](https://pypi.org/pypi/anndata/0.13.4/json) establish the
+  separate Zarr 3 environment boundary.
+- [Released Annotator](https://github.com/databio/geniml/blob/v0.8.4/geniml/scembed/annotation.py)
+  still uses the removed search API; [Qdrant query documentation](https://python-client.qdrant.tech/qdrant_client.qdrant_client)
+  documents `query_points`. Qdrant 1.19.1 client API was inspected locally;
+  no hosted annotation or credentialed call was executed.
+- No model weights, human cohort data, or large genomes were downloaded. No
+  StarSpace native build, HMM/ML/CCF end-to-end run, or external annotation
+  service was executed. Their source contracts are illustrative until a
+  project-specific synthetic smoke passes.

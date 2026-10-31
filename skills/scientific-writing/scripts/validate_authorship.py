@@ -11,6 +11,7 @@ from _common import (
     Issue,
     emit_report,
     is_nonempty_string,
+    is_iso_date,
     is_placeholder,
     issue,
     read_json,
@@ -22,7 +23,6 @@ from _common import (
 TOOL = "validate_authorship"
 AUTHOR_ID_RE = re.compile(r"^A[0-9]{3,8}$")
 CONTRIBUTOR_ID_RE = re.compile(r"^K[0-9]{3,8}$")
-DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 CREDIT_ROLES = {
     "conceptualization",
@@ -273,11 +273,13 @@ def validate_declarations(data: dict[str, Any]) -> list[Issue]:
             issues.append(
                 issue("error", "INVALID_DECLARATION_HASH", item_id=declaration_id)
             )
-        if not is_nonempty_string(declaration.get("verified_by")):
+        if not is_nonempty_string(declaration.get("verified_by")) or is_placeholder(
+            declaration.get("verified_by")
+        ):
             issues.append(
                 issue("error", "DECLARATION_VERIFIER_MISSING", item_id=declaration_id)
             )
-        if not DATE_RE.fullmatch(str(declaration.get("verified_on", ""))):
+        if not is_iso_date(declaration.get("verified_on")):
             issues.append(
                 issue("error", "INVALID_DECLARATION_DATE", item_id=declaration_id)
             )

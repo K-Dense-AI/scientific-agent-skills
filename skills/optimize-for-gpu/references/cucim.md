@@ -1,11 +1,14 @@
 # cuCIM Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuCIM (CUDA Clara IMage) is NVIDIA's GPU-accelerated computer vision and image processing library
 within the RAPIDS ecosystem. Its `cucim.skimage` module mirrors a substantial part of scikit-image
 on CuPy arrays, and `cucim.CuImage` reads tiled whole-slide images. Verify function coverage and
 benchmark the actual image sizes, storage path, and processing chain.
 
-> **Full documentation:** https://docs.rapids.ai/api/cucim/stable/
+> **Full documentation:** https://docs.nvidia.com/cucim/26.08/
 > **GitHub:** https://github.com/rapidsai/cucim
 
 ## Table of Contents
@@ -40,8 +43,8 @@ Use `uv add` in standalone examples; follow the user's existing project package 
 is already configured.
 
 ```bash
-uv add --extra-index-url=https://pypi.nvidia.com "cucim-cu12==26.6.*"    # For CUDA 12.x
-uv add --extra-index-url=https://pypi.nvidia.com "cucim-cu13==26.6.*"    # For CUDA 13.x
+uv add --extra-index-url=https://pypi.nvidia.com "cucim-cu12==26.8.*"    # For CUDA 12.x
+uv add --extra-index-url=https://pypi.nvidia.com "cucim-cu13==26.8.*"    # For CUDA 13.x
 ```
 
 cuCIM wheels are also published directly to PyPI, so the extra index is optional.
@@ -65,7 +68,7 @@ print(f"Filtered image shape: {result.shape}")  # Should work on GPU
 
 ## Core Concept: CuPy Arrays
 
-cuCIM operates natively on **CuPy arrays**. All `cucim.skimage` functions accept CuPy arrays as input and return CuPy arrays as output — zero-copy, all on GPU.
+cuCIM operates natively on **CuPy arrays**. Many image operations consume and return CuPy arrays. Some return scalars, tuples, dictionaries, or region objects and can synchronize; device residency does not imply zero allocation or zero host work.
 
 ```python
 import cupy as cp
@@ -296,7 +299,8 @@ tophat = white_tophat(gray_image_gpu, footprint=disk(10))
 from cucim.skimage.segmentation import (
     chan_vese, morphological_chan_vese, morphological_geodesic_active_contour,
     find_boundaries, mark_boundaries, clear_border,
-    expand_labels, relabel_sequential, random_walker
+    expand_labels, relabel_sequential, random_walker,
+    inverse_gaussian_gradient, checkerboard_level_set
 )
 
 # Chan-Vese segmentation
@@ -401,8 +405,9 @@ from cucim.skimage.metrics import (
 )
 
 mse = mean_squared_error(original_gpu, processed_gpu)
-psnr = peak_signal_noise_ratio(original_gpu, processed_gpu)
-ssim = structural_similarity(original_gpu, processed_gpu)
+psnr = peak_signal_noise_ratio(original_gpu, processed_gpu, data_range=1.0)
+ssim = structural_similarity(original_gpu, processed_gpu, data_range=1.0)
+# Here both images are grayscale floating-point intensities on [0, 1].
 ```
 
 ---
@@ -444,7 +449,9 @@ from cucim.core.operations.color import (
 normalized = normalize_colors_pca(he_image_gpu)
 
 # Color augmentation
-augmented = color_jitter(image_gpu, brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
+image_chw = cp.moveaxis(image_gpu, -1, 0)  # This operation expects CHW/NCHW
+augmented = cp.moveaxis(color_jitter(image_chw, brightness=0.2, contrast=0.2,
+                                    saturation=0.2, hue=0.1), 0, -1)
 ```
 
 ### Intensity Operations
@@ -452,7 +459,7 @@ augmented = color_jitter(image_gpu, brightness=0.2, contrast=0.2, saturation=0.2
 ```python
 from cucim.core.operations.intensity import normalize_data, scale_intensity_range, zoom
 
-normalized = normalize_data(image_gpu)
+normalized = normalize_data(image_gpu, norm_constant=1.0, min_value=0.0, max_value=255.0)
 scaled = scale_intensity_range(image_gpu, a_min=0, a_max=255, b_min=0.0, b_max=1.0)
 ```
 
@@ -461,9 +468,9 @@ scaled = scale_intensity_range(image_gpu, a_min=0, a_max=255, b_min=0.0, b_max=1
 ```python
 from cucim.core.operations.spatial import image_flip, image_rotate_90, rand_image_flip
 
-flipped = image_flip(image_gpu, spatial_axis=1)
-rotated = image_rotate_90(image_gpu, k=1)  # 90 degrees
-randomly_flipped = rand_image_flip(image_gpu, prob=0.5)
+flipped = image_flip(image_gpu, spatial_axis=(1,))
+rotated = image_rotate_90(image_gpu, k=1, spatial_axis=(0, 1))  # 90 degrees
+randomly_flipped = rand_image_flip(image_gpu, spatial_axis=(0, 1), prob=0.5)
 ```
 
 ### Distance Transform
@@ -490,7 +497,7 @@ img = CuImage("slide.svs")
 # Inspect metadata
 print(f"Dimensions: {img.shape}")
 print(f"Resolution levels: {img.resolutions}")
-print(f"Spacing: {img.spacing}")
+print(f"Spacing: {img.spacing()}")
 
 # Read a region (returns a CuImage object)
 region = img.read_region(location=(1000, 2000), size=(256, 256), level=0)
@@ -509,10 +516,10 @@ gray_tile = rgb2gray(tile_gpu)
 ### Tile Caching
 
 ```python
-from cucim.clara.cache import ImageCache
+from cucim import CuImage
 
-# Configure tile cache for repeated access patterns
-cache = ImageCache(memory_capacity=2 * 1024**3)  # 2 GB cache
+# Configure the global reader cache; capacity argument is in MiB, not bytes.
+cache = CuImage.cache("per_process", memory_capacity=2048)  # 2 GiB
 ```
 
 ### GPUDirect Storage
@@ -543,11 +550,11 @@ reuse all matter.
 
 ## Interoperability
 
-- **CuPy:** Native array format. All cucim.skimage functions accept and return CuPy arrays.
+- **CuPy:** Native image-array format; result container types depend on the function.
 - **NumPy:** Convert with `cp.asarray()` / `cp.asnumpy()`.
-- **PyTorch/TensorFlow:** Zero-copy via DLPack protocol: `torch.as_tensor(cupy_array)` or `torch.from_dlpack(cupy_array)`.
+- **PyTorch:** `torch.from_dlpack(cupy_array)` can share device memory; handle layout and lifetime explicitly. TensorFlow has a separate DLPack interface.
 - **MONAI:** Medical imaging framework with direct cuCIM integration for pathology transforms.
-- **Albumentations:** Can use cuCIM as GPU backend for augmentations.
+- **Albumentations:** Do not assume its NumPy/CPU transforms dispatch to cuCIM; explicit adaptation and equivalence checks are needed.
 - **NVIDIA DALI:** Data loading pipeline integration.
 - **Numba CUDA:** CuPy arrays interoperable with Numba GPU kernels.
 - **cuDF:** Use for tabular operations on `regionprops_table` output.
@@ -566,7 +573,7 @@ result = gaussian(cp.asarray(image), sigma=5)
 
 ## Known Limitations vs scikit-image
 
-1. **Incomplete API coverage:** ~50-66% of scikit-image functions are implemented. Notable gaps include some graph-based segmentation (watershed, SLIC superpixels), some feature descriptors (ORB, BRIEF, HOG), and some restoration methods.
+1. **Incomplete API coverage:** Check the selected function in the pinned cuCIM API, including parameters and output semantics, instead of relying on a coverage percentage.
 
 2. **Linux only.** No Windows or macOS GPU support.
 
@@ -668,12 +675,14 @@ for img in images_gpu:
     img = img_as_float32(img)
     img = resize(img, (224, 224))
     img = equalize_adapthist(img)
-    img = rand_image_flip(img, prob=0.5)
+    img = rand_image_flip(img, spatial_axis=(0, 1), prob=0.5)
+    img = cp.moveaxis(img, -1, 0)  # HWC -> CHW for color_jitter
     img = color_jitter(img, brightness=0.2, contrast=0.2)
+    img = cp.moveaxis(img, 0, -1)
     processed.append(img)
 
 batch_gpu = cp.stack(processed)
 
 # Zero-copy to PyTorch for model inference
-batch_torch = torch.as_tensor(batch_gpu).permute(0, 3, 1, 2)  # NHWC → NCHW
+batch_torch = torch.from_dlpack(batch_gpu).permute(0, 3, 1, 2)  # NHWC → NCHW
 ```

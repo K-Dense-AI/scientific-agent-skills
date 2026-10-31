@@ -13,7 +13,6 @@ Plot types:
 """
 
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import argparse
@@ -39,16 +38,19 @@ def set_publication_style():
 
 def generate_sample_data():
     """Generate sample data for demonstrations."""
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     x = np.linspace(0, 10, 100)
     y1 = np.sin(x)
     y2 = np.cos(x)
-    scatter_x = np.random.randn(200)
-    scatter_y = np.random.randn(200)
+    scatter_x = rng.standard_normal(200)
+    scatter_y = rng.standard_normal(200)
     categories = ['A', 'B', 'C', 'D', 'E']
-    bar_values = np.random.randint(10, 100, len(categories))
-    hist_data = np.random.normal(0, 1, 1000)
-    matrix = np.random.rand(10, 10)
+    bar_samples = rng.normal(np.arange(20, 70, 10)[:, None], 5, (5, 12))
+    bar_values = bar_samples.mean(axis=1)
+    bar_errors = bar_samples.std(axis=1, ddof=1)
+    hist_data = rng.normal(0, 1, 1000)
+    matrix = rng.random((10, 10))
+    distribution_data = rng.normal(0, np.arange(1, 5)[:, None], (4, 100))
 
     X, Y = np.meshgrid(np.linspace(-3, 3, 100), np.linspace(-3, 3, 100))
     Z = np.sin(np.sqrt(X**2 + Y**2))
@@ -57,6 +59,8 @@ def generate_sample_data():
         'x': x, 'y1': y1, 'y2': y2,
         'scatter_x': scatter_x, 'scatter_y': scatter_y,
         'categories': categories, 'bar_values': bar_values,
+        'bar_samples': bar_samples, 'bar_errors': bar_errors,
+        'distribution_data': distribution_data,
         'hist_data': hist_data, 'matrix': matrix,
         'X': X, 'Y': Y, 'Z': Z
     }
@@ -122,20 +126,15 @@ def create_bar_chart(data, ax=None):
         fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
 
     x_pos = np.arange(len(data['categories']))
-    errors = np.random.randint(5, 15, len(data['categories']))
+    errors = data['bar_errors']  # Sample SD calculated from synthetic replicates.
 
-    bars = ax.bar(x_pos, data['bar_values'], yerr=errors,
+    ax.bar(x_pos, data['bar_values'], yerr=errors,
                   color='steelblue', edgecolor='black', linewidth=1.5,
                   capsize=5, alpha=0.8)
 
-    # Color bars by value
-    colors = mpl.colormaps['viridis'](data['bar_values'] / data['bar_values'].max())
-    for bar, color in zip(bars, colors):
-        bar.set_facecolor(color)
-
     ax.set_xlabel('Category')
     ax.set_ylabel('Values')
-    ax.set_title('Bar Chart Example')
+    ax.set_title('Synthetic mean ±1 SD (n=12)')
     ax.set_xticks(x_pos, data['categories'])
     ax.grid(True, axis='y', alpha=0.3, linestyle='--')
 
@@ -157,7 +156,7 @@ def create_histogram(data, ax=None):
     n, bins, patches = ax.hist(data['hist_data'], bins=30, density=True,
                                alpha=0.7, edgecolor='black', color='steelblue')
 
-    # Overlay theoretical normal distribution
+    # Overlay a fitted normal density; this does not establish normality.
     from scipy.stats import norm
     mu, std = norm.fit(data['hist_data'])
     x_theory = np.linspace(data['hist_data'].min(), data['hist_data'].max(), 100)
@@ -181,8 +180,8 @@ def create_heatmap(data, ax=None):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 8), constrained_layout=True)
 
-    im = ax.imshow(data['matrix'], cmap='coolwarm', aspect='auto',
-                   vmin=0, vmax=1)
+    im = ax.imshow(data['matrix'], cmap='viridis', aspect='auto',
+                   interpolation='nearest', origin='upper', vmin=0, vmax=1)
 
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax)
@@ -215,7 +214,7 @@ def create_contour_plot(data, ax=None):
 
     # Contour lines
     contour = ax.contour(data['X'], data['Y'], data['Z'],
-                        levels=10, colors='black', linewidths=0.5, alpha=0.4)
+                        levels=np.linspace(-1, 1, 7), colors='black', linewidths=0.5)
 
     # Add labels to contour lines
     ax.clabel(contour, inline=True, fontsize=8)
@@ -240,8 +239,8 @@ def create_box_plot(data, ax=None):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
 
-    # Generate multiple distributions
-    box_data = [np.random.normal(0, std, 100) for std in range(1, 5)]
+    # Reuse the supplied groups; drawing a plot must not generate new observations.
+    box_data = list(data['distribution_data'])
 
     ax.boxplot(box_data, tick_labels=['Group 1', 'Group 2', 'Group 3', 'Group 4'],
                patch_artist=True, showmeans=True,
@@ -265,8 +264,7 @@ def create_violin_plot(data, ax=None):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
 
-    # Generate multiple distributions
-    violin_data = [np.random.normal(0, std, 100) for std in range(1, 5)]
+    violin_data = list(data['distribution_data'])
 
     parts = ax.violinplot(violin_data, positions=range(1, 5),
                          showmeans=True, showmedians=True)
@@ -341,13 +339,16 @@ def create_comprehensive_figure():
     ax5 = fig.add_subplot(gs[1, 2])   # Box plot - middle right
     create_box_plot(data, ax5)
 
-    ax6 = fig.add_subplot(gs[2, :2])  # Contour plot - bottom left, spans 2 columns
+    ax6 = fig.add_subplot(gs[2, 0])   # Contour plot - bottom left
     create_contour_plot(data, ax6)
 
-    ax7 = fig.add_subplot(gs[2, 2])   # Heatmap - bottom right
-    create_heatmap(data, ax7)
+    ax7 = fig.add_subplot(gs[2, 1])   # Violin plot - bottom center
+    create_violin_plot(data, ax7)
 
-    fig.suptitle('Comprehensive Matplotlib Template', fontsize=18, fontweight='bold')
+    ax8 = fig.add_subplot(gs[2, 2])   # Heatmap - bottom right
+    create_heatmap(data, ax8)
+
+    fig.suptitle('Matplotlib Template — Synthetic Data', fontsize=18, fontweight='bold')
 
     return fig
 
@@ -363,6 +364,8 @@ def main():
                        help='Matplotlib style to use')
     parser.add_argument('--output', type=str, default='plot.png',
                        help='Output filename')
+    parser.add_argument('--no-show', action='store_true',
+                        help='Save without opening an interactive window')
 
     args = parser.parse_args()
 
@@ -395,11 +398,13 @@ def main():
         fig = plot_functions[args.plot_type](data)
 
     # Save figure
-    plt.savefig(args.output, dpi=300, bbox_inches='tight')
+    fig.savefig(args.output, dpi=300, bbox_inches='tight')
     print(f"Plot saved to {args.output}")
 
     # Display
-    plt.show()
+    if not args.no_show:
+        plt.show()
+    plt.close(fig)
 
 
 if __name__ == "__main__":

@@ -30,8 +30,8 @@ NON_CLI_NAMES = frozenset({"__init__.py", "__main__.py", "_common.py", "conftest
 def cli_scripts(skill_root: Path) -> list[Path]:
     """Top-level scripts under `scripts/` that build an argparse parser.
 
-    Only the top level: nested directories such as the `office/` trees under
-    docx/pptx/xlsx are importable libraries, not entry points.
+    Only the top level: nested directories under `scripts/` are importable
+    libraries, not entry points.
     """
     scripts = []
     for path in sorted((skill_root / "scripts").glob("*.py")):

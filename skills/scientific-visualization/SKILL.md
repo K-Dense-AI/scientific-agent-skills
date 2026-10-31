@@ -1,11 +1,12 @@
 ---
 name: scientific-visualization
-description: Create and audit truthful, accessible, publication-ready scientific figures with Matplotlib, Seaborn, or Plotly. Use for figure design, multi-panel layouts, uncertainty and missing-data displays, color/contrast review, image metadata validation, and journal export planning.
+description: Creates and audits truthful, accessible, publication-ready scientific figures with Matplotlib, Seaborn, or Plotly. Use it for figure design, multi-panel layouts, uncertainty and missing-data displays, color/contrast review, image metadata validation, and journal export planning.
 license: MIT
 compatibility: Requires Python 3.11+ and uv for pinned examples. Bundled CLIs are network-free and load Matplotlib, Pillow, or pypdf only when needed. Plotly static export with Kaleido v1 requires a compatible Chrome/Chromium installation.
 allowed-tools: Read Write Edit Bash Glob Grep
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -68,7 +69,7 @@ See `references/color_palettes.md`. A grayscale screen is useful but is not a co
 
 ### 4. Implement with scoped styles
 
-Use Matplotlib's object-oriented API and temporary style contexts:
+Run shell examples from this skill directory. For your own figure script, add `scripts/` and `assets/` to the import path (see the bootstrap in `references/matplotlib_examples.md`) and create the output directory. Use Matplotlib's object-oriented API and temporary style contexts:
 
 ```python
 import matplotlib.pyplot as plt
@@ -123,16 +124,18 @@ sns.lineplot(
 
 For repeated measurements, preserve the subject/sample identifier. To show individual trajectories, use Seaborn's `units` with `estimator=None`; this draws one line per sampling unit instead of an aggregate mean. For an aggregate uncertainty band, compute intervals using the actual independent sampling unit (for example, a subject-level bootstrap) and plot those intervals explicitly. A row-wise CI and a fixed random seed do not account for within-subject dependence. See the [relational tutorial](https://seaborn.pydata.org/tutorial/relational).
 
+Seaborn drops missing rows before drawing lines, so it can bridge a missing observation. For visible gaps, use explicit NaNs/masks with Matplotlib or draw contiguous observed segments separately.
+
 Axes-level functions fit custom Matplotlib layouts; figure-level functions create their own figures/facets. Do not customize Seaborn's internal artist lists as if they were stable API.
 
 #### Plotly
 
 - Use `write_html()` for interaction and `write_image()`/`plotly.io.write_images()` for static output.
-- Kaleido 1.3.0 requires Chrome/Chromium; it no longer bundles Chrome.
+- Kaleido 1.4.0 requires Chrome/Chromium; it no longer bundles Chrome. Plotly 7 requires MathJax 3/4, not 2.
 - Current static formats: PNG, JPEG, WebP, SVG, PDF. EPS is Kaleido v0-only.
-- Do not pass deprecated `engine=` or use Orca/`plotly.io.kaleido.scope`.
+- Plotly 7 removes `engine=`, Orca, Kaleido <1, and `plotly.io.kaleido.scope`; use `plotly.io.defaults`.
 - `width`, `height`, and `scale` control pixels; `scale=3` is not inherently “300 DPI.”
-- WebGL traces embed raster content in PDF/SVG.
+- WebGL traces embed raster content in PDF/SVG. Plotly Express may select WebGL above 1,000 rows; use `render_mode="svg"` when vector markers are required.
 - Fully offline exports need local external assets when a figure references MathJax/topojson/tiles.
 
 ### 5. Export explicitly and record provenance
@@ -156,7 +159,7 @@ report = export_figure(
 )
 ```
 
-The exporter refuses implicit overwrite, writes atomically, keeps vector DPI for embedded rasters, uses TIFF LZW, and can use PDF/PS Type 42 fonts. It does not validate scientific content or publisher acceptance.
+The exporter refuses implicit overwrite and publishes each file atomically (a multi-format batch is not a transaction). It preserves vector DPI for embedded rasters and uses TIFF LZW. Matplotlib normally writes RGBA TIFF even on white; request `tiff_rgb=True` for an RGB TIFF without alpha. This verifies opacity before removing the alpha channel. It does not validate scientific content or publisher acceptance.
 
 For editable fonts:
 
@@ -177,24 +180,24 @@ Use an opaque explicit background unless transparency is required; blending agai
 
 ## Pinned snapshot
 
-The examples and smoke tests use direct package pins current on 2026-07-23:
+The examples and native smoke tests use these direct package pins, reviewed 2026-10-01:
 
 ```bash
 uv run --isolated --no-project --python 3.13 \
-  --with "matplotlib==3.11.1" \
+  --with "matplotlib==3.11.2" \
   --with "seaborn==0.13.2" \
-  --with "plotly==6.9.0" \
-  --with "kaleido==1.3.0" \
+  --with "plotly==7.1.0" \
+  --with "kaleido==1.4.0" \
   --with "pillow==12.3.0" \
-  --with "pypdf==6.14.2" \
+  --with "pypdf==6.19.0" \
   python your_figure.py
 ```
 
-This is a dated direct-dependency snapshot, not a transitive lock. Use the project's uv lock for exact replay; this skill intentionally ships no dependency lock.
+This is a dated direct-dependency snapshot, not a transitive lock. Create a lock in the consuming figure project for exact replay; the repository lock does not cover these isolated scientific dependencies.
 
 ## Bundled CLIs
 
-All helpers are deterministic, network-free, bounded, reject symlink inputs/destinations where relevant, and refuse overwrite unless `--force` is explicit.
+Bundled CLIs make no network calls and apply input byte/pixel limits; these are not general parser-memory or CPU limits. They reject final-path symlinks and refuse overwrite unless `--force` is explicit. Matplotlib file timestamps and backend versions can vary, so identical inputs do not guarantee byte-identical output.
 
 ### Inspect raster/vector metadata
 
@@ -206,7 +209,7 @@ uv run --isolated --no-project --python 3.13 \
   --alpha-policy forbid
 ```
 
-Supports raster images (Pillow), SVG, PDF (pypdf), and EPS/PS. Reports dimensions, DPI/effective DPI, mode, alpha, ICC presence, compression, page size, and conservative first-page PDF font resources. It does not inspect every embedded raster in a vector container.
+Supports raster images (Pillow), SVG, PDF (pypdf), and EPS/PS. Reports dimensions, DPI/effective DPI, mode, alpha, ICC presence, compression, and first-page PDF fonts. PDF dimensions include UserUnit and rotation, with CropBox separate from MediaBox. It does not fully decode every raster frame, inspect all PDF pages/fonts, or measure embedded-raster DPI.
 
 ### Audit palette contrast and grayscale
 
@@ -231,13 +234,13 @@ uv run --isolated --no-project --python 3.13 \
   --phase final
 ```
 
-Add `--input figure.pdf` to screen machine-readable properties. Profiles are official-source snapshots accessed 2026-07-23, not automatic compliance rules.
+Add `--input figure.pdf` to screen machine-readable properties. Profiles record source dates individually. Most were checked 2026-10-01; Science retains its 2026-07-23 snapshot because live access failed, and ACS is explicitly legacy guidance. Phase mismatches and advisory rules require review; a zero failure count is not acceptance.
 
 ### Preview styles
 
 ```bash
 uv run --isolated --no-project --python 3.13 \
-  --with "matplotlib==3.11.1" \
+  --with "matplotlib==3.11.2" \
   python scripts/style_preview.py \
   --output outputs/style-preview \
   --style default \
@@ -253,7 +256,7 @@ uv run --isolated --no-project --python 3.13 \
 uv run --isolated --no-project --python 3.13 \
   python scripts/style_presets.py --show nature
 uv run --isolated --no-project --python 3.13 \
-  --with "matplotlib==3.11.1" \
+  --with "matplotlib==3.11.2" \
   python scripts/figure_export.py --demo outputs/export-smoke --manifest
 ```
 
@@ -265,7 +268,7 @@ uv run --isolated --no-project --python 3.13 \
 - `assets/color_palettes.py`: importable Okabe-Ito and Paul Tol values with metadata.
 - `assets/publisher_profiles.json`: dated, machine-readable planning snapshots.
 
-Matplotlib style files omit `#` in hex colors because `#` begins comments in `.mplstyle` parsing.
+Matplotlib style files use double-quoted hex strings (for example, `"#0072B2"`); quotes preserve `#` instead of starting a comment.
 
 ## References
 

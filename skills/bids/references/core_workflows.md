@@ -10,7 +10,7 @@ derivatives, advanced PyBIDS usage, and running BIDS-Apps.
 
 ### 1. BIDS Directory Structure
 
-A minimal BIDS dataset follows this layout:
+Illustrative single-session layout (include only acquired modalities; not a complete ASL example):
 
 ```
 my_dataset/
@@ -41,21 +41,14 @@ my_dataset/
     perf/
       sub-01_asl.nii.gz
       sub-01_asl.json
-  sub-01/
-    ses-pre/
-      anat/
-        sub-01_ses-pre_T1w.nii.gz
-      func/
-        sub-01_ses-pre_task-nback_bold.nii.gz
-    ses-post/
-      ...
 ```
 
 **Key points:**
-- Every NIfTI file should have a corresponding `.json` sidecar
+- Required metadata must be available through matching JSON sidecars and inheritance; a separate JSON file beside every NIfTI is not mandatory
 - File names encode entities: `sub-<label>[_ses-<label>][_task-<label>][_acq-<label>][_run-<index>]_<suffix>.<extension>`
 - Entity order in filenames is fixed by the specification
-- Only `dataset_description.json` is strictly required at the root level
+- `dataset_description.json` is required at the root; additional files depend on dataset type and modality
+- For multiple sessions use `sub-01/ses-pre/anat/sub-01_ses-pre_T1w.nii.gz`; do not mix session and sessionless acquisitions for one subject
 
 ### 2. Creating dataset_description.json
 
@@ -64,19 +57,14 @@ import json
 
 dataset_description = {
     "Name": "My Neuroimaging Study",
-    "BIDSVersion": "1.10.0",
+    "BIDSVersion": "1.11.2",
     "DatasetType": "raw",
     "License": "CC0",
     "Authors": ["First Author", "Second Author"],
-    "Acknowledgements": "Funded by NIH R01-MH123456",
-    "HowToAcknowledge": "Please cite: Author et al. (2025) Journal Name.",
-    "Funding": ["NIH R01-MH123456", "NSF BCS-7654321"],
-    "ReferencesAndLinks": ["https://doi.org/10.xxxx/xxxxx"],
-    "DatasetDOI": "10.18112/openneuro.ds000001.v1.0.0",
     "GeneratedBy": [
         {
             "Name": "HeuDiConv",
-            "Version": "1.3.1",
+            "Version": "1.5.1",
             "CodeURL": "https://github.com/nipy/heudiconv"
         }
     ]
@@ -86,12 +74,13 @@ with open("dataset_description.json", "w") as f:
     json.dump(dataset_description, f, indent=4)
 ```
 
+Illustrative provenance: replace author, pipeline, and version values with actual records.
 For **derivatives**, set `"DatasetType": "derivative"` and add `"GeneratedBy"` listing the pipeline:
 
 ```python
 deriv_description = {
     "Name": "fMRIPrep - fMRI PREProcessing",
-    "BIDSVersion": "1.10.0",
+    "BIDSVersion": "1.11.2",
     "DatasetType": "derivative",
     "GeneratedBy": [
         {
@@ -108,7 +97,7 @@ deriv_description = {
 ```python
 from bids import BIDSLayout
 
-# Index a BIDS dataset (validates structure on load)
+# Index BIDS-compatible names; this is not full dataset validation
 layout = BIDSLayout("/path/to/bids_dataset")
 
 # Basic queries
@@ -134,13 +123,13 @@ nback_sub01 = layout.get(
 )
 
 # Get metadata from JSON sidecars (automatic inheritance)
-metadata = layout.get_metadata("/path/to/sub-01/func/sub-01_task-rest_bold.nii.gz")
+metadata = layout.get_metadata(bold_files[0])  # first check that a match exists
 tr = metadata["RepetitionTime"]
 
-# Get all entities for a file
+# Get entity definitions in this layout
 entities = layout.get_entities()
 
-# Build a path from entities using BIDSLayout
+# Inspect a matching file and its entity values
 bids_file = layout.get(subject="01", suffix="T1w", extension=".nii.gz")[0]
 print(bids_file.path)
 print(bids_file.get_entities())
@@ -148,7 +137,7 @@ print(bids_file.get_entities())
 
 **Key points:**
 - `BIDSLayout` indexes the entire dataset on initialization; for large datasets use `database_path` to cache the index
-- Metadata inheritance: a JSON sidecar at a higher level (e.g., root or subject) is inherited by all files below unless overridden
+- Metadata inheritance: a JSON sidecar at a higher level (e.g., root or subject) is inherited by matching files below unless overridden; minimize overrides and resolve ambiguous same-level matches
 - Use `return_type="filename"` for paths, `return_type="object"` (default) for `BIDSFile` objects
 
 ### 4. Validating BIDS Datasets
@@ -160,12 +149,15 @@ The `bids-validator-deno` PyPI package bundles the Deno-based validator as a sta
 ```bash
 # Install
 uv pip install bids-validator-deno
+# Use an activated virtual environment so the wrapper can locate its Deno runtime.
 
 # Validate a dataset
-bids-validator /path/to/bids_dataset
+bids-validator-deno /path/to/bids_dataset
 
-# Ignore specific warnings/errors
-bids-validator /path/to/bids_dataset --ignoreNiftiHeaders --ignoreSubjectConsistency
+# Save a full machine-readable report, including NIfTI header checks
+bids-validator-deno /path/to/bids_dataset --format json --max-rows -1 --outfile validation.json
+# Pin the schema when reproducing a review
+bids-validator-deno /path/to/bids_dataset --schema file:///absolute/path/to/bids_schema.json
 ```
 
 #### Using bids-validator via Deno directly
@@ -174,15 +166,23 @@ If Deno is already available, you can install or run the validator without PyPI:
 
 ```bash
 # Install globally via Deno
-deno install -g -A npm:bids-validator
+deno install -ERWN -g -n bids-validator jsr:@bids/validator
 
 # Or run without installing
-deno run -A npm:bids-validator /path/to/bids_dataset
+deno run -ERWN jsr:@bids/validator /path/to/bids_dataset
 ```
 
 #### Legacy Node.js validator
 
-The older Node.js-based validator (`npm install -g bids-validator`) is deprecated in favor of the Deno-based version. The Deno version is the reference implementation for BIDS Specification v1.9+.
+The older Node.js-based validator (`npm install -g bids-validator`) is deprecated in favor of the Deno-based version. Use the current schema validator for new work. The PyPI wrapper command is `bids-validator-deno`; the Deno installation above deliberately names its executable `bids-validator`.
+
+Validator 3.0.2 defaults to checking 1000 TSV rows; pass `--max-rows -1` for all rows.
+Use `--format json` (`--json` is a deprecated alias in 3.0.2). A local schema must be
+a `file:///...` URI, not a bare filesystem path.
+`--ignoreNiftiHeaders` skips header-dependent checks and cannot establish full compliance.
+The legacy `--ignoreSubjectConsistency` flag is absent. Inspect JSON issue codes and, only
+for justified exceptions, pass `--config` with scoped issue objects (see the
+[CLI documentation](https://bids-validator.readthedocs.io/en/latest/user_guide/command-line.html)).
 
 #### Using .bidsignore
 
@@ -193,7 +193,6 @@ Create `.bidsignore` at the dataset root to exclude files from validation (gitig
 sourcedata/
 extra_data/
 *.log
-*_sbref.nii.gz
 **/.DS_Store
 ```
 
@@ -209,7 +208,7 @@ BIDS filenames are built from ordered key-value entity pairs:
 
 | Entity | Key | Example | Required for |
 |--------|-----|---------|--------------|
-| Subject | `sub-` | `sub-01` | All files |
+| Subject | `sub-` | `sub-01` | Subject data; not dataset-level files |
 | Session | `ses-` | `ses-pre` | Multi-session studies |
 | Task | `task-` | `task-rest` | func (bold, cbv, phase), eeg, meg |
 | Acquisition | `acq-` | `acq-highres` | Distinguishing acquisition parameters |
@@ -229,7 +228,7 @@ BIDS filenames are built from ordered key-value entity pairs:
 
 | Datatype | Suffixes |
 |----------|----------|
-| anat | `T1w`, `T2w`, `FLAIR`, `T2star`, `T1map`, `T2map`, `defacemask` |
+| anat | `T1w`, `T2w`, `FLAIR`, `T2starw`, `T1map`, `T2map`, `defacemask` |
 | func | `bold`, `cbv`, `sbref`, `events`, `physio`, `stim` |
 | dwi | `dwi`, `sbref` |
 | fmap | `phasediff`, `phase1`, `phase2`, `magnitude1`, `magnitude2`, `fieldmap`, `epi` |
@@ -243,7 +242,7 @@ BIDS filenames are built from ordered key-value entity pairs:
 
 #### HeuDiConv
 
-HeuDiConv is the most flexible DICOM-to-BIDS converter. It supports three usage modes — from fully automatic to fully custom — and handles duplicates, provenance tracking, and sourcedata archiving out of the box.
+HeuDiConv supports Python heuristic-based DICOM-to-BIDS conversion. It supports three usage modes — from fully automatic to fully custom — and handles duplicates, provenance tracking, and sourcedata archiving out of the box.
 
 **Mode 1: ReproIn (turnkey, recommended for new studies)**
 
@@ -260,7 +259,7 @@ ReproIn protocol names encode BIDS entities directly:
 - `dwi_dir-AP` → `sub-XX/dwi/sub-XX_dir-AP_dwi.nii.gz`
 - `fmap_dir-PA` → `sub-XX/fmap/sub-XX_dir-PA_epi.nii.gz`
 
-Session can be set once on the localizer (e.g., `anat-scout_ses-pre`) and ReproIn propagates it to all sequences in that Program. Subject ID is extracted from DICOM metadata. Duplicate runs are numbered automatically.
+Session can be set once on the localizer (e.g., `anat-scout_ses-pre`) and ReproIn propagates it to all sequences in that Program. Subject ID is extracted from DICOM metadata. Encode runs explicitly and inspect duplicate/cancelled-run handling; not every repeated series becomes a valid numbered run.
 
 **Mode 2: Custom heuristic mapping into ReproIn (for existing data)**
 
@@ -288,10 +287,10 @@ See `references/conversion_tools.md` for complete heuristic file examples.
 
 **Key points:**
 - HeuDiConv wraps `dcm2niix` for the actual DICOM-to-NIfTI conversion
-- **`--minmeta`**: always use this flag to prevent excess DICOM metadata from overflowing JSON sidecars (can crash fMRIPrep/MRIQC)
-- **Duplicate handling**: use `{item:03d}` in templates for auto-numbering when the same protocol is run multiple times; without it, later runs overwrite earlier ones
+- **`--minmeta`**: omit additional scaninfo metadata; it does not remove the BIDS acquisition fields produced by dcm2niix
+- **Duplicate handling**: use `{item:03d}` in templates for auto-numbering when the same protocol is run multiple times; review collisions explicitly instead of relying on overwriting
 - **`.heudiconv/` directory**: created alongside output, stores provenance (heuristic used, dicominfo.tsv, conversion records). Keep it with your data for reproducibility
-- **`sourcedata/`**: HeuDiConv archives original DICOMs as `.tgz` files under `sourcedata/` for reproducibility
+- **`sourcedata/`**: DICOM archival depends on heuristic output types (ReproIn requests `dicom`; the custom example requests only `nii.gz`). Preserve source data separately when not archiving
 - **`is_motion_corrected` filter**: use in heuristics to exclude scanner-generated MOCO series (e.g., `if not s.is_motion_corrected`)
 - Both `--files` (explicit paths) and `-d` (template with `{subject}`, `{session}` placeholders) are supported for specifying DICOM input
 
@@ -310,7 +309,7 @@ See `references/conversion_tools.md` for detailed configuration examples.
 
 ### 7. Metadata Sidecars
 
-Every BIDS data file should have a JSON sidecar with acquisition parameters. Metadata fields follow the inheritance principle: a sidecar at a higher directory level applies to all matching files below.
+Required acquisition metadata must be available through applicable JSON sidecars. Metadata fields follow the inheritance principle: a sidecar at a higher directory level applies to all matching files below.
 
 **Inheritance example:**
 ```
@@ -321,7 +320,7 @@ my_dataset/
       sub-01_task-rest_bold.json  # Overrides/extends for sub-01 only
 ```
 
-**Critical metadata fields by modality:**
+**Illustrative metadata only; use measured values and match the image dimensions:**
 
 For **func (BOLD)**:
 ```json
@@ -331,7 +330,6 @@ For **func (BOLD)**:
     "PhaseEncodingDirection": "j-",
     "TotalReadoutTime": 0.05,
     "SliceTiming": [0, 0.5, 1.0, 1.5],
-    "EffectiveEchoSpacing": 0.00058,
     "EchoTime": 0.03
 }
 ```
@@ -361,14 +359,14 @@ For **DWI**:
 
 **Key points:**
 - `dcm2niix` auto-generates most sidecar fields from DICOM headers
-- `RepetitionTime` and `TaskName` are required for BOLD
+- `TaskName` and either `RepetitionTime` or `VolumeTiming` are required for BOLD; timing alternatives have additional constraints
 - `SliceTiming` is essential for slice-timing correction in fMRI preprocessing
 - `PhaseEncodingDirection` and `TotalReadoutTime` (or `EffectiveEchoSpacing`) are needed for distortion correction
 - See `references/metadata_fields.md` for comprehensive field reference
 
 ### 8. Events Files for Task fMRI
 
-Task-based fMRI requires `_events.tsv` files:
+Represent recorded task events with `_events.tsv`; not every task has recorded events (for example resting state):
 
 ```
 onset	duration	trial_type	response_time
@@ -379,10 +377,10 @@ onset	duration	trial_type	response_time
 ```
 
 **Required columns:**
-- `onset` - onset time in seconds relative to the start of the acquisition
-- `duration` - duration in seconds (use `n/a` for instantaneous events)
+- `onset` - onset time in seconds relative to the first stored data point (negative values are allowed)
+- `duration` - duration in seconds (use `0` for instantaneous events and `n/a` only if unavailable)
 
-**Recommended columns:**
+**Optional columns:**
 - `trial_type` - categorical label for condition
 - `response_time` - RT in seconds
 - Custom columns as needed (with descriptions in corresponding `.json` sidecar)
@@ -402,7 +400,7 @@ The `participants.json` sidecar describes columns:
 {
     "age": {
         "Description": "Age of the participant at time of scanning",
-        "Units": "years"
+        "Units": "year"
     },
     "sex": {
         "Description": "Biological sex",
@@ -459,7 +457,7 @@ my_dataset/
 **Derivative conventions:**
 - `space-<label>` - template/reference space (e.g., `MNI152NLin2009cAsym`, `T1w`)
 - `desc-<label>` - description of processing (e.g., `preproc`, `brain`, `smoothed`)
-- `res-<label>` - resolution (e.g., `2` for 2mm isotropic)
+- `res-<label>` - resolution label; document its meaning in `Resolution` metadata (the label need not be a voxel size)
 - Each pipeline gets its own directory under `derivatives/`
 - Must have its own `dataset_description.json` with `GeneratedBy`
 
@@ -470,7 +468,9 @@ from bids import BIDSLayout
 from bids.layout import BIDSLayoutIndexer
 
 # Cache the layout index for faster repeated access
-layout = BIDSLayout("/path/to/dataset", database_path="/path/to/cache.db")
+layout = BIDSLayout("/path/to/dataset", database_path="/path/to/pybids-cache")
+
+# Existing cache directories are reused; set reset_database=True after file changes.
 
 # Include derivatives
 layout = BIDSLayout(
@@ -524,24 +524,21 @@ sub01_df = files_df[files_df["subject"] == "01"]
 
 BIDS-Apps are containerized analysis pipelines that accept BIDS datasets as input:
 
+Illustrative container invocation; replace the image tag, paths, license and resources
+with the selected app release's requirements. Images are not executed by this skill's tests.
+
 ```bash
-# General BIDS-App invocation pattern
-docker run -v /path/to/bids:/data:ro -v /path/to/output:/out \
-    <bids-app-image> /data /out participant --participant_label 01
-
-# Common BIDS-Apps:
-# fMRIPrep - fMRI preprocessing
-docker run nipreps/fmriprep /data /out participant \
-    --participant-label 01 --fs-license-file /license.txt
-
-# MRIQC - MRI quality control
-docker run nipreps/mriqc /data /out participant \
-    --participant-label 01
-
-# QSIPrep - diffusion MRI preprocessing
-docker run pennbbl/qsiprep /data /out participant \
-    --participant-label 01
+docker run --rm \
+  -v /path/to/bids:/data:ro -v /path/to/output:/out \
+  -v /path/to/license.txt:/license.txt:ro \
+  nipreps/fmriprep:<pinned-version> /data /out participant \
+  --participant-label 01 --fs-license-file /license.txt
 ```
+
+Consult the current [fMRIPrep](https://fmriprep.org/en/stable/usage.html),
+[MRIQC](https://mriqc.readthedocs.io/en/stable/running.html), and
+[QSIPrep](https://qsiprep.readthedocs.io/en/latest/) CLI documentation.
+Check each app's supported analysis levels and participant flag spelling.
 
 **BIDS-App interface convention:**
 ```
@@ -550,3 +547,11 @@ bids-app input_dataset output_dir {participant|group} [options]
 
 - `participant` level: runs per-subject
 - `group` level: runs across all subjects (aggregation/group stats)
+
+## Review scope
+
+Reviewed against BIDS 1.11.2, PyBIDS 0.22.0, validator wrapper 3.0.2, HeuDiConv
+1.5.1 and dcm2bids 3.3.1 on 2026-09-30. Local synthetic tests cover PyBIDS
+queries/inheritance/cache/derivatives and the conversion mapping APIs. Commands
+requiring scanner DICOMs, containers or a GUI are illustrative; no real acquisition
+conversion or BIDS-App processing was performed.

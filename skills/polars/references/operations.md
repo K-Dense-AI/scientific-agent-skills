@@ -1,6 +1,8 @@
 # Polars Operations Reference
 
-This reference covers all common Polars operations with comprehensive examples.
+Polars 1.44.2 operation patterns. Fragments assume `import polars as pl` and a
+DataFrame with the named columns; they are illustrative unless instantiated in the
+local recipe tests described in [review.md](review.md).
 
 ## Selection Operations
 
@@ -195,6 +197,11 @@ df.group_by("category").agg(
 )
 ```
 
+`count()` excludes nulls, whereas `pl.len()` includes them and `n_unique()` counts
+null as one distinct value. NaN is a float value, not a null. `std`/`var` default to
+`ddof=1`; `quantile` defaults to nearest interpolation. Declare those conventions.
+`first`/`last` follow row order, not chronological extrema: sort first or use min/max.
+
 ### Conditional Aggregations
 
 Filter within aggregations:
@@ -261,7 +268,7 @@ df.with_columns(
     dense_rank=pl.col("score").rank(method="dense").over("team"),
 
     # Row number
-    row_num=pl.col("timestamp").sort().rank(method="ordinal").over("user_id")
+    row_num=pl.col("timestamp").rank(method="ordinal").over("user_id")
 )
 ```
 
@@ -276,12 +283,13 @@ df.with_columns(
 ```
 
 **explode:**
-Faster, groups rows together:
+Produces one scalar mean per group here; use `select` because row count changes:
 ```python
-df.with_columns(
+df.select(
     group_mean=pl.col("value").mean().over("category", mapping_strategy="explode")
 )
 ```
+Do not combine this layout with untouched row columns; alignment would be lost.
 
 **join:**
 Creates list columns:
@@ -296,9 +304,8 @@ df.with_columns(
 **Time-based rolling:**
 ```python
 df.with_columns(
-    rolling_avg=pl.col("value").rolling_mean(
-        window_size="7d",
-        by="date"
+    rolling_avg=pl.col("value").rolling_mean_by(
+        "date", window_size="7d", min_samples=1, closed="right"
     )
 )
 ```
@@ -311,6 +318,11 @@ df.with_columns(
 )
 ```
 
+For multiple subjects, sort by subject and time and apply the rolling expression
+with `.over("subject")`; never mix observations across subjects. A calendar `"7d"`
+window differs from seven observations and can differ from 168 hours across DST.
+Row-based rolling defaults to a full window; use `min_samples` explicitly if needed.
+
 ### Cumulative Operations
 
 ```python
@@ -321,6 +333,9 @@ df.with_columns(
     cumprod=pl.col("value").cum_prod().over("group")
 )
 ```
+
+Cumulative and shift expressions use row order within each group. Sort first, or
+specify `order_by="timestamp"` in `over` when a time order is required.
 
 ### Shift and Lag/Lead
 
@@ -369,7 +384,7 @@ df.sort("value", nulls_last=True)
 **Sort by expression:**
 ```python
 # Sort by computed value
-df.sort(pl.col("first_name").str.len())
+df.sort(pl.col("first_name").str.len_chars())
 
 # Sort by multiple expressions
 df.sort(
@@ -381,6 +396,13 @@ df.sort(
 ## Conditional Operations
 
 ### When/Then/Otherwise
+
+Polars 1.44 masks unused input rows for elementwise branches and may skip uniform
+branches. Older API docstrings still say every branch always executes; do not rely
+on that older claim. This is not a Python short-circuit guarantee for arbitrary
+expressions: missing columns and out-of-bounds gathers can still fail. Use `pl.lit`
+for string values; bare strings refer to columns. See the 1.44 release notes in
+[review.md](review.md).
 
 ```python
 # Basic conditional
@@ -442,7 +464,7 @@ df.with_columns(
 
 ```python
 # Contains
-df.filter(pl.col("email").str.contains("@gmail.com"))
+df.filter(pl.col("email").str.contains("@gmail.com", literal=True))
 
 # Starts/ends with
 df.filter(pl.col("name").str.starts_with("A"))
@@ -483,7 +505,7 @@ df.with_columns(
 # Add duration
 df.with_columns(
     next_week=pl.col("date") + pl.duration(weeks=1),
-    next_month=pl.col("date") + pl.duration(months=1)
+    next_month=pl.col("date").dt.offset_by("1mo")
 )
 
 # Difference between dates
@@ -491,6 +513,9 @@ df.with_columns(
     days_diff=(pl.col("end_date") - pl.col("start_date")).dt.total_days()
 )
 ```
+
+`pl.duration` represents fixed elapsed durations and has no `months` parameter.
+Use `dt.offset_by` for calendar offsets; preserve time zones and DST conventions.
 
 ### Date Filtering
 
@@ -527,7 +552,7 @@ df.with_columns(
 )
 
 # Explode lists to rows
-df.explode("items")
+df.explode("items", empty_as_null=True)
 
 # For element-wise list filtering, use Polars' native list-expression
 # methods with pl.element(); avoid Python callbacks in hot paths.

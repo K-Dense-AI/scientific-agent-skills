@@ -33,13 +33,9 @@ def validate(data: dict[str, Any]) -> tuple[Review, dict[str, int]]:
 
     basis = review.object(data.get("qmsr_basis"), "qmsr_basis")
     if basis is not None:
-        as_of = review.date(basis, "as_of", "qmsr_basis")
-        if as_of != "2026-07-23":
-            review.add(
-                "BASIS_DATE",
-                "qmsr_basis.as_of",
-                "this skill release is researched through 2026-07-23",
-            )
+        # The organization's source-review date is independent of this skill's
+        # research baseline. Currency itself requires controlled human review.
+        review.date(basis, "as_of", "qmsr_basis")
         effective = review.date(basis, "effective_date", "qmsr_basis")
         if effective != "2026-02-02":
             review.add(

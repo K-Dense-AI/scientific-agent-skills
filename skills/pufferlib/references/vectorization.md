@@ -1,7 +1,8 @@
 # Vectorization and Throughput
 
-Research snapshot: **2026-07-23**. PufferLib's published 3.0.0 package and
-current 4.0 source line expose different vectorization systems. Never mix their
+Review: **2026-10-01**. Native 5.0 guidance is in [native-5.md](native-5.md);
+3.0 and the pinned 4.0 snapshot below are historical profiles. PufferLib's published 3.0.0 package and
+historical 4.0 source line expose different vectorization systems. Never mix their
 configuration names.
 
 ## Version split
@@ -9,7 +10,7 @@ configuration names.
 | Profile | Vectorization surface | Use for |
 |---|---|---|
 | PyPI `pufferlib==3.0.0` | `pufferlib.vector.make`; `Serial`, `Multiprocessing`, optional `Ray`, and native `PufferEnv` backends | Published Python/Gymnasium/PettingZoo compatibility workflows |
-| Source `4.0` at a pinned commit | Native C vector interface configured by `[vec] total_agents`, `num_buffers`, and `num_threads` | Current Ocean/native trainer source |
+| Source `4.0` at a pinned commit | Native C vector interface configured by `[vec] total_agents`, `num_buffers`, and `num_threads` | Historical Ocean/native trainer source |
 
 The 4.0 package directory no longer contains the 3.0 `vector.py`,
 `emulation.py`, or `pytorch.py` modules. Treat old examples importing those
@@ -93,6 +94,11 @@ Do not assume `num_envs == returned batch length`.
 Validate actual shapes and dtypes at reset and the first step. In multi-agent
 workflows, use masks to exclude padded or inactive slots from loss and metrics.
 
+Episode-end semantics: emulated 3.0 environments reset on the send after a done
+transition, consuming no action for that slot. Native environments can differ.
+See `environments.md`; do not assume PufferLib exposes Gymnasium 1.3 autoreset
+metadata or that its stock learner correctly masks reset-only transitions.
+
 ### Multiprocessing constraints
 
 The 3.0 source validates these relationships:
@@ -138,9 +144,9 @@ different methods.
 - Recreate workers and environments for independent replicates; do not treat
   adjacent episodes from one long run as independent seeds.
 
-## Current 4.0 source
+## Historical 4.0 source
 
-The current default branch uses native C environments and a different vector
+The reviewed 4.0 source uses native C environments and a different vector
 layout:
 
 ```ini
@@ -200,11 +206,11 @@ and cannot substantiate an upstream PufferLib performance claim.
   — stable API source; accessed 2026-07-23.
 - [PufferLib 3.0 vectorization example](https://github.com/PufferAI/PufferLib/blob/3.0/examples/vectorization.py)
   — stable usage example; accessed 2026-07-23.
-- [PufferLib 4.0 documentation](https://puffer.ai/docs.html) — current native
-  architecture and CLI; accessed 2026-07-23.
-- [PufferLib 4.0 trainer source](https://github.com/PufferAI/PufferLib/blob/4.0/pufferlib/pufferl.py)
-  — current config and spawn behavior; accessed 2026-07-23.
+- [PufferLib live 5.0 documentation](https://puffer.ai/docs.html) — current native
+  architecture and CLI; rechecked 2026-10-01, not a 4.0 API reference.
+- [PufferLib 4.0 trainer source](https://github.com/PufferAI/PufferLib/blob/25647630e1b15330bb3153a5a0d3ff8d234c3acf/pufferlib/pufferl.py)
+  — historical config and spawn behavior; accessed 2026-07-23.
 - [PufferLib compatibility paper](https://arxiv.org/abs/2406.12905) — submitted
-  2024-06-18.
+  2024-06-11.
 - [PufferLib 2.0 paper](https://openreview.net/forum?id=qRyteMTgn0) —
   Reinforcement Learning Journal, 2025.

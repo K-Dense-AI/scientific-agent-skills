@@ -4,7 +4,7 @@ AI-powered scientific schematic generation using Nano Banana 2.
 
 This script uses a smart iterative refinement approach:
 1. Generate initial image with Nano Banana 2
-2. AI quality review using Gemini 3.6 Flash for scientific critique
+2. AI quality review using Gemini 3.7 Flash for scientific critique
 3. Only regenerate if quality is below threshold for document type
 4. Repeat until quality meets standards (max iterations)
 
@@ -151,7 +151,7 @@ def _resolve_api_key(explicit: Optional[str] = None) -> Optional[str]:
 class ScientificSchematicGenerator:
     """Generate scientific schematics using AI with smart iterative refinement.
     
-    Uses Gemini 3.6 Flash for quality review to determine if regeneration is needed.
+    Uses Gemini 3.7 Flash for quality review to determine if regeneration is needed.
     Multiple passes only occur if the generated schematic doesn't meet the
     quality threshold for the target document type.
     """
@@ -243,7 +243,7 @@ IMPORTANT - NO FIGURE NUMBERS:
         # "No endpoints found that support the requested output modalities".
         # https://openrouter.ai/google/gemini-3.1-flash-image
         self.image_model = "google/gemini-3.1-flash-image"
-        # Gemini 3.6 Flash for quality review - excellent vision and reasoning
+        # Gemini 3.7 Flash for quality review - excellent vision and reasoning
         self.review_model = "google/gemini-3.7-flash"
         
     def _log(self, message: str):
@@ -251,142 +251,71 @@ IMPORTANT - NO FIGURE NUMBERS:
         if self.verbose:
             print(f"[{time.strftime('%H:%M:%S')}] {message}")
     
-    def _make_request(self, model: str, messages: List[Dict[str, Any]], 
-                     modalities: Optional[List[str]] = None) -> Dict[str, Any]:
-        """
-        Make a request to OpenRouter API.
-        
-        Args:
-            model: Model identifier
-            messages: List of message dictionaries
-            modalities: Optional list of modalities (e.g., ["image", "text"])
-            
-        Returns:
-            API response as dictionary
-        """
+    def _post_request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Send one non-streaming request; never automatically replay a paid call."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/scientific-writer",
-            "X-Title": "Scientific Schematic Generator"
+            "X-Title": "Scientific Schematic Generator",
         }
-        
-        payload = {
-            "model": model,
-            "messages": messages
-        }
-        
-        if modalities:
-            payload["modalities"] = modalities
-        
-        self._log(f"Making request to {model}...")
-        
+        self._log(f"POST {endpoint} using {payload['model']}")
         try:
             response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=120
+                f"{self.base_url}/{endpoint}", headers=headers,
+                json=payload, timeout=120,
             )
-            
-            # Try to get response body even on error
             try:
                 response_json = response.json()
-            except json.JSONDecodeError:
-                response_json = {"raw_text": response.text[:500]}
-            
-            # Check for HTTP errors but include response body in error message
-            if response.status_code != 200:
-                error_detail = response_json.get("error", response_json)
-                self._log(f"HTTP {response.status_code}: {error_detail}")
-                raise RuntimeError(f"API request failed (HTTP {response.status_code}): {error_detail}")
-            
+            except ValueError:
+                raise RuntimeError(
+                    f"API returned non-JSON data (HTTP {response.status_code})"
+                ) from None
+            if not isinstance(response_json, dict):
+                raise RuntimeError("API response must be a JSON object")
+            if response.status_code != 200 or "error" in response_json:
+                error = response_json.get("error", {})
+                detail = error.get("message", "request rejected") if isinstance(error, dict) else str(error)
+                # Providers occasionally echo input; do not dump whole bodies or credentials.
+                detail = str(detail).replace(self.api_key, "[redacted]")[:500]
+                raise RuntimeError(f"API request failed (HTTP {response.status_code}): {detail}")
             return response_json
         except requests.exceptions.Timeout:
-            raise RuntimeError("API request timed out after 120 seconds")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"API request failed: {str(e)}")
-    
-    def _extract_image_from_response(self, response: Dict[str, Any]) -> Optional[bytes]:
+            raise RuntimeError("API request timed out after 120 seconds") from None
+        except requests.exceptions.RequestException as exc:
+            detail = str(exc).replace(self.api_key, "[redacted]")
+            raise RuntimeError(f"API request failed: {detail}") from None
+
+    def _make_request(self, model: str, messages: List[Dict[str, Any]],
+                      modalities: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Use chat completions for the text-and-image vision review."""
+        payload = {"model": model, "messages": messages}
+        if modalities:
+            payload["modalities"] = modalities
+        return self._post_request("chat/completions", payload)
+
+    def _extract_image_from_response(self, response: Dict[str, Any]) -> bytes:
+        """Decode the dedicated Image API response and enforce this helper's PNG contract.
+
+        The provider may omit media_type; the PNG signature still has to match.
+        This is a format check, not a full image-decoder or scientific-content check.
         """
-        Extract base64-encoded image from API response.
-        
-        For Nano Banana 2, images are returned in the 'images' field of the message,
-        not in the 'content' field.
-        
-        Args:
-            response: API response dictionary
-            
-        Returns:
-            Image bytes or None if not found
-        """
+        data = response.get("data")
+        if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+            raise RuntimeError("Image API returned no data[0] image")
+        item = data[0]
+        if item.get("media_type") not in (None, "image/png"):
+            raise RuntimeError(f"Expected PNG output; received {item['media_type']}")
+        encoded = item.get("b64_json")
+        if not isinstance(encoded, str) or not encoded:
+            raise RuntimeError("Image API returned no b64_json image")
         try:
-            choices = response.get("choices", [])
-            if not choices:
-                self._log("No choices in response")
-                return None
-            
-            message = choices[0].get("message", {})
-            
-            # IMPORTANT: Nano Banana 2 returns images in the 'images' field
-            images = message.get("images", [])
-            if images and len(images) > 0:
-                self._log(f"Found {len(images)} image(s) in 'images' field")
-                
-                # Get first image
-                first_image = images[0]
-                if isinstance(first_image, dict):
-                    # Extract image_url
-                    if first_image.get("type") == "image_url":
-                        url = first_image.get("image_url", {})
-                        if isinstance(url, dict):
-                            url = url.get("url", "")
-                        
-                        if url and url.startswith("data:image"):
-                            # Extract base64 data after comma
-                            if "," in url:
-                                base64_str = url.split(",", 1)[1]
-                                # Clean whitespace
-                                base64_str = base64_str.replace('\n', '').replace('\r', '').replace(' ', '')
-                                self._log(f"Extracted base64 data (length: {len(base64_str)})")
-                                return base64.b64decode(base64_str)
-            
-            # Fallback: check content field (for other models or future changes)
-            content = message.get("content", "")
-            
-            if self.verbose:
-                self._log(f"Content type: {type(content)}, length: {len(str(content))}")
-            
-            # Handle string content
-            if isinstance(content, str) and "data:image" in content:
-                match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=\n\r]+)', content, re.DOTALL)
-                if match:
-                    base64_str = match.group(1).replace('\n', '').replace('\r', '').replace(' ', '')
-                    self._log(f"Found image in content field (length: {len(base64_str)})")
-                    return base64.b64decode(base64_str)
-            
-            # Handle list content
-            if isinstance(content, list):
-                for i, block in enumerate(content):
-                    if isinstance(block, dict) and block.get("type") == "image_url":
-                        url = block.get("image_url", {})
-                        if isinstance(url, dict):
-                            url = url.get("url", "")
-                        if url and url.startswith("data:image") and "," in url:
-                            base64_str = url.split(",", 1)[1].replace('\n', '').replace('\r', '').replace(' ', '')
-                            self._log(f"Found image in content block {i}")
-                            return base64.b64decode(base64_str)
-            
-            self._log("No image data found in response")
-            return None
-            
-        except Exception as e:
-            self._log(f"Error extracting image: {str(e)}")
-            import traceback
-            if self.verbose:
-                traceback.print_exc()
-            return None
-    
+            image_data = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            raise RuntimeError("Image API returned invalid base64 image data") from None
+        if not image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise RuntimeError("Image API output does not have a PNG signature")
+        return image_data
+
     def _image_to_base64(self, image_path: str) -> str:
         """
         Convert image file to base64 data URL.
@@ -425,72 +354,22 @@ IMPORTANT - NO FIGURE NUMBERS:
         """
         self._last_error = None  # Reset error
         
-        messages = [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-        
         try:
-            response = self._make_request(
-                model=self.image_model,
-                messages=messages,
-                modalities=["image", "text"]
-            )
-            
-            # Debug: print response structure if verbose
-            if self.verbose:
-                self._log(f"Response keys: {response.keys()}")
-                if "error" in response:
-                    self._log(f"API Error: {response['error']}")
-                if "choices" in response and response["choices"]:
-                    msg = response["choices"][0].get("message", {})
-                    self._log(f"Message keys: {msg.keys()}")
-                    # Show content preview without printing huge base64 data
-                    content = msg.get("content", "")
-                    if isinstance(content, str):
-                        preview = content[:200] + "..." if len(content) > 200 else content
-                        self._log(f"Content preview: {preview}")
-                    elif isinstance(content, list):
-                        self._log(f"Content is list with {len(content)} items")
-                        for i, item in enumerate(content[:3]):
-                            if isinstance(item, dict):
-                                self._log(f"  Item {i}: type={item.get('type')}")
-            
-            # Check for API errors in response
-            if "error" in response:
-                error_msg = response["error"]
-                if isinstance(error_msg, dict):
-                    error_msg = error_msg.get("message", str(error_msg))
-                self._last_error = f"API Error: {error_msg}"
-                print(f"[FAIL] {self._last_error}")
-                return None
-            
+            # Image generation has its own body and response, distinct from chat.
+            # n=1 is supported by both current Gemini image-provider endpoints.
+            # output_format is absent from their capability maps: use the default
+            # and validate the returned MIME/signature rather than send that knob.
+            response = self._post_request("images", {
+                "model": self.image_model, "prompt": prompt, "n": 1,
+            })
             image_data = self._extract_image_from_response(response)
-            if image_data:
-                self._log(f"[OK] Generated image ({len(image_data)} bytes)")
-            else:
-                self._last_error = "No image data in API response - model may not support image generation"
-                self._log(f"[FAIL] {self._last_error}")
-                # Additional debug info when image extraction fails
-                if self.verbose and "choices" in response:
-                    msg = response["choices"][0].get("message", {})
-                    self._log(f"Full message structure: {json.dumps({k: type(v).__name__ for k, v in msg.items()})}")
-            
+            self._log(f"[OK] Generated PNG ({len(image_data)} bytes)")
             return image_data
-        except RuntimeError as e:
-            self._last_error = str(e)
+        except RuntimeError as exc:
+            self._last_error = str(exc)
             self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
-        except Exception as e:
-            self._last_error = f"Unexpected error: {str(e)}"
-            self._log(f"[FAIL] Generation failed: {self._last_error}")
-            import traceback
-            if self.verbose:
-                traceback.print_exc()
-            return None
-    
+
     def review_image(self, image_path: str, original_prompt: str, 
                     iteration: int, doc_type: str = "default",
                     max_iterations: int = 2) -> ReviewResult:
@@ -698,7 +577,13 @@ Generate an improved version that addresses all the critique points while mainta
         Returns:
             Dictionary with generation results and metadata
         """
+        if isinstance(iterations, bool) or not isinstance(iterations, int) or not 1 <= iterations <= 2:
+            raise ValueError("iterations must be 1 or 2")
+        if doc_type.lower() not in self.QUALITY_THRESHOLDS:
+            raise ValueError(f"Unknown document type: {doc_type}")
         output_path = Path(output_path)
+        if output_path.suffix.lower() != ".png":
+            raise ValueError("Output path must end in .png; format conversion is not supported")
         output_dir = output_path.parent
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -713,6 +598,10 @@ Generate an improved version that addresses all the critique points while mainta
             "user_prompt": user_prompt,
             "doc_type": doc_type,
             "quality_threshold": threshold,
+            "image_model": self.image_model,
+            "review_model": self.review_model,
+            "quality_met": False,
+            "termination_reason": None,
             "iterations": [],
             "final_image": None,
             # None, not 0.0 -- a run whose review never completed has no score,
@@ -756,8 +645,11 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                     "success": False,
                     "error": error_msg
                 })
-                continue
-            
+                # A failed refinement must not discard the earlier saved image.
+                # Stop here rather than replay a request after an ambiguous timeout.
+                results["termination_reason"] = "generation_failed"
+                break
+
             # Save iteration image
             iter_path = output_dir / f"{base_name}_v{i}{extension}"
             with open(iter_path, "wb") as f:
@@ -772,7 +664,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
             if review.score is not None:
                 print(f"[OK] Score: {review.score}/10 (threshold: {threshold}/10)")
             else:
-                print(f"[WARN] Review unavailable — image kept, quality not verified")
+                print(f"[WARN] Review unavailable - image kept, quality not verified")
                 print(f"  Reason: {review.error}")
 
             # Save iteration results
@@ -788,6 +680,15 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                 "success": True
             }
             results["iterations"].append(iteration_result)
+            # Preserve the latest successful image even if a later API call fails.
+            results["final_image"] = str(iter_path)
+            results["final_score"] = review.score
+            results["final_reviewed"] = review.reviewed and review.score is not None
+            results["success"] = True
+            results["quality_met"] = (
+                results["final_reviewed"] and review.score >= threshold
+                and not review.needs_improvement
+            )
 
             # Check if quality is acceptable - STOP EARLY if so
             if not review.needs_improvement:
@@ -798,7 +699,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                               f"{threshold} for {doc_type}")
                 else:
                     # Regenerating cannot fix a reviewer that did not answer.
-                    print(f"\n[WARN] Stopping without a verified score — review the image yourself")
+                    print(f"\n[WARN] Stopping without a verified score - review the image yourself")
                     reason = f"Review did not produce a score: {review.error}"
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
@@ -806,11 +707,15 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                 results["success"] = True
                 results["early_stop"] = True
                 results["early_stop_reason"] = reason
+                results["termination_reason"] = (
+                    "quality_threshold_met" if results["quality_met"] else "review_unavailable"
+                )
                 break
 
             # If this is the last iteration, we're done regardless
             if i == iterations:
                 print(f"\n[WARN] Maximum iterations reached")
+                results["termination_reason"] = "max_iterations"
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
                 results["final_reviewed"] = review.reviewed and review.score is not None
@@ -818,7 +723,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
                 break
 
             # Quality below threshold - improve prompt for next iteration
-            print(f"\n[WARN] Quality below threshold ({review.score} < {threshold})")
+            print(f"\n[WARN] Review requests improvement (score: {review.score}; threshold: {threshold})")
             print(f"Improving prompt based on feedback...")
             current_prompt = self.improve_prompt(user_prompt, review.critique, i + 1)
         
@@ -832,7 +737,7 @@ Generate a publication-quality scientific diagram that meets all the guidelines 
         
         # Save review log
         log_path = output_dir / f"{base_name}_review_log.json"
-        with open(log_path, "w") as f:
+        with open(log_path, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
         print(f"[OK] Review log: {log_path}")
         
@@ -930,8 +835,10 @@ Environment:
             print(f"\n[OK] Success! Image saved to: {args.output}")
             used = len([r for r in results['iterations'] if r.get('success')])
             if results.get("final_reviewed"):
-                if results.get("early_stop"):
+                if results.get("quality_met"):
                     print(f"  (Completed in {used} iteration(s) - quality threshold met)")
+                else:
+                    print("  (Image saved; review did not meet the quality criteria.)")
             else:
                 # The image is real; the quality claim is not. Say which.
                 print(f"  (Completed in {used} iteration(s) - quality NOT verified,"

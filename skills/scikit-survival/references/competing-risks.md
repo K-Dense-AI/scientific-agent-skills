@@ -1,6 +1,6 @@
 # Competing risks and cumulative incidence
 
-Verified for scikit-survival 0.28.0 on 2026-07-23.
+Verified for scikit-survival 0.28.0 on 2026-10-01.
 
 ## Estimand
 
@@ -89,8 +89,10 @@ assert np.allclose(
 )
 ```
 
-`time_min` estimates conditionally on surviving at least to that time. This changes
-the target population and must not be selected after viewing outcomes.
+`time_min` is documented as conditional survival. In released 0.28.0 it fails
+with a broadcasting error when it removes any unique times; the bundled helper
+rejects that setting. Do not claim a conditional/landmark analysis from this
+helper. A different verified method and explicit target population are needed.
 
 ### Confidence intervals
 
@@ -106,7 +108,24 @@ time_points, cumulative_incidence, confidence_interval = (
 )
 ```
 
-`confidence_interval` has shape `(K + 1, 2, n_times)`, where axis 1 is lower/upper.
+`confidence_interval` has shape `(K + 1, 2, n_times)`. Native 0.28.0 returns
+cause-specific rows in lower/upper order, but **total-risk row 0 is reversed and
+ignores `conf_level`**. Repair that row with the public all-event KM estimator:
+
+```python
+from sksurv.nonparametric import kaplan_meier_estimator
+
+km_time, _, km_ci = kaplan_meier_estimator(
+    event > 0, time, conf_type="log-log", conf_level=0.95,
+)
+assert np.array_equal(km_time, time_points)
+confidence_interval[0] = 1.0 - km_ci[::-1]
+assert np.all(confidence_interval[:, 0] <= confidence_interval[:, 1])
+```
+
+The bundled helper applies this repair using the requested level and rejects
+non-finite or reversed intervals. This repairs the total-risk row, not general
+small-sample coverage.
 Current variance choices are:
 
 - `"Aalen"`
@@ -149,7 +168,8 @@ all causes to event, if that is the estimand and censoring assumptions hold.
 
 ## Comparing groups
 
-Estimate group-specific curves without fitting preprocessing on the full dataset:
+For prespecified groups where every original cause occurs (the native function
+requires contiguous observed causes), estimate point curves:
 
 ```python
 curves = {}
@@ -158,9 +178,12 @@ for label in prespecified_groups:
     curves[label] = cumulative_incidence_competing_risks(
         event[mask],
         time[mask],
-        conf_type="log-log",
     )
 ```
+
+If a subgroup has no event for a cause, do not silently relabel its rows or invent
+an event to satisfy the API. Preserve a global cause mapping and use a method
+that supports absent causes; an all-censored group needs separate handling.
 
 Plotting pointwise intervals does not test equality. scikit-survival 0.28 does not
 provide Gray's test in this API. Do not substitute an ordinary log-rank test:
@@ -265,7 +288,8 @@ It:
 - bounds file size and row count;
 - verifies that cause-specific rows sum to total CIF;
 - writes numeric arrays without pickle;
-- reports point estimates at requested horizons;
+- reports point estimates at requested horizons within observed follow-up;
+- repairs total-risk intervals and guards the upstream conditional-time defect;
 - makes no network calls.
 
 Use only authorized, de-identified local data. Do not include row-level data or PHI
@@ -285,7 +309,9 @@ in reports.
 
 ## Sources
 
-Official scikit-survival sources checked 2026-07-23:
+Official scikit-survival sources checked 2026-10-01:
+
+- [Released CIF implementation](https://github.com/sebp/scikit-survival/blob/v0.28.0/sksurv/nonparametric.py) — native defects above reproduced on a six-row synthetic fixture.
 
 - [Competing-risks user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/competing-risks.html)
 - [CIF API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.nonparametric.cumulative_incidence_competing_risks.html)

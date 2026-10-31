@@ -16,7 +16,7 @@ sns.displot(data=df, x='variable', hue='group',
             kind='kde', fill=True, col='category')
 
 # Correlation analysis
-corr = df.corr()
+corr = df.select_dtypes(include='number').corr()
 sns.heatmap(corr, annot=True, cmap='coolwarm', center=0)
 ```
 
@@ -52,7 +52,7 @@ plt.tight_layout()
 ### Time Series with Confidence Bands
 
 ```python
-# Lineplot automatically aggregates and shows CI
+# Lineplot aggregates; sd shows data spread, not a confidence interval
 sns.lineplot(data=timeseries, x='date', y='measurement',
              hue='sensor', style='location', errorbar='sd')
 
@@ -112,3 +112,45 @@ sns.scatterplot(data=df, x='x', y='y', hue='category', palette=palette)
 sns.kdeplot(data=df, x='x', bw_adjust=0.5)  # Less smooth
 sns.kdeplot(data=df, x='x', bw_adjust=2)    # More smooth
 ```
+
+### Preserve missing-observation gaps
+
+`lineplot` drops missing rows before drawing and can connect observations on either
+side. Reindex to the study's expected sampling schedule first when absent rows
+should also count as missing; do not assume every irregular interval is a gap.
+This offline example has one subject, one expected observation per integer time,
+and an explicit missing row. For several subjects, build runs independently
+within each subject (and condition) before assigning a unique segment ID.
+
+```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+series = pd.DataFrame({'time': [0, 1, 2, 3, 4], 'value': [1., 2., np.nan, 4., 5.]})
+valid = series['value'].notna()
+series['segment'] = (~valid).cumsum()
+fig, ax = plt.subplots()
+sns.lineplot(data=series.loc[valid], x='time', y='value', units='segment',
+             estimator=None, errorbar=None, marker='o', sort=True, ax=ax)
+ax.set(xlabel='Time', ylabel='Response', title='Gap retained at time 2')
+fig.savefig('missing-gap.png', dpi=150)
+```
+
+Segmenting is for raw observations. For aggregate trajectories and bands, compute
+the estimate and valid intervals with the intended sampling units, then split
+those output arrays at undefined or missing timepoints too. Never replace missing
+measurements with zero just to obtain a continuous curve.
+
+### Statistical units and normalization
+
+A CI at each x is not automatically a paired or longitudinal analysis. `units`
+with `estimator=None` draws individual lines; categorical `units` can request a
+multilevel bootstrap but does not fit a mixed model. Keep biological and technical
+replication separate and report group sizes. `common_norm=True` normalizes density
+across groups together; use `False` for each group's shape, and still disclose n.
+
+Reviewed against [lineplot](https://seaborn.pydata.org/generated/seaborn.lineplot.html),
+[error bars](https://seaborn.pydata.org/tutorial/error_bars.html), and the released
+0.13.2 drawing code; the gap recipe is checked through its actual line coordinates.

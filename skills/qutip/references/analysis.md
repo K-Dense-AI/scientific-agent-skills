@@ -1,7 +1,7 @@
 # QuTiP 5.3 Analysis, Steady States, and Spectra
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-10-01**. Examples target
+`qutip==5.3.1`.
 
 ## Analysis starts with invariants
 
@@ -12,13 +12,16 @@ observable:
 import numpy as np
 
 def density_audit(rho, tolerance=1e-9):
-    eigenvalues = np.asarray(rho.eigenenergies(), dtype=float)
+    if not rho.isoper:
+        raise ValueError("density_audit requires an operator")
+    hermitian = bool(rho.isherm)
+    eigenvalues = np.linalg.eigvalsh(rho.full()) if hermitian else None
     trace = complex(rho.tr())
     return {
-        "is_hermitian": bool(rho.isherm),
+        "is_hermitian": hermitian,
         "trace_error": float(abs(trace - 1.0)),
-        "minimum_eigenvalue": float(eigenvalues.min()),
-        "positive_within_tolerance": bool(eigenvalues.min() >= -tolerance),
+        "minimum_eigenvalue": float(eigenvalues.min()) if hermitian else None,
+        "positive_within_tolerance": hermitian and bool(eigenvalues.min() >= -tolerance),
     }
 ```
 
@@ -75,8 +78,9 @@ state_fidelity = fidelity(rho, sigma)
 trace_distance = tracedist(rho, sigma)
 ```
 
-Always state the logarithm base. Check the QuTiP definition before comparing
-fidelity values with a source that may square or unsquare the quantity.
+Always state the logarithm base. QuTiP `fidelity` returns root fidelity
+`Tr(sqrt(sqrt(rho) * sigma * sqrt(rho)))`; for two kets this is absolute
+overlap. Square it only when the comparison uses the squared convention.
 
 For bipartite entropy:
 
@@ -304,16 +308,18 @@ absolute and relative differences and handle near-zero denominators explicitly.
 version, finite values, monotonic time grids, population bounds, analytic
 reference error when available, convergence deltas, and whether assumptions,
 seeds, and solver stats were recorded. It does not load QuTiP result files or
-other Python-object serialization.
+other Python-object serialization. Its pass status means report consistency,
+not numerical convergence or scientific validity; separately inspect analytic
+error, invariant checks, and the sweep acceptance status.
 
 `../scripts/steady_state_spectrum_planner.py` produces a bounded plan for
 steady-state and direct/FFT spectrum checks without running a model.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [Solver, correlation, spectrum, and steady-state API](https://qutip.readthedocs.io/en/stable/apidoc/solver.html)
 - [Steady-state guide](https://qutip.readthedocs.io/en/stable/guide/guide-steady.html)
 - [Correlation guide](https://qutip.readthedocs.io/en/stable/guide/guide-correlation.html)
 - [Quantum-object API](https://qutip.readthedocs.io/en/stable/apidoc/quantumobject.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5 changelog](https://qutip.readthedocs.io/en/stable/changelog.html)

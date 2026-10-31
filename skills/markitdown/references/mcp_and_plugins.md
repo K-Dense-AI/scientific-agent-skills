@@ -2,14 +2,14 @@
 
 ## Official MCP Package
 
-The Microsoft monorepo publishes `markitdown-mcp`. As of July 23, 2026, the package version is `0.0.1a4`; it depends on `markitdown[all]>=0.1.1,<0.2.0`.
+The Microsoft monorepo publishes `markitdown-mcp`. As of October 1, 2026, the package version is `0.0.1a7`; it depends on `markitdown[all]>=0.1.1,<0.2.0` and `mcp>=2.1.1,<3.0.0`. Runtime checks used MCP SDK 2.2.0. The 2.x server API replaces the older FastMCP import.
 
 Pin both packages to ensure the documented converter version:
 
 ```bash
 uv pip install \
-  "markitdown==0.1.6" \
-  "markitdown-mcp==0.0.1a4"
+  "markitdown==0.1.8" \
+  "markitdown-mcp==0.0.1a7"
 ```
 
 The server exposes exactly one tool:
@@ -56,7 +56,7 @@ Endpoints:
 - Streamable HTTP: `http://127.0.0.1:3001/mcp`
 - SSE: `http://127.0.0.1:3001/sse`
 
-`--sse` is a deprecated alias for `--http`.
+`--sse` is a deprecated alias for `--http`. Streamable HTTP is stateless and returns JSON responses. The server starts both transports in the same app. Local in-process tests verified tool discovery, conversion, and `/mcp` initialization; no public server was deployed. Expected file/fetch/conversion failures become MCP `ToolError` messages with sensitive internal detail reduced.
 
 ## MCP Security Model
 
@@ -78,7 +78,7 @@ Requirements:
 6. Deny sensitive network ranges and metadata endpoints.
 7. Do not give the server access to home-directory secrets, SSH keys, cloud credentials, or broad research storage.
 
-Localhost is not authentication: other processes or users on the same machine may still reach the port.
+The tested MCP SDK enables Host/Origin checks for localhost transports; these checks are not credentials. Localhost is not authentication: other processes or users on the same machine may still reach the port.
 
 ## MCP Plugins
 
@@ -94,7 +94,7 @@ Do this only for installed, reviewed plugins. Enabling plugins loads Python entr
 
 The official guide recommends Docker for desktop-agent use. A secure deployment should:
 
-- Build from a reviewed, pinned `v0.1.6` source checkout.
+- Build from a reviewed, pinned `v0.1.8` source checkout.
 - Run as a non-root user.
 - Mount a narrow input directory read-only.
 - Use a read-only root filesystem when practical.
@@ -102,14 +102,14 @@ The official guide recommends Docker for desktop-agent use. A secure deployment 
 - Restrict outbound networking.
 - Avoid mounting the Docker socket, home directory, or credential stores.
 
-Example runtime shape after building a trusted image:
+Illustrative runtime shape after building a trusted image (container execution was not tested in this audit):
 
 ```bash
 docker run --rm -i \
   --read-only \
   --cap-drop ALL \
   -v "/absolute/path/to/documents:/workdir:ro" \
-  markitdown-mcp:0.1.6
+  markitdown-mcp:0.1.8
 ```
 
 The conversion URI inside the container would use a path under `/workdir`.
@@ -225,19 +225,19 @@ Registering a converter before built-ins can change the parser selected for exis
 
 ## Official OCR Plugin
 
-`markitdown-ocr==0.1.0` is an official plugin from the Microsoft monorepo:
+`markitdown-ocr==0.1.1` requires core >=0.1.8 and is an official plugin from the Microsoft monorepo:
 
 ```bash
 uv pip install \
-  "markitdown==0.1.6" \
-  "markitdown-ocr==0.1.0" \
-  "openai==2.41.1"
+  "markitdown==0.1.8" \
+  "markitdown-ocr==0.1.1" \
+  "openai==3.22.1"
 ```
 
 It sends document images/pages to the configured OpenAI-compatible vision provider. Configuration and disclosure requirements are in `cloud_and_ocr.md`.
 
 ## Sources
 
-- MCP guide at v0.1.6: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-mcp
-- MCP server implementation: https://github.com/microsoft/markitdown/blob/v0.1.6/packages/markitdown-mcp/src/markitdown_mcp/__main__.py
-- Sample plugin at v0.1.6: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-sample-plugin
+- MCP guide at v0.1.8: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-mcp
+- MCP server implementation: https://github.com/microsoft/markitdown/blob/v0.1.8/packages/markitdown-mcp/src/markitdown_mcp/__main__.py
+- Sample plugin at v0.1.8: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-sample-plugin

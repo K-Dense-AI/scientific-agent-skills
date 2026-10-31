@@ -75,9 +75,13 @@ The planner:
 - marks `executes=false`;
 - never checks `PATH`, calls a runtime, reads credentials, or spawns a process.
 
-JSON object arguments are represented as a MATLAB `struct`; arrays and scalar
-JSON values use bounded literal conversion. Review semantics and shape before
-approval.
+JSON objects become scalar structs, including fields containing empty or
+heterogeneous lists; the constructor wraps each field value in a scalar cell
+to prevent struct-array expansion. Numeric rectangular lists become numeric
+arrays. String lists become MATLAB string arrays or Octave cell arrays of
+character vectors; other lists become cells. JSON `null` becomes `[]` and an
+empty list becomes `{}`. Octave strings use single quotes with doubled internal
+apostrophes, preserving literal backslashes. Review these shapes before use.
 
 ## GNU Octave 11.3.0 plans
 
@@ -194,7 +198,7 @@ environment management, Python string conversion, JSON table/timetable I/O,
 interactive HTML export, faster startup and selected kernels, and project-aware
 `runtests`. Read the release notes rather than assuming this list is complete.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [`matlab` on Linux and `-batch`](https://www.mathworks.com/help/matlab/ref/matlablinux.html)
 - [Startup Options](https://www.mathworks.com/help/matlab/matlab_env/startup-options.html)
@@ -206,8 +210,10 @@ interactive HTML export, faster startup and selected kernels, and project-aware
 - [MATLAB Compiler](https://www.mathworks.com/products/compiler.html)
 - [MATLAB Runtime](https://www.mathworks.com/products/compiler/matlab-runtime.html)
 - [Supported Compilers](https://www.mathworks.com/support/requirements/supported-compilers.html)
-- [R2026a System Requirements](https://www.mathworks.com/support/requirements/matlab-system-requirements.html)
-- [R2026a Program Offering Guide](https://www.mathworks.com/help/pdf_doc/offering/offering.pdf)
-- [R2026a Release Notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [Current system requirements](https://www.mathworks.com/support/requirements/matlab-system-requirements.html)
+- [Current Program Offering Guide](https://www.mathworks.com/help/pdf_doc/offering/offering.pdf)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)
 - [Octave Command-Line Options](https://docs.octave.org/latest/Command-Line-Options.html)
+- [Scalar struct construction](https://www.mathworks.com/help/matlab/ref/struct.html)
+- [Octave string escaping](https://docs.octave.org/latest/Escape-Sequences-in-String-Constants.html)
 - [Octave Startup Files](https://docs.octave.org/latest/Startup-Files.html)

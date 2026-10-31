@@ -1,25 +1,40 @@
 # Migration to Pysam 0.24
 
 Use this checklist when moving an existing environment or pipeline to
-pysam 0.24.0.
+pysam 0.24.1.
 
 ## Runtime Baseline
 
-- Pysam 0.24.0 was released 27 April 2026.
-- It was tested with Python 3.8–3.14.
-- It wraps HTSlib/samtools/bcftools 1.23.1.
+- Pysam 0.24.1 was released 7 September 2026.
+- It was tested upstream with Python 3.9–3.15 (RC2).
+- It wraps HTSlib/samtools/bcftools 1.24.
 - It requires Cython 3 when building/extending from source.
-- The release notes expect 0.24 to be the final line supporting Python 3.8.
+- Python 3.8 support ended with 0.24.0; 0.24.1 requires Python >=3.9.
 
 For a reproducible environment:
 
 ```bash
-uv pip install "pysam==0.24.0"
+uv pip install "pysam==0.24.1"
 ```
 
 If maintaining Python/Cython extensions that cimport pysam declarations,
 rebuild them against 0.24. Do not reuse binaries built against a different
 pysam ABI without verification.
+
+## Changes Since 0.24.0
+
+- Embedded tools advance from 1.23.1 to 1.24; test command results again.
+- `tabix_compress` now raises if its input cannot be opened.
+- `reverse_complement` and `reverse_complement_inplace` replace manual tables.
+- FORMAT decoding/assignment supports P/LA/LR/LG/M cardinalities; preserve
+  versioned header and local-allele metadata.
+- Linux wheels restore S3 support on Debian/Ubuntu and dynamically load
+  networking libraries. Verify the libraries and actual protocol at runtime.
+- Wheel distributions no longer carry C/Cython source files or debug symbols.
+
+The existing 0.24.0 operational changes below remain relevant. See
+`sources.md` for upstream docstring/implementation discrepancies verified in
+0.24.1 (notably variant fetch, pileup counts, BCF modes and tabix threads).
 
 ## CRAM Behavior
 

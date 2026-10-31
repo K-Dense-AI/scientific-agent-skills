@@ -122,16 +122,28 @@ def load_fid(input_path, settings, input_format):
         raise ValueError("Only canonical 1D NMRPipe direct-dimension FDF2 files are supported")
     if header["FDF2FTFLAG"] != 0 or header["FDF2QUADFLAG"] != 0 or not np.iscomplexobj(fid):
         raise ValueError("NMRPipe input must be complex and time-domain (FTFLAG=0, QUADFLAG=0)")
+    if len(fid) < 16:
+        raise ValueError("NMRPipe FID must contain at least 16 complex points")
     if header["FDSIZE"] != len(fid):
         raise ValueError("NMRPipe header size disagrees with the decoded FID")
+    if header["FDF2TDSIZE"] != len(fid):
+        raise ValueError("NMRPipe FDF2TDSIZE must equal the stored FID length; prior zero filling or truncation is unsupported")
     for field, key in (("FDF2SW", "spectral_width_hz"), ("FDF2OBS", "observation_mhz"), ("FDF2CAR", "carrier_ppm")):
         value = finite_number(settings[key], key)
         if not np.isclose(header[field], value, rtol=1e-6, atol=1e-6):
             raise ValueError(f"NMRPipe {field} disagrees with explicit {key}")
+    # Match the centered, unextracted axis constructed by pipe.create_dic.
+    # CAR alone is insufficient: make_uc derives its carrier from ORIG instead.
+    center = len(fid) // 2 + 1
+    origin = header["FDF2CAR"] * header["FDF2OBS"] - header["FDF2SW"] * (len(fid) - center) / len(fid)
+    origin_atol = 1e-6 * max(abs(header["FDF2CAR"] * header["FDF2OBS"]), abs(header["FDF2SW"]), 1.0)
+    if header["FDF2CENTER"] != center or not np.isclose(header["FDF2ORIG"], origin, rtol=1e-6, atol=origin_atol):
+        raise ValueError("NMRPipe FDF2CENTER/FDF2ORIG must describe a canonical centered axis")
     recorded = {key: header[key] for key in ("FDDIMCOUNT", "FDSIZE", "FDF2SW", "FDF2OBS", "FDF2CAR",
-                                            "FDF2LABEL", "FDF2FTFLAG", "FDF2QUADFLAG", "FDF2P0", "FDF2P1")}
+                                            "FDF2LABEL", "FDF2FTFLAG", "FDF2QUADFLAG", "FDF2P0", "FDF2P1",
+                                            "FDF2TDSIZE", "FDF2CENTER", "FDF2ORIG")}
     return fid, {"format": "nmrpipe", "header": recorded,
-                 "reader_validation": "synthetic 1D complex time-domain round trip; no experimental vendor validation"}
+                 "reader_validation": "synthetic 1D round trip and upstream NMRPipe-generated fixture; no experimental vendor validation"}
 
 
 def run(input_path, settings_path, output_dir, input_format="npz"):

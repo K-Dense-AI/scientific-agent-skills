@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Scan Python source for the unit and uncertainty defects that stay silent.
 
-Every rule here corresponds to code that runs, produces a plausible number, and
-is wrong: a stripped unit, a rescaled covariance matrix, a destroyed
+The heuristic rules identify code that warrants review, not a proof of error: a stripped unit, a rescaled covariance matrix, a destroyed
 correlation, a population standard deviation used as a standard uncertainty.
 The scan is static - it parses the file and never imports or runs it.
 """
@@ -89,7 +88,7 @@ UNIT_PRESERVING_CALLS = {"to", "to_base_units", "to_reduced_units", "m_as", "ito
 # CODATA 2022 recommended values, plus the constants the 2019 SI redefinition
 # fixed exactly. A literal within one part in a thousand of one of these is
 # almost always a constant somebody typed from memory. Every accessor below was
-# checked against scipy.constants 1.18.0, whose default data set is CODATA 2022.
+# checked against scipy.constants 1.18.1, whose default data set is CODATA 2022.
 KNOWN_CONSTANTS: tuple[tuple[float, str, str], ...] = (
     (299792458.0, "speed of light in vacuum", "value('speed of light in vacuum')"),
     (6.62607015e-34, "Planck constant", "value('Planck constant')"),
@@ -281,7 +280,7 @@ class Auditor(ast.NodeVisitor):
                     "CONST001",
                     "low",
                     f"hard-coded literal matches the {description}; the recommended "
-                    "value and its uncertainty change between CODATA releases",
+                    "value may be measured or exact; confirm its source and uncertainty",
                     f"use scipy.constants.{accessor}, with scipy.constants.precision "
                     "for the relative standard uncertainty (0.0 when the SI fixes "
                     "the constant exactly)",
@@ -332,7 +331,7 @@ class Auditor(ast.NodeVisitor):
                 "uncertainties; leave it False only for relative weights",
             )
 
-        if name in {"std", "var", "nanstd", "nanvar"} and "ddof" not in keywords:
+        if name in {"std", "var", "nanstd", "nanvar"} and not ({"ddof", "correction"} & keywords):
             if self._is_numpy_call(node):
                 self.report(
                     node,

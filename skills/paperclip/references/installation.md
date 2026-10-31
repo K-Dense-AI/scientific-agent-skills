@@ -1,341 +1,161 @@
-# Installing and authenticating Paperclip
+# Installing and authenticating GXL Paperclip
 
-Paperclip is distributed by GXL (`https://paperclip.gxl.ai`). There are two ways to reach it: a local
-CLI, or a hosted MCP server. The CLI is the richer surface — the virtual filesystem, `grep`, `scan`,
-`sql`, repos, and the clipboard all live there — so prefer it unless you are on Windows or cannot
-install software.
+Reviewed on 2026-09-30 against CLI/SDK 0.7.92, the
+[official installer](https://paperclip.gxl.ai/install.sh),
+[installation page](https://paperclip.gxl.ai/install), and local CLI source/help.
+Installer and account mutations were not executed. Commands below are illustrative unless noted.
 
-Commands here were exercised against **paperclip 0.7.14 and 0.7.15** on macOS (darwin 25.5.0). Per-client MCP
-configuration is transcribed from `https://paperclip.gxl.ai/install` and is not verified here.
+## Native install
 
-## 1. Install the CLI
-
-### One-line installer (recommended, macOS and Linux)
+The documented macOS/Linux installer is:
 
 ```bash
 curl -fsSL https://paperclip.gxl.ai/install.sh | bash
 ```
 
-This is the vendor's supported install path, and it executes a remotely-fetched script with the
-user's privileges — there is no published checksum or signature to verify it against. Get the user's
-go-ahead before running it, and read it first if they want that:
+It requires **an existing Python 3.8+ interpreter**, Bash, and curl or wget. It downloads the wheel,
+extracts it to `~/.paperclip/lib/`, supplies missing `requests`, `click`, and `pyyaml` dependencies,
+and writes `~/.local/bin/paperclip`. The launcher uses `#!/usr/bin/env python3`; it does not bundle
+an interpreter. The installer may edit the shell profile and opens interactive login/agent-selection
+prompts. Read the script before an authorized installation; do not run it as a read-only probe.
 
 ```bash
-curl -fsSL https://paperclip.gxl.ai/install.sh | less
+curl -fsSL https://paperclip.gxl.ai/install.sh -o /tmp/paperclip-install.sh
+less /tmp/paperclip-install.sh
 ```
 
-The same applies after install: the CLI self-updates opportunistically, so the code that runs can
-change between invocations. `paperclip --version` tells you what actually ran.
+The official `https://paperclip.gxl.ai/version.json` currently reports version `0.7.92` and a SHA-256
+for the distributed wheel. This corrects the old claim that no checksum is published. The inspected
+installer/updater does not enforce that checksum itself. For a reproducible environment, retain the
+wheel, its observed version, and the published checksum; detect if the unversioned URL changes
+between metadata retrieval and download.
 
-This drops a self-contained CLI in `~/.paperclip/` and a launcher on your `PATH` (on macOS,
-`~/.local/bin/paperclip`). It bundles its own interpreter and dependencies under `~/.paperclip/lib/`,
-so it will not disturb any project virtualenv.
-
-If `paperclip` is not found afterwards, `~/.local/bin` is not on your `PATH`:
+For an environment managed by uv:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"      # add to ~/.zshrc or ~/.bashrc to persist
+uv venv .venv
+uv pip install --python .venv/bin/python https://paperclip.gxl.ai/paperclip.whl
+.venv/bin/paperclip --version
 ```
 
-### Via uv
+The endpoint is unversioned. Do not install the unrelated PyPI package named `paperclip`.
+Installation into a controlled environment exposes both the CLI and `gxl_paperclip` Python module.
+The managed install's private library directory is not automatically on another interpreter's path.
 
-Use this when you want the package inside an environment you control — for example to import the
-Python SDK alongside your own code.
+If the launcher cannot be found:
 
 ```bash
-uv pip install https://paperclip.gxl.ai/paperclip.whl
-paperclip setup        # = paperclip login + paperclip install
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Two caveats. The wheel URL is unversioned, so it resolves to whatever is current — there is no pinned,
-hash-verified release to install instead, and `gxl-paperclip` is not published on PyPI. And the
-unrelated `paperclip` package **is** on PyPI: `uv pip install paperclip` installs the wrong software.
-Always install from the full URL.
+Windows users can connect to hosted MCP without running the macOS/Linux installer.
+Use the current vendor installation page for any client-specific setup.
 
-### Windows
+## Credentials and precedence
 
-The native installer does not support Windows. Use Claude Desktop, claude.ai, or another MCP client
-pointed at the hosted server (below).
+For ordinary user authentication, inspected 0.7.92 code resolves:
 
-## 2. Authenticate
+| Surface | Precedence |
+|---|---|
+| CLI data commands | `PAPERCLIP_BEARER_TOKEN`, then explicit `--api-key`/`PAPERCLIP_API_KEY`, then stored OAuth |
+| SDK `from_env()` | `PAPERCLIP_BEARER_TOKEN`, then `PAPERCLIP_API_KEY`, then stored OAuth |
 
-**Use an API key from the environment. Treat browser OAuth as the fallback.** A key is
-non-interactive, works headless and in CI, is independently revocable, and never blocks on a browser.
+Trusted internal execution has an additional internal-auth branch; it is not a user setup mechanism.
+Do not mix identities inadvertently. `--api-key` overrides the key environment binding, but a bearer
+token still takes precedence in the data-command client. Avoid secrets in command-line arguments.
 
-### Resolution order
+Create keys privately at `https://paperclip.gxl.ai/keys`. API-key requests use `X-API-Key`; bearer
+requests use `Authorization: Bearer ...`. Do not print, commit, or upload either credential.
 
-Verified against `cli/app.py` and `client/client.py` in 0.7.14:
-
-| Priority | Source | Notes |
-|---|---|---|
-| 1 | `--api-key` flag | Works, but exposed in `ps` and shell history — avoid |
-| 2 | `PAPERCLIP_API_KEY` env var | **Preferred.** Click reads it via the flag's `envvar` binding |
-| 3 | `~/.paperclip/credentials.json` | Written by `paperclip login` |
-
-A key in the environment **short-circuits OAuth completely**: `_ensure_auth()` returns immediately, so
-no browser opens and a stored login is not consulted even when one exists. That also means an exported
-key silently overrides the account you logged in as — `paperclip config` will show
-`Auth: ✓ API key (env)` instead of your email.
-
-The Python SDK's `from_env()` uses a similar order with one extra step in front:
-`PAPERCLIP_BEARER_TOKEN` → `PAPERCLIP_API_KEY` → `~/.paperclip/credentials.json`.
-
-### API key from `.env` — the default path
-
-Create a key at `https://paperclip.gxl.ai/keys` (they look like `gxl_...`) and put it in the project's
-`.env`:
+Paperclip does not load `.env` automatically. If the user has a trusted, shell-compatible `.env`,
+load it and execute the command in the same shell:
 
 ```bash
-# .env  — add to .gitignore
-PAPERCLIP_API_KEY=gxl_...
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+paperclip config 2>&1 | grep -E 'Auth:|Health:'
 ```
 
-**Paperclip has no dotenv support.** There is no `python-dotenv` dependency anywhere in the package;
-`config.py` reads `os.getenv("PAPERCLIP_API_KEY", "")` and nothing more. A `.env` sitting next to the
-command is invisible to it, so the file has to be exported into the environment first.
+The guard avoids the fatal missing-file behavior of POSIX `.`. Sourcing executes shell code, so
+never source a downloaded or untrusted file. Exports persist within that shell and its children;
+fresh tool-shell invocations need their own environment. A secret manager or pre-exported key needs
+no dotenv prefix. The normal `.env` file belongs in `.gitignore`.
 
-Use this exact form, in the directory holding `.env`:
+`paperclip login` opens a browser and writes OAuth credentials under `~/.paperclip/credentials.json`.
+Use it when the user is present to complete sign-in. `logout` deletes stored credentials; it is an
+account action, not an authentication check. Noninteractive missing-auth calls fail instead of
+completing browser login.
+
+## Diagnostics are not authentication validation
 
 ```bash
-[ -f .env ] && { set -a; . ./.env; set +a; }; paperclip config
+paperclip --version
+paperclip config 2>&1 | grep -E 'Auth:|Health:'
 ```
 
-`set -a` marks subsequent assignments for export, `.` sources the file, `set +a` restores normal
-behavior.
+`Auth` describes a configured credential, not its validity. CLI `config` uses an unauthenticated
+`GET /health` for the reachability line. An invalid key may still look configured. The next
+**task-authorized** request validates usable access; do not spend search or LLM quota just to test a
+key. SDK `health()` is different: it dispatches the authenticated `status` command and returns a
+`HealthStatus`; inspect `healthy`, `output`, and errors rather than reachability alone.
 
-Two things about this form are not stylistic:
+Do not print complete config files: they can contain account or credential information.
 
-**The `[ -f .env ]` guard is mandatory.** A bare `. ./.env` against a missing file is a *fatal* error
-in a POSIX shell — it terminates the shell, so everything after the `;` is silently discarded:
+## Optional agent skill installation
+
+`paperclip install` writes the vendor's agent entrypoint into a project. The installed file now
+points the agent to `paperclip skill` for full instructions rather than embedding a frozen manual.
+The inspected non-TTY selection order is 1 = Claude Code, 2 = Cursor, 3 = Codex:
 
 ```bash
-# WRONG — unguarded, run in a directory with no .env
-sh -c 'set -a; . ./.env 2>/dev/null; set +a; echo survived; paperclip config'
-#   (no output at all — "survived" never prints, paperclip never runs)
+# Only when this installation is requested; stdin answers the two prompts.
+printf '3\n\n' | paperclip install --dir /path/to/project
 ```
 
-Guarded, it is safe in all four states, each verified: `.env` present, `.env` absent, key already
-ambient in the environment, and under both `sh` and `bash`.
+The second blank answer accepts the provided directory. Multiple choices use commas at the active
+prompt, not a later shell command. Paths are `.claude/skills/paperclip/`,
+`.cursor/skills/paperclip/`, and `.agents/skills/paperclip/`. Native help does not currently expose
+an `--agent` or `--yes` option. Installation behavior was inspected, not run in this review.
 
-**Every invocation needs it.** Environment variables do not persist between separate shell
-invocations, which is exactly how an agent runs commands — one call per tool use. Export in one call
-and run `paperclip` in the next and the key is gone, and Paperclip does not complain: it silently
-falls back to stored OAuth, a *different identity*:
+## Hosted MCP
 
-```bash
-# WRONG — split across two tool calls
-# call 1
-set -a; . ./.env; set +a
-# call 2
-paperclip config      # → Auth: ✓ someone@example.com   ← the key never loaded
-```
-
-```bash
-# RIGHT — one self-contained call
-[ -f .env ] && { set -a; . ./.env; set +a; }; paperclip config   # → Auth: ✓ API key (env)
-```
-
-If the key is already exported — CI secrets, a shell profile, `direnv` — the guard is a harmless
-no-op and no prefix is needed.
-
-```bash
-export PAPERCLIP_API_KEY='gxl_...'   # ad hoc, current shell only
-```
-
-Values containing spaces must be quoted inside `.env` or the shell will try to run them; `gxl_` keys
-never contain spaces, so this only matters for other variables sharing the file.
-
-Over HTTP the key travels as an `X-API-Key` header. Never echo it, never commit `.env`, and never
-include it in a file you `paperclip upload`.
-
-### The `--api-key` flag
-
-```bash
-paperclip --api-key "$PAPERCLIP_API_KEY" search -s pmc "query" -n 5
-```
-
-Same mechanism, worse hygiene: the argument shows up in `ps` output and shell history. Use it only to
-run two identities in one shell where exporting would collide.
-
-### Fallback: browser OAuth — a human must run this
-
-`paperclip login` opens a browser and waits. An agent cannot complete it; ask the user to run it and
-report back. With no TTY it exits cleanly rather than hanging:
-
-```text
-[error] Not authenticated. Run: paperclip login
-       Or use --api-key flag or PAPERCLIP_API_KEY env var
-```
-
-For interactive use on a machine with a browser and no key available:
-
-```bash
-paperclip login       # opens a browser
-paperclip logout      # sign out, remove stored credentials
-```
-
-Credentials land in `~/.paperclip/credentials.json`. Sign-in is also triggered automatically on first
-use — which is exactly the blocking behavior an API key avoids, so set the key before the first call
-in any non-interactive context.
-
-## 3. Verify
-
-```bash
-paperclip config
-```
-
-With a key exported, a healthy install prints:
-
-```text
-  Paperclip
-  Server:  https://paperclip.gxl.ai
-           (default)
-  Auth:    ✓ API key (env)
-  Config:  /Users/you/.paperclip
-  Health:  ✓ server reachable
-  Sources: PubMed Central, bioRxiv, medRxiv, arXiv
-```
-
-Under OAuth the `Auth` line shows your email address instead.
-
-**`Auth: ✓` means a key is present, not that it is valid.** A junk key produces the identical line,
-and `Health: ✓ server reachable` is an unauthenticated probe. Only a real query proves the credential:
-
-```bash
-paperclip search -s pmc "CRISPR base editing" -n 3
-```
-
-You should get numbered results ending in a `[s_xxxxxxxx]` result id. An invalid key instead prints
-`[error] Authentication failed (API key invalid).` and exits **1**, which is what to check in a script.
-
-## 4. Install the agent skill files (optional)
-
-`paperclip install` writes Paperclip's own skill files into a project so an agent picks them up
-without being told.
-
-**It is interactive** — two prompts, agent and path. Run bare from a tool call it either hangs on a
-TTY or aborts without writing anything:
-
-```text
-  Select (e.g. 1,2 or all) [1]: Aborted!
-```
-
-Answer both prompts on stdin. `1` = Claude Code, `2` = Cursor, `3` = Codex; the empty second line
-accepts the `--dir` default:
-
-```bash
-printf '1\n\n' | paperclip install --dir /path/to/project
-# → writes /path/to/project/.claude/skills/paperclip/SKILL.md
-```
-
-Interactively:
-
-```bash
-paperclip install                 # prompts for client: Claude Code or Codex
-paperclip install --dir ~/work/my-project
-```
-
-Installed skills are tracked in `~/.paperclip/installed_skills.json`. This is independent of the
-CLI itself — the CLI works fine without it.
-
-## 5. MCP server (no local install)
-
-Universal endpoint:
+The documented Streamable HTTP endpoint is:
 
 ```text
 https://paperclip.gxl.ai/mcp
 ```
 
-### Claude Code
+Use the client's supported OAuth flow or `X-API-Key` header. Configure secrets through the client;
+do not embed a real key in a shared config example. See the vendor's
+[per-client setup](https://paperclip.gxl.ai/install) for the current interface.
+
+Release 0.7.90 changed the connector to expose one tool per CLI command. Do not assume the old
+single `paperclip` tool catalogue. Discover the connected tools and load current instructions.
+The SDK still uses a legacy command-dispatch MCP call internally, which is a distinct client
+compatibility path. Native-only installation/account/local-file commands are unavailable over MCP;
+connector uploads use the connector's upload flow, not a path on the user's local filesystem.
+No authenticated MCP session was exercised during this review.
+
+## Configuration and maintenance
 
 ```bash
-claude mcp add --transport http paperclip https://paperclip.gxl.ai/mcp
-```
-
-### Codex
-
-```bash
-codex mcp add paperclip --url https://paperclip.gxl.ai/mcp
-codex mcp login paperclip
-```
-
-Codex Desktop: Settings → MCP servers → Custom MCP, with an `X-API-Key` header holding your key.
-
-### Cursor — `~/.cursor/mcp.json`
-
-```json
-{
-  "mcpServers": {
-    "paperclip": {
-      "url": "https://paperclip.gxl.ai/mcp",
-      "type": "http"
-    }
-  }
-}
-```
-
-Reload the window afterwards.
-
-### Claude Desktop and claude.ai
-
-Customize → Connectors → add a custom connector named "Paperclip" with the MCP URL above. Requires a
-Pro, Max, Team, or Enterprise plan.
-
-### Windsurf, Antigravity, ChatGPT
-
-Same URL, configured as a custom MCP server or connector; the first two need the `X-API-Key` header
-added by hand in their config file.
-
-**MCP caveat:** the MCP surface is a single `paperclip` tool, not the full CLI. Its own instructions
-tell you to run `paperclip skill` first to load the command reference.
-
-## 6. Maintenance
-
-```bash
-paperclip update      # upgrade the CLI and refresh installed agent skills
-paperclip uninstall   # remove Paperclip from this machine
-```
-
-The CLI also self-updates opportunistically. A command may print
-`[paperclip] Updated 0.7.14 → v0.7.15` before its output — harmless, but it means a long-running
-script can change versions mid-run. Pin behavior by running `paperclip update` up front if that
-matters.
-
-## 7. Configuration
-
-```bash
-paperclip config                              # diagnostics (default)
-paperclip config --show                       # current configuration
-paperclip config --url http://localhost:8002  # point at a different server
-paperclip config --sources pmc --sources fda  # persistent default source filter
 paperclip config --sources-list
-paperclip config --sources-clear
+paperclip config --help
+paperclip update --help
+paperclip uninstall --help
 ```
 
-A persistent source filter narrows *every* subsequent command. If searches come back suspiciously
-empty, check `paperclip config --sources-list` before debugging anything else.
+In 0.7.92, `config --sources`, `--sources-list`, and `--sources-clear` all display defaults;
+the callbacks no longer save or clear a persistent source filter. Pass `-s` on each query. The
+old troubleshooting instruction to clear a stale source filter is therefore inapplicable.
+`config --url URL` still changes the stored server. `PAPERCLIP_BASE_URL` overrides that setting.
+Only send credentials to the server selected for the task.
 
-Config lives in `~/.paperclip/`:
-
-```text
-~/.paperclip/
-├── credentials.json      OAuth tokens
-├── feature_flags.json
-├── installed_skills.json
-├── repos/                local repo state
-├── cache/
-└── lib/                  bundled interpreter + gxl_paperclip package
-```
-
-## Troubleshooting
-
-| Symptom | Cause and fix |
-|---|---|
-| `command not found: paperclip` | `~/.local/bin` missing from `PATH` — export it, or re-source your shell rc |
-| `Error: search requires a source flag (-s)` | Expected. Every search names a source: `-s pmc` |
-| `Auth: ✗` in `paperclip config` | Run `paperclip login`, or export `PAPERCLIP_API_KEY` |
-| Searches return nothing across sources | A stale source filter — `paperclip config --sources-clear` |
-| Corpus `grep` finds nothing for a rare term | Default scan is time-bounded; retry with `--exhaustive` |
-| `head` on `meta.json` prints nothing | `head`/`tail` handle `.lines` files; use `cat` for JSON |
-| Version changed mid-session | Opportunistic self-update; re-run `paperclip --version` |
-| MCP client cannot authenticate | Add the `X-API-Key` header with a key from `/keys` |
+When requested, `paperclip update` upgrades the managed install and refreshes installed agent
+skills; `paperclip uninstall` removes the install and prompts for confirmation (`--keep-credentials`
+retains credentials). Neither is a verification command. Managed data commands may also check for
+updates and refresh skills automatically. Updating once is **not version pinning**. Record the
+observed version for reproducibility, or use a controlled environment and retained wheel.

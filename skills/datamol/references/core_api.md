@@ -1,139 +1,81 @@
-# Datamol Core API Reference
+# Datamol core API (0.13.0)
 
-This document covers the main functions available in the datamol namespace.
+The [current API](https://docs.datamol.io/stable/api/datamol.mol.html) and installed
+0.13.0 source were checked. These are call patterns, not exhaustive signatures.
 
-## Molecule Creation and Conversion
+## Conversion and identity
 
-### `to_mol(mol, ...)`
-Convert SMILES string or other molecular representations to RDKit molecule objects.
-- **Parameters**: Accepts SMILES strings, InChI, or other molecular formats
-- **Returns**: `rdkit.Chem.Mol` object
-- **Common usage**: `mol = dm.to_mol("CCO")`
+- `dm.to_mol(smiles)` accepts SMILES/CXSMILES, an existing Mol, or RDKit binary bytes.
+  It does not auto-detect InChI or arbitrary formats. Parsing failures can return `None`;
+  unsupported argument types can raise. Check the result before every downstream step.
+- `dm.from_inchi(inchi)` and `dm.from_smarts(smarts)` return Mol or `None`.
+- `dm.from_selfies(text)` returns a SMILES string by default; use `as_mol=True` for Mol.
+- `dm.copy_mol(mol)` creates a copy. `dm.to_binary(mol)` handles one molecule; `dm.to_dict([mol])` and
+  `dm.from_dict(payload)` serialize/restore a sequence of molecules through RDKit JSON. They support interchange; record RDKit version with persisted data.
+- `dm.to_smiles(mol, canonical=True, isomeric=True)` retains specified stereochemistry.
+  `dm.to_inchi`, `dm.to_inchikey`, `dm.to_smarts`, and `dm.to_selfies` are separate exports.
+- `dm.hash_mol(mol, hash_scheme="all")` supports `all`, `no_stereo`, and `no_tautomers`.
+  Choose the identity policy deliberately; collapsing stereoisomers or tautomers can
+  merge biologically distinct records.
+- `dm.reorder_atoms(mol)` changes atom indices. Store mappings before combining reordered
+  structures with atom-indexed labels. `dm.add_hs`/`dm.remove_hs` also change atom topology.
 
-### `from_inchi(inchi)`
-Convert InChI string to molecule object.
+## Sanitization and standardization
 
-### `from_smarts(smarts)`
-Convert SMARTS pattern to molecule object.
+`dm.sanitize_mol(mol, charge_neutral=False)` attempts a sanitization round trip and can
+return `None`. `dm.fix_mol`, `dm.fix_valence`, and `dm.fix_valence_charge` change structures
+heuristically; a successful return does not establish that the original chemistry was recovered.
 
-### `from_selfies(selfies)`
-Convert SELFIES string to molecule object.
+`dm.standardize_mol(mol, disconnect_metals=False, normalize=True, reionize=True,
+uncharge=False, stereo=True)` returns a standardized molecule. It does not select the
+largest fragment. Preserve source SMILES and identifiers; explicitly decide salt, charge,
+metal, isotope and stereochemistry policy. `dm.standardize_smiles(smiles)` accepts no
+policy keyword arguments in 0.13.0; use the molecule API for explicit choices.
 
-### `copy_mol(mol)`
-Create a copy of a molecule object to avoid modifying the original.
+## Fingerprints and distances
 
-## Molecule Export
+```python
+import datamol as dm
+import numpy as np
+mols = [dm.to_mol(s) for s in ["CCO", "CCCO", "c1ccccc1"]]
+fp = dm.to_fp(mols[0], fp_type="ecfp", radius=2, fpSize=2048)
+assert fp.shape == (2048,)
+distances = dm.pdist(mols, radius=2, fpSize=2048)  # square N x N by default
+condensed = dm.pdist(mols, squareform=False, radius=2, fpSize=2048)
+cross = dm.cdist(mols[:1], mols, radius=2, fpSize=2048)  # 1 x N
+assert distances.shape == (3, 3) and condensed.shape == (3,)
+assert np.allclose(np.diag(distances), 0)
+```
 
-### `to_smiles(mol, ...)`
-Convert molecule object to SMILES string.
-- **Common parameters**: `canonical=True`, `isomeric=True`
+ECFP defaults to radius 3 (ECFP6); FCFP defaults to radius 2. Generator fingerprints
+use `fpSize`, not `n_bits`. Use `includeChirality=True` if stereochemistry should affect
+similarity, and use identical options for every query/library operation. `as_array=False`
+returns the RDKit fingerprint. `topological` means topological torsions; `rdkit` is the
+RDKit path fingerprint. MACCS has its own fixed size (167); it does not accept `fpSize`.
+Count variants include `ecfp-count`, `fcfp-count`, `atompair-count`, `topological-count`,
+and `rdkit-count`. The similarity helpers compute binary Jaccard/Tanimoto distances;
+do not use them to imply a count-vector Tanimoto metric. Lower distance means higher
+similarity, with similarity = 1 - distance for the binary fingerprints used here.
 
-### `to_inchi(mol, ...)`
-Convert molecule to InChI string representation.
+## Clusters and selections
 
-### `to_inchikey(mol)`
-Convert molecule to InChI key (fixed-length hash).
+```python
+cluster_indices, cluster_molecules = dm.cluster_mols(mols, cutoff=0.2)
+picked_indices, picked_molecules = dm.pick_diverse(mols, npick=min(2, len(mols)), seed=42)
+centroid_indices, centroid_molecules = dm.pick_centroids(mols, npick=2, method="sphere")
+assert len(picked_indices) == len(picked_molecules) == 2
+```
 
-### `to_smarts(mol)`
-Convert molecule to SMARTS pattern.
+All three return two components. Cluster indices are groups of source positions; selection
+indices address the original list. Retain these indices to preserve labels/IDs. `pick_centroids`
+is a distance-based representative selector; the default sphere method may return fewer
+than `npick` due to its threshold. It is not a geometric mean. Butina stores a quadratic
+pairwise-distance list; no universal safe molecule count applies. Bound resources before
+clustering. `pick_diverse` avoids storing the full pairwise matrix but is still work-dependent.
 
-### `to_selfies(mol)`
-Convert molecule to SELFIES (Self-Referencing Embedded Strings) format.
+## Graphs and tables
 
-## Sanitization and Standardization
-
-### `sanitize_mol(mol, ...)`
-Enhanced version of RDKit's sanitize operation using mol→SMILES→mol conversion and aromatic nitrogen fixing.
-- **Purpose**: Fix common molecular structure issues
-- **Returns**: Sanitized molecule or None if sanitization fails
-
-### `standardize_mol(mol, disconnect_metals=False, normalize=True, reionize=True, ...)`
-Apply comprehensive standardization procedures including:
-- Metal disconnection
-- Normalization (charge corrections)
-- Reionization
-- Stereo assignment when requested
-
-`standardize_mol` does not automatically select the largest fragment. Use a separate,
-explicit fragment policy when appropriate and preserve the original salt/mixture record.
-
-### `standardize_smiles(smiles, ...)`
-Apply SMILES standardization procedures directly to a SMILES string.
-
-### `fix_mol(mol)`
-Attempt to fix molecular structure issues automatically.
-
-### `fix_valence(mol)` / `fix_valence_charge(mol, inplace=False)`
-Correct valence errors in molecular structures (charge-aware variant available).
-
-### `hash_mol(mol, hash_scheme='all')`
-Generate a chemistry-aware hash for deduplication (requires RDKit ≥ 2022.09).
-- **`hash_scheme`**: `'all'` (default), `'no_stereo'`, or `'no_tautomers'`
-
-## Molecular Properties
-
-### `reorder_atoms(mol, ...)`
-Ensure consistent atom ordering for the same molecule regardless of original SMILES representation.
-- **Purpose**: Maintain reproducible feature generation
-
-### `remove_hs(mol, ...)`
-Remove hydrogen atoms from molecular structure.
-
-### `add_hs(mol, ...)`
-Add explicit hydrogen atoms to molecular structure.
-
-## Fingerprints and Similarity
-
-### `to_fp(mol, fp_type='ecfp', ...)`
-Generate molecular fingerprints for similarity calculations.
-- **Fingerprint types**:
-  - `'ecfp'` / `'fcfp'` - Morgan fingerprints (default radius 3 for ECFP6; pass `radius=2` for ECFP4)
-  - `'maccs'` - MACCS keys
-  - `'topological'` - Topological fingerprints
-  - `'atompair'` - Atom pair fingerprints
-  - `'rdkit'` - RDKit topological fingerprint
-  - Count variants: `'ecfp-count'`, `'fcfp-count'`, `'atompair-count'`, etc.
-- **Implementation**: Uses RDKit `rdFingerprintGenerator` (datamol ≥ 0.12.5)
-- **Common parameters**: `n_bits` (default 2048), `radius`
-- **Returns**: Numpy array or RDKit fingerprint object
-
-### `pdist(mols, ...)`
-Calculate pairwise Tanimoto distances between all molecules in a list.
-- **Supports**: Parallel processing via `n_jobs` parameter
-- **Returns**: Distance matrix
-
-### `cdist(mols1, mols2, ...)`
-Calculate Tanimoto distances between two sets of molecules.
-
-## Clustering and Diversity
-
-### `cluster_mols(mols, cutoff=0.2, feature_fn=None, n_jobs=1)`
-Cluster molecules using Butina clustering algorithm.
-- **Parameters**:
-  - `cutoff`: Distance threshold (default 0.2)
-  - `feature_fn`: Custom function for molecular features
-  - `n_jobs`: Parallelization (-1 for all cores)
-- **Important**: Builds full distance matrix - suitable for ~1000 structures, not for 10,000+
-- **Returns**: List of clusters (each cluster is a list of molecule indices)
-
-### `pick_diverse(mols, npick, ...)`
-Select diverse subset of molecules based on fingerprint diversity.
-
-### `pick_centroids(mols, npick, ...)`
-Select centroid molecules representing clusters.
-
-## Graph Operations
-
-### `to_graph(mol)`
-Convert molecule to graph representation for graph-based analysis.
-
-### `get_all_path_between(mol, start, end)`
-Find all paths between two atoms in molecular structure.
-
-## DataFrame Integration
-
-### `to_df(mols, smiles_column='smiles', mol_column='mol')`
-Convert list of molecules to pandas DataFrame.
-
-### `from_df(df, smiles_column='smiles', mol_column='mol')`
-Convert pandas DataFrame to list of molecules.
+`dm.to_graph(mol)` creates a NetworkX graph; `dm.get_all_path_between(mol, atom1, atom2)`
+can grow combinatorially on ring-rich graphs. `dm.to_df(mols, mol_column="mol")` includes
+molecules explicitly (the default is `None`). `dm.from_df(df, mol_column="mol")` returns
+one molecule per row, attaching other columns as molecule properties; handle invalid rows.

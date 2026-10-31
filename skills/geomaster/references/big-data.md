@@ -1,363 +1,165 @@
-# Big Data and Cloud Computing
+# Big data and cloud geospatial computing
 
-Distributed processing, cloud platforms, and GPU acceleration for geospatial data.
+Core local array/storage recipes are tested. Remote clusters, cloud uploads and GPU
+examples below are illustrative and require their own runtime/access. See [review.md](review.md).
 
-## Distributed Processing with Dask
-
-### Dask-GeoPandas
+## Dask-GeoPandas
 
 ```python
 import dask_geopandas
-import geopandas as gpd
-import dask.dataframe as dd
 
-# Read large GeoPackage in chunks
-dask_gdf = dask_geopandas.read_file('large.gpkg', npartitions=10)
-
-# Perform spatial operations
-dask_gdf['area'] = dask_gdf.geometry.area
-dask_gdf['buffer'] = dask_gdf.geometry.buffer(1000)
-
-# Compute result
-result = dask_gdf.compute()
-
-# Distributed spatial join
-dask_points = dask_geopandas.read_file('points.gpkg', npartitions=5)
-dask_zones = dask_geopandas.read_file('zones.gpkg', npartitions=3)
-
-joined = dask_points.sjoin(dask_zones, how='inner', predicate='within')
+points = dask_geopandas.read_file('points.gpkg', npartitions=5)
+zones = dask_geopandas.read_file('zones.gpkg', npartitions=3)
+if points.crs is None or zones.crs is None:
+    raise ValueError('CRS must be known')
+points = points.to_crs(zones.crs)
+points = points.spatial_shuffle()
+zones = zones.spatial_shuffle()
+joined = points.sjoin(zones, how='inner', predicate='within')
 result = joined.compute()
 ```
 
-### Dask for Raster Processing
+`spatial_shuffle` computes spatial partitioning; `set_index(calculate_spatial_partitions=True)`
+is not that API. The current distributed spatial join supports inner joins. Its
+result can multiply rows for overlapping zones. Perform area/buffer calculations only
+after projecting to a justified metric CRS. Partition count alone is not a memory cap.
+
+## Lazy rasters
+
+Dask has no `array.from_rasterio`. Rioxarray constructs chunked arrays and manages file
+access; do not close a Rasterio handle that deferred tasks still depend on.
 
 ```python
-import dask.array as da
-import rasterio
-
-# Create lazy-loaded raster array
-def lazy_raster(path, chunks=(1, 1024, 1024)):
-    with rasterio.open(path) as src:
-        profile = src.profile
-        # Create dask array
-        raster = da.from_rasterio(src, chunks=chunks)
-
-    return raster, profile
-
-# Process large raster
-raster, profile = lazy_raster('very_large.tif')
-
-# Calculate NDVI (lazy operation)
-ndvi = (raster[3] - raster[2]) / (raster[3] + raster[2] + 1e-8)
-
-# Apply function to each chunk
-def process_chunk(chunk):
-    return (chunk - chunk.min()) / (chunk.max() - chunk.min())
-
-normalized = da.map_blocks(process_chunk, ndvi, dtype=np.float32)
-
-# Compute and save
-with rasterio.open('output.tif', 'w', **profile) as dst:
-    dst.write(normalized.compute())
-```
-
-### Dask Distributed Cluster
-
-```python
-from dask.distributed import Client
-
-# Connect to cluster
-client = Client('scheduler-address:8786')
-
-# Or create local cluster
-from dask.distributed import LocalCluster
-cluster = LocalCluster(n_workers=4, threads_per_worker=2, memory_limit='4GB')
-client = Client(cluster)
-
-# Use Dask-GeoPandas with cluster
-dask_gdf = dask_geopandas.from_geopandas(gdf, npartitions=10)
-dask_gdf = dask_gdf.set_index(calculate_spatial_partitions=True)
-
-# Operations are now distributed
-result = dask_gdf.buffer(1000).compute()
-```
-
-## Cloud Platforms
-
-### Google Earth Engine
-
-```python
-import ee
-
-# Initialize
-ee.Initialize(project='your-project')
-
-# Large-scale composite
-def create_annual_composite(year):
-    """Create cloud-free annual composite."""
-
-    # Sentinel-2 collection
-    s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED') \
-        .filterBounds(ee.Geometry.Rectangle([-125, 32, -114, 42])) \
-        .filterDate(f'{year}-01-01', f'{year}-12-31') \
-        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
-
-    # Cloud masking
-    def mask_s2(image):
-        qa = image.select('QA60')
-        cloud_bit_mask = 1 << 10
-        cirrus_bit_mask = 1 << 11
-        mask = qa.bitwiseAnd(cloud_bit_mask).eq(0).And(
-               qa.bitwiseAnd(cirrus_bit_mask).eq(0))
-        return image.updateMask(mask.Not())
-
-    s2_masked = s2.map(mask_s2)
-
-    # Median composite
-    composite = s2_masked.median().clip(roi)
-
-    return composite
-
-# Export to Google Drive
-task = ee.batch.Export.image.toDrive(
-    image=composite,
-    description='CA_composite_2023',
-    scale=10,
-    region=roi,
-    crs='EPSG:32611',
-    maxPixels=1e13
-)
-task.start()
-```
-
-### Planetary Computer (Microsoft)
-
-```python
-import pystac_client
-import planetary_computer
-import odc.stac
-import xarray as xr
-
-# Search catalog
-catalog = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace,
-)
-
-# Search NAIP imagery
-search = catalog.search(
-    collections=["naip"],
-    bbox=[-125, 32, -114, 42],
-    datetime="2020-01-01/2023-12-31",
-)
-
-items = list(search.get_items())
-
-# Load as xarray dataset
-data = odc.stac.load(
-    items[:100],  # Process in batches
-    bands=["image"],
-    crs="EPSG:32611",
-    resolution=1.0,
-    chunkx=1024,
-    chunky=1024,
-)
-
-# Compute statistics lazily
-mean = data.mean().compute()
-std = data.std().compute()
-
-# Export to COG
 import rioxarray
-data.isel(time=0).rio.to_raster('naip_composite.tif', compress='DEFLATE')
-```
-
-### Google Cloud Storage
-
-```python
-from google.cloud import storage
-import rasterio
-from rasterio.session import GSSession
-
-# Upload to GCS
-client = storage.Client()
-bucket = client.bucket('my-bucket')
-blob = bucket.blob('geospatial/data.tif')
-blob.upload_from_filename('local_data.tif')
-
-# Read directly from GCS
-with rasterio.open(
-    'gs://my-bucket/geospatial/data.tif',
-    session=GSSession()
-) as src:
-    data = src.read()
-
-# Use with Rioxarray
-import rioxarray
-da = rioxarray.open_rasterio('gs://my-bucket/geospatial/data.tif')
-```
-
-## GPU Acceleration
-
-### CuPy for Raster Processing
-
-```python
-import cupy as cp
 import numpy as np
 
-def gpu_ndvi(nir, red):
-    """Calculate NDVI on GPU."""
-    # Transfer to GPU
-    nir_gpu = cp.asarray(nir)
-    red_gpu = cp.asarray(red)
-
-    # Calculate on GPU
-    ndvi_gpu = (nir_gpu - red_gpu) / (nir_gpu + red_gpu + 1e-8)
-
-    # Transfer back
-    return cp.asnumpy(ndvi_gpu)
-
-# Batch processing
-def batch_process_gpu(raster_path):
-    with rasterio.open(raster_path) as src:
-        data = src.read()  # (bands, height, width)
-
-    data_gpu = cp.asarray(data)
-
-    # Process all bands
-    for i in range(data.shape[0]):
-        data_gpu[i] = (data_gpu[i] - data_gpu[i].min()) / \
-                      (data_gpu[i].max() - data_gpu[i].min())
-
-    return cp.asnumpy(data_gpu)
+cube = rioxarray.open_rasterio('stack.tif', masked=True,
+                             chunks={'band': 1, 'x': 1024, 'y': 1024})
+# Caller has verified a common-grid four-band B02/B03/B04/B08 reflectance stack.
+red, nir = cube.isel(band=2), cube.isel(band=3)
+denominator = nir + red
+ndvi = ((nir - red) / denominator).where(denominator != 0)
+# Global reduction, not a different normalization for each chunk.
+low, high = ndvi.min(skipna=True), ndvi.max(skipna=True)
+normalized = ((ndvi - low) / (high - low)).where(high > low)
+normalized.rio.to_raster('normalized.tif', dtype='float32')
+cube.close()
 ```
 
-### RAPIDS for Spatial Analysis
+Per-chunk min/max creates seams and changes the statistic with chunk layout. Focal
+filters need a halo via `map_overlap` or equivalent. Cloud/nodata masks must be applied
+before reductions. Clip early; `compute()` on the whole cube can exceed RAM.
+
+Use `with Client(...)`/`with LocalCluster(...)` to close cluster resources. In scripts,
+put process-based cluster creation under `if __name__ == '__main__':`. Do not serialize
+open HDF5/GDAL handles into process workers; each task should open its own input.
+
+## Cloud platforms
+
+### Earth Engine
+
+Use the SCL-mask template in [remote-sensing.md](remote-sensing.md). For a year,
+`filterDate(f'{year}-01-01', f'{year+1}-01-01')` includes all days because the end is
+exclusive. A valid-pixel mask goes to `updateMask(mask)`, not `updateMask(mask.Not())`.
+Median mosaics are not guaranteed cloud-free and need QA/support inspection.
+`ee.batch.Export.image.toDrive` requires image, region, scale/CRS and output settings;
+starting the task writes to an external destination and may consume service quota.
+
+### Planetary Computer / ODC
+
+Search with a small bbox and `max_items`; use `list(search.items())`. `odc.stac.load`
+accepts `chunks={'x': 1024, 'y': 1024}`, not `chunkx`/`chunky`. Supply the output bbox
+as well as resolution to avoid loading full intersecting scenes. Inspect NAIP band
+metadata rather than assuming a multi-band `image` asset becomes one scalar band.
+Use a common `geobox` or `like=` when independent loads must align exactly. Calibration
+and provider-specific asset names are described in the remote-sensing reference.
+
+### S3 and Google Cloud Storage
+
+Rasterio authentication sessions belong to `rasterio.Env`, not an `open(..., session=...)`
+keyword. Prefer the environment's credential chain; do not embed keys.
 
 ```python
-import cudf
-import cuspatial
+import rasterio
+from rasterio.session import AWSSession
 
-# Load data to GPU
-gdf_gpu = cuspatial.from_geopandas(gdf)
-
-# Spatial join on GPU
-points_gpu = cuspatial.from_geopandas(points_gdf)
-polygons_gpu = cuspatial.from_geopandas(polygons_gdf)
-
-joined = cuspatial.join_polygon_points(
-    polygons_gpu,
-    points_gpu
-)
-
-# Convert back
-result = joined.to_pandas()
+# Requires boto3 and existing authorized AWS credential configuration.
+with rasterio.Env(AWSSession()):
+    with rasterio.open('s3://your-bucket/path.tif') as src:
+        subset = src.read(1, window=((0, 128), (0, 128)), masked=True)
 ```
 
-### PyTorch for Geospatial Deep Learning
+GCS uses a `GSSession` and configured Google credentials in the same Env pattern.
+`google.cloud.storage.Client().bucket(name).blob(key).upload_from_filename(path)`
+performs an external upload; validate bucket/key/overwrite intent first. COG range
+reads still incur requests/egress and may fail when SAS credentials expire mid-job.
+
+## GPU paths (illustrative, not executed)
+
+CuPy needs compatible GPU/CUDA software; transferring arrays can dominate small work.
+Cast to floating point before subtraction and keep the same QA mask/denominator policy
+as CPU processing. Do not normalize integer arrays in place.
+
+cuSpatial's `point_in_polygon(points.geometry, polygons.geometry)` returns a boolean
+point-by-polygon table, not a joined GeoDataFrame. For larger data use its documented
+quadtree workflow. Both inputs need the same coordinate system; output indices require
+explicit reconciliation. `join_polygon_points` is not the current documented API.
+
+PyTorch datasets need `__len__`, `__getitem__`, aligned image/label grids and explicit
+nodata label handling. Training batches require `optimizer.zero_grad(set_to_none=True)`.
+Current AMP APIs are `torch.amp.GradScaler('cuda')` and
+`torch.autocast(device_type='cuda')`; the older `torch.cuda.amp` namespace is deprecated.
+Keep preprocessing, band order and normalization consistent across training/inference.
+See [machine-learning.md](machine-learning.md) for spatial holdouts and tensor shapes.
+
+## Storage
+
+### COG
 
 ```python
-import torch
-from torch.utils.data import DataLoader
-
-# Custom dataset
-class SatelliteDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, label_paths):
-        self.image_paths = image_paths
-        self.label_paths = label_paths
-
-    def __getitem__(self, idx):
-        with rasterio.open(self.image_paths[idx]) as src:
-            image = src.read().astype(np.float32)
-
-        with rasterio.open(self.label_paths[idx]) as src:
-            label = src.read(1).astype(np.int64)
-
-        return torch.from_numpy(image), torch.from_numpy(label)
-
-# DataLoader with GPU prefetching
-dataset = SatelliteDataset(images, labels)
-loader = DataLoader(
-    dataset,
-    batch_size=16,
-    shuffle=True,
-    num_workers=4,
-    pin_memory=True,  # Faster transfer to GPU
-)
-
-# Training with mixed precision
-from torch.cuda.amp import autocast, GradScaler
-
-scaler = GradScaler()
-
-for images, labels in loader:
-    images, labels = images.to('cuda'), labels.to('cuda')
-
-    with autocast():
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-
-    scaler.scale(loss).backward()
-    scaler.step(optimizer)
-    scaler.update()
+from rasterio.shutil import copy as rio_copy
+from rio_cogeo.cogeo import cog_validate
+rio_copy('input.tif', 'output.tif', driver='COG', compress='DEFLATE',
+         overview_resampling='NEAREST')  # categorical data; choose appropriately
+valid, errors, warnings = cog_validate('output.tif')
+assert valid, errors
 ```
 
-## Efficient Data Formats
+The COG driver constructs the layout; tiled/compressed TIFF alone does not guarantee it.
+Use average/bilinear only for suitable continuous data, nearest/mode for classes.
+Create overviews as part of conversion. Updating the output afterward can break layout.
 
-### Cloud-Optimized GeoTIFF (COG)
-
-```python
-from rio_cogeo.cogeo import cog_translate
-
-# Convert to COG
-cog_translate(
-    src_path='input.tif',
-    dst_path='output_cog.tif',
-    dst_kwds={'compress': 'DEFLATE', 'predictor': 2},
-    overview_level=5,
-    overview_resampling='average',
-    config={'GDAL_TIFF_INTERNAL_MASK': True}
-)
-
-# Create overviews for faster access
-with rasterio.open('output.tif', 'r+') as src:
-    src.build_overviews([2, 4, 8, 16], resampling='average')
-    src.update_tags(ns='rio_overview', resampling='average')
-```
-
-### Zarr for Multidimensional Arrays
+### Zarr / Xarray
 
 ```python
+# ds is an Xarray Dataset with explicit chunks and spatial/time metadata.
+ds.to_zarr('data.zarr', mode='w-', zarr_format=2, consolidated=True)
 import xarray as xr
-import zarr
-
-# Create Zarr store
-store = zarr.DirectoryStore('data.zarr')
-
-# Save datacube to Zarr
-ds.to_zarr(store, consolidated=True)
-
-# Read efficiently
-ds = xr.open_zarr('data.zarr', consolidated=True)
-
-# Extract subset efficiently
-subset = ds.sel(time='2023-01', latitude=slice(30, 40))
+restored = xr.open_zarr('data.zarr', consolidated=True)
 ```
 
-### Parquet for Vector Data
+`w-` rejects an existing store; choose replacement explicitly. This selects v2 for
+interoperability rather than depending on default format. Zarr 3 uses
+`zarr.storage.LocalStore`, not the removed `DirectoryStore`. Verify dataset coordinates,
+CRS conventions, chunk boundaries and dtype after round trip.
+
+### GeoParquet
 
 ```python
-import geopandas as gpd
-
-# Write to Parquet (with spatial index)
-gdf.to_parquet('data.parquet', compression='snappy', index=True)
-
-# Read efficiently
-gdf = gpd.read_parquet('data.parquet')
-
-# Read subset with filtering
-import pyarrow.parquet as pq
-table = pq.read_table('data.parquet', filters=[('column', '==', 'value')])
+gdf.to_parquet('data.parquet', index=False, compression='snappy',
+               write_covering_bbox=True, schema_version='1.1.0')
+subset = gpd.read_parquet('data.parquet', bbox=(xmin, ymin, xmax, ymax))
 ```
 
-For more big data examples, see [code-examples.md](code-examples.md).
+The bbox is in the file's CRS. `index=True` stores the pandas index; it does not create
+a spatial index. Covering bbox enables spatial filtering; inspect metadata and client
+support. Test I/O through the receiving system, especially for multiple geometries.
+
+Sources: [Dask-GeoPandas spatial shuffle](https://dask-geopandas.readthedocs.io/en/stable/docs/reference/api/dask_geopandas.GeoDataFrame.spatial_shuffle.html),
+[Rioxarray](https://corteva.github.io/rioxarray/stable/rioxarray.html),
+[ODC](https://odc-stac.readthedocs.io/en/latest/_api/odc.stac.load.html),
+[Rasterio cloud credentials](https://rasterio.readthedocs.io/en/stable/topics/switch.html),
+[cuSpatial](https://docs.rapids.ai/api/cuspatial/stable/api_docs/spatial/),
+[PyTorch AMP](https://docs.pytorch.org/docs/stable/amp.html),
+[COG](https://gdal.org/en/stable/drivers/raster/cog.html),
+[Xarray Zarr](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.to_zarr.html).

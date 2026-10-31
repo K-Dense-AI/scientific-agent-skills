@@ -6,7 +6,7 @@ This document provides comprehensive guidance on generalized linear models in st
 
 GLMs extend linear regression to non-normal response distributions through:
 1. **Distribution family**: Specifies the conditional distribution of the response
-2. **Link function**: Transforms the linear predictor to the scale of the mean
+2. **Link function**: Maps the conditional mean to the linear predictor; the inverse link maps back
 3. **Variance function**: Relates variance to the mean
 
 **General form**: g(μ) = Xβ, where g is the link function and μ = E(Y|X)
@@ -16,8 +16,10 @@ GLMs extend linear regression to non-normal response distributions through:
 - **Binary outcomes**: Logistic regression (Binomial family with logit link)
 - **Count data**: Poisson or Negative Binomial regression
 - **Positive continuous data**: Gamma or Inverse Gaussian
-- **Non-normal distributions**: When OLS assumptions violated
+- **Conditional mean/variance structure**: Choose family from the response mechanism, not a normality test on the marginal response
 - **Link functions**: Need non-linear relationship between predictors and response scale
+
+Formula predictions take raw named columns; array predictions take the exact training design. Do not reuse a result from a different family in a later fragment. Use positive finite exposure, pass `exposure=e` or `offset=np.log(e)` (not both), and supply new exposure/offset when predicting new rows. Binomial proportions need trial counts (`var_weights=n`) or a two-column `[successes, failures]` response; arbitrary proportions are not Bernoulli observations.
 
 ## Distribution Families
 
@@ -48,7 +50,7 @@ results = smf.glm('success ~ x1 + x2', data=df,
                   family=sm.families.Binomial()).fit()
 
 # Access predictions (probabilities)
-probs = results.predict(X_new)
+probs = results.predict(new_df)  # Raw named predictors after a formula fit
 
 # Classification (0.5 threshold)
 predictions = (probs > 0.5).astype(int)
@@ -98,8 +100,8 @@ print("Rate ratios:", rate_ratios)
 
 **Overdispersion check:**
 ```python
-# Deviance / df should be ~1 for Poisson
-overdispersion = results.deviance / results.df_resid
+# Pearson dispersion is a screening statistic, not a calibrated universal test
+overdispersion = results.pearson_chi2 / results.df_resid
 print(f"Overdispersion: {overdispersion}")
 
 # If >> 1, consider Negative Binomial
@@ -126,7 +128,7 @@ from statsmodels.discrete.discrete_model import NegativeBinomial
 nb_model = NegativeBinomial(y, X)
 nb_results = nb_model.fit()
 
-print(f"Dispersion parameter alpha: {nb_results.params[-1]}")
+print(f"Dispersion parameter alpha: {np.asarray(nb_results.params)[-1]}")
 ```
 
 ### Gaussian Family
@@ -261,12 +263,14 @@ link = families.links.Power(power=2)
 
 ### Choosing Link Functions
 
-**Canonical links** (default for each family):
+**Common default links** (canonical up to conventional scaling for these families):
 - Binomial → Logit
 - Poisson → Log
 - Gamma → Inverse
 - Gaussian → Identity
 - Inverse Gaussian → Inverse squared
+
+The default Gamma inverse link and binomial log/identity links may violate their response domains for some designs. Inspect warnings, finite fitted means and support; a converged optimizer does not make an invalid mean valid. Use a positive-mean link when appropriate.
 
 **When to use non-canonical:**
 - **Log link with Binomial**: Risk ratios instead of odds ratios
@@ -320,7 +324,7 @@ results.predict(X_new)     # Predictions for new data
 
 # Model fit statistics
 results.aic                # Akaike Information Criterion
-results.bic                # Bayesian Information Criterion
+results.bic_llf            # Likelihood-based BIC (GLM .bic can be deviance-based)
 results.deviance           # Deviance
 results.null_deviance      # Null model deviance
 results.pearson_chi2       # Pearson chi-squared statistic
@@ -338,15 +342,12 @@ results.resid_working      # Working residuals
 ### Pseudo R-squared
 
 ```python
-# McFadden's pseudo R-squared
-pseudo_r2 = 1 - (results.deviance / results.null_deviance)
-print(f"Pseudo R²: {pseudo_r2:.4f}")
-
-# Adjusted pseudo R-squared
-n = len(y)
-k = len(results.params)
-adj_pseudo_r2 = 1 - ((n-1)/(n-k)) * (results.deviance / results.null_deviance)
-print(f"Adjusted Pseudo R²: {adj_pseudo_r2:.4f}")
+# Likelihood-based McFadden measure: appropriate for discrete outcomes
+pseudo_r2 = results.pseudo_rsquared(kind="mcf")
+print(f"McFadden pseudo R²: {pseudo_r2:.4f}")
+# Cox-Snell is available for discrete or continuous likelihoods
+print("Cox-Snell:", results.pseudo_rsquared(kind="cs"))
+# 1 - deviance/null_deviance is a different measure; do not label it McFadden.
 ```
 
 ## Diagnostics
@@ -354,20 +355,22 @@ print(f"Adjusted Pseudo R²: {adj_pseudo_r2:.4f}")
 ### Goodness of Fit
 
 ```python
-# Deviance should be approximately χ² with df_resid degrees of freedom
+# Chi-square goodness-of-fit approximations need adequate expected cell counts;
+# these are not generally calibrated for sparse counts or ungrouped Bernoulli data
 from scipy import stats
 
-deviance_pval = 1 - stats.chi2.cdf(results.deviance, results.df_resid)
+deviance_pval = stats.chi2.sf(results.deviance, results.df_resid)
 print(f"Deviance test p-value: {deviance_pval}")
 
 # Pearson chi-squared test
-pearson_pval = 1 - stats.chi2.cdf(results.pearson_chi2, results.df_resid)
+pearson_pval = stats.chi2.sf(results.pearson_chi2, results.df_resid)
 print(f"Pearson chi² test p-value: {pearson_pval}")
 
 # Check for overdispersion/underdispersion
 dispersion = results.pearson_chi2 / results.df_resid
 print(f"Dispersion: {dispersion}")
-# Should be ~1; >1 suggests overdispersion, <1 underdispersion
+# For a Poisson model with an adequate mean, >1 flags extra-Poisson dispersion.
+# Gaussian/Gamma/InverseGaussian estimate scale; this ratio need not be 1.
 ```
 
 ### Residual Analysis
@@ -403,7 +406,7 @@ if isinstance(results.model.family, sm.families.Binomial):
 ```python
 from statsmodels.stats.outliers_influence import GLMInfluence
 
-influence = GLMInfluence(results)
+influence = results.get_influence()  # Supplies the GLM-specific leverage and scale
 
 # Leverage
 leverage = influence.hat_matrix_diag
@@ -411,8 +414,8 @@ leverage = influence.hat_matrix_diag
 # Cook's distance
 cooks_d = influence.cooks_distance[0]
 
-# DFFITS
-dffits = influence.dffits[0]
+# Standardized approximate change in fitted means (not OLS DFFITS)
+d_fitted_scaled = influence.d_fittedvalues_scaled
 
 # Find influential observations
 influential = np.where(cooks_d > 4/len(y))[0]
@@ -431,10 +434,10 @@ model_full = sm.GLM(y, X_full, family=family).fit()
 
 # LR statistic
 lr_stat = 2 * (model_full.llf - model_reduced.llf)
-df = model_full.df_model - model_reduced.df_model
+df_diff = model_full.df_model - model_reduced.df_model
 
 from scipy import stats
-lr_pval = 1 - stats.chi2.cdf(lr_stat, df)
+lr_pval = stats.chi2.sf(lr_stat, df_diff)
 print(f"LR test p-value: {lr_pval}")
 
 # Wald test for multiple parameters
@@ -448,16 +451,18 @@ print(wald_test)
 
 ```python
 # Heteroscedasticity-robust (sandwich estimator)
-results_robust = results.get_robustcov_results(cov_type='HC0')
+results_robust = results.model.fit(cov_type='HC0')
 
 # Cluster-robust
-results_cluster = results.get_robustcov_results(cov_type='cluster',
-                                                groups=cluster_ids)
+results_cluster = results.model.fit(cov_type='cluster',
+                                    cov_kwds={'groups': cluster_ids})
 
 # Compare standard errors
 print("Regular SE:", results.bse)
 print("Robust SE:", results_robust.bse)
 ```
+
+Robust covariance addresses the variance calculation under its asymptotic assumptions. It does not repair separation, an incorrect mean model, few independent clusters, or endogeneity. GLM influence approximations are experimental, especially with exposure/offset.
 
 ## Model Comparison
 
@@ -465,20 +470,23 @@ print("Robust SE:", results_robust.bse)
 # AIC/BIC for non-nested models
 models = [model1_results, model2_results, model3_results]
 for i, res in enumerate(models, 1):
-    print(f"Model {i}: AIC={res.aic:.2f}, BIC={res.bic:.2f}")
+    print(f"Model {i}: AIC={res.aic:.2f}, BIC={res.bic_llf:.2f}")
 
 # Likelihood ratio test for nested models (as shown above)
 
 # Cross-validation for predictive performance
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import log_loss
 
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
+# Binary independent observations only; X already includes the intercept.
+X_array, y_array = np.asarray(X), np.asarray(y)
+family = sm.families.Binomial()
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 cv_scores = []
 
-for train_idx, val_idx in kf.split(X):
-    X_train, X_val = X[train_idx], X[val_idx]
-    y_train, y_val = y[train_idx], y[val_idx]
+for train_idx, val_idx in kf.split(X_array, y_array):
+    X_train, X_val = X_array[train_idx], X_array[val_idx]
+    y_train, y_val = y_array[train_idx], y_array[val_idx]
 
     model_cv = sm.GLM(y_train, X_train, family=family).fit()
     pred_probs = model_cv.predict(X_val)
@@ -504,22 +512,12 @@ if isinstance(family, sm.families.Binomial):
 if isinstance(family, sm.families.Poisson):
     expected_counts = predictions
 
-# Prediction intervals via bootstrap
-n_boot = 1000
-boot_preds = np.zeros((n_boot, len(X_new)))
-
-for i in range(n_boot):
-    # Bootstrap resample
-    boot_idx = np.random.choice(len(y), size=len(y), replace=True)
-    X_boot, y_boot = X[boot_idx], y[boot_idx]
-
-    # Fit and predict
-    boot_model = sm.GLM(y_boot, X_boot, family=family).fit()
-    boot_preds[i] = boot_model.predict(X_new)
-
-# 95% prediction intervals
-pred_lower = np.percentile(boot_preds, 2.5, axis=0)
-pred_upper = np.percentile(boot_preds, 97.5, axis=0)
+# Conditional mean confidence intervals, not intervals for a new observation
+mean_prediction = results.get_prediction(X_new, which="mean")
+mean_ci = mean_prediction.conf_int(alpha=0.05)
+mean_table = mean_prediction.summary_frame()
+# A bootstrap of fitted means alone also omits future outcome noise.
+# Outcome prediction intervals need the fitted family/scale plus parameter uncertainty.
 ```
 
 ## Common Applications
@@ -575,7 +573,7 @@ print("Rate ratios:", rate_ratios)
 # Check overdispersion
 dispersion = results.pearson_chi2 / results.df_resid
 if dispersion > 1.5:
-    print(f"Overdispersion detected ({dispersion:.2f}). Consider Negative Binomial.")
+    print(f"Elevated Pearson dispersion ({dispersion:.2f}); investigate mean, dependence and count family.")
 ```
 
 ### Gamma Regression (Cost/Duration Data)
@@ -594,9 +592,9 @@ print("Multiplicative effects on mean:", effects)
 
 ## Best Practices
 
-1. **Check distribution assumptions**: Plot histograms and Q-Q plots of response
+1. **Check conditional assumptions**: Examine response support, mean structure, exposure and residual patterns; marginal response normality does not choose a GLM
 2. **Verify link function**: Use canonical links unless there's a reason not to
-3. **Examine residuals**: Deviance residuals should be approximately normal
+3. **Examine residuals**: Discrete deviance residuals need not be normal; evaluate calibration and simulation-based diagnostics appropriate to the family
 4. **Test for overdispersion**: Especially for Poisson models
 5. **Use offsets appropriately**: For rate modeling with varying exposure
 6. **Consider robust SEs**: When variance assumptions questionable

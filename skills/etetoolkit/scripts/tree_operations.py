@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 import sys
 from collections import Counter
@@ -51,7 +52,13 @@ def load_tree(path: Path, parser: ParserSpec) -> Tree:
 
     try:
         with path.open(encoding="utf-8") as handle:
-            return Tree(handle, parser=parser)
+            tree = Tree(handle, parser=parser)
+        for node in tree.traverse():
+            for prop in ("dist", "support"):
+                value = node.props.get(prop)
+                if value is not None and not math.isfinite(float(value)):
+                    raise ValueError(f"nonfinite {prop} on node {node.name!r}")
+        return tree
     except (OSError, ValueError, TypeError, NewickError) as exc:
         raise UserInputError(
             f"could not parse {path} with Newick parser {parser!r}: {exc}"
@@ -260,7 +267,8 @@ def command_reroot(args: argparse.Namespace) -> None:
         tree.set_outgroup(outgroup)
         method = f"outgroup {args.outgroup!r}"
 
-    save_tree(tree, args.output, args.output_parser or args.parser, args.props)
+    output_parser = args.parser if args.output_parser is None else args.output_parser
+    save_tree(tree, args.output, output_parser, args.props)
     print(f"Rerooted with {method}; wrote {args.output}")
 
 
@@ -268,8 +276,14 @@ def command_prune(args: argparse.Namespace) -> None:
     tree = load_tree(args.input, args.parser)
     names = read_keep_names(args.keep, args.keep_file)
     validate_requested_names(tree, names)
-    tree.prune(names, preserve_branch_length=args.preserve_branch_length)
-    save_tree(tree, args.output, args.output_parser or args.parser, args.props)
+    # Resolve leaves, not arbitrary nodes sharing a leaf's name.
+    leaves_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+    tree.prune(
+        [leaves_by_name[name] for name in names],
+        preserve_branch_length=args.preserve_branch_length,
+    )
+    output_parser = args.parser if args.output_parser is None else args.output_parser
+    save_tree(tree, args.output, output_parser, args.props)
     print(f"Retained {len(names)} leaves; wrote {args.output}")
 
 
@@ -288,6 +302,9 @@ def command_compare(args: argparse.Namespace) -> None:
         )
         if duplicates:
             raise UserInputError(f"{label} has duplicate leaf names: {duplicates}")
+
+    if len(set(tree_a.leaf_names()) & set(tree_b.leaf_names())) < 2:
+        raise UserInputError("RF comparison requires at least two shared leaves")
 
     (
         rf,
@@ -310,7 +327,8 @@ def command_compare(args: argparse.Namespace) -> None:
         "unrooted": args.unrooted,
         "rf": rf,
         "max_rf": max_rf,
-        "normalized_rf": rf / max_rf if max_rf else 0.0,
+        # With no eligible splits there is no denominator, not perfect agreement.
+        "normalized_rf": rf / max_rf if max_rf > 0 else None,
         "common_leaf_count": len(common),
         "common_leaves": sorted(common),
         "discarded_edge_count_a": len(discarded_a),

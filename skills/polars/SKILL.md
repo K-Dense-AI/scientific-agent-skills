@@ -1,11 +1,13 @@
 ---
 name: polars
-description: High-performance DataFrame library for Python ETL, analytics, and pandas migration. Use for expression-based data manipulation with lazy query optimization, parallel execution, streaming out-of-core processing, Arrow interoperability, and optional GPU execution.
+description: High-performance DataFrame library for Python ETL, analytics, and pandas migration. It supports expression-based data manipulation with lazy query optimization, parallel execution, streaming out-of-core processing, Arrow interoperability, and optional GPU execution.
 license: https://github.com/pola-rs/polars/blob/main/LICENSE
 allowed-tools: Read
-compatibility: Requires Python 3.10+ for polars 1.41.x. Install with uv pip install; optional extras enable Excel, database, cloud, pandas/NumPy, and GPU integrations.
+compatibility: Requires Python 3.10+ for Polars 1.44.2. Install with uv pip install; optional extras enable Excel, database, cloud, pandas/NumPy, and GPU integrations.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
+  upstream-version: "1.44.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -13,7 +15,12 @@ metadata:
 
 ## Overview
 
-Polars is a lightning-fast DataFrame library for Python and Rust built on Apache Arrow. Work with Polars' expression-based API, lazy evaluation framework, and high-performance data manipulation capabilities for efficient data processing, pandas migration, and data pipeline optimization.
+Polars is a columnar DataFrame library for Python and Rust with Arrow interoperability. Work with Polars' expression-based API, lazy evaluation framework, and high-performance data manipulation capabilities for efficient data processing, pandas migration, and data pipeline optimization.
+
+Reviewed against the official stable documentation and native Polars 1.44.2. Local
+regression tests cover the corrected APIs and scientific failure cases; cloud, GPU,
+BigQuery, and remote database recipes are illustrative and require provider setup.
+Fragments using undefined columns, paths, or `...` require adaptation to the dataset.
 
 ## Quick Start
 
@@ -21,12 +28,12 @@ Polars is a lightning-fast DataFrame library for Python and Rust built on Apache
 
 Install the current stable Polars release verified during this refresh:
 ```bash
-uv pip install "polars==1.41.2"
+uv pip install "polars==1.44.2"
 ```
 
 Install optional integrations only when needed:
 ```bash
-uv pip install "polars[excel,database,fsspec,pandas,numpy]==1.41.2"
+uv pip install "polars[excel,database,fsspec,pandas,numpy]==1.44.2"
 ```
 
 Basic DataFrame creation and operations:
@@ -82,7 +89,7 @@ result = df.filter(pl.col("age") > 25)  # Executes immediately
 
 **Lazy (LazyFrame):** Operations build a query plan, optimized before execution
 ```python
-lf = pl.scan_csv("file.csv")  # Doesn't read yet
+lf = pl.scan_csv("file.csv")  # Builds a plan; schema inference can read the source
 result = lf.filter(pl.col("age") > 25).select("name", "age")
 df = result.collect()  # Now executes optimized query
 ```
@@ -201,9 +208,9 @@ df.with_columns(
 ```
 
 **Mapping strategies:**
-- `group_to_rows` (default): Preserves original row order
-- `explode`: Faster but groups rows together
-- `join`: Creates list columns
+- `group_to_rows` (default): Maps results back to rows; scalar aggregates broadcast.
+- `explode`: Changes row layout/count; use in `select`, not alongside original rows.
+- `join`: Joins grouped values back as lists; can consume substantial memory.
 
 ## Data I/O
 
@@ -212,7 +219,7 @@ Polars supports reading and writing:
 - CSV, Parquet, JSON, Excel
 - Databases (via connectors)
 - Cloud storage (S3, Azure, GCS)
-- Google BigQuery
+- Google BigQuery through its SDK or a supported database connector
 - Multiple/partitioned files
 
 ### Common I/O Operations
@@ -264,7 +271,7 @@ Stack DataFrames:
 pl.concat([df1, df2], how="vertical")
 
 # Horizontal (add columns)
-pl.concat([df1, df2], how="horizontal")
+pl.concat([df1, df2], how="horizontal_extend")
 
 # Diagonal (union with different schemas)
 pl.concat([df1, df2], how="diagonal")
@@ -288,7 +295,7 @@ Polars offers significant performance improvements over pandas with a cleaner AP
 
 ### Conceptual Differences
 - **No index**: Polars uses integer positions only
-- **Strict typing**: No silent type conversions
+- **Typed columns**: Schema inference and coercion exist; validate the resulting schema
 - **Lazy evaluation**: Available via LazyFrame
 - **Parallel by default**: Operations parallelized automatically
 
@@ -304,7 +311,7 @@ Polars offers significant performance improvements over pandas with a cleaner AP
 
 ### Key Syntax Patterns
 
-**Pandas sequential (slow):**
+**Pandas assignment:**
 ```python
 df.assign(
     col_a=lambda df_: df_.value * 10,
@@ -312,7 +319,7 @@ df.assign(
 )
 ```
 
-**Polars parallel (fast):**
+**Polars independent expressions:**
 ```python
 df.with_columns(
     col_a=pl.col("value") * 10,
@@ -337,19 +344,19 @@ For comprehensive migration guide, load `references/pandas_migration.md`.
    - Use `.map_elements()` only when necessary
    - Prefer native Polars operations
 
-3. **Use streaming for very large data:**
+3. **Use streaming to reduce intermediate memory:**
    ```python
    lf.collect(engine="streaming")
    ```
+   The returned DataFrame still must fit memory. Use `lf.sink_parquet("output.parquet")`
+   for a direct file output; some operations still need substantial memory.
 
-4. **Select only needed columns early:**
+4. **Let the optimizer push down filters and projections:**
    ```python
-   # Good: Select columns early
-   lf.select("col1", "col2").filter(...)
-
-   # Bad: Filter on all columns first
-   lf.filter(...).select("col1", "col2")
+   lf.filter(pl.col("age") > 25).select("name", "age")
    ```
+   Retain filter dependencies and inspect `explain()`. Moving a filter across an
+   aggregation or outer join can change the answer.
 
 5. **Use appropriate data types:**
    - Categorical for low-cardinality strings
@@ -377,6 +384,26 @@ pl.col("x").drop_nulls()
 
 For additional best practices and patterns, load `references/best_practices.md`.
 
+## Scientific validation
+
+- Preserve sample IDs as strings (including leading zeros), declared units, time zones,
+  and provenance. Supply `schema_overrides` at ingestion; use `lf.collect_schema()`
+  to inspect a lazy schema, which may require source I/O.
+- Distinguish null from NaN and infinity. `fill_null` does not repair NaN; count
+  missing/nonfinite observations before choosing exclusion or imputation.
+- `pl.len()` counts rows; `count()` excludes null; `n_unique()` includes null.
+  Declare `std(ddof=1)` and quantile interpolation for reproducible summaries.
+- Check join cardinality with `validate="m:1"`/`"1:1"` and audit unmatched IDs.
+  Default joins do not match null keys. Sort time data within each subject before
+  lags, rolling windows, and as-of joins; choose an as-of tolerance in real units.
+- Multiple expressions in one `with_columns` read the same input schema. Chain
+  contexts when one new column depends on another. `when` is not a Python
+  short-circuit guarantee: 1.44 masks unused rows in elementwise branches, but
+  missing columns and non-elementwise out-of-bounds operations can still fail.
+- Compare eager and streaming results on a bounded fixture with
+  `polars.testing.assert_frame_equal`, sorting by stable identifiers when order is
+  immaterial. Successful execution is not validation of the scientific assumptions.
+
 ## Resources
 
 This skill includes comprehensive reference documentation:
@@ -390,6 +417,7 @@ This skill includes comprehensive reference documentation:
 - `best_practices.md` - Performance optimization tips and common patterns
 
 Load these references as needed when users require detailed information about specific topics.
+Official sources and the executed coverage are in [review.md](references/review.md).
 
 ## Citing Scientific Agent Skills
 

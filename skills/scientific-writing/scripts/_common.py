@@ -8,6 +8,7 @@ import json
 import sys
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -189,6 +190,16 @@ def require_list(value: Any, label: str) -> list[Any]:
 
 def is_nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def is_iso_date(value: Any) -> bool:
+    """Accept an actual calendar date in the exact YYYY-MM-DD form."""
+    if not isinstance(value, str):
+        return False
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
 
 
 def is_placeholder(value: Any) -> bool:

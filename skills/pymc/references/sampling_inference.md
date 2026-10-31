@@ -1,432 +1,151 @@
-# PyMC Sampling and Inference Methods
+# PyMC Sampling and Inference
 
-This reference covers the sampling algorithms and inference methods available in PyMC for posterior inference.
+Targets PyMC 6.3.2 / PyTensor 3.3.2 / ArviZ 1.3.0, reviewed 2026-10-01.
+Fragments requiring `model` or data variables below are illustrative patterns;
+NUTS, ADVI, predictive sampling and the complete workflow have bounded native
+smoke tests. Alternative samplers are source-checked, not runtime-validated here.
 
-## MCMC Sampling Methods
-
-### Primary Sampling Function
-
-**`pm.sample(draws=1000, tune=1000, chains=4, **kwargs)`**
-
-The main interface for MCMC sampling in PyMC.
-
-**Key Parameters:**
-- `draws`: Number of samples to draw per chain (default: 1000)
-- `tune`: Number of tuning/warmup samples (default: 1000, discarded)
-- `chains`: Number of parallel chains (default: 4)
-- `cores`: Number of CPU cores to use (default: all available)
-- `target_accept`: Target acceptance rate for step size tuning (default: 0.8, increase to 0.9-0.95 for difficult posteriors)
-- `random_seed`: Random seed for reproducibility
-- `return_inferencedata`: Return an xarray `DataTree` object in PyMC 6 / ArviZ 1 (default: True)
-- `idata_kwargs`: Additional kwargs for data tree creation (e.g., `{"log_likelihood": True}` for model comparison)
-- `nuts_sampler`: Optional NUTS implementation: `"pymc"`, `"nutpie"`, `"blackjax"`, or `"numpyro"`
-- `backend`: Optional computational backend such as `"numba"`, `"c"`, or `"jax"`
-
-**Returns:** ArviZ-compatible `DataTree` containing posterior samples, sampling statistics, and diagnostics
-
-**Example:**
-```python
-with pm.Model() as model:
-    # ... define model ...
-    idata = pm.sample(draws=2000, tune=1000, chains=4, target_accept=0.9)
-```
-
-For PyMC 6, avoid deprecated `nuts_sampler_kwargs`; pass sampler-specific settings through explicit sampler keyword dictionaries such as `nuts={"target_accept": 0.9}` when needed.
-
-### Sampling Algorithms
-
-PyMC automatically selects appropriate samplers based on model structure, but you can specify algorithms manually.
-
-#### NUTS (No-U-Turn Sampler)
-
-**Default algorithm** for continuous parameters. Highly efficient Hamiltonian Monte Carlo variant.
-
-- Automatically tunes step size and mass matrix
-- Adaptive: explores posterior geometry during tuning
-- Best for smooth, continuous posteriors
-- Can struggle with high correlation or multimodality
-
-**Manual specification:**
-```python
-with model:
-    idata = pm.sample(step=pm.NUTS(target_accept=0.95))
-```
-
-**When to adjust:**
-- Increase `target_accept` (0.9-0.99) if seeing divergences
-- Use `init='adapt_diag'` for faster initialization (default)
-- Use `init='jitter+adapt_diag'` for difficult initializations
-
-#### Metropolis
-
-General-purpose Metropolis-Hastings sampler.
-
-- Works for both continuous and discrete variables
-- Less efficient than NUTS for smooth continuous posteriors
-- Useful for discrete parameters or non-differentiable models
-- Requires manual tuning
-
-**Example:**
-```python
-with model:
-    idata = pm.sample(step=pm.Metropolis())
-```
-
-#### Slice Sampler
-
-Slice sampling for univariate distributions.
-
-- No tuning required
-- Good for difficult univariate posteriors
-- Can be slow for high dimensions
-
-**Example:**
-```python
-with model:
-    idata = pm.sample(step=pm.Slice())
-```
-
-#### CompoundStep
-
-Combine different samplers for different parameters.
-
-**Example:**
-```python
-with model:
-    # Use NUTS for continuous params, Metropolis for discrete
-    step1 = pm.NUTS([continuous_var1, continuous_var2])
-    step2 = pm.Metropolis([discrete_var])
-    idata = pm.sample(step=[step1, step2])
-```
-
-### Sampling Diagnostics
-
-PyMC automatically computes diagnostics. Check these before trusting results:
-
-#### Effective Sample Size (ESS)
-
-Measures independent information in correlated samples.
-
-- **Rule of thumb**: ESS > 400 per chain (1600 total for 4 chains)
-- Low ESS indicates high autocorrelation
-- Access via: `az.ess(idata)`
-
-#### R-hat (Gelman-Rubin statistic)
-
-Measures convergence across chains.
-
-- **Rule of thumb**: R-hat < 1.01 for all parameters
-- R-hat > 1.01 indicates non-convergence
-- Access via: `az.rhat(idata)`
-
-#### Divergences
-
-Indicate regions where NUTS struggled.
-
-- **Rule of thumb**: 0 divergences (or very few)
-- Divergences suggest biased samples
-- **Fix**: Increase `target_accept`, reparameterize, or use stronger priors
-- Access via: `idata.sample_stats.diverging.sum()`
-
-#### Energy Plot
-
-Visualizes Hamiltonian Monte Carlo energy transitions.
-
-```python
-az.plot_energy(idata)
-```
-
-Good separation between energy distributions indicates healthy sampling.
-
-### Handling Sampling Issues
-
-#### Divergences
-
-```python
-# Increase target acceptance rate
-idata = pm.sample(target_accept=0.95)
-
-# Or reparameterize using non-centered parameterization
-# Bad (centered):
-mu = pm.Normal('mu', 0, 1)
-sigma = pm.HalfNormal('sigma', 1)
-x = pm.Normal('x', mu, sigma, observed=data)
-
-# Good (non-centered):
-mu = pm.Normal('mu', 0, 1)
-sigma = pm.HalfNormal('sigma', 1)
-x_offset = pm.Normal('x_offset', 0, 1, observed=(data - mu) / sigma)
-```
-
-#### Slow Sampling
-
-```python
-# Use fewer tuning steps if model is simple
-idata = pm.sample(tune=500)
-
-# Increase cores for parallelization
-idata = pm.sample(cores=8, chains=8)
-
-# Use variational inference for initialization
-with model:
-    approx = pm.fit()  # Run ADVI
-    initvals = approx.sample(return_inferencedata=False)[0]
-    idata = pm.sample(initvals=initvals)
-```
-
-#### High Autocorrelation
-
-```python
-# Increase draws
-idata = pm.sample(draws=5000)
-
-# Reparameterize to reduce correlation
-# Consider using QR decomposition for regression models
-```
-
-## Variational Inference
-
-Faster approximate inference for large models or quick exploration.
-
-### ADVI (Automatic Differentiation Variational Inference)
-
-**`pm.fit(n=10000, method='advi', **kwargs)`**
-
-Approximates posterior with simpler distribution (typically mean-field Gaussian).
-
-**Key Parameters:**
-- `n`: Number of iterations (default: 10000)
-- `method`: VI algorithm ('advi', 'fullrank_advi', 'svgd')
-- `random_seed`: Random seed
-
-**Returns:** Approximation object for sampling and analysis
-
-**Example:**
-```python
-with model:
-    approx = pm.fit(n=50000)
-    # Draw samples from approximation
-    idata = approx.sample(1000)
-    # Or sample for MCMC initialization
-    initvals = approx.sample(return_inferencedata=False)[0]
-```
-
-**Trade-offs:**
-- **Pros**: Much faster than MCMC, scales to large data
-- **Cons**: Approximate, may miss posterior structure, underestimates uncertainty
-
-### Full-Rank ADVI
-
-Captures correlations between parameters.
+## Sampling contract
 
 ```python
 with model:
-    approx = pm.fit(method='fullrank_advi')
+    idata = pm.sample(draws=1000, tune=1000, chains=4, cores=4,
+                      nuts_sampler="pymc", random_seed=42,
+                      nuts={"target_accept": .9})
+    pm.compute_log_likelihood(idata)
 ```
 
-More accurate than mean-field but slower.
+- `draws` counts retained samples **per chain**; warmup is additional and discarded
+  by default. Choose counts from diagnostics and the estimand's precision target.
+- Omitted `cores` is capped at four CPUs; omitted `chains` is at least two and
+  otherwise based on cores. Set both explicitly to bound resources.
+- `nuts_sampler=None` can select installed nutpie; `"pymc"` forces the native
+  implementation. Alternatives are `"nutpie"`, `"numpyro"`, `"blackjax"`; optional
+  implementations need compatible dependencies and entirely continuous models.
+- `backend` chooses graph execution (`"numba"`, `"c"`, `"jax"`) and is distinct
+  from the sampler. Not every model op supports every backend.
+- Use `nuts={...}` for sampler-specific settings; `nuts_sampler_kwargs` is
+  deprecated. PyMC NUTS tree-depth options are not portable assumptions for
+  other implementations.
+- `init="auto"` currently chooses `jitter+adapt_diag` for PyMC NUTS. Initialization
+  settings do not carry over identically to every alternative sampler.
+- A seed supports replay in a fixed environment; it is not cross-version/backend
+  bitwise reproducibility. Retain resolved package versions and numerical backend.
+- `return_inferencedata=True` returns an xarray `DataTree` in PyMC 6. Some API
+  prose still says InferenceData; the released annotations and runtime establish
+  the DataTree behavior. `False` requests the legacy MultiTrace route.
 
-### SVGD (Stein Variational Gradient Descent)
+## Geometry and diagnostics
 
-Non-parametric variational inference.
+Use rank-normalized R-hat near 1 (flag values above 1.01), bulk/tail ESS, and
+MCSE for the quantity being reported. ESS in `az.summary` is pooled over chains;
+400 is only a screening floor, not assurance that a rare-event probability is
+accurate. Multiple modes may remain undiscovered even when chains agree.
+
+Inspect divergences at their parameter locations, posterior correlations, scale
+priors and parameterization. Higher `target_accept` can reduce integration error
+but cannot identify an unidentifiable model. A lack of divergence flags does not
+prove exploration. Energy **overlap**, not separation, is the useful visual
+comparison; `az.bfmi` below about 0.3 merits investigation. Check the actual
+configured tree-depth limit or recorded `reached_max_treedepth`, not the maximum
+observed tree depth.
+
+For weakly informed hierarchical effects, non-centering often helps:
+
+```python
+with pm.Model(coords={"group": group_names}) as model:
+    population_mean = pm.Normal("population_mean", 0, sigma=2)
+    group_scale = pm.HalfNormal("group_scale", sigma=1)
+    offset = pm.Normal("offset", 0, sigma=1, dims="group")
+    theta = pm.Deterministic("theta", population_mean + group_scale * offset,
+                             dims="group")
+    pm.Normal("y", theta[group_idx], sigma=1, observed=y)
+```
+
+For strongly informed effects, a centered form may be more efficient. Do not
+"non-center" an observed likelihood by placing parameter-dependent transformed
+data in `observed`; that changes the density and drops the necessary Jacobian.
+Non-center latent effects while preserving the observation model.
+
+QR can reduce predictor correlation but changes priors unless transformed
+consistently. Use `pytensor.tensor.linalg.solve(R, beta_tilde)` for a symbolic
+solve, check full column rank, and record the implied original-coefficient prior.
+An independent Normal prior on QR coefficients is not automatically the original
+independent Normal prior on regression coefficients.
+
+## Discrete and non-gradient inference
+
+For mixed models PyMC can assign compound samplers; explicitly assigning a
+step method is also supported:
 
 ```python
 with model:
-    approx = pm.fit(method='svgd', n=20000)
+    idata = pm.sample(step=[pm.NUTS(vars=[continuous_parameter]),
+                            pm.Metropolis(vars=[discrete_parameter])],
+                      draws=1000, tune=1000, chains=4, random_seed=42)
 ```
 
-Better captures multimodality but more computationally expensive.
+Marginalize discrete latent variables when feasible. Binary/categorical Gibbs
+methods may be more appropriate than generic Metropolis. Slice sampling handles
+some univariate non-gradient targets and adapts its width during tuning; it is
+not a no-tuning algorithm. HMC-only diagnostics may be absent for these methods.
 
-## Prior and Posterior Predictive Sampling
+`pm.sample_smc` supports Sequential Monte Carlo and can explore difficult modes;
+its marginal likelihood requires proper, normalized priors and repeated runs to
+assess Monte Carlo stability. It is not automatically a reliable evidence estimate.
 
-### Prior Predictive Sampling
-
-Sample from the prior distribution (before seeing data).
-
-**`pm.sample_prior_predictive(draws=500, **kwargs)`**
-
-**Purpose:**
-- Validate priors are reasonable
-- Check implied predictions before fitting
-- Ensure model generates plausible data
-
-**Example:**
-```python
-with model:
-    prior_pred = pm.sample_prior_predictive(draws=1000)
-
-# Visualize prior predictions
-az.plot_ppc(prior_pred, group='prior')
-```
-
-### Posterior Predictive Sampling
-
-Sample from posterior predictive distribution (after fitting).
-
-**`pm.sample_posterior_predictive(trace, **kwargs)`**
-
-**Purpose:**
-- Model validation via posterior predictive checks
-- Generate predictions for new data
-- Assess goodness-of-fit
-
-**Example:**
-```python
-with model:
-    # After sampling
-    idata = pm.sample()
-
-    # Add posterior predictive samples
-    pm.sample_posterior_predictive(idata, extend_inferencedata=True)
-
-# Posterior predictive check
-az.plot_ppc(idata)
-```
-
-### Predictions for New Data
-
-Update data and sample predictive distribution:
+## Variational inference
 
 ```python
 with model:
-    # Original model fit
-    idata = pm.sample()
-
-    # Update with new predictor values
-    pm.set_data({'X': X_new}, coords={'obs_id': np.arange(len(X_new))})
-
-    # Sample predictions
-    post_pred_new = pm.sample_posterior_predictive(
-        idata,
-        var_names=['y_pred'],
-        predictions=True,
-    )
+    approx = pm.fit(n=10000, method="advi", random_seed=42,
+                    progressbar=False)
+    variational_draws = approx.sample(draws=1000, random_seed=43)
 ```
 
-In PyMC 6, `var_names` controls what appears in the output but does not force trace variables to be resampled. Use `sample_vars` to explicitly regenerate trace variables and `freeze_vars` to reuse trace variables when changed data would otherwise mark them volatile.
+`pm.fit` supports `advi`, `fullrank_advi`, `svgd` and `asvgd`. Mean-field ADVI can
+miss dependence and underestimate uncertainty. Full-rank approximations capture
+Gaussian correlations but need not recover modes or tails. SVGD also has no
+guarantee of recovering multimodality. Inspect the optimization history, restart
+with multiple seeds and compare important marginals/contrasts with MCMC where
+possible. Ordinary chain R-hat and ESS on independently generated VI draws
+measure draws from the approximation, not its accuracy relative to the posterior.
 
-## Maximum A Posteriori (MAP) Estimation
+For optional PyMC NUTS ADVI initialization use the documented `init="advi+adapt_diag"`
+path. Do not casually use `approx.sample(...)[0]`: a `MultiTrace` returns point
+objects under a different contract than DataTree, and transformed/free-variable
+names and independent initializations matter. Starting from ADVI is not required.
 
-Find posterior mode (point estimate).
+Minibatch VI must pair predictors/outcomes in a shared batch and provide the
+correct full-data `total_size` on the likelihood. It changes optimization noise,
+not the scientific sampling design; biased batches or group leakage remain biased.
 
-**`pm.find_MAP(start=None, method='L-BFGS-B', **kwargs)`**
+## Forward sampling
 
-**When to use:**
-- Quick point estimates
-- Initialization for MCMC
-- When full posterior not needed
+`pm.sample_prior_predictive(draws=...)` samples the generative model before fitting.
+`pm.sample_posterior_predictive(idata, predictions=False)` creates replicated
+outcomes; `predictions=True` stores new-data results in a separate group.
 
-**Example:**
-```python
-with model:
-    map_estimate = pm.find_MAP()
-    print(map_estimate)
-```
+PyMC 6 forward sampling distinguishes **returned** variables (`var_names`) from
+explicitly **resampled** variables (`sample_vars`). Trace variables are matched by
+name and compatible shape/coordinates. Changed-data deterministics are recomputed;
+review volatile-variable warnings for random variables. Use `freeze_vars` only
+when conditioning on the original posterior variable is intended. A `Potential`
+only contributes to log probability: forward samples ignore it, so custom
+likelihoods need a compatible generative/random path for meaningful PPCs.
 
-**Limitations:**
-- Doesn't quantify uncertainty
-- Can find local optima in multimodal posteriors
-- Sensitive to prior specification
+## MAP
 
-## Inference Recommendations
+`pm.find_MAP()` finds a local mode, not posterior uncertainty or evidence. Official
+PyMC guidance advises against using it to initialize NUTS; use `pm.sample`'s
+initialization. MAP is parameterization-dependent and can be misleading in
+hierarchical models or near boundaries.
 
-### Standard Workflow
+## Primary sources
 
-1. **Start with ADVI** for quick exploration:
-   ```python
-   approx = pm.fit(n=20000)
-   ```
-
-2. **Run MCMC** for full inference:
-   ```python
-   idata = pm.sample(draws=2000, tune=1000)
-   ```
-
-3. **Check diagnostics**:
-   ```python
-   az.summary(idata, var_names=['~mu_log__'])  # Exclude transformed vars
-   ```
-
-4. **Sample posterior predictive**:
-   ```python
-   pm.sample_posterior_predictive(idata, extend_inferencedata=True)
-   ```
-
-### Choosing Inference Method
-
-| Scenario | Recommended Method |
-|----------|-------------------|
-| Small-medium models, need full uncertainty | MCMC with NUTS |
-| Large models, initial exploration | ADVI |
-| Discrete parameters | Metropolis or marginalize |
-| Hierarchical models with divergences | Non-centered parameterization + NUTS |
-| Very large data | Minibatch ADVI |
-| Quick point estimates | MAP or ADVI |
-
-### Reparameterization Tricks
-
-**Non-centered parameterization** for hierarchical models:
-
-```python
-# Centered (can cause divergences):
-mu = pm.Normal('mu', 0, 10)
-sigma = pm.HalfNormal('sigma', 1)
-theta = pm.Normal('theta', mu, sigma, shape=n_groups)
-
-# Non-centered (better sampling):
-mu = pm.Normal('mu', 0, 10)
-sigma = pm.HalfNormal('sigma', 1)
-theta_offset = pm.Normal('theta_offset', 0, 1, shape=n_groups)
-theta = pm.Deterministic('theta', mu + sigma * theta_offset)
-```
-
-**QR decomposition** for correlated predictors:
-
-```python
-import numpy as np
-
-# QR decomposition
-Q, R = np.linalg.qr(X)
-
-with pm.Model():
-    # Uncorrelated coefficients
-    beta_tilde = pm.Normal('beta_tilde', 0, 1, shape=p)
-
-    # Transform back to original scale
-    beta = pm.Deterministic('beta', pm.math.solve(R, beta_tilde))
-
-    mu = pm.math.dot(Q, beta_tilde)
-    sigma = pm.HalfNormal('sigma', 1)
-    y = pm.Normal('y', mu, sigma, observed=y_obs)
-```
-
-## Advanced Sampling
-
-### Sequential Monte Carlo (SMC)
-
-For complex posteriors or model evidence estimation:
-
-```python
-with model:
-    idata = pm.sample_smc(draws=2000, chains=4)
-```
-
-Good for multimodal posteriors or when NUTS struggles.
-
-### Custom Initialization
-
-Provide starting values:
-
-```python
-initvals = {'mu': 0, 'sigma': 1}
-with model:
-    idata = pm.sample(initvals=initvals)
-```
-
-Or use MAP estimate:
-
-```python
-with model:
-    initvals = pm.find_MAP()
-    idata = pm.sample(initvals=initvals)
-```
+- [Sampling](https://www.pymc.io/projects/docs/en/stable/api/generated/pymc.sample.html)
+- [NUTS initialization](https://www.pymc.io/projects/docs/en/stable/api/generated/pymc.init_nuts.html)
+- [Variational fit](https://www.pymc.io/projects/docs/en/stable/api/generated/pymc.fit.html)
+- [MAP limitations](https://www.pymc.io/projects/docs/en/stable/api/generated/pymc.find_MAP.html)
+- [Forward sampling source](https://www.pymc.io/projects/docs/en/stable/_modules/pymc/sampling/forward.html)
+- [ArviZ diagnostics](https://python.arviz.org/projects/stats/en/stable/api/generated/arviz_stats.bfmi.html)

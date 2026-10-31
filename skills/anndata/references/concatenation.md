@@ -1,6 +1,6 @@
 # Concatenating AnnData Objects
 
-Combine multiple AnnData objects along either observations or variables axis.
+Combine multiple AnnData objects along either axis. Reviewed for AnnData 0.13.4. Match stable identifiers, species/genome build, units, and preprocessing before concatenating. Feature unions with sparse zero fill conflate unmeasured features with observed zeros; preserve a per-batch feature-presence record when that distinction matters.
 
 ## Basic Concatenation
 
@@ -15,7 +15,7 @@ adata2 = ad.AnnData(X=np.random.rand(150, 50))
 adata3 = ad.AnnData(X=np.random.rand(200, 50))
 
 # Concatenate along observations (axis=0, default)
-adata_combined = ad.concat([adata1, adata2, adata3], axis=0)
+adata_combined = ad.concat([adata1, adata2, adata3], axis=0, index_unique='-')
 
 print(adata_combined.shape)  # (450, 50)
 ```
@@ -106,15 +106,15 @@ adata_combined = ad.concat(
 
 Control how metadata from different objects is combined using the `merge` parameter.
 
-### merge=None (default for observations)
+### merge=None (default for either axis)
 Exclude metadata on non-concatenation axis.
 
 ```python
-# When concatenating observations, var metadata must match
+# When concatenating observations, merge controls var-side annotations
 adata1.var['gene_type'] = 'protein_coding'
 adata2.var['gene_type'] = 'protein_coding'
 
-# var is kept only if identical across all objects
+# Variable index is kept; var annotation columns are dropped even if identical
 adata_combined = ad.concat([adata1, adata2], merge=None)
 ```
 
@@ -122,8 +122,8 @@ adata_combined = ad.concat([adata1, adata2], merge=None)
 Keep metadata that is identical across all objects.
 
 ```python
-adata1.var['chromosome'] = ['chr1'] * 25 + ['chr2'] * 25
-adata2.var['chromosome'] = ['chr1'] * 25 + ['chr2'] * 25
+adata1.var['chromosome'] = 'chr1'
+adata2.var['chromosome'] = 'chr1'
 adata1.var['type'] = 'protein_coding'
 adata2.var['type'] = 'lncRNA'  # Different
 
@@ -132,11 +132,11 @@ adata_combined = ad.concat([adata1, adata2], merge='same')
 ```
 
 ### merge='unique'
-Keep metadata columns where each key has exactly one value.
+Keep elements with one possible value across inputs after index alignment; this does not mean all entries within a column must be identical.
 
 ```python
-adata1.var['gene_id'] = [f'ENSG{i:05d}' for i in range(50)]
-adata2.var['gene_id'] = [f'ENSG{i:05d}' for i in range(50)]
+adata1.var['gene_id'] = adata1.var_names
+adata2.var['gene_id'] = adata2.var_names
 
 # gene_id is kept (unique values for each key)
 adata_combined = ad.concat([adata1, adata2], merge='unique')
@@ -146,8 +146,8 @@ adata_combined = ad.concat([adata1, adata2], merge='unique')
 Take values from the first object containing each key.
 
 ```python
-adata1.var['description'] = ['Desc1'] * 50
-adata2.var['description'] = ['Desc2'] * 50
+adata1.var['description'] = 'Desc1'
+adata2.var['description'] = 'Desc2'
 
 # Uses descriptions from adata1
 adata_combined = ad.concat([adata1, adata2], merge='first')
@@ -157,8 +157,8 @@ adata_combined = ad.concat([adata1, adata2], merge='first')
 Keep metadata that appears in only one object.
 
 ```python
-adata1.var['adata1_specific'] = [1] * 50
-adata2.var['adata2_specific'] = [2] * 50
+adata1.var['adata1_specific'] = 1
+adata2.var['adata2_specific'] = 2
 
 # Both metadata columns are kept
 adata_combined = ad.concat([adata1, adata2], merge='only')
@@ -205,11 +205,11 @@ adata2 = ad.AnnData(X=np.random.rand(150, 50))
 adata2.layers['normalized'] = np.random.rand(150, 50)
 adata2.layers['scaled'] = np.random.rand(150, 50)
 
-# Layers are concatenated automatically if present in all objects
+# With join="inner", common layers are concatenated (outer joins union keys)
 adata_combined = ad.concat([adata1, adata2])
 
 print(adata_combined.layers.keys())
-# dict_keys(['normalized', 'scaled'])
+# Contains None (X), 'normalized', and 'scaled' in AnnData 0.13.4
 ```
 
 ## Concatenating Multi-dimensional Annotations
@@ -252,7 +252,7 @@ adata2.uns['experiment'] = {'date': '2025-01-01', 'batch': 'B'}
 
 # Using merge='unique' for uns
 adata_combined = ad.concat([adata1, adata2], uns_merge='unique')
-# 'date' is kept (same value), 'batch' might be excluded (different values)
+# 'date' is kept; conflicting 'batch' is excluded
 ```
 
 ## Lazy Concatenation (AnnCollection)
@@ -278,8 +278,13 @@ collection = AnnCollection(
 print(collection.n_obs)  # Total observations
 print(collection.obs.head())  # Metadata loaded, not X
 
-# Convert to regular AnnData when needed (loads all data)
-adata = collection.to_adata()
+# Collection conversion contains annotations only; X is None.
+metadata_only = collection.to_adata()
+
+# A selected view can gather X, but 0.13.4 default conversion may fail because
+# X also appears in layers[None]. This workaround EXPLICITLY omits all named layers.
+selected = collection[:100, :].to_adata(ignore_layers=True)
+# This is not a full-fidelity conversion (var metadata/raw/uns are not restored).
 ```
 
 ### Working with AnnCollection
@@ -287,17 +292,22 @@ adata = collection.to_adata()
 # Subset without loading data
 subset = collection[collection.obs['cell_type'] == 'T cell']
 
-# Iterate through datasets
-for adata in collection:
-    print(adata.shape)
-
-# Access specific dataset
-first_dataset = collection[0]
+# Indexing is by observations/variables, not source dataset.
+first_observation = collection[0, :]
+# Keep the original input list to iterate through source datasets.
+for source in backed_adatas:
+    print(source.shape)
+# After materializing needed subsets:
+for source in backed_adatas:
+    source.file.close()
 ```
 
 ## Concatenation on Disk
 
-For datasets too large for memory, concatenate directly on disk:
+For datasets too large for memory, use experimental `concat_on_disk`.
+`max_loaded_elems` limits sparse processing; dense input uses Dask. Pairwise
+concatenation is not implemented here. Reopen the result and compare it with
+`ad.concat` on a representative subset before committing a large workflow:
 
 ```python
 import anndata as ad
@@ -307,7 +317,11 @@ from anndata.experimental import concat_on_disk
 concat_on_disk(
     ['data1.h5ad', 'data2.h5ad', 'data3.h5ad'],
     'combined.h5ad',
-    join='outer'
+    join='outer',
+    label='source',
+    keys=['one', 'two', 'three'],
+    index_unique='-',
+    max_loaded_elems=1_000_000
 )
 
 # Load result in backed mode
@@ -378,12 +392,9 @@ Always use `label` and `keys` to track which observations came from which datase
 - Consider backed mode for the result
 
 5. **Handle batch effects**
-Concatenation combines data but doesn't correct for batch effects. Apply batch correction after concatenation:
-```python
-# After concatenation, apply batch correction
-import scanpy as sc
-sc.pp.combat(adata_combined, key='batch')
-```
+Concatenation does not estimate batch effects. Choose an analysis method based on
+experimental design and matrix semantics; automatic correction can erase biology
+when batch and condition are confounded. See the scanpy skill for analysis.
 
 6. **Validate results**
 ```python
@@ -397,3 +408,14 @@ print(adata_combined.obs['batch'].value_counts())
 print(adata_combined.var.head())
 print(adata_combined.obs.head())
 ```
+
+`pairwise=True` creates block-diagonal graphs with no cross-batch neighbors; recompute
+a graph after integration when cross-batch relationships are needed. `axis=1` aligns
+observations by name but does not make RNA counts and protein values statistically
+comparable; preserve modality and use a MuData container for separate matrices.
+
+Sources: [concat](https://anndata.readthedocs.io/en/stable/generated/anndata.concat.html),
+[AnnCollection](https://anndata.readthedocs.io/en/stable/generated/anndata.experimental.AnnCollection.html),
+[to_adata](https://anndata.readthedocs.io/en/stable/generated/anndata.experimental.AnnCollection.to_adata.html),
+[concat_on_disk](https://anndata.readthedocs.io/en/stable/generated/anndata.experimental.concat_on_disk.html),
+and installed 0.13.4 source. Biological and user-file examples are illustrative.

@@ -1,574 +1,154 @@
-# Quantum Chemistry with PennyLane
+# Quantum chemistry
 
-## Table of Contents
-1. [Molecular Hamiltonians](#molecular-hamiltonians)
-2. [Variational Quantum Eigensolver (VQE)](#variational-quantum-eigensolver-vqe)
-3. [Molecular Structure](#molecular-structure)
-4. [Basis Sets and Mapping](#basis-sets-and-mapping)
-5. [Excited States](#excited-states)
-6. [Quantum Chemistry Workflows](#quantum-chemistry-workflows)
+Targets PennyLane 0.45.1's built-in differentiable Hartree-Fock (`method="dhf"`).
+The H2 blocks below run in order and are tested. Energies are Hartree; coordinates
+are explicitly bohr. These are finite-basis electronic energies including nuclear
+repulsion, not thermochemical free energies.
 
-## Molecular Hamiltonians
-
-### Building Molecular Hamiltonians
+## H2 Hamiltonian and UCCSD VQE
 
 ```python
 import pennylane as qml
-from pennylane import qchem
-import numpy as np
-
-# Define molecule
-symbols = ['H', 'H']
-geometry = np.array([[0.0, 0.0, -0.66140414], [0.0, 0.0, 0.66140414]])
-molecule = qchem.Molecule(
-    symbols,
-    geometry,
-    charge=0,
-    mult=1,
-    basis_name='sto-3g',
-)
-
-# Generate Hamiltonian
-hamiltonian, n_qubits = qchem.molecular_hamiltonian(
-    molecule,
-    mapping='jordan_wigner',
-)
-
-print(f"Hamiltonian: {hamiltonian}")
-print(f"Number of qubits needed: {n_qubits}")
-```
-
-### Jordan-Wigner Transformation
-
-```python
-# Hamiltonian is automatically in qubit form via Jordan-Wigner
-# Manual transformation:
-from pennylane import fermi
-
-# Fermionic operators
-a_0 = fermi.FermiC(0)  # Creation operator
-a_1 = fermi.FermiA(1)  # Annihilation operator
-
-# Convert to qubits
-qubit_op = qml.jordan_wigner(a_0 * a_1)
-```
-
-### Bravyi-Kitaev Transformation
-
-```python
-# Alternative mapping (more efficient for some systems)
-from pennylane.qchem import bravyi_kitaev
-
-# Build Hamiltonian with Bravyi-Kitaev
-hamiltonian, n_qubits = qchem.molecular_hamiltonian(
-    molecule,
-    mapping='bravyi_kitaev'
-)
-```
-
-### Custom Hamiltonians
-
-```python
-# Build Hamiltonian from coefficients and operators
-coeffs = [0.2, -0.8, 0.5]
-obs = [
-    qml.PauliZ(0),
-    qml.PauliZ(0) @ qml.PauliZ(1),
-    qml.PauliX(0) @ qml.PauliX(1)
-]
-
-H = qml.Hamiltonian(coeffs, obs)
-
-# Or use simplified syntax
-H = 0.2 * qml.PauliZ(0) - 0.8 * qml.PauliZ(0) @ qml.PauliZ(1) + 0.5 * qml.PauliX(0) @ qml.PauliX(1)
-```
-
-## Variational Quantum Eigensolver (VQE)
-
-### Basic VQE Implementation
-
-```python
 from pennylane import numpy as np
 
-# Define device
-dev = qml.device('default.qubit', wires=n_qubits)
+geometry = np.array([[0.0, 0.0, -0.66140414], [0.0, 0.0, 0.66140414]], requires_grad=False)
+molecule = qml.qchem.Molecule(["H", "H"], geometry, charge=0, mult=1,
+                              basis_name="sto-3g", unit="bohr")
+H, n_qubits = qml.qchem.molecular_hamiltonian(molecule, method="dhf", mapping="jordan_wigner")
+electrons = molecule.n_electrons
+hf = qml.qchem.hf_state(electrons, n_qubits)
+singles, doubles = qml.qchem.excitations(electrons, n_qubits)
+s_wires, d_wires = qml.qchem.excitations_to_wires(singles, doubles)
+dev = qml.device("default.qubit", wires=n_qubits)
 
-# Hartree-Fock state preparation
-hf_state = qchem.hf_state(electrons=2, orbitals=n_qubits)
-
-def ansatz(params, wires):
-    """Variational ansatz."""
-    qml.BasisState(hf_state, wires=wires)
-
-    for i in range(len(wires)):
-        qml.RY(params[i], wires=i)
-
-    for i in range(len(wires)-1):
-        qml.CNOT(wires=[i, i+1])
-
-@qml.qnode(dev)
-def vqe_circuit(params):
-    ansatz(params, wires=range(n_qubits))
-    return qml.expval(hamiltonian)
-
-# Optimize
-opt = qml.GradientDescentOptimizer(stepsize=0.4)
-params = np.random.normal(0, np.pi, n_qubits, requires_grad=True)
-
-for n in range(100):
-    params, energy = opt.step_and_cost(vqe_circuit, params)
-
-    if n % 20 == 0:
-        print(f"Step {n}: Energy = {energy:.8f} Ha")
-
-print(f"Final ground state energy: {energy:.8f} Ha")
-```
-
-### UCCSD Ansatz
-
-```python
-# Singles and doubles excitations
-singles, doubles = qchem.excitations(electrons=2, orbitals=n_qubits)
-s_wires, d_wires = qchem.excitations_to_wires(singles, doubles)
-
-@qml.qnode(dev)
-def uccsd_circuit(params):
-    # UCCSD prepares the Hartree-Fock reference internally.
+def ansatz(params):
     qml.UCCSD(params, wires=range(n_qubits), s_wires=s_wires,
-              d_wires=d_wires, init_state=hf_state)
+              d_wires=d_wires, init_state=hf)
 
-    return qml.expval(hamiltonian)
+@qml.qnode(dev)
+def energy(params):
+    ansatz(params)
+    return qml.expval(H)
 
-# Initialize parameters
-n_params = len(singles) + len(doubles)
-params = np.zeros(n_params, requires_grad=True)
-
-# Optimize
+params = np.zeros(len(singles) + len(doubles), requires_grad=True)
+hf_energy = float(energy(params))
 opt = qml.AdamOptimizer(stepsize=0.1)
-for n in range(100):
-    params, energy = opt.step_and_cost(uccsd_circuit, params)
+for _ in range(240):
+    params, old_energy = opt.step_and_cost(energy, params)
+final_energy = float(energy(params))
+assert final_energy <= hf_energy + 1e-8
+print(f"[OK] VQE electronic energy including nuclear repulsion: {final_energy:.8f} Ha")
 ```
 
-### Adaptive VQE
+`UCCSD` prepares `init_state` internally. Do not prepend a second HF state.
+The electron number is nuclear charge sum **minus molecular charge**, not the
+number of atoms. Active-space workflows use the **active** electron count and
+spin orbitals, not the full molecule's count. Built-in DHF has element, basis and
+closed-shell restrictions; use a supported external backend for open-shell work.
+
+## Independent reference and particle-number validation
+
+Continue the H2 block:
 
 ```python
-def adaptive_vqe(hamiltonian, n_qubits, max_gates=10):
-    """Adaptive VQE: Grow ansatz iteratively."""
-    dev = qml.device('default.qubit', wires=n_qubits)
+# Jordan-Wigner occupations correspond to computational-basis bits.
+N = qml.qchem.particle_number(n_qubits)
+@qml.qnode(dev)
+def number_moments(params):
+    ansatz(params)
+    return qml.expval(N), qml.var(N)
+mean_n, var_n = number_moments(params)
+assert np.allclose(mean_n, electrons, atol=1e-8)
+assert abs(var_n) < 1e-8
 
-    # Start with HF state
-    operations = []
-    params = []
-
-    hf_state = qchem.hf_state(electrons=2, orbitals=n_qubits)
-
-    @qml.qnode(dev)
-    def circuit(p):
-        qml.BasisState(hf_state, wires=range(n_qubits))
-
-        for op, param in zip(operations, p):
-            op(param)
-
-        return qml.expval(hamiltonian)
-
-    # Iteratively add gates
-    for _ in range(max_gates):
-        # Find best gate to add
-        best_op = None
-        best_improvement = 0
-
-        for candidate_op in generate_candidates():
-            # Test adding this operation
-            test_ops = operations + [candidate_op]
-            test_params = params + [0.0]
-
-            improvement = evaluate_improvement(test_ops, test_params)
-
-            if improvement > best_improvement:
-                best_improvement = improvement
-                best_op = candidate_op
-
-        if best_improvement < threshold:
-            break
-
-        operations.append(best_op)
-        params.append(0.0)
-
-        # Optimize current ansatz
-        opt = qml.AdamOptimizer(stepsize=0.1)
-        for _ in range(50):
-            params = opt.step(circuit, params)
-
-    return circuit, params
+# Tiny-system dense check restricted to the intended electron number.
+# A larger system also needs explicit spin/symmetry sector selection.
+h_matrix = qml.matrix(H, wire_order=range(n_qubits))
+sector = [i for i in range(2**n_qubits) if i.bit_count() == electrons]
+reference_energy = float(np.linalg.eigvalsh(h_matrix[np.ix_(sector, sector)])[0])
+assert final_energy >= reference_energy - 1e-8
+assert final_energy - reference_energy < 1e-5
 ```
 
-## Molecular Structure
+Convergence of an optimizer is not proof of reaching the ground state. A generic
+RY/CNOT ansatz need not conserve particle number or spin. Compare energy against
+a classical calculation using the same geometry, basis, frozen core, active space,
+charge, multiplicity and mapping. The global minimum across all Fock sectors need
+not be the molecular state of interest. Dense diagonalization scales exponentially.
 
-### Defining Molecules
+## Dipole observables
+
+Continue the same H2 calculation, with fixed molecular parameters:
 
 ```python
-# Simple diatomic
-h2_symbols = ['H', 'H']
-h2_coords = np.array([[0.0, 0.0, -0.66140414], [0.0, 0.0, 0.66140414]])
-
-# Water molecule
-h2o_symbols = ['O', 'H', 'H']
-h2o_coords = np.array([
-    [0.0, 0.0, 0.0],      # O
-    [0.757, 0.586, 0.0],  # H
-    [-0.757, 0.586, 0.0], # H
-])
-
-# From XYZ format
-symbols, geometry = qchem.read_structure('molecule.xyz')
-molecule = qchem.Molecule(symbols, geometry)
+# dipole_moment returns a function; call it to obtain x/y/z observables.
+dipoles = qml.qchem.dipole_moment(molecule, mapping="jordan_wigner")()
+@qml.qnode(dev)
+def dipole_vector(params):
+    ansatz(params)
+    return tuple(qml.expval(op) for op in dipoles)
+mu_au = np.asarray(dipole_vector(params))
+assert np.linalg.norm(mu_au) < 1e-6  # neutral, centrosymmetric H2
+mu_debye = mu_au * 2.541746473
 ```
 
-### Geometry Optimization
-
-```python
-def optimize_geometry(symbols, initial_coords, basis='sto-3g'):
-    """Optimize molecular geometry."""
-
-    def energy_surface(coords):
-        molecule = qchem.Molecule(symbols, coords, basis_name=basis)
-        H, n_qubits = qchem.molecular_hamiltonian(
-            molecule
-        )
-
-        # Run VQE to get energy
-        energy = run_vqe(H, n_qubits)
-        return energy
-
-    # Classical optimization of nuclear coordinates
-    from scipy.optimize import minimize
-
-    result = minimize(
-        energy_surface,
-        initial_coords,
-        method='BFGS',
-        options={'gtol': 1e-5}
-    )
-
-    return result.x, result.fun
-
-optimized_coords, min_energy = optimize_geometry(h2_symbols, h2_coords)
-print(f"Optimized geometry: {optimized_coords}")
-print(f"Energy: {min_energy} Ha")
-```
-
-### Bond Dissociation Curves
-
-```python
-def dissociation_curve(symbols, axis=2, distances=None):
-    """Calculate potential energy surface."""
-
-    if distances is None:
-        distances = np.linspace(0.5, 3.0, 20)
-
-    energies = []
-
-    for d in distances:
-        coords = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, d]])
-        molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
-
-        H, n_qubits = qchem.molecular_hamiltonian(
-            molecule
-        )
-
-        energy = run_vqe(H, n_qubits)
-        energies.append(energy)
-
-        print(f"Distance: {d:.2f} Å, Energy: {energy:.6f} Ha")
-
-    return distances, energies
-
-# H2 dissociation
-distances, energies = dissociation_curve(['H', 'H'])
-
-import matplotlib.pyplot as plt
-plt.plot(distances, energies)
-plt.xlabel('Bond length (Å)')
-plt.ylabel('Energy (Ha)')
-plt.title('H2 Dissociation Curve')
-plt.show()
-```
-
-## Basis Sets and Mapping
-
-### Basis Set Selection
-
-```python
-# Minimal basis (fastest, least accurate)
-molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
-H_sto3g, n_qubits = qchem.molecular_hamiltonian(
-    molecule
-)
-
-# Double-zeta basis
-molecule = qchem.Molecule(symbols, coords, basis_name='6-31g')
-H_631g, n_qubits = qchem.molecular_hamiltonian(
-    molecule
-)
-
-# Large basis (slower, more accurate)
-molecule = qchem.Molecule(symbols, coords, basis_name='cc-pvdz')
-H_ccpvdz, n_qubits = qchem.molecular_hamiltonian(
-    molecule
-)
-```
-
-### Active Space Selection
-
-```python
-# Select active orbitals
-active_electrons = 2
-active_orbitals = 2
-
-molecule = qchem.Molecule(symbols, coords, basis_name='sto-3g')
-H_active, n_qubits = qchem.molecular_hamiltonian(
-    molecule,
-    active_electrons=active_electrons,
-    active_orbitals=active_orbitals,
-)
-
-print(f"Full system: {len(symbols)} electrons")
-print(f"Active space: {active_electrons} electrons in {active_orbitals} orbitals")
-print(f"Qubits needed: {n_qubits}")
-```
-
-### Fermion-to-Qubit Mappings
-
-```python
-# Jordan-Wigner (default)
-H_jw, n_q_jw = qchem.molecular_hamiltonian(
-    molecule, mapping='jordan_wigner'
-)
-
-# Bravyi-Kitaev
-H_bk, n_q_bk = qchem.molecular_hamiltonian(
-    molecule, mapping='bravyi_kitaev'
-)
-
-# Parity
-H_parity, n_q_parity = qchem.molecular_hamiltonian(
-    molecule, mapping='parity'
-)
-
-print(f"Jordan-Wigner terms: {len(H_jw.ops)}")
-print(f"Bravyi-Kitaev terms: {len(H_bk.ops)}")
-```
-
-## Excited States
-
-### Quantum Subspace Expansion
-
-```python
-def quantum_subspace_expansion(hamiltonian, ground_state_params, excitations):
-    """Calculate excited states via subspace expansion."""
-
-    @qml.qnode(dev)
-    def ground_state():
-        ansatz(ground_state_params, wires=range(n_qubits))
-        return qml.state()
-
-    # Get ground state
-    psi_0 = ground_state()
-
-    # Generate excited state basis
-    basis = [psi_0]
-
-    for exc in excitations:
-        @qml.qnode(dev)
-        def excited_state():
-            ansatz(ground_state_params, wires=range(n_qubits))
-            # Apply excitation
-            apply_excitation(exc)
-            return qml.state()
-
-        psi_exc = excited_state()
-        basis.append(psi_exc)
-
-    # Build Hamiltonian matrix in subspace
-    n_basis = len(basis)
-    H_matrix = np.zeros((n_basis, n_basis))
-
-    for i in range(n_basis):
-        for j in range(n_basis):
-            H_matrix[i, j] = np.vdot(basis[i], hamiltonian @ basis[j])
-
-    # Diagonalize
-    eigenvalues, eigenvectors = np.linalg.eigh(H_matrix)
-
-    return eigenvalues, eigenvectors
-```
-
-### SSVQE (Subspace-Search VQE)
-
-```python
-def ssvqe(hamiltonian, n_states=3):
-    """Calculate multiple states simultaneously."""
-
-    def cost_function(params):
-        states = []
-
-        for i in range(n_states):
-            @qml.qnode(dev)
-            def state_i():
-                ansatz(params[i], wires=range(n_qubits))
-                return qml.state()
-
-            states.append(state_i())
-
-        # Energy expectation
-        energies = [np.vdot(s, hamiltonian @ s) for s in states]
-
-        # Orthogonality penalty
-        penalty = 0
-        for i in range(n_states):
-            for j in range(i+1, n_states):
-                overlap = np.abs(np.vdot(states[i], states[j]))
-                penalty += overlap ** 2
-
-        return sum(energies) + 1000 * penalty
-
-    # Initialize parameters for all states
-    params = [np.random.random(n_params) for _ in range(n_states)]
-
-    opt = qml.AdamOptimizer(stepsize=0.01)
-    for _ in range(100):
-        params = opt.step(cost_function, params)
-
-    return params
-```
-
-## Quantum Chemistry Workflows
-
-### Full VQE Workflow
-
-```python
-def full_chemistry_workflow(symbols, coords, basis='sto-3g'):
-    """Complete quantum chemistry calculation."""
-
-    print("1. Building molecular Hamiltonian...")
-    molecule = qchem.Molecule(symbols, coords, basis_name=basis)
-    H, n_qubits = qchem.molecular_hamiltonian(
-        molecule
-    )
-
-    print(f"   Molecule: {' '.join(symbols)}")
-    print(f"   Qubits: {n_qubits}")
-    print(f"   Hamiltonian terms: {len(H.ops)}")
-
-    print("\n2. Preparing Hartree-Fock state...")
-    n_electrons = sum(qchem.atomic_numbers[s] for s in symbols)
-    hf_state = qchem.hf_state(n_electrons, n_qubits)
-
-    print("\n3. Running VQE...")
-    energy, params = run_vqe(H, n_qubits, hf_state)
-
-    print(f"\n4. Results:")
-    print(f"   Ground state energy: {energy:.8f} Ha")
-
-    print("\n5. Computing properties...")
-    dipole = compute_dipole_moment(symbols, coords, params)
-    print(f"   Dipole moment: {dipole:.4f} D")
-
-    return {
-        'energy': energy,
-        'params': params,
-        'dipole': dipole
-    }
-
-results = full_chemistry_workflow(['H', 'H'], h2_coords)
-```
-
-### Molecular Property Calculation
-
-```python
-def compute_molecular_properties(symbols, coords, vqe_params):
-    """Calculate molecular properties from VQE solution."""
-
-    # Energy
-    molecule = qchem.Molecule(symbols, coords)
-    H, n_qubits = qchem.molecular_hamiltonian(molecule)
-    energy = vqe_circuit(vqe_params)
-
-    # Dipole moment
-    dipole_obs = qchem.dipole_moment(molecule)
-
-    @qml.qnode(dev)
-    def dipole_circuit(axis):
-        ansatz(vqe_params, wires=range(n_qubits))
-        return qml.expval(dipole_obs[axis])
-
-    dipole = [dipole_circuit(i) for i in range(3)]
-    dipole_magnitude = np.linalg.norm(dipole)
-
-    # Particle number (sanity check)
-    @qml.qnode(dev)
-    def particle_number():
-        ansatz(vqe_params, wires=range(n_qubits))
-        N_op = qchem.particle_number(n_qubits)
-        return qml.expval(N_op)
-
-    n_particles = particle_number()
-
-    return {
-        'energy': energy,
-        'dipole_moment': dipole_magnitude,
-        'dipole_vector': dipole,
-        'particle_number': n_particles
-    }
-```
-
-### Reaction Energy Calculation
-
-```python
-def reaction_energy(reactants, products):
-    """Calculate energy of chemical reaction."""
-
-    # Calculate energies of reactants
-    E_reactants = 0
-    for molecule in reactants:
-        symbols, coords = molecule
-        mol = qchem.Molecule(symbols, coords)
-        H, n_qubits = qchem.molecular_hamiltonian(mol)
-        E_reactants += run_vqe(H, n_qubits)
-
-    # Calculate energies of products
-    E_products = 0
-    for molecule in products:
-        symbols, coords = molecule
-        mol = qchem.Molecule(symbols, coords)
-        H, n_qubits = qchem.molecular_hamiltonian(mol)
-        E_products += run_vqe(H, n_qubits)
-
-    # Reaction energy
-    delta_E = E_products - E_reactants
-
-    print(f"Reactant energy: {E_reactants:.6f} Ha")
-    print(f"Product energy: {E_products:.6f} Ha")
-    print(f"Reaction energy: {delta_E:.6f} Ha ({delta_E * 627.5:.2f} kcal/mol)")
-
-    return delta_E
-
-# Example: H2 dissociation
-reactants = [((['H', 'H'], h2_coords_bonded))]
-products = [((['H'], [0, 0, 0]), (['H'], [10, 0, 0]))]  # Separated atoms
-
-delta_E = reaction_energy(reactants, products)
-```
-
-## Best Practices
-
-1. **Start with small basis sets** - Use STO-3G for testing, upgrade for production
-2. **Use active space** - Reduce qubits by selecting relevant orbitals
-3. **Choose appropriate mapping** - Bravyi-Kitaev often reduces circuit depth
-4. **Initialize with HF** - Start VQE from Hartree-Fock state
-5. **Validate results** - Compare with classical methods (FCI, CCSD)
-6. **Consider symmetries** - Exploit molecular symmetries to reduce complexity
-7. **Use UCCSD for accuracy** - UCCSD ansatz is chemically motivated
-8. **Monitor convergence** - Check gradient norms and energy variance
-9. **Account for correlation** - Ensure ansatz captures electron correlation
-10. **Benchmark thoroughly** - Test on known systems before novel molecules
+The dipole above includes electronic and nuclear terms in atomic units (`e a0`).
+Keep the vector, origin and unit, not only its magnitude. Charged-system dipoles
+are origin dependent. Differentiable molecule parameters must also be supplied to
+the returned dipole function. `dipole_of` is a separate external-backend API and
+must not be substituted with an assumed identical signature.
+
+## Units, active spaces and mappings
+
+`Molecule(..., unit="angstrom")` converts Angstrom input; its default is bohr.
+`qml.qchem.read_structure` reads XYZ coordinates and returns geometry in bohr;
+record that conversion once. The returned coordinates are flat; reshape to
+`(-1, 3)` for `Molecule`. The reader also writes `structure.xyz` to its
+`outpath`, so use a dedicated output directory. Do not relabel a bohr distance axis as Angstrom.
+Use `(n_atoms, 3)` coordinates; flatten/unflatten explicitly if a classical
+optimizer requires a one-dimensional optimization variable.
+
+`molecular_hamiltonian(molecule, active_electrons=..., active_orbitals=...)` takes
+**spatial** active orbitals; the qubit/spin-orbital count is twice that for the
+untapered encodings. Document frozen/core orbitals and validate orbital selection
+across changing geometries. Supported mappings include `jordan_wigner`, `parity`
+and `bravyi_kitaev`. `qml.jordan_wigner` and `qml.bravyi_kitaev` map fermionic
+operators; the latter is not imported from `pennylane.qchem`. Change state
+preparation/observables consistently with the mapping; do not reuse JW occupation
+bit counting with a BK or parity state. Use `H.terms()` for coefficients/operators.
+
+For basis changes, validate supported elements/functions and convergence against
+a larger basis. Optional `method="pyscf"` needs PySCF; `method="openfermion"` needs
+OpenFermion-PySCF. Those backends and basis-set-exchange downloads were not executed
+in this refresh. `Molecule`/`molecular_hamiltonian` are not generic JIT-safe functions.
+
+## Geometry, reactions and excited states
+
+Geometry optimization and dissociation curves require a converged inner electronic
+problem at **every** geometry. Warm-start ansatz parameters when appropriate, track
+state/active-space continuity, and verify forces against finite differences at
+matched convergence thresholds. Unconverged inner solves can make numerical forces
+meaningless. Report the actual distance units and all convergence tolerances.
+Separated hydrogen atoms are open shell; do not pass neutral H with singlet DHF.
+
+Reaction energies need balanced stoichiometry, appropriate charge/spin and a common
+energy convention. Zero-point, thermal, solvation and standard-state corrections
+are separate; a difference of VQE electronic energies is not a free energy.
+
+For quantum subspace expansion, form both `Hij=<phi_i|H|phi_j>` and
+`Sij=<phi_i|phi_j>`. Remove near-linear dependencies using overlap eigenvalues,
+then solve `H c = E S c`; diagonalizing `H` alone is valid only in an orthonormal
+basis. Use `qml.matrix(H, wire_order=...)` for tiny simulator checks, not operator
+`H @ statevector`. Complex matrix elements must retain complex dtype. Validate
+Hermiticity, overlap rank and residuals. SSVQE uses one shared unitary on distinct
+orthogonal reference states with ordered weights; independently optimized states
+plus an overlap penalty is a different algorithm. These advanced workflows are
+scientific guidance, not executed end-to-end examples.
+
+## Sources
+
+- [Molecule](https://docs.pennylane.ai/en/stable/code/api/pennylane.qchem.Molecule.html)
+- [molecular_hamiltonian](https://docs.pennylane.ai/en/stable/code/api/pennylane.qchem.molecular_hamiltonian.html)
+- [UCCSD](https://docs.pennylane.ai/en/stable/code/api/pennylane.UCCSD.html)
+- [dipole_moment](https://docs.pennylane.ai/en/stable/code/api/pennylane.qchem.dipole_moment.html)
+- [Chemistry API](https://docs.pennylane.ai/en/stable/code/qml_qchem.html)

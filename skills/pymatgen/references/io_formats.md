@@ -1,6 +1,6 @@
 # I/O: parsers, writers, VASP, Q-Chem, and trust boundaries
 
-This reference targets `pymatgen-core==2026.7.16`, which now owns core and
+This reference targets `pymatgen-core==2026.9.23`, which now owns core and
 electronic-structure-code I/O under the unchanged `pymatgen.io` namespace.
 
 ## I/O is a semantic conversion
@@ -142,6 +142,10 @@ structure to XYZ drops lattice and periodicity. Basic XYZ also does not define
 oxidation states, partial occupancies, bonds, charge, spin multiplicity, or
 arbitrary site properties.
 
+`Structure.to(fmt="xyz")` is unsupported in the tested registry. The bundled
+converter uses `pymatgen.io.xyz.XYZ(structure)` explicitly, after acknowledging
+the loss of lattice/PBC. Read the result as a `Molecule`.
+
 CSSR and XSF have their own representational limits. Treat support in
 `Structure.to()` as syntactic capability, not proof of losslessness.
 
@@ -162,6 +166,11 @@ For untrusted input, use a bounded strict JSON parser, reject duplicate keys and
 non-finite values, validate the expected schema, and call a specific
 constructor. Do not use pickle. Do not pass attacker-controlled `@module` or
 `@class` metadata to a general dynamic object decoder.
+
+`Structure.from_dict()` itself decodes site-property MSON values. The bundled
+loader therefore rejects nested MSON metadata, duplicate keys and non-finite
+numbers before constructing a structure. It accepts plain `.json`/`.mson`
+files only; decompress and inspect compressed JSON separately.
 
 YAML is not used by the bundled CLIs. If a workflow truly needs YAML, use a
 safe loader plus schema validation; YAML safety does not solve object-schema or
@@ -202,6 +211,9 @@ silently use files from an unrelated installation.
 
 ## VASP output parsing
 
+This file-dependent example is illustrative; signatures were checked against
+the pinned core release, but a licensed calculation was not run.
+
 ```python
 from pymatgen.io.vasp import Vasprun
 
@@ -237,6 +249,12 @@ Parser success does not establish:
 Preserve source-file checksums and parsing options. Large XML, HDF5, CHGCAR,
 LOCPOT, WAVECAR, and trajectory files need explicit byte and memory limits.
 
+For collinear spin-polarized LOCPOT/ELFCAR, the current primary channels are
+`spin_up` and `spin_down`; CHGCAR retains `total` and `diff`. Old LOCPOT/ELFCAR
+aliases warn. Volumetric interpolation now uses periodic `i/n` grid positions;
+`interpolator` is a method, without the old `.grid`/`.values` attributes or
+SciPy `method`/`fill_value` call options.
+
 ## Band structures and DOS
 
 `Vasprun.get_band_structure()` returns a `BandStructure` or
@@ -269,6 +287,9 @@ text = str(job)
 parsed = QCOutput("qchem.out")
 data = parsed.data
 ```
+
+The input construction is exercised with a synthetic water molecule. Output
+parsing is illustrative and needs an actual Q-Chem output file.
 
 `QCInput` accepts explicit sections such as `rem`, `opt`, `pcm`, `solvent`,
 `smx`, `scan`, `plots`, `nbo`, `geom_opt`, and others. Validate each setting
@@ -311,7 +332,7 @@ text into a shell command.
    and required properties with explicit numerical tolerances.
 9. Record both checksums and every warning in the artifact manifest.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-09-30)
 
 - [pymatgen I/O API](https://pymatgen.org/pymatgen.io.html)
 - [CIF parser and writer API](https://pymatgen.org/pymatgen.io.html)

@@ -1,15 +1,15 @@
 # Command-Line Interface
 
-The pyzotero CLI connects to your **local Zotero 7 installation** (not the remote Web API). It requires a running Zotero desktop app with local API access enabled:
+The pyzotero CLI connects to your **local Zotero installation** (Zotero 7+ for reads, Zotero 10+ for writes) (not the remote Web API). It requires a running Zotero desktop app with local API access enabled:
 
 **Zotero → Settings → Advanced → Allow other applications on this computer to communicate with Zotero**
 
 ## Installation
 
 ```bash
-uv add "pyzotero[cli]"
+uv add "pyzotero[cli]==1.15.2"
 # or run without installing:
-uvx --from "pyzotero[cli]" pyzotero search -q "your query"
+uvx --from "pyzotero[cli]==1.15.2" pyzotero search -q "your query"
 ```
 
 ## Searching
@@ -100,3 +100,22 @@ Use `--json` for structured JSON output suitable for piping to other tools.
 - `--fulltext` expands search to PDF content; results show parent bibliographic items (not raw attachments)
 - Multiple `--tag` flags use AND logic
 - Multiple `--itemtype` flags use OR logic
+
+## Authorized Local Writes (Zotero 10+)
+
+The CLI also supports local writes in the reviewed 1.15.2 release. These are illustrative commands, not part of the read-only smoke test:
+
+```bash
+# Zotero displays its authorization dialog; choose the scope you intend.
+pyzotero authorize --app-name "Research library tool"
+pyzotero listitemfields journalArticle
+pyzotero createitem items.json --json
+pyzotero createcollection "Review papers" --json
+pyzotero addtocollection COLKEY ITEMKEY --json
+pyzotero removefromcollection COLKEY ITEMKEY --json
+pyzotero movetocollection --from OLDCOLKEY --to NEWCOLKEY ITEMKEY --json
+```
+
+`items.json` contains an editable item object or array of objects. Validate bibliographic metadata before importing. The stored persistent local key and server ID are in `$XDG_CONFIG_HOME/pyzotero/local-api-key.json` (default `~/.config/pyzotero/local-api-key.json`); a Web API key does not authorize these commands. Collection membership commands update one item at a time.
+
+For Semantic Scholar CLI commands (`related`, `citations`, `references`, `s2search`), network access is required; see the limitations in [mcp.md](mcp.md). Sources: [CLI documentation](https://pyzotero.readthedocs.io/en/latest/#command-line-interface), [release CLI source](https://github.com/urschrei/pyzotero/blob/v1.15.2/src/pyzotero/cli.py).

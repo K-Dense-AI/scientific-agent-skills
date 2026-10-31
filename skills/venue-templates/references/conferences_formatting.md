@@ -2,7 +2,7 @@
 
 Current-year conference rules change independently by track. Use this guide to find the authoritative source and to understand the scope of the rule; do not carry a page limit or style file into another year.
 
-**Reviewed:** 2026-07-20
+**Reviewed:** 2026-10-01
 
 ## How to Use This Guide
 
@@ -30,7 +30,8 @@ Official instructions and files override every summary below.
 **Initial submission**
 
 - Up to **9 content pages**, including figures.
-- Additional pages containing acknowledgments, references, the required paper checklist, and optional technical appendices do not count as content pages.
+- References, optional technical appendices, and the mandatory checklist are outside the initial content limit; acknowledgments must be omitted for review.
+- Camera-ready main content may use **10 pages**. The `neurips-2026` helper preset remains the 9-page initial limit.
 - Omit both the `final` and `preprint` style options; the official style then anonymizes the submission and adds line numbers.
 - Do not include acknowledgments in the anonymized submission.
 - The **NeurIPS Paper Checklist is required**; omitting it can cause desk rejection.
@@ -92,7 +93,13 @@ Use the exact NeurIPS 2026 package. The bundled `assets/journals/neurips_article
 **Rebuttal**
 
 - The rebuttal is a one-page PDF using the rebuttal template from the author kit.
+- CVPR discourages new contributions or unrequested experimental results in rebuttals; a general recommendation to add new experiments does not override this policy.
 - It must remain anonymous and may not add external material.
+
+## ARR and CHI 2026
+
+- [ARR current call](https://aclrollingreview.org/cfp): long/short papers use 8/4 content pages; Limitations are required after the conclusion, outside the content limit. Verify appendix and ethical-considerations placement in the call. ARR reviews are not public merely because the system uses OpenReview. The October 2026 cycle introduces a qualified service-contributor requirement and capacity caps; check the call before promising review.
+- [CHI 2026 papers](https://chi2026.acm.org/authors/papers/) and [publication formats](https://chi2026.acm.org/chi-publication-formats/): review uses a single-column anonymous manuscript. For LaTeX, use `\documentclass[manuscript,review,anonymous]{acmart}`, not the legacy `sigchi` option. Final production goes through TAPS.
 
 ## Other Conference Families
 
@@ -103,12 +110,12 @@ The following links are discovery starting points, not cached requirements.
 | AAAI | https://aaai.org/conference/aaai/ | Use the target year's author kit |
 | IJCAI | https://www.ijcai.org/ | Use the target year's call and style |
 | ACL / ARR | https://aclrollingreview.org/ | Check ARR submission requirements and the committing venue |
-| EMNLP | https://www.emnlp.org/ | Check the current call and ACL style package |
+| EMNLP | https://sigdat.org/ | Check the current call and ACL style package |
 | ACM CHI | https://chi.acm.org/ | Check the current papers track and ACM workflow |
 | ACM SIGKDD | https://kdd.org/ | Check the exact track; limits differ |
 | ACM SIGIR | https://sigir.org/ | Check the target year's call |
-| USENIX Security | https://www.usenix.org/conference/usenixsecurity | Check the current submission cycle and artifact rules |
-| ISMB | https://www.iscb.org/ismb | Check the proceedings track and journal instructions |
+| USENIX Security | https://www.usenix.org/conferences/security | Check the current submission cycle and artifact rules |
+| ISMB | https://www.iscb.org/conferences-events/about-ismb | Check the proceedings track and journal instructions |
 | RECOMB | https://www.recomb.org/ | Check the target year's Springer/author kit |
 | PSB | https://psb.stanford.edu/ | Check the current author instructions |
 | IEEE conferences | https://conferences.ieeeauthorcenter.ieee.org/ | Use the conference-selected IEEE template |

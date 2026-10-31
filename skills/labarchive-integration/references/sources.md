@@ -1,10 +1,14 @@
 # Sources and Verification Notes
 
-Research date: **2026-07-23**.
+Research date: **2026-09-30**.
 
-Official LabArchives pages were located with `parallel-cli search` and read with
-`parallel-cli extract`. GitHub repository metadata was cross-checked with
-GitHub's API. No search output or credential material is stored in this skill.
+Official LabArchives help pages were read through the web tool. The shared API
+notebook was read with fresh `parallel-cli extract` requests and by navigating
+its public tree in Chrome, because basic extraction returned an empty shell
+and one container-page extraction redirected to login. Browser reading resolved
+that gap without authentication. PyPI and GitHub public metadata were checked
+for optional community clients. No authenticated API requests, remote writes,
+or product-integration transfers were performed.
 
 ## Official API sources
 
@@ -89,7 +93,7 @@ https://mynotebook.labarchives.com/share/LabArchives%20API/MTQ0LjN8MjcvMTExL1RyZ
   `X-LabArchives-LabId`, `X-LabArchives-Signature`, and
   `X-LabArchives-Expires`.
 - Route parameters are included in the signature input; query parameters are
-  excluded.
+  excluded. The method-specific `users/me` exception omits the Lab ID header.
 
 ### Inventory API v1 item creation
 
@@ -97,9 +101,50 @@ https://mynotebook.labarchives.com/share/LabArchives%20API/MTg4LjV8MjcvMTQ1L1RyZ
 
 - Page revision: **2026-04-02**
 - The public navigation labels the Inventory surface **APIs (v1)**.
-- Explicitly documents `POST /public/v1/inventory` and its JSON schema.
+- Explicitly documents `POST /public/v1/inventory` and its JSON body fields.
 - The navigation also exposes read/update item routes and sections for item
   types, orders, storage locations, and vendors.
+
+### Method-level audit
+
+Opened every endpoint named by this skill through **ELN API Classes** or
+**Inventory > APIs (v1)** in the official notebook:
+
+- `entries/entry_info`: GET, `uid`/`eid`, optional data/comment flags; XML.
+- `entries/entry_attachment`: GET, `uid`/`eid`, raw application file and
+  `Content-Disposition`, not an LA container ZIP.
+- `notebooks/notebook_backup`: GET, owner `uid`/`nbid`, optional `json` and
+  `no_attachments`; `.7z` archive. Internal archive schema remains access-gated.
+- `users/user_access_info`: GET, `login_or_email` and authorization-code/token
+  `password`, signed query; returns UID and auto-login permission in XML.
+- `users/user_info_via_id`: GET with UID; honor auto-login permission and the
+  documented restricted purpose of `authenticated=true`.
+- `utilities/epoch_time`: GET with `akid`, no `sig`/`expires`; epoch milliseconds.
+- `utilities/api_base_urls`: signed GET; XML region URL/description list. Its
+  older example uses browser hosts, inconsistent with the newer API overview.
+- Inventory `GET /public/v1/users/me`: lab discovery, no Lab ID needed;
+  https://mynotebook.labarchives.com/share/LabArchives%20API/MTQ4LjIwMDAwMDAwMDAwMDAyfDI3LzExNC9UcmVlTm9kZS8zODc0Mjc0OTI5fDM3Ni4y
+- Inventory `GET /public/v1/inventory`: JSON array, `pageSize` at most 1000,
+  `pageNumber`, optional filters; out-of-stock items excluded by default.
+  Page-number origin/default and stable ordering are not specified.
+- Inventory `GET /public/v1/inventory/{itemId}`: one item JSON object, no query;
+  https://mynotebook.labarchives.com/share/LabArchives%20API/MTg0LjZ8MjcvMTQyLTIyMC9UcmVlTm9kZS8zMzkzMTkwNjY5fDQ2OC41OTk5OTk5OTk5OTk5Nw==
+- Inventory `GET /public/v1/inventory/{itemId}/attachments`: ZIP bytes.
+- Inventory POST create and update: `name` and `typeId` marked required, HTTP
+  200 item detail; examples include comments that must be removed for valid JSON.
+
+**Inventory > Overview** explicitly publishes `https://iapi.labarchives.com`,
+request `Content-Type: application/json`, JSON/ZIP response media types, and
+v1 version/deprecation policy. It does not provide a regional variant table.
+Navigate there from the official notebook linked above; navigation does not
+update its address bar, so the method titles identify the pages read.
+
+Additional direct method sources:
+
+- https://mynotebook.labarchives.com/share/LabArchives%2520API/MjAuOHwyNy8xNi9UcmVlTm9kZS8xMTk0MTIyNDl8NTIuOA==
+- https://mynotebook.labarchives.com/share/LabArchives%2520API/MjIuMXwyNy8xNy9UcmVlTm9kZS8yODM1OTg2MjY1fDU2LjE=
+- https://mynotebook.labarchives.com/share/LabArchives%2520API/MTQuM3wyNy8xMS9UcmVlTm9kZS8yMTI3OTAwNDQzfDM2LjM=
+- https://mynotebook.labarchives.com/share/LabArchives%2520API/MTEwLjV8MjcvODUtMTM5L1RyZWVOb2RlLzk0NjQ2ODg4MXwyODAuNQ==
 
 ## Official product and help sources
 
@@ -115,7 +160,7 @@ https://help.labarchives.com/hc/en-us/articles/11728160845332-Using-an-Instituti
 
 https://help.labarchives.com/hc/en-us/articles/11723701830676-ELN-for-Research-Introduction-and-Subscription-Plans
 
-- Updated **2025-09-24**
+- Updated **2026-08-27**
 - Lists developer API access under the Enterprise plan.
 
 ### Inventory API entitlement
@@ -152,14 +197,12 @@ this skill.
 
 https://github.com/mcmero/labarchives-py
 
-GitHub metadata checked **2026-07-23**:
+GitHub metadata checked **2026-09-30**:
 
 - personal/community repository, not LabArchives-owned,
-- 3 commits total,
 - last commit: **2022-08-10** (`1b5b745baaf9`),
 - no tags,
 - no GitHub releases,
-- no matching PyPI project found in the searches performed,
 - no official LabArchives endorsement found.
 
 Conclusion: remove the old unpinned Git clone installation and do not recommend
@@ -171,36 +214,31 @@ this wrapper by default.
 - Source: https://github.com/nimh-dsst/labapi
 - Documentation: https://nimh-dsst.github.io/labapi/
 
-Verified status on **2026-07-23**:
+Verified status on **2026-09-30** using project-owned PyPI/GitHub metadata:
 
-- community project under the NIMH DSST GitHub organization, not
-  LabArchives-owned,
-- PyPI stable release **1.1.1**, published **2026-07-06**,
-- Python requirement **>=3.10**,
-- GitHub also had prerelease **1.2.0rc2**, published **2026-07-23**,
-- repository activity was current on the research date,
-- no official LabArchives endorsement was found.
+- NIMH DSST community project, not LabArchives-owned;
+- stable release **1.2.0**, published **2026-08-20** on PyPI and GitHub;
+- Python requirement **>=3.10**;
+- current PyPI `license_expression` and GitHub license both identify **MIT**;
+- no official LabArchives endorsement was identified in the reviewed vendor docs.
 
-The published documentation offers optional `.env` auto-loading, which this
-skill intentionally does not recommend for agent workflows. PyPI 1.1.1 and the
-current repository metadata also showed differing license labels during this
-review; inspect the exact selected artifact and license before adoption.
+Metadata sources:
 
-If an institution explicitly approves this client, pin the stable release rather
-than a branch or prerelease:
+- https://pypi.org/pypi/labapi/json
+- https://api.github.com/repos/nimh-dsst/labapi/releases
+- https://api.github.com/repos/nimh-dsst/labapi/license
 
-```bash
-uv add "labapi==1.1.1"
-```
-
-Review transitive dependencies and use only named process-environment variables.
-The standard-library bundled helpers remain the default here.
+This review checked release metadata, not client execution or transitive
+behavior. Adoption remains a separate institution-reviewed choice. Pin the
+selected release and inspect its credential-loading behavior; the bundled
+standard-library tools do not import or require this client.
 
 ## Claims not established by public official sources
 
 The research did **not** establish:
 
-- a complete absolute regional base-URL table for Inventory API v1,
+- an Inventory regional base-URL table beyond the published `iapi.labarchives.com`,
+- the Inventory list endpoint's page-number origin/default or stable ordering,
 - a numeric requests-per-minute or burst quota,
 - a generic LabArchives OAuth 2.0 authorization/token endpoint,
 - an official LabArchives Python SDK,

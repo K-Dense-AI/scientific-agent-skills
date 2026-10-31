@@ -6,7 +6,7 @@ Tell the user that runtime and cost grow with the row count and processor tier b
 
 ## Define columns
 
-Let the CLI suggest output columns:
+Let the CLI suggest output columns (this makes authenticated Ingest API calls):
 
 ```bash
 parallel-cli enrich suggest "Find the CEO and annual revenue" --json
@@ -48,13 +48,15 @@ parallel-cli enrich run \
   --enriched-columns '[{"name":"ceo","description":"Current CEO","type":"str"}]'
 ```
 
-The CLI also accepts a YAML configuration file:
+Inline `--data` is converted to CSV and supports CSV output only. For JSON output use `--source-type json` with a JSON file. Include a stable row key among the source columns when row identity matters.
+
+The Python package with `[cli]` extras also accepts a YAML configuration file; standalone binaries may not include those extras:
 
 ```bash
 parallel-cli enrich run "config.yaml"
 ```
 
-Use `--dry-run` to inspect a planned CLI-argument run without making API calls.
+Use `--dry-run` to inspect a planned CLI-argument run without making API calls. It does not work with YAML configs, and `--intent --dry-run` does not generate columns. Explicit `--enriched-columns` avoids repeating schema suggestions; select `--processor` explicitly when cost or reproducibility matters.
 
 ## Asynchronous workflow
 
@@ -64,22 +66,24 @@ Add `--no-wait --json` for a large job:
 parallel-cli enrich run "config.yaml" --no-wait --json
 ```
 
-Record the returned task-group ID and validate that it starts with `tgrp_` and contains no whitespace or shell metacharacters.
+This returns `taskgroup_id`, `url`, and `num_runs`; it does not write the configured target file. Record the returned task-group ID and validate that it starts with `tgrp_` and contains no whitespace or shell metacharacters.
 
 ```bash
 parallel-cli enrich status "tgrp_xxx" --json
 
 parallel-cli enrich poll "tgrp_xxx" \
-  --timeout 540 \
-  -o "enrichment-result.json" \
-  --json
+  --timeout 45 \
+  --poll-interval 5 \
+  -o "enrichment-result.json"
 ```
 
-Poll at most three times. If the task remains incomplete after 27 minutes total, stop and report its status and ID.
+Follow the bounded polling policy in SKILL.md. `enrich status` returns `status_counts`, `is_active`, and `num_runs`; inactive groups can still contain failed rows.
+
+`enrich poll` exports an array of `{input, output}` or `{input, error}` records, not the original target CSV/JSON table. Merge these records back by stable row key and verify counts before writing a requested table. In 0.9.3, `-o` also prints a human status line, even with `--json`; use the saved file as the JSON source, or use `--json` alone for stdout parsing. This poll export omits per-field basis and individual run IDs. When evidence retention is required, retrieve the Task Group run stream with `include_input=true&include_output=true` through the SDK/API and preserve `run`, `output.content`, and `output.basis`.
 
 ## Follow-up enrichment
 
-For a direct follow-up to a previous research or enrichment task, pass the exact returned interaction ID:
+For a direct follow-up to a previous research or individual enrichment Task Run, pass its returned interaction ID. Do not pass the task-group ID; CLI group exports do not expose individual interaction IDs:
 
 ```bash
 parallel-cli enrich run \

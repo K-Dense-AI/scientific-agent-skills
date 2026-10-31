@@ -1,6 +1,6 @@
 # Fictiv capabilities reference
 
-Material lists marked **(live)** were read from the app's configurator in Sep 2026. Everything else comes from Fictiv's Help Center, spec pages and marketing pages, which sometimes disagree with each other. **The live configurator wins.** Re-check with `scripts/list_dropdown_options.js` if a choice matters.
+Material lists marked **(live)** are the retained September 2026 configurator snapshot, not a fresh authenticated audit. Official Help Center and specification pages were reviewed on 2026-09-30. They sometimes conflict: confirm the selected process/material, final quote, drawing requirements and account-specific options before ordering. An upload widget's accept list is not proof that a format can be manufactured. Re-check dropdown options with `scripts/list_dropdown_options.js`.
 
 ## Contents
 1. Processes at a glance
@@ -14,11 +14,13 @@ Material lists marked **(live)** were read from the app's configurator in Sep 20
 9. Inspection and certificates
 10. Lead-time mechanics and holidays
 11. Compliance: export control, ITAR, IP, NDA
-12. Tools: Materials.AI, Atlas, Punchout; there is no public API
+12. Tools: Materials.AI, Atlas, Punchout; public API verification limits
 
 ---
 
 ## 1. Processes at a glance
+
+Advertised fastest times and recorded material counts are planning aids, not an order commitment. The configured quote determines availability, timing and cost; casting/molding sample timing does not imply completed production tooling/runs.
 
 | Process (card name) | Quote | "As fast as" | Account needed | Notes |
 |---|---|---|---|---|
@@ -26,7 +28,7 @@ Material lists marked **(live)** were read from the app's configurator in Sep 20
 | **3D Printing**: FDM, SLS, SLA, PolyJet, MJF, Carbon DLS | Instant | 1 day | any | 45+ materials, 11 finishes. No DMLS/metal printing listed. |
 | **Urethane Casting** | Instant for simple parts, else manual | 7–10 days | company email | 12 materials. About 20 castings per silicone mold. |
 | **Sheet Metal**: cutting, forming, welding, inserts | Instant | 2 days | any | 11 materials, 11 finishes |
-| **Injection Molding**: production, family, multi-cavity, overmolding | Instant IM for simple straight-pull parts (<8×8×4 in), else "within 48 hours" | 10 days (T1) | company email | 30+ standard / 100+ custom resins |
+| **Injection Molding**: production, family, multi-cavity, overmolding | Instant IM is advertised for eligible parts; other projects require review | 10 days (T1) | company email | 30+ standard / 100+ custom resins |
 | **Compression Molding** | Manual (48 h) | 10 days | company email | 9 elastomers |
 | **Die Casting**: high and low pressure | Manual (48 h) | 10–15 days | company email | 8 alloys, post-machining |
 
@@ -34,7 +36,7 @@ Fictiv doesn't design parts. It needs a 3D CAD file. Extrusion isn't a self-serv
 
 ## 2. File formats (live "Supported File Types" modal)
 
-"Files must contain a singular, solid body."
+Use the [supported-format list](https://www.fictiv.com/help/uploading-and-organizing-parts/what-file-formats-does-fictiv-support). In most cases files need one solid body. The [getting-started guide](https://www.fictiv.com/help/getting-started/how-to-get-started-with-fictiv) permits modeled-in CNC pins/inserts; other separate CNC bodies must be split. The dedicated 3DP multi-body policy has functional exceptions (§4.5).
 
 - **Parametric CAD (all processes):**
   - Dassault: `.sldprt .3dxml .catpart .catshape .cgr .dlv .exp .model .session`
@@ -43,11 +45,11 @@ Fictiv doesn't design parts. It needs a 3D CAD file. Extrusion isn't a self-serv
   - Autodesk: `.ipt`
   - PTC: `.prt`
   - Other: `.3dm .vda .x3dv .ifc .xpr .xas .mf1 .neu .prc .sab .sat .u3d`
-  - The uploader's accept list also includes `.3mf .arc .gts .ifczip .pkg .psm .pwd .unv .xmt .xmt_txt .wrl`.
+  - The historical uploader additionally listed `.3mf .arc .gts .ifczip .pkg .unv .xmt .xmt_txt`; public manufacturing support for these was not verified. Export STEP or a documented mesh format. `.wrl` and `.acs` are mesh formats, not CNC formats.
 - **Mesh (3D printing only):** `.stl .3ds .collada .dae .obj .off .ply .v3d .pts .tri .acs .x3d .wrl`
-- **PDF drawings:** must accompany a CAD file and can't be quoted alone.
+- **PDF drawings:** must accompany a CAD file and cannot be quoted alone. The drawing guide excludes normal 3DP drawing attachment, while the quoting-time guide describes a drawing for 3DP inserts: confirm that special workflow with Fictiv before promising it.
 - **Assemblies (BOM only, not quotable):** `.sldasm .asm .iam .catproduct`
-- **Not supported:** IGES, `.f3d`, `.slddrw`, `.dxf`, `.catdrawing`
+- **Not supported:** IGES, `.f3d`, `.slddrw`, `.dxf`, `.catdrawing`, native Solid Edge `.psm` and `.pwd` (export STEP).
 - **SolidWorks:** save a single configuration, because multi-config files are rejected.
 - **File size limit:** not documented.
 
@@ -81,14 +83,14 @@ Live menu for 6061:
 - **Powder Coating**
 - **Vibratory Tumble**
 
-Type II colors (live): Natural, Black, Blue, Gold, Red, all sealed. Type II adds about 2 days.
+Type II colors (live): Natural, Black, Blue, Gold, Red, all sealed. Type II added 2 days in the prior quote snapshot; the current [finish specification guide](https://www.fictiv.com/specifications/surface-finishes) lists a general 5–10 day range. Use the actual quote delta, not a fixed promise.
 
 Other finishes by material (Help Center):
 - **Steel and stainless:** Black Oxide, Passivation, Electropolish, Zinc Plating, ENP, Powder coat, Media blast, Tumble
 - **Acrylic:** Hand polish
 - **Polycarbonate:** Vapor polish
 
-The default is **As machined: ISO Grade N7, Ra 1.6 µm / 63 µin**.
+The recorded configurator default was **As machined: ISO Grade N7, Ra 1.6 µm / 63 µin**. The current [CNC specifications](https://www.fictiv.com/specifications/cnc-machining) also describe Ra 3.2 µm as a standard finish. Verify the actual quoted requirement rather than assuming either applies universally.
 - Custom Ra, cosmetic specs, masking, Type I anodize and custom colors all need a drawing and/or manual review.
 - Powder coat supports Pantone and RAL matching (ask).
 
@@ -117,7 +119,7 @@ The default is **As machined: ISO Grade N7, Ra 1.6 µm / 63 µin**.
 
 ### 3.5 Size limits
 
-- **Help Center:** mill 1828 × 500 × 152 mm (72 × 20 × 6 in); lathe Ø152 × 394 mm (6 × 12 in).
+- **Help Center:** mill 1828 × 500 × 152 mm (72 × 20 × 6 in); lathe Ø152 × 394 mm. The Help Center pairs this with 6 × 12 in, an inconsistent conversion (394 mm is about 15.5 in); confirm the actual turning envelope with Fictiv.
 - **Marketing:** up to 48 in length. A large-parts program reaches up to 10.5 m × 3.7 m × 1.2 m through sales.
 - Oversize parts go to manual review or sales.
 
@@ -155,17 +157,11 @@ These are what trigger Fictiv's warnings:
 
 ### 4.3 Tolerances
 
-Fictiv says 3DP tolerances "cannot be guaranteed". Typical values:
-- PolyJet ±0.2 mm
-- SLS and MJF ±0.3 mm
-- SLA ±(0.13 mm + 0.05 mm/mm)
-- FDM ±0.5 mm (PLA ±1.0 mm)
-
-Use CNC for critical fits.
+The current [3DP specification table](https://www.fictiv.com/specifications/3d-printing) gives typical values of FDM ±0.5 mm, SLA ±0.15 mm, SLS/MJF ±0.3 mm, and PolyJet/Carbon DLS ±0.1 mm. These are guidance, not a guarantee for a chosen part. The [older Help Center tolerance article](https://www.fictiv.com/help/fictiv-teams/what-are-your-standard-manufacturing-tolerances) still gives different PolyJet/SLA values and wider tolerances for large parts. Confirm critical dimensions and material-specific capability with Fictiv; consider CNC for critical fits.
 
 ### 4.4 Max build size (mm)
 
-- FDM ABS: 406×355×406 (Help Center); large-format FDM up to 914×610×914
+- FDM ABS: 406×355×406 (Help Center); large-format FDM up to 914×609×914
 - MJF: 380×284×380
 - SLS: 700×380×580
 - PolyJet: 490×390×200
@@ -178,7 +174,7 @@ Use CNC for critical fits.
 - Avoid trapped internal cavities in SLS (powder) and PolyJet (support).
 - Heat-set threaded inserts are available and go to engineering review in under 2 h.
 - DFM for 3DP is limited to wall-thickness checks.
-- Multiple bodies in one file are only acceptable for interlinked moving assemblies such as chains or hinges.
+- The [dedicated multi-body policy](https://www.fictiv.com/help/getting-a-quote/multiple-body-files-in-3d-printing) accepts functional interlinked bodies and conditionally processed assembly-to-STL exports, with collision/slicing risks. Separate floating bodies or duplicated parts in one file are unacceptable; upload unique parts separately and set quantity in the quote. The checker cannot classify these exceptions or establish printability.
 
 ## 5. Sheet metal
 
@@ -205,6 +201,8 @@ Use CNC for critical fits.
 
 ## 7. Injection molding
 
+Sources: [current service capabilities](https://www.fictiv.com/capabilities/injection-molding-services) and [design specifications](https://www.fictiv.com/specifications/injection-molding).
+
 - **Tooling:**
   - GlobalFlex (inserts in shared frames, CN, US or MX)
   - Traditional aluminum or steel (US)
@@ -223,8 +221,8 @@ Use CNC for critical fits.
 - **DFM report:**
   - Slides are marked Warning, Approval required or Revision required.
   - Annotate slides, then "Notify Fictiv".
-  - Customer owns the cavity and core. Storage is free for 2 years, then $500/yr.
-- **Tooling payment:** 100% upfront, or 50/50 with PO terms.
+  - Confirm tooling ownership/storage in the agreement. The current service page describes two years after the last order, then shipping/destruction at the customer's direction; a universal $500/year fee was not verified.
+- **Tooling payment:** read the actual tooling quote and approved credit terms; a universal upfront or 50/50 schedule was not verified in the current public workflow.
 
 ## 8. Compression molding and die casting
 
@@ -241,9 +239,11 @@ Use CNC for critical fits.
 |---|---|---|---|
 | Standard Inspection Report | Included automatically | free | — |
 | Advanced Inspection Report (CMM, laser, optical) | Config → Inspections → Add | per part; +3–5 business days | Bubbled drawing |
-| Certificate of Conformity | Config → Certificates → Add | about $100 | Drawing callout recommended |
-| Material Certification | Config → Certificates → Add | varies; not available for every material | — |
+| Certificate of Conformity | Config → Certificates → Add | $100 in the reviewed Help Center; verify quote | Drawing callout required |
+| Material Certification | Config → Certificates → Add | varies; availability not guaranteed | Drawing callout and request before ordering |
 | FAI, custom reports, PPAP | "Contact us" / chat / account manager | quoted | Drawing; discuss with AE *before* ordering |
+
+The [inspection/certificate protocol](https://www.fictiv.com/help/fictiv-teams/2372639-inspection-reports-and-certificates-of-conformance) requires drawing callouts and a discussion with the account executive before ordering. Drawing callouts alone may leave costs and added days absent from an RFQ. Check that the returned quote actually includes every requested deliverable.
 
 ## 10. Lead-time mechanics
 
@@ -251,23 +251,20 @@ Use CNC for critical fits.
   - The live checkout banner showed an **8 PM** cutoff. The Help Center says 3 pm PT. Trust the banner.
 - The quote's ship date is driven by the **slowest part**. Finishes, inspections and EDM add days.
 - **Six tiers per quote:** North America (USA or Mexico) Fastest / Standard / Cost-effective, and Overseas Fastest / Standard / Cost-effective. "USA only" restricts production to US suppliers.
-- **Holidays excluded:**
-  - US: Dec 24–25, Jan 1, MLK, Presidents', Memorial, Jul 4, Labor, Thanksgiving (2 days).
-  - Overseas: Chinese New Year (about a week), May 1–5, Oct 1–3, Mid-Autumn.
-  - The checkout banner links "holiday schedule".
-- Quotes are valid for **30 days**.
+- **Holidays:** use the quote ship date and checkout holiday schedule. The public [production-holidays article](https://www.fictiv.com/help/getting-started/what-are-fictivs-production-holidays) still lists 2024–2025 dates as of review; do not reuse that calendar for 2026 or infer a current closure duration.
+- Quotes normally expire after **30 days**, unless the quote explicitly states otherwise.
 
 ## 11. Compliance
 
 - **Export control:** EAR99 and 9E991 are self-serve. Other ECCNs go through Fictiv's off-platform request form.
 - **ITAR:** not supported. Files and quotes with ITAR language are auto-deleted. Uploading controlled data violates the Terms.
 - **If a user's part is defense, space or aerospace hardware, ask about its classification before uploading.**
-- **IP:** Fictiv strips identifying info before sharing with partners. Partners are under NDA. Fictiv may not train AI on customer data. A mutual NDA is available through the contact form (1–2 business days).
-- **End-use declaration:** Prototype or Commercial, on every quote.
+- **IP:** Fictiv strips identifying info before sharing with partners. Partners are under NDA. The [Terms](https://www.fictiv.com/terms) restrict generative-AI training but include an exception for irreversibly de-identified, aggregated data that cannot identify the customer or reconstruct their information; do not promise an unconditional ban. A mutual NDA is available through the contact form (1–2 business days).
+- **End-use declaration:** Prototype or Commercial; the international-shipping guide explicitly requires this for non-tooling quotes, including reorders. Read the current declaration for tooling-specific flows.
 
 ## 12. Tools and integrations
 
 - **Materials.AI:** an in-app ("Ask Materials.AI") and web (fictiv.com/ai/materials) chat for choosing materials. Informational only; needs a company email.
-- **Atlas** (atlas.fictiv.com): an AI CNC complexity score and manufacturability analysis. Early access / waitlist.
+- **Atlas** ([atlas.fictiv.com](https://atlas.fictiv.com)): a separate CNC analysis app. The reviewed public page exposes Upload part, My parts and Login, with feedback on setups, machine time and tooling; it is not a waitlist-only page. Its upload banner and Terms are separate: do not assume the main platform's export exceptions automatically apply.
 - **Punchout:** cXML to SAP Ariba, Coupa and Dynamics 365 (Teams only).
-- **No public API, SDK or CAD plugin exists.** Everything is done through the web app. The app talks to an internal GraphQL endpoint (`prod-graphql.fictiv.com`). It's undocumented, unsupported and subject to change, so drive the UI rather than calling it.
+- **No public customer API contract was found in the reviewed official documentation.** Use the browser workflow or a Fictiv-provisioned Punchout integration. The historical app snapshot referenced `prod-graphql.fictiv.com`, but no supported endpoint paths, authentication, GraphQL schema, request/response contract, version or pagination semantics were verified. Do not call that private service or invent an SDK. Absence of public documentation does not establish that no private integrations or CAD plugins exist.

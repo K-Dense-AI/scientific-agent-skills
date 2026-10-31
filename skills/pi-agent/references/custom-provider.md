@@ -2,12 +2,15 @@
 
 Source: https://pi.dev/docs/latest/custom-provider
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Extensions register providers with `pi.registerProvider()` for proxies, private deployments, OAuth/SSO, and non-standard streaming APIs. Two forms exist: a complete pi-ai `Provider` (preferred when you need custom authentication, filtering, refresh, or streaming) and the legacy provider-config object. `models.json` overrides compose **above** registered native providers.
 
 ## Complete Provider Form
 
 ```ts
-import { createProvider, openAICompletionsApi } from "@earendil-works/pi-ai";
+import { createProvider } from "@earendil-works/pi-ai";
+import * as openaiCompletionsApi from "@earendil-works/pi-ai/api/openai-completions";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
@@ -27,7 +30,7 @@ export default function (pi: ExtensionAPI) {
       },
     },
     models: [],
-    api: openAICompletionsApi(),
+    api: openaiCompletionsApi,
   }));
 }
 ```
@@ -59,7 +62,7 @@ pi.registerProvider("my-provider", {
 });
 ```
 
-Use an **async extension factory** for dynamic model discovery so models are registered before startup finishes and are visible to `pi --list-models`. Dynamic providers can also implement `refreshModels({ signal, store, ... })`; Pi calls it during model refresh and publishes the result synchronously. Persist through `context.store` only when the catalog should survive — live servers such as llama.cpp can ignore it.
+Use an **async extension factory** for dynamic model discovery so models are registered before startup finishes and are visible to `pi --list-models`. Dynamic providers can also implement `refreshModels(context)`. Complete Providers return nothing and call `context.publish({ update })` to install provider-owned state exposed by `getModels()`. Legacy config callbacks return model definitions. Use the generation-checked publish persistence contract, never the removed `context.store` pattern; pass `context.signal` to I/O.
 
 `pi.unregisterProvider(name)` removes that provider's dynamic models, API key fallback, OAuth registration, and custom stream handlers, restoring overridden built-in behavior. Calls made after the initial load phase take effect immediately — no `/reload`.
 
@@ -90,15 +93,15 @@ oauth: {
 
 ## Custom Streaming
 
-Implement `streamSimple(model, context, options?)` returning an `AssistantMessageEventStream` from `createAssistantMessageEventStream()`. Initialize an `AssistantMessage` (`role`, `content: []`, `api`, `provider`, `model`, zeroed `usage`, `stopReason: "pending"`, `timestamp`), then:
+Implement `streamSimple(model, context, options?)` with a normalized `TranscriptContext`: read prompt/tools with `getCurrentSystemPrompt(context.messages)` and `getCurrentTools(context.messages)`, or use `collapseSystemMessages(context)` for transports that cannot represent mid-conversation updates. Do not read removed `context.systemPrompt`/`context.tools`. Return an `AssistantMessageEventStream` from `createAssistantMessageEventStream()`. Initialize an `AssistantMessage` (`role`, `content: []`, `api`, `provider`, `model`, zeroed `usage`, `stopReason: "pending"`, `timestamp`), then:
 
 1. `stream.push({ type: "start", partial: output })`
 2. Content events, tracking `contentIndex` per block: `text_start`, `text_delta`, `text_end`, `thinking_start`, `thinking_delta`, `thinking_end`, `toolcall_start`, `toolcall_delta`, `toolcall_end`
 3. `stream.push({ type: "done", reason, message })` or `{ type: "error", reason, error }`, then `stream.end()`
 
-`stopReason: "pending"` marks the partial message; set a terminal reason before pushing `done` (throw for `"error"`/`"aborted"`). Every event carries `partial` with the current `AssistantMessage` state — mutate `output.content` as data arrives and pass `output`. Tool calls accumulate JSON deltas, parse into `{ id, name, arguments }`, and finish with `toolcall_end` carrying the full `toolCall`. Update usage from the API response and call `calculateCost(model, output.usage)`. Register with `streamSimple` on the provider config.
+`stopReason: "pending"` marks the partial message; set a terminal reason before pushing `done` (throw for `"error"`/`"aborted"`). Content/start events carry `partial` with the current `AssistantMessage` state; terminal events instead carry `message` or `error` — mutate `output.content` as data arrives and pass `output`. Tool calls accumulate JSON deltas, parse into `{ id, name, arguments }`, and finish with `toolcall_end` carrying the full `toolCall`. Update usage from the API response and call `calculateCost(model, output.usage)`. Register with `streamSimple` on the provider config.
 
-Reference implementations in `packages/ai/src/providers/`: `anthropic.ts`, `mistral.ts`, `openai-completions.ts`, `openai-responses.ts`, `google.ts`, `amazon-bedrock.ts`.
+Reference implementations live in `packages/ai/src/api/`, including `anthropic-messages.ts`, `mistral-conversations.ts`, `openai-completions.ts`, `openai-responses.ts`, `google-generative-ai.ts`, and `bedrock-converse-stream.ts`. Honor `options.onPayload`, `options.onResponse`, and awaited `options.onProviderStreamEvent` plus cancellation and provider-scoped environment.
 
 ## Context Overflow Errors
 

@@ -203,7 +203,11 @@ def hdf5_inventory(
                         "compression": obj.compression,
                         "dtype": dtype_text,
                         "object_like": object_like,
-                        "shape": [int(value) for value in obj.shape],
+                        "shape": (
+                            [int(value) for value in obj.shape]
+                            if obj.shape is not None else None
+                        ),
+                        "null_dataspace": obj.shape is None,
                     },
                 )
                 if object_like:

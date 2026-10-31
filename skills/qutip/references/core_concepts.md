@@ -1,7 +1,7 @@
 # QuTiP 5.3 Core Concepts
 
-Research and API verification date: **2026-07-23**. Examples target
-`qutip==5.3.0`.
+Research and API verification date: **2026-10-01**. Examples target
+`qutip==5.3.1`.
 
 ## Units and the equation being solved
 
@@ -250,14 +250,13 @@ Useful superoperator constructors and conversions include:
 
 ```python
 from qutip import (
-    choi_to_kraus,
-    choi_to_super,
     kraus_to_super,
     spost,
     spre,
     sprepost,
-    super_to_choi,
-    super_to_kraus,
+    to_choi,
+    to_kraus,
+    to_super,
 )
 ```
 
@@ -292,9 +291,9 @@ collapse rates.
 
 It is a preflight audit, not a proof that the physical model is appropriate.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [QuTiP 5.3 quantum-object API](https://qutip.readthedocs.io/en/stable/apidoc/quantumobject.html)
 - [Tensor-product guide](https://qutip.readthedocs.io/en/stable/guide/guide-tensor.html)
-- [QuTiP 5.3.0 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.0)
+- [QuTiP 5.3.1 release notes](https://github.com/qutip/qutip/releases/tag/v5.3.1)
 - [QuTiP 5.3 changelog](https://qutip.readthedocs.io/en/stable/changelog.html)

@@ -105,7 +105,8 @@
 
 -   number: '016'
     title: Diffusion weighted imaging derivatives
-    pull_request: https://github.com/bids-standard/bids-specification/pull/2211
+    pull_request: https://github.com/bids-standard/bids-specification/pull/2258
+    html_preview: https://bids-specification--2258.org.readthedocs.build/en/2258/derivatives/diffusion-derivatives.html
     content:
     -   derivative
     leads:
@@ -118,15 +119,18 @@
     -   adapted general spatial derivatives proposal, meaning using <modality>map, like `dwimap`
     -   decided on using `params-` to denote different file types, for example `param-md` or `param-fa`
     -   updated meta-data
+    -   PR 2258 replaces earlier PR 2211 so maintainers can push changes during development
     blocking:
     google_doc_created:
-    pull_request_created:
+    pull_request_created: 2025-11
     pull_request_merged:
 
 -   number: '017'
     title: Generic BIDS connectivity data schema
     display: Connectivity schema
     google_doc: https://docs.google.com/document/d/1ugBdUF6dhElXdj3u9vw0iWjE6f_Bibsro3ah7sRV0GA/
+    pull_request: https://github.com/bids-standard/bids-specification/pull/1902
+    html_preview: https://bids-specification--1902.org.readthedocs.build/en/1902/
     content:
     -   derivative
     leads:
@@ -136,14 +140,17 @@
     status:
     -   specified different formats for dense and sparse matrices
     -   'proposed arrays in h5 or zarr to cover multi-dimensional matrices (for example: dynamic connectivity)'
+    -   schema-based PR opened to integrate the BEP into the specification
     blocking:
     google_doc_created: 2017-05
-    pull_request_created:
+    pull_request_created: 2024-08
     pull_request_merged:
 
 -   number: '021'
     title: Common Electrophysiological Derivatives
     google_doc: https://docs.google.com/document/d/1PmcVs7vg7Th-cGC-UrX8rAhKUHIzOI-uIOh69_mvdlw/
+    pull_request: https://github.com/bids-standard/bids-specification/pull/1680
+    html_preview: https://bids-specification--1680.org.readthedocs.build/en/1680/derivatives/ephys.html
     content:
     -   derivative
     leads:
@@ -171,12 +178,13 @@
     -   'Perspectives: Derivatives beyond channels by time data will be discussed at a later point'
     blocking:
     google_doc_created: 2018-05
-    pull_request_created:
+    pull_request_created: 2024-01
     pull_request_merged:
 
 -   number: '023'
     title: PET Preprocessing derivatives
     google_doc: https://docs.google.com/document/d/1yzsd1J9GT-aA0DWhdlgNr5LCu6_gvbjLyfvYq2FuxlY/
+    pull_request: https://github.com/bids-standard/bids-specification/pull/2339
     content:
     -   derivative
     leads:
@@ -199,8 +207,9 @@
     -   Need more example datasets (fore example different tracers) with different preprocessing choices to capture as most of the PET community as possible
     -   Need to finish alignment with other modalities
     -   Still need to agree on the level of information going into corresponding json files
+    -   Draft schema PR 2339 opened
     google_doc_created: 2018-08
-    pull_request_created:
+    pull_request_created: 2026-02
     pull_request_merged:
 
 -   number: '024'
@@ -368,10 +377,12 @@
 -   number: '036'
     title: Phenotypic Data Guidelines
     google_doc: https://docs.google.com/document/d/1WTkfES8L0vItZVyyR68fc-9cO03jS-kCnMnw6602pbc/
+    pull_request: https://github.com/bids-standard/bids-specification/pull/2123
+    html_preview: https://bids-specification--2123.org.readthedocs.build/en/2123/appendices/phenotype.html
     content:
     -   raw
     leads:
-    -   given-names: Eric
+    -   given-names: Eric A.
         family-names: Earl
     -   given-names: Samuel
         family-names: Guay
@@ -379,15 +390,18 @@
         family-names: Urchs
     -   given-names: Arshitha
         family-names: Basavaraj
+    -   given-names: Dustin
+        family-names: Moraczewski
     bids_maintainers:
     -   given-names: Chris
         family-names: Markiewicz
     -   given-names: Ross
         family-names: Blair
     status:
-    -   BEP entering community review period shortly.
-    -   BIDS specification PR 2123.
-    -   BIDS examples PR 465.
+    -   Made major revisions in advance of the upcoming October 2026 community review period.
+    -   BIDS Specification PR 2123.
+    -   BIDS Examples PR 465.
+    -   BIDS Validator PR 438.
     blocking:
     -   A successful community review.
     google_doc_created: 2021-10
@@ -598,6 +612,8 @@
     title: Diffusion Tractography
     display: Tractography
     google_doc: https://docs.google.com/document/d/1ubDQ2RhgjnfGqoeukzEkPV9YEHhfYMERrj7-3b0c2HI/edit
+    pull_request: https://github.com/bids-standard/bids-specification/pull/2333
+    html_preview: https://bids-specification--2333.org.readthedocs.build/en/2333/derivatives/diffusion-derivatives.html
     leads:
     -   given-names: Robert E.
         family-names: Smith
@@ -609,11 +625,12 @@
     -   Porting comprehensive description of streamline tractography mechanisms into specification - 10.1016/B978-0-12-817057-1.00023-8
     -   Determine appropriate resolution with TRX development - https://tee-ar-ex.github.io/trx-python/
     -   Decide on scope of BEP; e.g. whether to include tractometry, complex tract delineation
+    -   PR 2333 opened to port content from the google doc into the specification
     content:
     -   derivative
     blocking:
     google_doc_created: 2022-02
-    pull_request_created:
+    pull_request_created: 2026-01
     pull_request_merged:
 
 -   number: '047'

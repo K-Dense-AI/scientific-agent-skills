@@ -1,6 +1,6 @@
 # Chemistry and Molecular Formats
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Executable scope:** No chemistry-native format has a bundled parser. This file
 is a reference-only routing guide, not a support claim.
 
@@ -16,8 +16,8 @@ is a reference-only routing guide, not a support claim.
 | Genuine CSV/TSV/JSON/NPY/NPZ/HDF5 exports | General inspector only | Apply the exact general-format capability; no chemical semantics are inferred |
 
 The `.cif`, `.log`, `.out`, `.raw`, and `.dat` suffixes are ambiguous. The
-capability manifest reports reference-only status and does not sniff content or
-guess a producer.
+capability manifest registers `.cif` and `.raw` as reference-only; unregistered
+`.log`, `.out`, and `.dat` fail closed. It does not sniff content or guess a producer.
 
 ## PDB and PDBx/mmCIF
 
@@ -166,7 +166,8 @@ property text to shell commands or dynamic evaluation.
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
 - wwPDB, [File Formats and the PDB](https://www.wwpdb.org/documentation/file-formats-and-the-pdb)
   (PDBx/mmCIF is the official archive/working format; legacy PDB format 3.30

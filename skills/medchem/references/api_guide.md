@@ -1,6 +1,6 @@
 # Medchem API Reference
 
-Reference for **medchem 2.0.5**. Official docs: https://medchem-docs.datamol.io/stable/api/
+Reference for **medchem 2.1.1**, checked 2026-10-01 against current documentation and installed release source. Requires Python 3.11+. Official API: https://medchem-docs.datamol.io/stable/api/medchem.rules.html
 
 ## Module: medchem.rules
 
@@ -89,12 +89,14 @@ mc.rules.list_descriptors()  # property names for query language
 ChEMBL-derived structural alert filter sets (Glaxo, Dundee, BMS, etc.).
 
 ```python
-CommonAlertsFilters()
+CommonAlertsFilters(alerts_set=["BMS", "Dundee", "Glaxo"], alerts_db_path=None)
 ```
+
+The source defaults to **BMS only**, despite an older constructor docstring saying BMS+Dundee+Glaxo. Select sets explicitly.
 
 **Returns DataFrame columns:** `mol`, `pass_filter`, `status`, `reasons`
 
-- `status`: one of `"exclude"`, `"flag"`, `"annotations"`, `"ok"`
+- `status`: `"exclude"` or `"ok"` in the current common-alert implementation
 - `pass_filter`: bool — True if compound passes
 
 **Methods:**
@@ -114,11 +116,13 @@ NIBRFilters()
 
 **Returns DataFrame columns:** `mol`, `pass_filter`, `status`, `severity`, `reasons`, `n_covalent_motif`, `special_mol`
 
-- `severity`: 0 = clean; 1–9 = flags; ≥10 = excluded by default
+- `severity`: sum of flag scores; any explicit exclusion alert yields 10.
+- `status`: `"exclude"`, `"flag"`, `"annotations"`, or `"ok"`.
+- Class `pass_filter` rejects explicit exclusions only. Combine it with `severity < 10` to also reject accumulated flags. For prevalidated molecules, `functional.nibr_filter(max_severity=10)` supplies the severity cutoff. The functional wrapper checks severity only and can admit invalid inputs (reported by the class with severity zero); never use it as a parse-validity check.
 
 ### Lilly demerits (optional)
 
-Requires `mamba install lilly-medchem-rules`. Access via:
+Requires native tools installed with `medchem install-lilly` (C++/make/zlib/Ruby, source download and build; WSL on Windows). This native installation/execution was not exercised locally. Access via:
 
 ```python
 mc.functional.lilly_demerit_filter(mols, max_demerits=160, n_jobs=-1)
@@ -130,18 +134,17 @@ from medchem.structural.lilly_demerits import LillyDemeritsFilters
 
 ## Module: medchem.functional
 
-High-level boolean-mask API. **True = passes** (no alert / passes all rules).
+High-level boolean-mask API. **True = passes** (no alert / passes all rules). `return_idx=True` returns indices instead of the default NumPy mask. `alert_filter` uses the names from `CommonAlertsFilters.list_default_available_alerts()`; it does not validate unknown names, which can silently create an empty alert set. For `brenk` and `pains_a`, use `catalog_filter`. Its string interface deliberately rejects `nibr` and `bredt`; use `nibr_filter` and `bredt_filter` respectively. Raw NIBR catalog matching ignores severity and includes annotations.
 
 | Function | Description |
 |----------|-------------|
 | `rules_filter(mols, rules, n_jobs=None, ...)` | Apply rule list |
 | `nibr_filter(mols, max_severity=10, n_jobs=None, ...)` | NIBR filter |
-| `alert_filter(mols, alerts, alerts_db=None, n_jobs=1, ...)` | Named alert catalogs |
-| `catalog_filter(mols, catalogs, n_jobs=-1, ...)` | RDKit FilterCatalog list |
+| `alert_filter(mols, alerts, alerts_db=None, n_jobs=1, ...)` | Common-alert collection names, case-insensitive |
+| `catalog_filter(mols, catalogs, n_jobs=-1, ...)` | Named catalogs or RDKit FilterCatalog objects |
 | `complexity_filter(mols, complexity_metric="bertz", limit="99", ...)` | Complexity threshold |
 | `lilly_demerit_filter(mols, max_demerits=160, ...)` | Lilly demerits (optional) |
 | `chemical_group_filter(mols, chemical_group, ...)` | Exclude group matches |
-| `catalog_filter(mols, catalogs, ...)` | Custom catalog list |
 | `bredt_filter(mols, ...)` | Bredt instability filter |
 | `macrocycle_filter(mols, ...)` | Macrocycle filter |
 | `protecting_groups_filter(mols, ...)` | Protecting group filter |
@@ -149,6 +152,13 @@ High-level boolean-mask API. **True = passes** (no alert / passes all rules).
 | `symmetry_filter(mols, ...)` | Symmetry filter |
 
 ---
+
+In 2.1.1, `bredt_filter` kekulizes supplied RDKit objects in place, changing later aromatic substructure/PAINS matches. Preserve the shared input molecules by copying them:
+
+```python
+from rdkit import Chem
+passes_bredt = mc.functional.bredt_filter([Chem.Mol(mol) for mol in mol_list], n_jobs=1)
+```
 
 ## Module: medchem.catalogs
 
@@ -171,7 +181,7 @@ mc.catalogs.NamedCatalogs.bredt()
 
 ```python
 catalog_from_smarts(smarts_list)
-merge_catalogs(catalogs)
+merge_catalogs(*catalogs)
 list_named_catalogs()
 ```
 
@@ -191,12 +201,14 @@ ChemicalGroup(groups=None, n_jobs=None, groups_db=None)
 
 ```python
 has_match(mol, exact_match=False, terminal_only=False) -> bool
-get_matches(mol, use_smiles=True, exact_match=False, terminal_only=False) -> dict
-filter(mols) -> list[Mol]
-get_catalog() -> FilterCatalog
+get_matches(mol, use_smiles=True, exact_match=False, terminal_only=False) -> pd.DataFrame  # None for invalid input
+filter(names, fuzzy=False) -> ChemicalGroup  # narrows pattern names in place
+get_catalog(exact_match=True) -> FilterCatalog
 list_groups() -> list
 list_hierarchy_groups() -> list
 ```
+
+Group collections contain substructure patterns, not whole-molecule classifications: `amino_acids` includes side-chain fragments that can match ethanol. Some collections contain unparseable SMILES patterns (observed for `electrophilic_warheads_for_kinases`); inspect `group.dataframe` and validate `mol`/`mol_smarts` before choosing a representation or curating a custom database.
 
 **Listing helpers:**
 
@@ -224,7 +236,9 @@ cf(mol)  # -> bool
 ```
 
 **Available metrics** (`ComplexityFilter.list_default_available_filters()`):
-`bertz`, `sas`, `qed`, `clogp`, `whitlock`, `barone`, `smcm`, `twc`
+`bertz`, `sas`, `qed`, `clogp`, `whitlock`, `barone`, `smcm`, `twc`, `spacialscore`.
+The default ZINC-15 table supports the first eight; `spacialscore` requires a custom threshold CSV.
+`limit` must be a provided table label: `median`, `90`, `99`, `999`, or `max` for ZINC-15; `999` is 99.9%. Thresholds depend on molecular-weight bins. The implementation uses `score < threshold` for every metric, including QED, and treats a NaN score as a pass. Validate finiteness separately when needed.
 
 **Direct metric functions:**
 
@@ -233,6 +247,7 @@ mc.complexity.WhitlockCT(mol)
 mc.complexity.BaroneCT(mol)
 mc.complexity.SMCM(mol)
 mc.complexity.TWC(mol)
+mc.complexity.SPS(mol)  # normalized SpacialScore
 ```
 
 For batch filtering, use `mc.functional.complexity_filter()`.
@@ -247,10 +262,11 @@ Scaffold-based substructure matching with per-atom constraint functions — **no
 
 ```python
 Constraints(core: Mol, constraint_fns: Dict[str, Callable], prop_name: str = "query")
-constraints(mol)  # -> bool or match details
+constraints(mol)  # -> bool
+constraints.get_matches(mol)  # tuple of matching atom-index tuples
 ```
 
-Use `RuleFilters` or the query language for MW/LogP/TPSA bounds.
+A constraint is active only when a core atom has `prop_name` set to a key in `constraint_fns`. Each function receives **one extracted side-chain molecule** and returns a boolean. See the executable example in `SKILL.md`; a three-argument lambda on an unannotated core never applies the intended check. Use `RuleFilters` or the query language for MW/LogP/TPSA bounds.
 
 ---
 
@@ -272,7 +288,7 @@ qf(mols, n_jobs=-1, progress=True, scheduler="processes") -> list[bool]
 | Rule match | `MATCHRULE("rule_of_five")` |
 | Alert catalog | `HASALERT("pains")` |
 | Property compare | `HASPROP("mw", <, 500)` |
-| Chemical group | `HASGROUP("privileged_scaffolds")` |
+| Functional-group name | `HASGROUP("Primary amines")` |
 | Substructure | `HASSUBSTRUCTURE("c1ccccc1")` |
 | Superstructure | `HASSUPERSTRUCTURE("CCO")` |
 | Boolean | `true`, `false` |
@@ -285,6 +301,8 @@ qf(mols, n_jobs=-1, progress=True, scheduler="processes") -> list[bool]
 'MATCHRULE("rule_of_cns") AND HASPROP("tpsa", <=, 90)'
 'NOT HASALERT("brenk") AND HASPROP("mw", >=, 200)'
 ```
+
+`HASGROUP` accepts exact map keys from `mc.groups.get_functional_group_map()`, not collection names from `list_default_chemical_groups()`. Some aliases from `list_functional_group_names()` (for example `primary_amine`) are missing from the map in 2.1.1 and raise `KeyError`; use a map key such as `Primary amines`. `HASSUPERSTRUCTURE("CCO")` tests whether the input molecule is contained in the query molecule. Invalid inputs should be separated before evaluating queries.
 
 ### Class: QueryOperator
 
@@ -305,7 +323,7 @@ mask = mc.functional.nibr_filter(mols=mol_list, n_jobs=-1)
 
 ```python
 rules_df = mc.rules.RuleFilters(rule_list=["rule_of_five"])(mols=mol_list, n_jobs=-1)
-alerts_df = mc.structural.CommonAlertsFilters()(mols=mol_list, n_jobs=-1)
+alerts_df = mc.structural.CommonAlertsFilters(alerts_set=["BMS", "Dundee", "Glaxo"])(mols=mol_list, n_jobs=-1)
 
 passing = [
     mol for i, mol in enumerate(mol_list)
@@ -321,7 +339,12 @@ import datamol as dm
 import medchem as mc
 
 df = pd.read_csv("molecules.csv")
-df["mol"] = df["smiles"].apply(dm.to_mol)
+df["mol"] = df["smiles"].apply(
+    lambda value: dm.to_mol(value) if isinstance(value, str) and value.strip() else None
+)
+invalid = df[df["mol"].isna()].copy()
+df = df[df["mol"].notna()].reset_index(drop=True)
+# Keep invalid separately with original source IDs; these are parse failures.
 
 results = mc.rules.RuleFilters(rule_list=["rule_of_five", "rule_of_cns"])(
     mols=df["mol"].tolist(), n_jobs=-1
@@ -329,3 +352,13 @@ results = mc.rules.RuleFilters(rule_list=["rule_of_five", "rule_of_cns"])(
 df = pd.concat([df, results.drop(columns=["mol"])], axis=1)
 filtered = df[df["pass_all"]]
 ```
+
+
+Upstream NIBR 2.1.1 also converts the catalog special-molecule flag with `bool(text)`; a nonempty `"0"` therefore becomes true. Treat `special_mol` as unreliable metadata until the raw catalog entry is checked, rather than evidence of a peptide or glycoside.
+
+## Upstream verification sources
+
+- [Release 2.1.1](https://github.com/datamol-io/medchem/releases/tag/2.1.1) and [2.1 migration](https://medchem-docs.datamol.io/stable/migration.html)
+- [Structural APIs](https://medchem-docs.datamol.io/stable/api/medchem.structural.html), [functional APIs](https://medchem-docs.datamol.io/stable/api/medchem.functional.html), [catalog APIs](https://medchem-docs.datamol.io/stable/api/medchem.catalogs.html)
+- [Groups](https://medchem-docs.datamol.io/stable/api/medchem.groups.html), [complexity](https://medchem-docs.datamol.io/stable/api/medchem.complexity.html), [constraints](https://medchem-docs.datamol.io/stable/api/medchem.constraints.html), [queries](https://medchem-docs.datamol.io/stable/api/medchem.query.html)
+- [Versioned source](https://github.com/datamol-io/medchem/tree/2.1.1/medchem) resolves docstring discrepancies. No remote service endpoints, authentication, or pagination are used by these local APIs. Native Lilly filtering remains an unexecuted optional integration.

@@ -6,19 +6,20 @@ let you stop early (for benefit, harm, or futility) or modify the design — sav
 participants, time, and money. The catch: every interim look at the data is another
 chance to cross the significance threshold by luck, so the error rate must be
 controlled explicitly. Peeking at accumulating data and stopping the first time
-p < 0.05 inflates the Type I error rate badly (to ~0.20+ with a few looks) — this is
-the core problem these methods solve.
+p < 0.05 can inflate the Type I error rate; the amount depends on the number and timing
+of looks, test, and correlation. This is the core problem these methods solve.
 
 ## Why naive peeking fails
 
 If you test at α = 0.05 at each of K interim analyses and stop at the first
-significant result, the *overall* false-positive rate is far above 0.05 — roughly
-0.08 for 2 looks, ~0.14 for 5, ~0.20 for 10. The fix is to spend your total α across
-the looks so the *cumulative* Type I error stays at 0.05.
+significant result, the *overall* false-positive rate generally exceeds 0.05.
+There is no universal inflation value for K looks. Calibrate the joint procedure
+(e.g. alpha spending with its required assumptions) so the cumulative error is
+controlled, then verify it under realistic null scenarios.
 
 ## Group-sequential designs
 
-Pre-plan a fixed number of interim analyses (e.g. after 25%, 50%, 75%, 100% of data)
+Pre-plan a fixed number of interim analyses (e.g. at information fractions 25%, 50%, 75%, 100%)
 and use **adjusted, more stringent boundaries** at each look so the overall α is
 preserved. Common boundary families:
 
@@ -30,7 +31,11 @@ preserved. Common boundary families:
   effects.
 - **Alpha-spending functions (Lan–DeMets):** generalize the above by defining how much
   α is "spent" as a function of information accrued, so the number and timing of looks
-  need not be fixed in advance — only the spending function is.
+  can vary under a pre-specified, valid monitoring plan. Information fractions
+  represent statistical information, not automatically enrolled-patient fractions.
+  Do not choose extra looks because an unblinded effect is nearly significant;
+  spending alone does not license such outcome-dependent monitoring. See the
+  [FDA adaptive-design guidance](https://www.fda.gov/media/78495/download).
 
 You can stop for:
 - **Efficacy** — the effect crosses the upper boundary.
@@ -40,15 +45,21 @@ You can stop for:
 
 Group-sequential designs require a modestly larger maximum sample size than a fixed
 design (to pay for the looks), but the *expected* sample size is usually smaller
-because many trials stop early.
+under scenarios where trials often stop early; report it under both null and
+plausible alternatives.
 
 ### Tooling
 
-Python support is thinner than for fixed designs; common options:
-- **statsmodels** has limited sequential utilities; for full boundary computation,
-  most practitioners call R packages via `rpy2` or a subprocess:
-  - R `gsDesign` — the standard for group-sequential boundaries and spending functions.
-  - R `rpact` — confirmatory adaptive and group-sequential designs.
+Use purpose-built boundary calculations; the bundled Python helpers generate
+allocation/DOE layouts, not interim boundaries. Official current options are:
+- R [`gsDesign::gsDesign`](https://keaven.github.io/gsDesign/reference/gsDesign.html):
+  `k` includes the final analysis, `timing` specifies information fractions, and
+  `test.type` distinguishes one-sided, symmetric two-sided, and binding/nonbinding
+  futility designs. Do not assume the default `alpha=0.025` is a two-sided 0.05 test.
+- R [`rpact::getDesignGroupSequential`](https://docs.rpact.org/reference/getDesignGroupSequential.html):
+  configure `kMax`, `informationRates`, `sided`, `alpha`, `typeOfDesign`, and
+  futility explicitly. These are documentation-verified pointers; this skill does
+  not ship or runtime-test an R boundary calculation.
 - For custom rules, **simulate** the whole sequential procedure (generate data, apply
   the boundaries look by look, repeat) to confirm the realized Type I error and to
   estimate expected sample size and power. This mirrors the simulation approach in the
@@ -73,7 +84,8 @@ unblinded treatment effect can inflate Type I error and bias the final effect es
 unless the method explicitly corrects for it. Two non-negotiables:
 1. **Pre-specify** the adaptation rule and the error-control method before the study.
 2. **Validate by simulation** that the *entire* procedure preserves the Type I error
-   rate and yields acceptable power and unbiased-enough estimates.
+   rate and yields acceptable power, estimator bias, confidence-interval coverage,
+   and expected/maximum sample sizes; report Monte Carlo uncertainty.
 
 ## When to use them
 

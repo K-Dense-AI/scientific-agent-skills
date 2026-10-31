@@ -3,7 +3,6 @@ Clustering analysis example with multiple algorithms, evaluation, and visualizat
 """
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -12,8 +11,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import (
     silhouette_score, calinski_harabasz_score, davies_bouldin_score
 )
-import warnings
-warnings.filterwarnings('ignore')
+from sklearn.utils.validation import check_array
 
 
 def preprocess_for_clustering(X, scale=True, pca_components=None):
@@ -34,7 +32,7 @@ def preprocess_for_clustering(X, scale=True, pca_components=None):
     array
         Preprocessed data
     """
-    X_processed = X.copy()
+    X_processed = check_array(X, ensure_min_samples=2, copy=True)
 
     if scale:
         scaler = StandardScaler()
@@ -50,7 +48,7 @@ def preprocess_for_clustering(X, scale=True, pca_components=None):
 
 def find_optimal_k_kmeans(X, k_range=range(2, 11)):
     """
-    Find optimal K for K-Means using elbow method and silhouette score.
+    Explore candidate K values with inertia and silhouette; no truth guarantee.
 
     Parameters:
     -----------
@@ -64,6 +62,11 @@ def find_optimal_k_kmeans(X, k_range=range(2, 11)):
     dict
         Dictionary with inertia and silhouette scores for each K
     """
+    X = check_array(X, ensure_min_samples=3)
+    k_range = list(k_range)
+    if not k_range or any(not isinstance(k, (int, np.integer)) or
+                          not 2 <= k < len(X) for k in k_range):
+        raise ValueError("k_range must contain integers with 2 <= k < n_samples")
     inertias = []
     silhouette_scores = []
 
@@ -72,7 +75,13 @@ def find_optimal_k_kmeans(X, k_range=range(2, 11)):
         labels = kmeans.fit_predict(X)
 
         inertias.append(kmeans.inertia_)
-        silhouette_scores.append(silhouette_score(X, labels))
+        # Duplicate rows can collapse requested clusters; an undefined metric
+        # must not be ranked as evidence for a particular K.
+        score = clustering_metrics(X, labels)['silhouette']
+        silhouette_scores.append(np.nan if score is None else score)
+
+    if not np.isfinite(silhouette_scores).any():
+        raise ValueError("No candidate produced 2 <= distinct labels < n_samples")
 
     # Plot results
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
@@ -97,8 +106,8 @@ def find_optimal_k_kmeans(X, k_range=range(2, 11)):
     plt.close()
 
     # Find best K based on silhouette score
-    best_k = k_range[np.argmax(silhouette_scores)]
-    print(f"\nRecommended K based on silhouette score: {best_k}")
+    best_k = k_range[int(np.nanargmax(silhouette_scores))]
+    print(f"\nCandidate K with highest silhouette (exploratory): {best_k}")
 
     return {
         'k_values': list(k_range),
@@ -108,93 +117,51 @@ def find_optimal_k_kmeans(X, k_range=range(2, 11)):
     }
 
 
+def clustering_metrics(X, labels):
+    """Score an explicit set of rows, preserving undefined metrics as None."""
+    n_labels = len(np.unique(labels))
+    if not 2 <= n_labels < len(labels):
+        return dict(silhouette=None, calinski_harabasz=None, davies_bouldin=None,
+                    metric_reason="Requires 2 <= distinct labels < scored samples")
+    return dict(silhouette=float(silhouette_score(X, labels)),
+                calinski_harabasz=float(calinski_harabasz_score(X, labels)),
+                davies_bouldin=float(davies_bouldin_score(X, labels)),
+                metric_reason=None)
+
+
 def compare_clustering_algorithms(X, n_clusters=3):
+    """Compare exploratory Euclidean clusterings on finite numeric features.
+
+    DBSCAN scores exclude noise and therefore describe a different population;
+    use n_scored/coverage and metric_reason when interpreting its scores.
+    Internal scores alone do not establish scientific clusters.
     """
-    Compare different clustering algorithms.
-
-    Parameters:
-    -----------
-    X : array-like
-        Feature matrix (should be scaled)
-    n_clusters : int
-        Number of clusters
-
-    Returns:
-    --------
-    dict
-        Dictionary with results for each algorithm
-    """
-    print("="*60)
-    print(f"Comparing Clustering Algorithms (n_clusters={n_clusters})")
-    print("="*60)
-
+    X = check_array(X, ensure_min_samples=2)
+    if not isinstance(n_clusters, (int, np.integer)) or not 1 <= n_clusters <= len(X):
+        raise ValueError("n_clusters must be an integer between 1 and n_samples")
     algorithms = {
         'K-Means': KMeans(n_clusters=n_clusters, random_state=42, n_init=10),
         'Agglomerative': AgglomerativeClustering(n_clusters=n_clusters, linkage='ward'),
-        'Gaussian Mixture': GaussianMixture(n_components=n_clusters, random_state=42)
+        'Gaussian Mixture': GaussianMixture(n_components=n_clusters, random_state=42),
+        'DBSCAN': DBSCAN(eps=0.5, min_samples=5),
     }
-
-    # DBSCAN doesn't require n_clusters
-    # We'll add it separately
-    dbscan = DBSCAN(eps=0.5, min_samples=5)
-    dbscan_labels = dbscan.fit_predict(X)
-
     results = {}
-
     for name, algorithm in algorithms.items():
         labels = algorithm.fit_predict(X)
-
-        # Calculate metrics
-        silhouette = silhouette_score(X, labels)
-        calinski = calinski_harabasz_score(X, labels)
-        davies = davies_bouldin_score(X, labels)
-
-        results[name] = {
-            'labels': labels,
-            'n_clusters': n_clusters,
-            'silhouette': silhouette,
-            'calinski_harabasz': calinski,
-            'davies_bouldin': davies
-        }
-
-        print(f"\n{name}:")
-        print(f"  Silhouette Score:       {silhouette:.4f} (higher is better)")
-        print(f"  Calinski-Harabasz:      {calinski:.4f} (higher is better)")
-        print(f"  Davies-Bouldin:         {davies:.4f} (lower is better)")
-
-    # DBSCAN results
-    n_clusters_dbscan = len(set(dbscan_labels)) - (1 if -1 in dbscan_labels else 0)
-    n_noise = list(dbscan_labels).count(-1)
-
-    if n_clusters_dbscan > 1:
-        # Only calculate metrics if we have multiple clusters
-        mask = dbscan_labels != -1  # Exclude noise
-        if mask.sum() > 0:
-            silhouette = silhouette_score(X[mask], dbscan_labels[mask])
-            calinski = calinski_harabasz_score(X[mask], dbscan_labels[mask])
-            davies = davies_bouldin_score(X[mask], dbscan_labels[mask])
-
-            results['DBSCAN'] = {
-                'labels': dbscan_labels,
-                'n_clusters': n_clusters_dbscan,
-                'n_noise': n_noise,
-                'silhouette': silhouette,
-                'calinski_harabasz': calinski,
-                'davies_bouldin': davies
-            }
-
-            print(f"\nDBSCAN:")
-            print(f"  Clusters found:         {n_clusters_dbscan}")
-            print(f"  Noise points:           {n_noise}")
-            print(f"  Silhouette Score:       {silhouette:.4f} (higher is better)")
-            print(f"  Calinski-Harabasz:      {calinski:.4f} (higher is better)")
-            print(f"  Davies-Bouldin:         {davies:.4f} (lower is better)")
-    else:
-        print(f"\nDBSCAN:")
-        print(f"  Clusters found:         {n_clusters_dbscan}")
-        print(f"  Noise points:           {n_noise}")
-        print("  Note: Insufficient clusters for metric calculation")
-
+        mask = labels != -1
+        n_scored = int(mask.sum())
+        result = dict(labels=labels, n_clusters=len(np.unique(labels[mask])),
+                      n_noise=int((~mask).sum()), n_scored=n_scored,
+                      coverage=n_scored / len(X),
+                      **clustering_metrics(X[mask], labels[mask]))
+        results[name] = result
+        print(f"\n{name}: {result['n_clusters']} clusters; "
+              f"{result['n_noise']} noise; coverage={result['coverage']:.1%}")
+        for metric in ('silhouette', 'calinski_harabasz', 'davies_bouldin'):
+            value = result[metric]
+            print(f"  {metric}: {value:.4f}" if value is not None else f"  {metric}: undefined")
+        if result['metric_reason']:
+            print(f"  {result['metric_reason']}")
     return results
 
 
@@ -211,7 +178,10 @@ def visualize_clusters(X, results, true_labels=None):
     true_labels : array-like or None
         True labels (if available) for comparison
     """
-    # Reduce to 2D using PCA
+    X = check_array(X, ensure_min_samples=2, ensure_min_features=2)
+    if not results and true_labels is None:
+        raise ValueError("At least one clustering result or true_labels is required")
+    # Reduce to 2D using PCA (display only; scores use the clustering space).
     pca = PCA(n_components=2)
     X_2d = pca.fit_transform(X)
 
@@ -255,8 +225,9 @@ def visualize_clusters(X, results, true_labels=None):
             ax.legend()
 
         title = f"{name} (K={result['n_clusters']})"
-        if 'silhouette' in result:
+        if result.get('silhouette') is not None:
             title += f"\nSilhouette: {result['silhouette']:.3f}"
+        title += f"\nCoverage: {result.get('coverage', 1.0):.0%}"
         ax.set_title(title)
         ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]:.2%})')
         ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]:.2%})')
@@ -368,7 +339,7 @@ if __name__ == "__main__":
     )
 
     # Add noise points
-    noise = np.random.randn(50, 2) * 3
+    noise = np.random.default_rng(42).normal(size=(50, 2)) * 3
     X_synth = np.vstack([X_synth, noise])
     y_synth_with_noise = np.concatenate([y_synth, np.full(50, -1)])
 

@@ -1,6 +1,6 @@
 # Bioinformatics and Genomics Formats
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Executable scope:** Bounded FASTA/FASTQ aggregate inspection only. All other
 formats below are reference-only.
 
@@ -8,8 +8,8 @@ formats below are reference-only.
 
 | Format | Bundled inspection | What it does |
 |---|---|---|
-| `.fasta`, `.fa`, `.fna` | Optional, `biopython==1.87` | Streams a bounded record/base prefix; length, alphabet, ambiguity, GC, and duplicate-header-token aggregates |
-| `.fastq`, `.fq` | Optional, `biopython==1.87` | Same plus bounded Phred+33 quality aggregates |
+| `.fasta`, `.fa`, `.fna` | Optional, `biopython==1.88` | Streams a bounded record/base prefix; length, alphabet, ambiguity, GC, and duplicate-header-token aggregates |
+| `.fastq`, `.fq` | Optional, `biopython==1.88` | Same plus bounded Phred+33 quality aggregates |
 | Compressed FASTA/FASTQ | No | `.gz`, `.bz2`, archives, URLs, pipes, and stdin are rejected |
 | SAM/BAM/CRAM | No | Reference-only HTS tooling |
 | VCF/BCF/gVCF | No | Reference-only version/reference-aware tooling |
@@ -27,7 +27,7 @@ FASTA is a record-oriented text convention: a `>` title line followed by
 sequence text, potentially wrapped across lines. The title is an identifier,
 not a trusted command, filename, URL, taxonomic fact, or unique database key.
 
-The bundled `sequence_inspector.py` uses Biopython 1.87's
+The bundled `sequence_inspector.py` uses Biopython 1.88's
 `SimpleFastaParser`, which the current Biopython tutorial recommends as a
 lower-overhead streaming parser for large FASTA files. It:
 
@@ -165,10 +165,10 @@ The matrix alone is incomplete. Validate all sidecars and ordering together.
 
 ## Pinned optional snapshot
 
-Biopython 1.87 was released on 2026-03-30 and requires Python 3.10+:
+Biopython 1.88 was released on 2026-08-06 and requires Python 3.10+:
 
 ```bash
-uv pip install "biopython==1.87"
+uv pip install "biopython==1.88"
 ```
 
 Biopython also depends on NumPy for parts of its API; lock the complete
@@ -176,12 +176,13 @@ environment for a study.
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
-- Biopython 1.87, [Sequence Input/Output tutorial](https://biopython.org/docs/latest/Tutorial/chapter_seqio.html)
+- Biopython 1.88, [Sequence Input/Output tutorial](https://biopython.org/docs/latest/Tutorial/chapter_seqio.html)
   (explicit format selection and low-level FASTA/FASTQ parsers).
-- [Biopython PyPI](https://pypi.org/project/biopython/), version 1.87,
-  released 2026-03-30.
+- [Biopython PyPI](https://pypi.org/project/biopython/), version 1.88,
+  released 2026-08-06.
 - GA4GH, [hts-specs repository](https://github.com/samtools/hts-specs)
   (SAM/BAM/CRAM, VCF/BCF, and related canonical specifications).
 - UCSC Genome Browser, [BED format FAQ](https://genome.ucsc.edu/FAQ/FAQformat.html#format1).

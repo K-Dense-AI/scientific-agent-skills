@@ -1,6 +1,6 @@
 # Study Reporting and Appraisal
 
-Checked 2026-07-23.
+Checked 2026-09-30.
 
 ## First Principle
 
@@ -14,6 +14,7 @@ Use risk-of-bias/applicability tools separately and preserve human judgments.
 |---|---|---|
 | Observational cohort/case-control/cross-sectional | STROBE | RECORD for routinely collected data |
 | Prediction model development or evaluation | TRIPOD+AI | PROBAST+AI |
+| LLM development, tuning, or evaluation research | TRIPOD-LLM | Task- and design-specific reporting |
 | Tumor prognostic marker | REMARK | Appropriate risk-of-bias and assay guidance |
 | Diagnostic accuracy | STARD | STARD-AI when the index test uses AI |
 | Randomized AI intervention protocol | Current SPIRIT base | SPIRIT-AI extension |
@@ -53,6 +54,10 @@ Report, at minimum:
 - subgroup performance and fairness considerations;
 - intended user, presentation, and limitations.
 
+### TRIPOD-LLM
+
+For research documentation concerning LLM development, tuning, prompting, or evaluation, use [TRIPOD-LLM](https://www.nature.com/articles/s41591-024-03425-5), published January 8, 2025. Its modular checklist depends on the research design and task. Record the model/version, prompts, evaluation setting, and human review; it is a reporting guideline, not a model-quality score. This does not add LLM calls, raw text handling, or care delivery to this skill.
+
 ### PROBAST+AI
 
 [PROBAST+AI](https://pubmed.ncbi.nlm.nih.gov/40127903), published March 24, 2025, replaces the original PROBAST for broad prediction-model assessment. It has two distinct parts:
@@ -71,16 +76,16 @@ Applicability is assessed for participants/data sources, predictors, and outcome
 
 ## Biomarker Studies
 
-Use the FDA-NIH [BEST Resource](https://www.ncbi.nlm.nih.gov/books/NBK326791/) for terminology. Distinguish:
+Use the FDA-NIH [BEST Glossary](https://www.ncbi.nlm.nih.gov/books/NBK338448/) (revised January 16, 2025) for terminology. Distinguish categories and roles:
 
 - diagnostic;
 - monitoring;
-- pharmacodynamic/response;
+- response, including pharmacodynamic and surrogate-endpoint biomarker roles;
+- multicomponent;
 - predictive;
 - prognostic;
 - safety;
-- susceptibility/risk;
-- surrogate endpoint biomarkers.
+- susceptibility/risk.
 
 A biomarker is not itself a measure of how a person feels, functions, or survives. Analytical validation, clinical validation, and clinical utility are distinct.
 
@@ -96,7 +101,7 @@ For tumor prognostic markers, use [REMARK](https://www.equator-network.org/repor
 - applicability and generalizability;
 - transparent participant flow and reference-standard handling.
 
-Use STARD-AI with STARD. Do not use it for a prognostic prediction model merely because the model returns a class.
+Use STARD-AI with STARD. The [July 13, 2026 author correction](https://www.nature.com/articles/s41591-026-04570-9) adds an omitted steering-committee author; it does not replace the checklist. Do not use it for a prognostic prediction model merely because the model returns a class.
 
 ## AI Trial Protocols and Reports
 
@@ -105,6 +110,8 @@ Use STARD-AI with STARD. Do not use it for a prognostic prediction model merely 
 - Use SPIRIT-AI for protocols evaluating an AI intervention.
 - Use CONSORT-AI for reports of randomized trials evaluating an AI intervention.
 - Apply them with the current generic [SPIRIT 2025](https://pubmed.ncbi.nlm.nih.gov/40295741) or [CONSORT 2025](https://www.bmj.com/content/389/bmj-2024-081123) statement, respectively.
+
+The [official extension catalogue](https://www.consort-spirit.org/extensions) still groups these AI extensions under SPIRIT 2013 and CONSORT 2010. Crosswalk their AI-specific items to the 2025 base checklists by content; do not assume the old item numbers match or describe them as updated 2025 AI extensions.
 
 AI extensions emphasize the intervention version, input acquisition/quality handling, human-AI interaction, integration requirements, errors/failures, and analysis of performance.
 

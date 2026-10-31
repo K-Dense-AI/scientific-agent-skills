@@ -1,0 +1,5 @@
+# The published native extensions import torch while preparing build metadata.
+# Keep the isolated build ABI aligned with tests/skill-requirements.toml.
+[extra-build-dependencies]
+torch-scatter = ["torch==2.0.0", "numpy==1.26.4", "setuptools==80.10.2"]
+torch-cluster = ["torch==2.0.0", "numpy==1.26.4", "setuptools==80.10.2"]

@@ -23,33 +23,33 @@ from pathlib import Path
 PRESETS = {
     "neurips-2026": {
         "max_content_pages": 9,
-        "excluded": "acknowledgments, references, checklist, and optional technical appendices",
-        "source": "https://neurips.cc/Conferences/2026/CallForPapers",
-        "checked": "2026-07-20",
+        "excluded": "references, checklist, and optional technical appendices; omit acknowledgments for review",
+        "source": "https://neurips.cc/Conferences/2026/MainTrackHandbook",
+        "checked": "2026-10-01",
     },
     "icml-2026": {
         "max_content_pages": 8,
         "excluded": "references and appendices",
         "source": "https://icml.cc/Conferences/2026/AuthorInstructions",
-        "checked": "2026-07-20",
+        "checked": "2026-10-01",
     },
     "iclr-2026": {
         "max_content_pages": 9,
         "excluded": "references and appendices",
         "source": "https://iclr.cc/Conferences/2026/AuthorGuide",
-        "checked": "2026-07-20",
+        "checked": "2026-10-01",
     },
     "cvpr-2026": {
         "max_content_pages": 8,
         "excluded": "cited references only",
         "source": "https://cvpr.thecvf.com/Conferences/2026/AuthorGuidelines",
-        "checked": "2026-07-20",
+        "checked": "2026-10-01",
     },
     "nsf-standard": {
         "max_content_pages": 15,
         "excluded": "all separately uploaded proposal components",
         "source": "https://www.nsf.gov/policies/pappg",
-        "checked": "2026-07-20",
+        "checked": "2026-10-01",
     },
     "nih-r01": {
         "max_content_pages": 12,
@@ -58,7 +58,7 @@ PRESETS = {
             "https://grants.nih.gov/grants-process/write-application/"
             "how-to-apply-application-guide/page-limits"
         ),
-        "checked": "2026-07-20",
+        "checked": "2026-10-01",
     },
 }
 
@@ -66,13 +66,16 @@ PRESETS = {
 def run_poppler(command: str, pdf_path: Path) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(
-            [command, str(pdf_path)],
+            [command, str(pdf_path.resolve())],
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
     except FileNotFoundError:
         return None
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"{command} timed out after 30 seconds") from error
     except subprocess.CalledProcessError as error:
         message = error.stderr.strip() or str(error)
         raise RuntimeError(f"{command} failed: {message}") from error
@@ -91,7 +94,8 @@ def pdf_info(pdf_path: Path) -> dict[str, str] | None:
     return info
 
 
-def embedded_fonts(pdf_path: Path) -> list[str] | None:
+def embedded_fonts(pdf_path: Path) -> list[dict[str, str | bool]] | None:
+    """Read all font rows, including fonts whose Poppler `emb` column is no."""
     result = run_poppler("pdffonts", pdf_path)
     if result is None:
         return None
@@ -99,9 +103,14 @@ def embedded_fonts(pdf_path: Path) -> list[str] | None:
     fonts = []
     for line in result.stdout.splitlines()[2:]:
         fields = line.split()
-        if fields:
-            fonts.append(fields[0])
-    return sorted(set(fonts))
+        if not fields:
+            continue
+        # Type can contain spaces ("CID TrueType", "Type 1"). The last
+        # five columns are always emb, sub, uni, object number, generation.
+        if len(fields) < 7 or fields[-5] not in {"yes", "no"}:
+            raise RuntimeError("Unrecognized pdffonts row; inspect font output manually")
+        fonts.append({"name": fields[0], "embedded": fields[-5] == "yes"})
+    return fonts
 
 
 def page_count_result(
@@ -157,7 +166,7 @@ def page_count_result(
     }
 
 
-def font_result(fonts: list[str] | None) -> dict[str, str]:
+def font_result(fonts: list[dict[str, str | bool]] | None) -> dict[str, str]:
     if fonts is None:
         return {
             "status": "skip",
@@ -166,13 +175,19 @@ def font_result(fonts: list[str] | None) -> dict[str, str]:
     if not fonts:
         return {
             "status": "manual",
-            "message": "No embedded fonts were reported; inspect the PDF manually.",
+            "message": "No font rows were reported; text may be outlined or rasterized. Inspect manually.",
+        }
+    missing = sorted({str(font["name"]) for font in fonts if not font["embedded"]})
+    if missing:
+        return {
+            "status": "fail",
+            "message": "Fonts not embedded: " + ", ".join(missing) + ". Re-export with fonts embedded.",
         }
     return {
         "status": "info",
         "message": (
             "Embedded font names: "
-            + ", ".join(fonts)
+            + ", ".join(sorted({str(font["name"]) for font in fonts}))
             + ". This does not verify font family or point size compliance."
         ),
     }
@@ -231,8 +246,9 @@ def parse_args() -> argparse.Namespace:
         description="Inspect page count, fonts, and metadata without claiming full compliance"
     )
     parser.add_argument("--file", required=True, help="PDF file to inspect")
-    parser.add_argument("--venue", choices=sorted(PRESETS), help="Verified preset")
-    parser.add_argument("--max-pages", type=int, help="Explicit maximum content pages")
+    limits = parser.add_mutually_exclusive_group()
+    limits.add_argument("--venue", choices=sorted(PRESETS), help="Dated initial-submission preset")
+    limits.add_argument("--max-pages", type=int, help="Explicit maximum content pages")
     parser.add_argument(
         "--content-pages",
         type=int,
@@ -274,6 +290,9 @@ def main() -> int:
         print("Warning: supply --source-url so the explicit limit is auditable.")
 
     checks = {item.strip() for item in args.check.split(",") if item.strip()}
+    if not checks:
+        print("Error: --check must select at least one inspection.")
+        return 2
     allowed = {"page-count", "fonts", "metadata", "all"}
     unknown = checks - allowed
     if unknown:
@@ -306,7 +325,7 @@ def main() -> int:
         print(f"Preset: {args.venue} (checked {checked})")
     print(f"Official source: {source_url or 'not supplied'}")
     for name, result in results.items():
-        print(f"\n{name.upper()} [{result['status']}]")
+        print(f"\n{name.upper()} [{result['status'].upper()}]")
         print(result["message"])
 
     if args.report:

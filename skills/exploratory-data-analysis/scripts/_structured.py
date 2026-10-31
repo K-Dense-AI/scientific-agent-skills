@@ -77,8 +77,9 @@ def _sample_array(array: Any, np: Any) -> Any:
         num=MAX_ARRAY_SAMPLE,
         dtype=np.int64,
     )
-    flat = array.reshape(-1)
-    return np.asarray(flat[positions])
+    # ndarray.flat indexes in C order without materializing a full C-order
+    # copy of a Fortran-contiguous memory map.
+    return np.asarray(array.flat[positions])
 
 
 def _array_report(
@@ -170,7 +171,7 @@ def inspect_numpy(
         import numpy as np
     except ImportError as exc:
         raise CliError(
-            'optional dependency missing; install with: uv pip install "numpy==2.5.1"'
+            'optional dependency missing; install with: uv pip install "numpy==2.5.3"'
         ) from exc
     if suffix == ".npy":
         try:

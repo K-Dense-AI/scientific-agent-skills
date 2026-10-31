@@ -123,7 +123,7 @@ for index, channel in enumerate(image.getChannels()):
             "label_redacted": True,
             "color": channel.getColor().getRGB(),
             "lut": channel.getLut(),
-            "reverse_intensity": channel.isReverseIntensity(),
+            "reverse_intensity": channel.isInverted(),
         }
     )
 ```
@@ -245,7 +245,8 @@ result = conn.createImageFromNumpySeq(
 
 Before execution:
 
-1. validate iterator plane order and exact expected plane count;
+1. use T-fastest plane order: `for z ...: for c ...: for t ...`, with
+   exactly `sizeZ * sizeC * sizeT` arrays of shape `(sizeY, sizeX)`;
 2. validate each shape and dtype;
 3. cap source planes and memory;
 4. confirm target dataset and group;

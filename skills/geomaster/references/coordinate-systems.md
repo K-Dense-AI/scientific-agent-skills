@@ -1,6 +1,6 @@
 # Coordinate Reference Systems (CRS)
 
-Complete guide to coordinate systems, projections, and transformations for geospatial data.
+Coordinate-system reference, reviewed 2026-10-01 against PyProj/PROJ. Code with external data is illustrative. CRS names were checked against the installed PROJ database; a numerical round trip does not establish datum accuracy or grid availability.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Complete guide to coordinate systems, projections, and transformations for geosp
 
 A Coordinate Reference System defines how coordinates relate to positions on Earth:
 
-- **Geographic CRS**: Uses latitude/longitude (degrees)
+- **Geographic CRS**: Uses angular latitude/longitude; usually degrees, but inspect axis units
 - **Projected CRS**: Uses Cartesian coordinates (meters, feet)
 - **Vertical CRS**: Defines height/depth (e.g., ellipsoidal heights)
 
@@ -44,25 +44,25 @@ A Coordinate Reference System defines how coordinates relate to positions on Ear
 | 4326 | WGS 84 | Global | GPS default, use for storage |
 | 4269 | NAD83 | North America | USGS data, slightly different from WGS84 |
 | 4258 | ETRS89 | Europe | European reference frame |
-| 4612 | GDA94 | Australia | Australian datum |
+| 4283 | GDA94 | Australia | Australian datum |
 
 ### Projected CRS (Meters)
 
 | EPSG | Name | Area | Distortion | Notes |
 |------|------|------|------------|-------|
 | 3857 | Web Mercator | Global (85°S-85°N) | High near poles | Web maps (Google, OSM) |
-| 32601-32660 | UTM Zone N | Global (1° bands) | <1% per zone | Metric calculations |
-| 32701-32760 | UTM Zone S | Global (1° bands) | <1% per zone | Southern hemisphere |
-| 3395 | Mercator | World | Moderate | World maps |
+| 32601-32660 | UTM Zone N | 6° longitude zones | Check area of use | Metric calculations |
+| 32701-32760 | UTM Zone S | 6° longitude zones | Check area of use | Southern hemisphere |
+| 3395 | World Mercator | World | Increases toward poles | Conformal, not equal-area |
 | 5070 | CONUS Albers | USA (conterminous) | Low | US national mapping |
 | 2154 | Lambert-93 | France | Very low | French national projection |
 
 ### Regional Projections
 
 **United States:**
-- EPSG:5070 - US National Atlas Equal Area (CONUS)
-- EPSG:6350 - US National Atlas (Alaska)
-- EPSG:102003 - USA Contiguous Albers Equal Area
+- EPSG:5070 - NAD83 / Conus Albers
+- EPSG:3338 - NAD83 / Alaska Albers
+- ESRI:102003 - USA Contiguous Albers Equal Area
 - EPSG:2227 - California Zone 3 (US Feet)
 
 **Europe:**
@@ -72,7 +72,7 @@ A Coordinate Reference System defines how coordinates relate to positions on Ear
 - EPSG:25832-25836 - UTM zones (ETRS89)
 
 **Other:**
-- EPSG:3112 - GDA94 / MGA zone 52 (Australia)
+- EPSG:3112 - GDA94 / Geoscience Australia Lambert (Australia)
 - EPSG:2056 - CH1903+ / LV95 (Switzerland)
 - EPSG:4326 - WGS 84 (global default)
 
@@ -88,7 +88,7 @@ A Coordinate Reference System defines how coordinates relate to positions on Ear
 
 ```python
 # Bad: Distance calculation in geographic CRS
-gpd.geographic_crs = "EPSG:4326"
+# Assume gdf already has a verified geographic CRS
 distance = gdf.geometry.length  # WRONG! Returns degrees, not meters
 
 # Good: Calculate distance in projected CRS
@@ -108,7 +108,7 @@ distance_m = gdf_projected.geometry.length  # Correct: meters
 import geopandas as gpd
 
 # Project to appropriate UTM zone
-gdf = gpd.to_crs(gdf.estimate_utm_crs())
+gdf = gdf.to_crs(gdf.estimate_utm_crs())
 
 # Now area and distance are accurate
 area_sqm = gdf.geometry.area
@@ -141,10 +141,12 @@ Earth is divided into 60 zones (6° longitude each):
 
 ```python
 def get_utm_zone(longitude, latitude):
-    """Get UTM zone EPSG code from coordinates."""
+    """Nominal 6-degree zone only; special Norway/Svalbard zones need registry lookup."""
     import math
 
-    zone = math.floor((longitude + 180) / 6) + 1
+    if not (-180 <= longitude <= 180 and -80 <= latitude <= 84):
+        raise ValueError('Outside the nominal UTM domain')
+    zone = min(60, math.floor((longitude + 180) / 6) + 1)
 
     if latitude >= 0:
         epsg = 32600 + zone  # Northern hemisphere
@@ -179,9 +181,9 @@ gdf_projected = gdf.to_crs(utm_crs)
 - EPSG:5041 - UPS North (Arctic)
 - EPSG:5042 - UPS South (Antarctic)
 
-**UTM Non-standard:**
+**Other national grids (not UTM):**
 - EPSG:31466-31469 - German Gauss-Krüger zones
-- EPSG:2056 - Swiss LV95 (based on UTM principles)
+- EPSG:2056 - Swiss LV95 (oblique Mercator)
 
 ## Transformations
 
@@ -193,7 +195,7 @@ from pyproj import Transformer
 # Create transformer
 transformer = Transformer.from_crs(
     "EPSG:4326",  # WGS 84 (lat/lon)
-    "EPSG:32633", # UTM Zone 33N (meters)
+    "EPSG:32610", # UTM Zone 10N for this California point
     always_xy=True  # Input: x=lon, y=lat (not y=lat, x=lon)
 )
 
@@ -229,7 +231,7 @@ print(f"Name: {crs.name}")
 print(f"Type: {crs.type_name}")
 print(f"Area of use: {crs.area_of_use.name}")
 print(f"Datum: {crs.datum.name}")
-print(f"Ellipsoid: {crs.ellipsoid_name}")
+print(f"Ellipsoid: {crs.ellipsoid.name}")
 ```
 
 ## Best Practices
@@ -244,9 +246,9 @@ gdf = gpd.read_file('data.geojson')
 # Check CRS immediately
 print(f"CRS: {gdf.crs}")  # Should never be None!
 
-# If None, set it
+# If absent, obtain the source CRS from metadata; never guess it from bounds.
 if gdf.crs is None:
-    gdf.set_crs("EPSG:4326", inplace=True)
+    raise ValueError("Source CRS is unknown")
 ```
 
 ### 2. Verify CRS Before Operations
@@ -254,6 +256,8 @@ if gdf.crs is None:
 ```python
 def ensure_same_crs(gdf1, gdf2):
     """Ensure two GeoDataFrames have same CRS."""
+    if gdf1.crs is None or gdf2.crs is None:
+        raise ValueError("Source CRS is unknown")
     if gdf1.crs != gdf2.crs:
         gdf2 = gdf2.to_crs(gdf1.crs)
         print(f"Reprojected gdf2 to {gdf1.crs}")
@@ -271,7 +275,7 @@ result = gpd.sjoin(points, zones, predicate='within')
 gdf_local = gdf.to_crs(gdf.estimate_utm_crs())
 
 # For national/regional analysis
-gdf_us = gdf.to_crs("EPSG:5070")  # US National Atlas Equal Area
+gdf_us = gdf.to_crs("EPSG:5070")  # NAD83 / Conus Albers
 gdf_eu = gdf.to_crs("EPSG:3035")  # Europe Equal Area
 
 # For web visualization

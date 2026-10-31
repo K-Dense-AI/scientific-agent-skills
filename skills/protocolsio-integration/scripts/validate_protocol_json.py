@@ -68,7 +68,7 @@ def _protocol_object(payload: Any) -> Mapping[str, Any]:
     if protocol is None:
         nested = payload.get("payload")
         if isinstance(nested, Mapping):
-            protocol = nested.get("protocol")
+            protocol = nested.get("protocol", nested)
     if protocol is None:
         protocol = payload
     if not isinstance(protocol, Mapping):
@@ -243,7 +243,9 @@ def validate_and_summarize(
         "id": _bounded_int(protocol.get("id"), name="id"),
         "guid": _bounded_string(protocol.get("guid"), name="guid", maximum=128),
         "uri": _bounded_string(protocol.get("uri"), name="uri"),
-        "doi": _bounded_string(protocol.get("doi"), name="doi"),
+        "doi": _bounded_string(
+            None if protocol.get("doi") == "" else protocol.get("doi"), name="doi"
+        ),
         "version_uri": _bounded_string(
             protocol.get("version_uri"),
             name="version_uri",

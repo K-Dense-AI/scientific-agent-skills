@@ -186,7 +186,7 @@ def main() -> int:
     except ModuleNotFoundError as error:
         raise SystemExit(
             "Qiskit is not installed. Install the pinned core package "
-            'with: uv pip install "qiskit==2.5.0"'
+            'with: uv pip install "qiskit==2.5.2"'
         ) from error
 
     if args.json:

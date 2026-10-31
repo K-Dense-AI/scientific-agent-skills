@@ -1,6 +1,6 @@
 # Deep Learning Networks
 
-Aeon provides neural network architectures specifically designed for time series tasks. These networks serve as building blocks for classification, regression, clustering, and forecasting.
+Aeon 1.6 provides TensorFlow/Keras network building blocks. This reference was checked against release source; all deep-training snippets are illustrative and were not executed during this review. Install the estimator's TensorFlow dependency separately rather than downloading all optional stacks. Estimator inputs use `(cases, channels, timepoints)` and wrappers transpose internally to Keras layouts.
 
 ## Core Network Architectures
 
@@ -36,9 +36,9 @@ Aeon provides neural network architectures specifically designed for time series
 ### Recurrent Networks
 
 **RecurrentNetwork** - RNN/LSTM/GRU
-- Configurable cell type (RNN, LSTM, GRU)
+- `rnn_type` supports `"simple"`, `"lstm"`, and `"gru"`
 - Sequential modeling of temporal dependencies
-- **Use when**: Sequential dependencies critical, variable-length series
+- **Use when**: Sequential dependencies are important
 
 ### Temporal Convolutional Network
 
@@ -60,8 +60,8 @@ Networks designed for representation learning and clustering.
 
 ### Autoencoder Variants
 
-**EncoderNetwork** - Generic Encoder
-- Flexible encoder structure
+**EncoderNetwork** - Convolutional Encoder
+- Convolutional layers and attention-based encoding
 - **Use when**: Custom encoding needed
 
 **AEFCNNetwork** - FCN-based Autoencoder
@@ -97,7 +97,7 @@ Networks designed for representation learning and clustering.
 
 **DeepARForecaster** - Probabilistic forecasting (use via `aeon.forecasting.deep_learning`)
 - Autoregressive RNN for forecasting
-- Produces probabilistic predictions
+- Point output by default; `use_probabilistic=True` requests mean/scale output. Validate loss and calibration for uncertainty use
 - **Use when**: Need forecast uncertainty quantification
 
 ## Usage with Estimators
@@ -118,7 +118,10 @@ reg = ResNetRegressor(n_epochs=100)
 reg.fit(X_train, y_train)
 
 # Clustering with autoencoder
-clusterer = AEFCNClusterer(n_clusters=3, n_epochs=100)
+from sklearn.cluster import KMeans
+clusterer = AEFCNClusterer(
+    estimator=KMeans(n_clusters=3, random_state=42), n_epochs=100
+)
 labels = clusterer.fit_predict(X_train)
 ```
 
@@ -127,13 +130,14 @@ labels = clusterer.fit_predict(X_train)
 Many networks accept configuration parameters:
 
 ```python
-# Configure FCN layers
+# Configure FCN layers and the optimizer (no learning_rate constructor field)
+from tensorflow.keras.optimizers import Adam
 clf = FCNClassifier(
     n_epochs=200,
     batch_size=32,
     kernel_size=[7, 5, 3],  # Kernel sizes for each layer
     n_filters=[128, 256, 128],  # Filters per layer
-    learning_rate=0.001
+    optimizer=Adam(learning_rate=0.001)
 )
 ```
 
@@ -154,12 +158,12 @@ Key hyperparameters to tune:
 
 - `n_epochs` - Training iterations (50-200 typical)
 - `batch_size` - Samples per batch (16-64 typical)
-- `learning_rate` - Step size (0.0001-0.01)
+- Learning rate belongs to the Keras `optimizer`; it is not an FCNClassifier parameter
 - Network-specific: layers, filters, kernel sizes
 
 ### Callbacks
 
-Many networks support callbacks for training monitoring:
+Many estimators support callbacks. FCNClassifier.fit does not pass a validation set to Keras; use training `loss` for these callbacks, and evaluate generalization on independent validation data:
 
 ```python
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
@@ -167,8 +171,8 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 clf = FCNClassifier(
     n_epochs=200,
     callbacks=[
-        EarlyStopping(patience=20, restore_best_weights=True),
-        ReduceLROnPlateau(patience=10, factor=0.5)
+        EarlyStopping(monitor="loss", patience=20, restore_best_weights=True),
+        ReduceLROnPlateau(monitor="loss", patience=10, factor=0.5)
     ]
 )
 ```
@@ -179,9 +183,10 @@ Deep learning networks benefit from GPU:
 
 ```python
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Use first GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Set before importing TensorFlow
+from aeon.classification.deep_learning import InceptionTimeClassifier
 
-# Networks automatically use GPU if available
+# TensorFlow uses a supported GPU when its platform backend is configured
 clf = InceptionTimeClassifier(n_epochs=100)
 clf.fit(X_train, y_train)
 ```
@@ -192,7 +197,7 @@ clf.fit(X_train, y_train)
 
 **Classification**: InceptionNetwork, ResNetNetwork, FCNNetwork
 **Regression**: InceptionNetwork, ResNetNetwork, TCNNetwork
-**Forecasting**: TCNForecaster, DeepARForecaster, RecurrentNetwork
+**Forecasting**: TCNForecaster, DeepARForecaster
 **Clustering**: AEFCNNetwork, AEResNetNetwork, AEAttentionBiGRUNetwork
 
 ### By Data Characteristics:
@@ -200,7 +205,7 @@ clf.fit(X_train, y_train)
 **Long sequences**: TCNNetwork, DCNNNetwork (dilated convolutions)
 **Short sequences**: MLPNetwork, FCNNetwork
 **Multivariate**: InceptionNetwork, FCNNetwork, LITENetwork
-**Variable length**: RecurrentNetwork with masking
+**Variable length**: Check estimator `capability:unequal_length`; a recurrent architecture does not imply that its aeon wrapper supports ragged data
 **Multi-scale patterns**: InceptionNetwork
 
 ### By Computational Resources:
@@ -226,7 +231,7 @@ X_test_norm = normalizer.transform(X_test)
 
 ### 2. Training/Validation Split
 
-Use validation set for early stopping:
+Hold out validation cases (or whole subjects/groups when measurements are related). FCNClassifier.fit accepts only `(X, y)`, not `validation_data=`:
 
 ```python
 from sklearn.model_selection import train_test_split
@@ -236,7 +241,8 @@ X_train_fit, X_val, y_train_fit, y_val = train_test_split(
 )
 
 clf = FCNClassifier(n_epochs=200)
-clf.fit(X_train_fit, y_train_fit, validation_data=(X_val, y_val))
+clf.fit(X_train_fit, y_train_fit)
+validation_accuracy = clf.score(X_val, y_val)
 ```
 
 ### 3. Start Simple
@@ -256,12 +262,11 @@ from sklearn.model_selection import GridSearchCV
 
 param_grid = {
     'n_epochs': [100, 200],
-    'batch_size': [16, 32],
-    'learning_rate': [0.001, 0.0001]
+    'batch_size': [16, 32]
 }
 
 clf = FCNClassifier()
-grid = GridSearchCV(clf, param_grid, cv=3)
+grid = GridSearchCV(clf, param_grid, cv=3, n_jobs=1)
 grid.fit(X_train, y_train)
 ```
 
@@ -287,3 +292,5 @@ np.random.seed(seed)
 random.seed(seed)
 tf.random.set_seed(seed)
 ```
+
+Sources: [networks API](https://www.aeon-toolkit.org/en/stable/api_reference/networks.html), [FCN source](https://github.com/aeon-toolkit/aeon/blob/v1.6.0/aeon/classification/deep_learning/_fcn.py).

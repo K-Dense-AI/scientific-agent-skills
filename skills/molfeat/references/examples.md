@@ -1,712 +1,142 @@
-# Molfeat Usage Examples
+# Worked Molfeat 1.0 examples
 
-This document provides practical examples for common molfeat use cases.
+These small CPU examples use Molfeat 1.0.0 with datamol 0.13.0. They are covered by
+local smoke tests. Dataset-scale workflows are illustrative and need project data.
 
-## Installation
+## Preprocess explicitly and retain IDs
 
-Requires Python 3.9 or 3.10 (molfeat 0.11.0 does not support 3.11+):
-
-```bash
-uv pip install "molfeat==0.11.0"
-
-# With all pip-installable optional dependencies
-uv pip install "molfeat[all]==0.11.0"
-
-# With specific dependencies
-uv pip install "molfeat[dgl]==0.11.0"          # For GNN models
-uv pip install "molfeat[graphormer]==0.11.0"   # For Graphormer
-uv pip install "molfeat[transformer]==0.11.0"  # For ChemBERTa, ChemGPT
-uv pip install "molfeat[pyg]==0.11.0"          # For PyTorch Geometric
-uv pip install "molfeat[viz]==0.11.0"          # For NGLView widgets
-```
-
----
-
-## Quick Start
-
-### Basic Featurization Workflow
+`preprocess()` is not an automatically invoked transformation hook. Apply a chosen
+standardization policy explicitly; the example below normalizes molecules without
+asserting that all salts, tautomers, or protonation states should be collapsed.
 
 ```python
 import datamol as dm
+import numpy as np
 from molfeat.calc import FPCalculator
 from molfeat.trans import MoleculeTransformer
 
-# Load sample data
-data = dm.data.freesolv().sample(100).smiles.values
-
-# Single molecule featurization
-calc = FPCalculator("ecfp")
-features_single = calc(data[0])
-print(f"Single molecule features shape: {features_single.shape}")
-# Output: (2048,)
-
-# Batch featurization with parallelization
-transformer = MoleculeTransformer(calc, n_jobs=-1)
-features_batch = transformer(data)
-print(f"Batch features shape: {features_batch.shape}")
-# Output: (100, 2048)
-```
-
----
-
-## Calculator Examples
-
-### Fingerprint Calculators
-
-```python
-from molfeat.calc import FPCalculator
-
-# ECFP (Extended-Connectivity Fingerprints)
-ecfp = FPCalculator("ecfp", radius=3, fpSize=2048)
-fp = ecfp("CCO")  # Ethanol
-print(f"ECFP shape: {fp.shape}")  # (2048,)
-
-# MACCS keys
-maccs = FPCalculator("maccs")
-fp = maccs("c1ccccc1")  # Benzene
-print(f"MACCS shape: {fp.shape}")  # (167,)
-
-# Count-based fingerprints
-ecfp_count = FPCalculator("ecfp-count", radius=3)
-fp_count = ecfp_count("CC(C)CC(C)C")  # Non-binary counts
-
-# MAP4 fingerprints
-map4 = FPCalculator("map4")
-fp = map4("CC(=O)Oc1ccccc1C(=O)O")  # Aspirin
-```
-
-### Descriptor Calculators
-
-```python
-from molfeat.calc import RDKitDescriptors2D, MordredDescriptors
-
-# RDKit 2D descriptors (200+ properties)
-desc2d = RDKitDescriptors2D()
-descriptors = desc2d("CCO")
-print(f"Number of 2D descriptors: {len(descriptors)}")
-
-# Get descriptor names
-names = desc2d.columns
-print(f"First 5 descriptors: {names[:5]}")
-
-# Mordred descriptors (1800+ properties)
-mordred = MordredDescriptors()
-descriptors = mordred("c1ccccc1O")  # Phenol
-print(f"Mordred descriptors: {len(descriptors)}")
-```
-
-### Pharmacophore Calculators
-
-```python
-from molfeat.calc import CATSCalculator
-
-# 2D CATS descriptors
-cats = CATSCalculator(mode="2D", scale="raw")
-descriptors = cats("CC(C)Cc1ccc(C)cc1C")  # Cymene
-print(f"CATS descriptors: {descriptors.shape}")  # (21,)
-
-# 3D CATS descriptors (requires conformer)
-cats3d = CATSCalculator(mode="3D", scale="num")
-```
-
----
-
-## Transformer Examples
-
-### Basic Transformer Usage
-
-```python
-from molfeat.trans import MoleculeTransformer
-from molfeat.calc import FPCalculator
-import datamol as dm
-
-# Prepare data
-smiles_list = [
-    "CCO",
-    "CC(=O)O",
-    "c1ccccc1",
-    "CC(C)O",
-    "CCCC"
-]
-
-# Create transformer
-calc = FPCalculator("ecfp")
-transformer = MoleculeTransformer(calc, n_jobs=-1)
-
-# Transform molecules
-features = transformer(smiles_list)
-print(f"Features shape: {features.shape}")  # (5, 2048)
-```
-
-### Error Handling
-
-```python
-# Handle invalid SMILES gracefully
-smiles_with_errors = [
-    "CCO",           # Valid
-    "invalid",       # Invalid
-    "CC(=O)O",       # Valid
-    "xyz123",        # Invalid
-]
-
-transformer = MoleculeTransformer(
-    FPCalculator("ecfp"),
-    n_jobs=-1,
-    verbose=True            # Log errors
-)
-
-features = transformer.transform(smiles_with_errors, ignore_errors=True)
-# transform preserves input positions with None for failed molecules
-print(features)  # [array(...), None, array(...), None]
-```
-
-### Concatenating Multiple Featurizers
-
-```python
-from molfeat.trans import FeatConcat, MoleculeTransformer
-from molfeat.calc import FPCalculator
-
-# Combine MACCS (167) + ECFP (2048) = 2215 dimensions
-concat_calc = FeatConcat([
-    FPCalculator("maccs"),
-    FPCalculator("ecfp", radius=3, fpSize=2048)
-])
-
-transformer = MoleculeTransformer(concat_calc, n_jobs=-1)
-features = transformer(smiles_list)
-print(f"Combined features shape: {features.shape}")  # (n, 2215)
-
-# Triple combination
-triple_concat = FeatConcat([
-    FPCalculator("maccs"),
-    FPCalculator("ecfp"),
-    FPCalculator("rdkit")
-])
-```
-
-### Saving and Loading Configurations
-
-```python
-from molfeat.trans import MoleculeTransformer
-from molfeat.calc import FPCalculator
-
-# Create and save transformer
-transformer = MoleculeTransformer(
-    FPCalculator("ecfp", radius=3, fpSize=2048),
-    n_jobs=-1
-)
-
-# Save to YAML
-transformer.to_state_yaml_file("my_featurizer.yml")
-
-# Save to JSON
-transformer.to_state_json_file("my_featurizer.json")
-
-# Load from saved state
-loaded_transformer = MoleculeTransformer.from_state_yaml_file("my_featurizer.yml")
-
-# Use loaded transformer
-features = loaded_transformer(smiles_list)
-```
-
----
-
-## Pretrained Model Examples
-
-### Using the ModelStore
-
-```python
-from molfeat.store.modelstore import ModelStore
-
-# Initialize model store
-store = ModelStore()
-
-# List all available models
-print(f"Total available models: {len(store.available_models)}")
-
-# Search for specific models
-chemberta_models = store.search(name="ChemBERTa")
-for model in chemberta_models:
-    print(f"- {model.name}: {model.description}")
-
-# Get model information
-model_card = store.search(name="ChemBERTa-77M-MLM")[0]
-print(f"Model: {model_card.name}")
-print(f"Version: {model_card.version}")
-print(f"Authors: {model_card.authors}")
-
-# View usage instructions
-model_card.usage()
-
-# Load model directly
-transformer = store.load("ChemBERTa-77M-MLM")
-```
-
-### ChemBERTa Embeddings
-
-```python
-from molfeat.trans.pretrained import PretrainedMolTransformer
-
-# Load ChemBERTa model
-chemberta = PretrainedMolTransformer("ChemBERTa-77M-MLM", n_jobs=-1)
-
-# Generate embeddings
-smiles = ["CCO", "CC(=O)O", "c1ccccc1"]
-embeddings = chemberta(smiles)
-print(f"ChemBERTa embeddings shape: {embeddings.shape}")
-# Output: (3, 768) - 768-dimensional embeddings
-
-# Use in ML pipeline
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-
-X_train, X_test, y_train, y_test = train_test_split(
-    embeddings, labels, test_size=0.2
-)
-
-clf = RandomForestClassifier()
-clf.fit(X_train, y_train)
-predictions = clf.predict(X_test)
-```
-
-### ChemGPT Models
-
-```python
-# Small model (4.7M parameters)
-chemgpt_small = PretrainedMolTransformer("ChemGPT-4.7M", n_jobs=-1)
-
-# Medium model (19M parameters)
-chemgpt_medium = PretrainedMolTransformer("ChemGPT-19M", n_jobs=-1)
-
-# Large model (1.2B parameters)
-chemgpt_large = PretrainedMolTransformer("ChemGPT-1.2B", n_jobs=-1)
-
-# Generate embeddings
-embeddings = chemgpt_small(smiles)
-```
-
-### Graph Neural Network Models
-
-```python
-# GIN models with different pre-training objectives
-gin_masking = PretrainedMolTransformer("gin-supervised-masking", n_jobs=-1)
-gin_infomax = PretrainedMolTransformer("gin-supervised-infomax", n_jobs=-1)
-gin_edgepred = PretrainedMolTransformer("gin-supervised-edgepred", n_jobs=-1)
-
-# Generate graph embeddings
-embeddings = gin_masking(smiles)
-print(f"GIN embeddings shape: {embeddings.shape}")
-
-# Graphormer (for quantum chemistry)
-graphormer = PretrainedMolTransformer("Graphormer-pcqm4mv2", n_jobs=-1)
-embeddings = graphormer(smiles)
-```
-
----
-
-## Machine Learning Integration
-
-### Scikit-learn Pipeline
-
-```python
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
-from molfeat.trans import MoleculeTransformer
-from molfeat.calc import FPCalculator
-
-# Create ML pipeline
-pipeline = Pipeline([
-    ('featurizer', MoleculeTransformer(FPCalculator("ecfp"), n_jobs=-1)),
-    ('classifier', RandomForestClassifier(n_estimators=100))
-])
-
-# Train and evaluate
-pipeline.fit(smiles_train, y_train)
-predictions = pipeline.predict(smiles_test)
-
-# Cross-validation
-scores = cross_val_score(pipeline, smiles_all, y_all, cv=5)
-print(f"CV scores: {scores.mean():.3f} (+/- {scores.std():.3f})")
-```
-
-### Grid Search for Hyperparameter Tuning
-
-```python
-from sklearn.model_selection import GridSearchCV
-from sklearn.svm import SVC
-
-# Define pipeline
-pipeline = Pipeline([
-    ('featurizer', MoleculeTransformer(FPCalculator("ecfp"), n_jobs=-1)),
-    ('classifier', SVC())
-])
-
-# Define parameter grid
-param_grid = {
-    'classifier__C': [0.1, 1, 10],
-    'classifier__kernel': ['rbf', 'linear'],
-    'classifier__gamma': ['scale', 'auto']
-}
-
-# Grid search
-grid_search = GridSearchCV(pipeline, param_grid, cv=5, n_jobs=-1)
-grid_search.fit(smiles_train, y_train)
-
-print(f"Best parameters: {grid_search.best_params_}")
-print(f"Best score: {grid_search.best_score_:.3f}")
-```
-
-### Multiple Featurizer Comparison
-
-```python
-from sklearn.metrics import roc_auc_score
-
-# Test different featurizers
-featurizers = {
-    'ECFP': FPCalculator("ecfp"),
-    'MACCS': FPCalculator("maccs"),
-    'RDKit': FPCalculator("rdkit"),
-    'Descriptors': RDKitDescriptors2D(),
-    'Combined': FeatConcat([
-        FPCalculator("maccs"),
-        FPCalculator("ecfp")
-    ])
-}
-
-results = {}
-for name, calc in featurizers.items():
-    transformer = MoleculeTransformer(calc, n_jobs=-1)
-    X_train = transformer(smiles_train)
-    X_test = transformer(smiles_test)
-
-    clf = RandomForestClassifier(n_estimators=100)
-    clf.fit(X_train, y_train)
-
-    y_pred = clf.predict_proba(X_test)[:, 1]
-    auc = roc_auc_score(y_test, y_pred)
-    results[name] = auc
-
-    print(f"{name}: AUC = {auc:.3f}")
-```
-
-### PyTorch Deep Learning
-
-```python
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from molfeat.trans import MoleculeTransformer
-from molfeat.calc import FPCalculator
-
-# Custom dataset
-class MoleculeDataset(Dataset):
-    def __init__(self, smiles, labels, transformer):
-        self.features = transformer(smiles)
-        self.labels = torch.tensor(labels, dtype=torch.float32)
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return (
-            torch.tensor(self.features[idx], dtype=torch.float32),
-            self.labels[idx]
-        )
-
-# Prepare data
-transformer = MoleculeTransformer(FPCalculator("ecfp"), n_jobs=-1)
-train_dataset = MoleculeDataset(smiles_train, y_train, transformer)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-# Simple neural network
-class MoleculeClassifier(nn.Module):
-    def __init__(self, input_dim):
-        super().__init__()
-        self.network = nn.Sequential(
-            nn.Linear(input_dim, 512),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        return self.network(x)
-
-# Train model
-model = MoleculeClassifier(input_dim=2048)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = nn.BCELoss()
-
-for epoch in range(10):
-    for batch_features, batch_labels in train_loader:
-        optimizer.zero_grad()
-        outputs = model(batch_features).squeeze()
-        loss = criterion(outputs, batch_labels)
-        loss.backward()
-        optimizer.step()
-```
-
----
-
-## Advanced Usage Patterns
-
-### Custom Preprocessing
-
-```python
-from molfeat.trans import MoleculeTransformer
-import datamol as dm
-
-class CustomTransformer(MoleculeTransformer):
-    def preprocess(self, mol):
-        """Custom preprocessing: standardize molecule"""
-        if isinstance(mol, str):
-            mol = dm.to_mol(mol)
-
-        # Standardize
-        mol = dm.standardize_mol(mol)
-
-        # Remove salts
-        mol = dm.remove_salts(mol)
-
-        return mol
-
-# Use custom transformer
-transformer = CustomTransformer(FPCalculator("ecfp"), n_jobs=-1)
-features = transformer(smiles_list)
-```
-
-### Featurization with Conformers
-
-```python
-import datamol as dm
-from molfeat.calc import RDKitDescriptors3D
-
-# Generate conformers
-def prepare_3d_mol(smiles):
+rows = [("a", "CCO"), ("bad", "invalid"), ("b", "CC(=O)O")]
+accepted, rejected = [], []
+for record_id, smiles in rows:
     mol = dm.to_mol(smiles)
-    mol = dm.add_hs(mol)
-    mol = dm.conform.generate_conformers(mol, n_confs=1)
-    return mol
+    if mol is None or mol.GetNumAtoms() == 0:
+        rejected.append(record_id)
+        continue
+    mol = dm.standardize_mol(mol)
+    accepted.append((record_id, mol))
 
-# 3D descriptors
-calc_3d = RDKitDescriptors3D()
-
-smiles = "CC(C)Cc1ccc(C)cc1C"
-mol_3d = prepare_3d_mol(smiles)
-descriptors_3d = calc_3d(mol_3d)
+transformer = MoleculeTransformer(
+    FPCalculator("ecfp", radius=2, fpSize=2048), dtype=np.float32,
+)
+X = transformer([mol for _, mol in accepted])  # strict: catch unexpected failures
+assert X.shape == (2, 2048)
+assert [record_id for record_id, _ in accepted] == ["a", "b"]
+assert rejected == ["bad"]
 ```
 
-### Parallel Batch Processing
+For real data retain original SMILES and the standardized form with each ID. Confirm
+whether mixtures and protonation variants are distinct assay records before removing
+fragments. Enforce the same policy in validation and deployment.
+
+## Concatenate and persist
 
 ```python
-from molfeat.trans import MoleculeTransformer
-from molfeat.calc import FPCalculator
-import time
-
-# Large dataset
-smiles_large = load_large_dataset()  # e.g., 100,000 molecules
-
-# Test different parallelization levels
-for n_jobs in [1, 2, 4, -1]:
-    transformer = MoleculeTransformer(
-        FPCalculator("ecfp"),
-        n_jobs=n_jobs
-    )
-
-    start = time.time()
-    features = transformer(smiles_large)
-    elapsed = time.time() - start
-
-    print(f"n_jobs={n_jobs}: {elapsed:.2f}s")
-```
-
-### Caching for Expensive Operations
-
-```python
-from molfeat.trans.pretrained import PretrainedMolTransformer
 import numpy as np
-from pathlib import Path
+from molfeat.trans import FeatConcat, MoleculeTransformer
+from molfeat.trans.fp import FPVecTransformer
 
-# Load expensive pretrained model
-transformer = PretrainedMolTransformer("ChemBERTa-77M-MLM", n_jobs=-1)
+parts = [FPVecTransformer("maccs"), FPVecTransformer("ecfp:4", length=2048)]
+combined = FeatConcat(parts, dtype=np.float32)
+smiles = ["CCO", "c1ccccc1"]
+X = combined(smiles, enforce_dtype=True)
+assert X.shape == (2, 2215)
 
-# Cache embeddings with NumPy (avoid pickle for untrusted paths)
-cache_file = Path("embeddings_cache.npz")
-
-if cache_file.exists():
-    embeddings = np.load(cache_file)["embeddings"]
-    print("Loaded cached embeddings")
-else:
-    embeddings = transformer(smiles_list)
-    np.savez(cache_file, embeddings=embeddings)
-    print("Computed and cached embeddings")
+# Save each component state; FeatConcat is a container, not a calculator.
+for i, part in enumerate(parts):
+    part.to_state_json_file(f"component_{i}.json")
+restored = FeatConcat([
+    MoleculeTransformer.from_state_json_file(f"component_{i}.json")
+    for i in range(len(parts))
+])
+np.testing.assert_array_equal(restored(smiles), X)
 ```
 
----
+Use strict calls after common validation. See the API reference for the 1.0
+`FeatConcat(ignore_errors=True)` row-alignment limitation.
 
-## Common Workflows
-
-### Virtual Screening Workflow
+## Named and pharmacophore descriptors
 
 ```python
-from molfeat.calc import FPCalculator
-from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+from molfeat.calc import CATS, RDKitDescriptors2D, Pharmacophore2D
+
+rdkit_2d = RDKitDescriptors2D()
+values = rdkit_2d("CCO")
+assert len(values) == len(rdkit_2d.columns)
+nonfinite_names = np.asarray(rdkit_2d.columns)[~np.isfinite(values)]
+
+cats = CATS(use_3d_distances=False, scale="raw")
+assert cats("CCO").shape == (189,)
+gobbi = Pharmacophore2D(factory="gobbi", length=2048)
+assert gobbi("c1ccccc1O").shape == (2048,)
+```
+
+Do not replace all undefined descriptors with zero without documenting why that is
+scientifically meaningful. Fit imputation/column selection on the training fold and
+record the final ordered column list. Optional `MordredDescriptors` defaults to 2D;
+install `molfeat[mordred]` to use it, and inspect missing values separately.
+
+## Generate and check one 3D conformer
+
+```python
 import datamol as dm
-
-# 1. Prepare training data (known actives/inactives)
-train_smiles = load_training_data()
-train_labels = load_training_labels()  # 1=active, 0=inactive
-
-# 2. Featurize training set
-transformer = MoleculeTransformer(FPCalculator("ecfp"), n_jobs=-1)
-X_train = transformer(train_smiles)
-
-# 3. Train classifier
-clf = RandomForestClassifier(n_estimators=500, n_jobs=-1)
-clf.fit(X_train, train_labels)
-
-# 4. Featurize screening library
-screening_smiles = load_screening_library()  # e.g., 1M compounds
-X_screen = transformer(screening_smiles)
-
-# 5. Predict and rank
-predictions = clf.predict_proba(X_screen)[:, 1]
-ranked_indices = predictions.argsort()[::-1]
-
-# 6. Get top hits
-top_n = 1000
-top_hits = [screening_smiles[i] for i in ranked_indices[:top_n]]
-```
-
-### QSAR Model Building
-
-```python
-from molfeat.calc import RDKitDescriptors2D
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import cross_val_score
 import numpy as np
+from molfeat.calc import RDKitDescriptors3D, USRDescriptors, CATS
 
-# Load QSAR dataset
-smiles = load_molecules()
-y = load_activity_values()  # e.g., IC50, logP
-
-# Featurize with interpretable descriptors
-transformer = MoleculeTransformer(RDKitDescriptors2D(), n_jobs=-1)
-X = transformer(smiles)
-
-# Standardize features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-# Build linear model
-model = Ridge(alpha=1.0)
-scores = cross_val_score(model, X_scaled, y, cv=5, scoring='r2')
-print(f"R² = {scores.mean():.3f} (+/- {scores.std():.3f})")
-
-# Fit final model
-model.fit(X_scaled, y)
-
-# Interpret feature importance
-feature_names = transformer.featurizer.columns
-importance = np.abs(model.coef_)
-top_features_idx = importance.argsort()[-10:][::-1]
-
-print("Top 10 important features:")
-for idx in top_features_idx:
-    print(f"  {feature_names[idx]}: {model.coef_[idx]:.3f}")
+mol = dm.conformers.generate(
+    dm.to_mol("CCCO"), n_confs=1, random_seed=42,
+    minimize_energy=True, num_threads=1,
+)
+assert mol is not None and mol.GetNumConformers() == 1
+shape = USRDescriptors("USR")(mol)
+assert shape.shape == (12,) and np.isfinite(shape).all()
+rdkit_3d = RDKitDescriptors3D()(mol)
+cats_3d = CATS(use_3d_distances=True)(mol)
+assert cats_3d.shape == (126,)
 ```
 
-### Similarity Search
+The current datamol API is `dm.conformers.generate`, not
+`dm.conform.generate_conformers`. One conformer is a smoke test, not a representative
+conformational ensemble. For a scientific study record sampling, protonation,
+force field, minimization/convergence, coordinates, conformer IDs, and the rule for
+aggregating conformer descriptors. Plain SMILES contain no 3D coordinates.
+
+## Binary Tanimoto similarity
 
 ```python
+import numpy as np
+from rdkit import DataStructs
 from molfeat.calc import FPCalculator
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 
-# Query molecule
-query_smiles = "CC(=O)Oc1ccccc1C(=O)O"  # Aspirin
-
-# Database of molecules
-database_smiles = load_molecule_database()  # Large collection
-
-# Compute fingerprints
-calc = FPCalculator("ecfp")
-query_fp = calc(query_smiles).reshape(1, -1)
-
-transformer = MoleculeTransformer(calc, n_jobs=-1)
-database_fps = transformer(database_smiles)
-
-# Compute similarity
-similarities = cosine_similarity(query_fp, database_fps)[0]
-
-# Find most similar
-top_k = 10
-top_indices = similarities.argsort()[-top_k:][::-1]
-
-print(f"Top {top_k} similar molecules:")
-for i, idx in enumerate(top_indices, 1):
-    print(f"{i}. {database_smiles[idx]} (similarity: {similarities[idx]:.3f})")
+calc = FPCalculator("ecfp", radius=2, fpSize=2048, includeChirality=True)
+query = calc("CCO", raw=True)
+library = ["CCO", "CCCO", "c1ccccc1"]
+fingerprints = [calc(s, raw=True) for s in library]
+scores = np.array(DataStructs.BulkTanimotoSimilarity(query, fingerprints))
+assert scores[0] == 1.0
+ranked_positions = np.argsort(-scores, kind="stable")
 ```
 
----
+Use the same fingerprint configuration for query and reference compounds. Binary
+Tanimoto, count-vector similarity, cosine on embeddings, and distances on scaled
+continuous descriptors encode different assumptions; do not interchange their
+thresholds. Shape descriptors need their own appropriate metric.
 
-## Troubleshooting
+## Cache identity and large batches
 
-### Handling Invalid Molecules
-
-```python
-# Illustrative: smiles_list is supplied by the caller.
-transformer = MoleculeTransformer(FPCalculator("ecfp"), verbose=True)
-valid_features, valid_ids = transformer(smiles_list, ignore_errors=True)
-valid_smiles = [smiles_list[i] for i in valid_ids]
-# Apply valid_ids to any labels or record identifiers too.
-```
-
-### Memory Management for Large Datasets
-
-```python
-# Process in chunks for very large datasets
-def featurize_in_chunks(smiles_list, transformer, chunk_size=10000):
-    all_features = []
-
-    for i in range(0, len(smiles_list), chunk_size):
-        chunk = smiles_list[i:i+chunk_size]
-        features = transformer(chunk)
-        all_features.append(features)
-        print(f"Processed {i+len(chunk)}/{len(smiles_list)}")
-
-    return np.vstack(all_features)
-
-# Use with large dataset
-features = featurize_in_chunks(large_smiles_list, transformer)
-```
-
-### Reproducibility
-
-```python
-import random
-import numpy as np
-import torch
-
-# Set all random seeds
-def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-set_seed(42)
-
-# Save exact configuration
-transformer.to_state_yaml_file("config.yml")
-
-# Document version
-import molfeat
-print(f"molfeat version: {molfeat.__version__}")
-```
+A single `embeddings_cache.npz` filename is insufficient provenance. Save numeric
+features with input IDs and a manifest containing standardized input identity,
+configuration/state, model revision/tokenizer/pooling/max length, package versions,
+and row order. Validate the manifest before reuse. Load numeric arrays with
+`allow_pickle=False`. For large datasets, write each chunk or score it immediately;
+retaining all chunks before stacking does not bound total memory.

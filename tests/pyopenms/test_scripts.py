@@ -19,11 +19,10 @@ across samples while keeping distinct ones apart -- all verifiable on
 experiments built peak by peak in memory, where the right answer is known by
 construction.
 
-Feature *detection* (FeatureFindingMetabo, FeatureFinderAlgorithmPicked),
-adduct deconvolution and identification post-processing are deliberately not
-driven end to end: they need real profile data, and a synthetic experiment would
-only prove that the algorithms return nothing. Their static configuration --
-adduct tables, the shared detector import -- is checked instead.
+Native 3.6 regression coverage also exercises nonempty synthetic feature
+finding, processing writeback/type checks, target-decoy IDs, local mass-search
+TSVs and export preconditions. These check APIs and known synthetic answers,
+not instrument performance or statistical FDR calibration.
 """
 
 from __future__ import annotations
@@ -668,8 +667,8 @@ class AlignAndLinkTests(TemporaryDirectoryTestCase):
         large = feature_map(
             [(100.0, 300.1, 1000.0), (200.0, 400.2, 2000.0), (300.0, 500.3, 500.0)]
         )
-        self.assertEqual(align_link_quantify.align([small, large]), 1)
-        self.assertEqual(align_link_quantify.align([large, small]), 0)
+        self.assertEqual(align_link_quantify.align([small, large], allow_unaligned=True), 1)
+        self.assertEqual(align_link_quantify.align([large, small], allow_unaligned=True), 0)
 
     def test_co_eluting_features_are_linked_across_samples(self) -> None:
         first = feature_map([(100.0, 300.1000, 1000.0), (200.0, 400.2000, 2000.0)])
@@ -818,6 +817,256 @@ class ConsensusMatrixTests(TemporaryDirectoryTestCase):
         # And the scaling really moved something.
         self.assertNotAlmostEqual(after["two.mzML"], before["two.mzML"], places=3)
 
+
+
+import detect_features_centroided
+import process_identifications
+import export_gnps_sirius
+ms = pyopenms
+np = numpy
+
+
+def isotope_run():
+    exp = ms.MSExperiment()
+    for i in range(41):
+        amplitude = 100000 * np.exp(-0.5 * ((i - 20) / 5) ** 2)
+        spec = spectrum(float(i), 1, [(300., amplitude), (301.003355, amplitude*.18), (302.00671, amplitude*.025)])
+        spec.setType(ms.SpectrumSettings.SpectrumType.CENTROID)
+        exp.addSpectrum(spec)
+    return exp
+
+
+def test_both_detectors_find_nonempty_synthetic_isotope_feature():
+    exp = isotope_run()
+    fm, count = detect_features_metabo.detect_features(exp, noise=10, iso_model="none")
+    assert count == 3 and fm.size() == 1
+    assert fm[0].getMZ() == pytest.approx(300, abs=.001)
+    assert fm[0].getRT() == pytest.approx(20, abs=1)
+    picked = detect_features_centroided.detect_features(exp, min_spectra=5)
+    assert picked.size() == 1
+    assert picked[0].getMZ() == pytest.approx(300, abs=.001)
+
+
+def test_profile_is_rejected_and_unknown_requires_explicit_assumption():
+    exp = isotope_run()
+    scans = list(exp)
+    scans[0].setType(ms.SpectrumSettings.SpectrumType.PROFILE)
+    exp.setSpectra(scans)
+    with pytest.raises(ValueError, match="centroided MS1"):
+        detect_features_metabo.detect_features(exp)
+    scans[0].setType(ms.SpectrumSettings.SpectrumType.UNKNOWN)
+    exp.setSpectra(scans)
+    with pytest.raises(ValueError, match="unknown"):
+        detect_features_centroided.detect_features(exp)
+    assert detect_features_centroided.detect_features(exp, assume_centroided=True).size() == 1
+
+
+def test_ms2_is_excluded_from_feature_detection():
+    exp = isotope_run()
+    exp.addSpectrum(spectrum(20.5, 2, [(100., 1e6)]))
+    fm, count = detect_features_metabo.detect_features(exp, noise=10, iso_model="none")
+    assert count == 3 and fm.size() == 1
+    assert exp.getNrSpectra() == 42
+
+
+def test_filter_preserves_metadata_and_peak_auxiliary_arrays():
+    exp = ms.MSExperiment()
+    instrument = ms.Instrument(); instrument.setName("synthetic instrument")
+    exp.setInstrument(instrument)
+    spec = spectrum(1., 1, [(100., 2.), (200., 10.)])
+    auxiliary = ms.FloatDataArray(); auxiliary.setName("test values")
+    auxiliary.push_back(3.); auxiliary.push_back(7.)
+    spec.setFloatDataArrays([auxiliary]); exp.addSpectrum(spec)
+    out = convert_format.filter_experiment(exp, min_intensity=5.)
+    assert out.getInstrument().getName() == "synthetic instrument"
+    assert list(out[0].getFloatDataArrays()[0]) == [7.]
+    assert len(exp[0]) == 2
+
+
+def test_processing_writes_back_and_respects_selected_level(tmp_path):
+    exp = ms.MSExperiment()
+    exp.addSpectrum(spectrum(1., 1, [(100., 2.), (200., 10.)]))
+    exp.addSpectrum(spectrum(2., 2, [(110., 3.), (210., 20.)]))
+    inp, out = tmp_path / "in.mzML", tmp_path / "out.mzML"
+    ms.MzMLFile().store(str(inp), exp)
+    result = run_script("process_spectra.py", str(inp), str(out), "--ms-level", "1", "--normalize", "to_one", "--threshold", "0.5", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    actual = convert_format.load_experiment(str(out))
+    assert list(actual[0].get_peaks()[0]) == [200.]
+    assert list(actual[0].get_peaks()[1]) == [1.]
+    assert list(actual[1].get_peaks()[1]) == [3., 20.]
+
+
+def test_native_profile_centroiding_and_unselected_centroid_passthrough(tmp_path):
+    exp = ms.MSExperiment()
+    profile = ms.MSSpectrum(); profile.setRT(1.); profile.setMSLevel(1)
+    profile.setType(ms.SpectrumSettings.SpectrumType.PROFILE)
+    mz = np.linspace(499.9, 500.1, 101)
+    profile.set_peaks((mz, 1000*np.exp(-.5*((mz-500)/.01)**2)))
+    exp.addSpectrum(profile)
+    centroid = spectrum(2., 2, [(100., 10.)]); centroid.setType(ms.SpectrumSettings.SpectrumType.CENTROID)
+    exp.addSpectrum(centroid)
+    inp, out = tmp_path/"profile.mzML", tmp_path/"picked.mzML"
+    ms.MzMLFile().store(str(inp), exp)
+    result = run_script("process_spectra.py", str(inp), str(out), "--pick", "--smooth", "gauss", "--gaussian-width", "0.02", "--ms-level", "1", "--sn", "0", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    actual = convert_format.load_experiment(str(out))
+    assert len(actual[0]) == 1
+    assert actual[0][0].getMZ() == pytest.approx(500., abs=.001)
+    assert list(actual[1].get_peaks()[1]) == [10.]
+    bad = run_script("process_spectra.py", str(out), str(tmp_path/"bad.mzML"), "--pick", cwd=tmp_path)
+    assert bad.returncode == 2 and "requires profile" in bad.stderr
+
+
+def ids():
+    prot = ms.ProteinIdentification(); prot.setIdentifier("synthetic")
+    prot.setSearchEngine("synthetic")
+    sp = prot.getSearchParameters(); sp.digestion_enzyme = ms.ProteaseDB().getEnzyme("Trypsin")
+    prot.setSearchParameters(sp)
+    peps = ms.PeptideIdentificationList()
+    for sequence, score, label in [("PEPTIDEK", 10., "target"), ("EDITPEPK", 5., "decoy")]:
+        pid = ms.PeptideIdentification(); pid.setIdentifier("synthetic")
+        pid.setScoreType("synthetic score"); pid.setHigherScoreBetter(True)
+        pid.setRT(10.); pid.setMZ(500.)
+        hit = ms.PeptideHit(); hit.setSequence(ms.AASequence.fromString(sequence))
+        hit.setScore(score); hit.setCharge(1); hit.setMetaValue("target_decoy", label)
+        pid.setHits([hit]); peps.push_back(pid)
+    return [prot], peps
+
+
+def test_local_index_fdr_idxml_and_csv(tmp_path):
+    proteins, peptides = ids()
+    fasta = tmp_path/"db.fasta"
+    fasta.write_text(">target\nPEPTIDEK\n>DECOY_target\nEDITPEPK\n")
+    inp, out, table = tmp_path/"in.idXML", tmp_path/"out.idXML", tmp_path/"hits.csv"
+    ms.IdXMLFile().store(str(inp), proteins, peptides)
+    result = run_script("process_identifications.py", str(inp), "--fasta", str(fasta), "--fdr", "1", "--out", str(out), "--csv", str(table), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    _, actual = ms.IdXMLFile().load(str(out))
+    assert len(actual) == 1 and actual[0].getScoreType() == "q-value"
+    assert actual[0].getHits()[0].getSequence().toString() == "PEPTIDEK"
+    assert list(csv.DictReader(table.open()))[0]["accessions"] == "target"
+
+
+def test_fdr_rejects_no_decoys_and_mixed_scores():
+    _, peptides = ids()
+    only_target = ms.PeptideIdentificationList(); only_target.push_back(peptides[0])
+    with pytest.raises(ValueError, match="both target and decoy"):
+        process_identifications.filter_psm_qvalues(only_target, .01)
+    changed = peptides[1]; changed.setHigherScoreBetter(False); peptides[1] = changed
+    with pytest.raises(ValueError, match="one search run"):
+        process_identifications.filter_psm_qvalues(peptides, .01)
+
+
+def test_accurate_mass_search_with_tiny_local_database_and_relative_paths(tmp_path):
+    (tmp_path/"mapping.tsv").write_text("database_name\tSynthetic\ndatabase_version\t1\n180.0633903828\tC6H12O6\tTEST_GLUCOSE\n")
+    (tmp_path/"struct.tsv").write_text("TEST_GLUCOSE\tSynthetic glucose\tnull\tnull\n")
+    fm = feature_map([(10., 181.0706668494, 1000.)])
+    inp, out = tmp_path/"glucose.featureXML", tmp_path/"hits.mzTab"
+    ms.FeatureXMLFile().store(str(inp), fm)
+    result = run_script("accurate_mass_search.py", str(inp), "--db-mapping", "mapping.tsv", "--db-struct", "struct.tsv", "--out-mztab", str(out), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "TEST_GLUCOSE" in out.read_text()
+
+
+def test_unannotated_gnps_consensus_is_rejected(tmp_path):
+    cm = align_link_quantify.link([feature_map([(10., 200., 1000.)]), feature_map([(10., 200., 1000.)])], ["one.mzML", "two.mzML"], 10., 5., "ppm")
+    path = tmp_path/"plain.consensusXML"; ms.ConsensusXMLFile().store(str(path), cm)
+    args = argparse.Namespace(consensus=str(path), out_prefix=str(tmp_path/"out"), mzml=["source.mzML"])
+    with pytest.raises(ValueError, match="MS2 feature annotations"):
+        export_gnps_sirius.export_gnps(args)
+
+
+def test_alignment_failure_is_not_silently_linked():
+    with pytest.raises(RuntimeError, match="Alignment failed"):
+        align_link_quantify.align([feature_map([]), feature_map([])])
+
+
+def test_empty_xic_and_zero_charge_are_clear_cli_errors(tmp_path):
+    exp = ms.MSExperiment(); exp.addSpectrum(spectrum(1., 2, [(100., 1.)]))
+    path = tmp_path/"ms2.mzML"; ms.MzMLFile().store(str(path), exp)
+    result = run_script("extract_chromatograms.py", str(path), "--mz", "100", cwd=tmp_path)
+    assert result.returncode == 2 and "no MS1" in result.stderr
+    for script, args in [("mass_calculator.py", ["--formula", "H2O"]), ("digest_protein.py", ["--sequence", "PEPTIDEK"])]:
+        result = run_script(script, *args, "--charges", "0", cwd=tmp_path)
+        assert result.returncode == 2 and "positive charge" in result.stderr
+
+
+
+def test_native_gnps_export_with_indexed_ms2_mapping(tmp_path):
+    exp = ms.MSExperiment()
+    exp.addSpectrum(spectrum(10., 2, [(100., 100.), (150., 200.)], precursor_mz=200.))
+    mzml = tmp_path / "synthetic.mzML"
+    writer = ms.MzMLFile(); options = writer.getOptions(); options.setWriteIndex(True); writer.setOptions(options)
+    writer.store(str(mzml), exp)
+    second_mzml = tmp_path / "synthetic_second.mzML"; writer.store(str(second_mzml), exp)
+    cm = align_link_quantify.link([feature_map([(10., 200., 1000.)]), feature_map([(10., 200., 2000.)])], [str(mzml), str(second_mzml)], 10., 5., "ppm")
+    ids = ms.PeptideIdentificationList()
+    for map_index in (0, 1):
+        pid = ms.PeptideIdentification(); pid.setIdentifier("synthetic mapping"); pid.setMetaValue("map_index", map_index); pid.setMetaValue("spectrum_index", 0)
+        ids.push_back(pid)
+    feature = cm[0]; feature.setPeptideIdentifications(ids); cm[0] = feature
+    protein = ms.ProteinIdentification(); protein.setIdentifier("synthetic mapping"); protein.setSearchEngine("synthetic"); cm.setProteinIdentifications([protein])
+    path = tmp_path / "mapped.consensusXML"; ms.ConsensusXMLFile().store(str(path), cm)
+    prefix = str(tmp_path / "gnps")
+    args = argparse.Namespace(consensus=str(path), out_prefix=prefix, mzml=[str(mzml), str(second_mzml)])
+    export_gnps_sirius.export_gnps(args)
+    assert "BEGIN IONS" in Path(prefix + ".mgf").read_text()
+    assert Path(prefix + "_quant.txt").stat().st_size > 0
+
+
+def test_adduct_cli_on_synthetic_positive_pair(tmp_path):
+    fm = feature_map([(10., 181.0706668494, 1000.), (10., 203.052608, 500.)])
+    inp, out = tmp_path / "adducts.featureXML", tmp_path / "out.featureXML"
+    ms.FeatureXMLFile().store(str(inp), fm)
+    result = run_script("detect_adducts.py", str(inp), "--out-features", str(out), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    actual = ms.FeatureMap(); ms.FeatureXMLFile().load(str(out), actual)
+    assert actual.size() == 2
+    assert any(f.metaValueExists("dc_charge_adducts") for f in actual)
+
+
+def test_indexed_chromatogram_and_calibration_roundtrip(tmp_path):
+    exp = ms.MSExperiment()
+    for i in range(5):
+        exp.addSpectrum(spectrum(i*10., 1, [(x*1.000005, 1000.) for x in (500.,750.,1000.)]))
+    calibration = ms.InternalCalibration()
+    found, _ = calibration.fillCalibrants(exp, [ms.InternalCalibration_LockMass(x,1,1) for x in (500.,750.,1000.)],20.,False,False,False)
+    assert found == 15
+    assert calibration.calibrate(exp,[1],ms.MZTrafoModel.MODELTYPE.LINEAR,-1.,False,5.,5.)
+    assert exp[0].get_peaks()[0] == pytest.approx([500.,750.,1000.],abs=.001)
+    chrom = ms.MSChromatogram(); chrom.setNativeID("synthetic TIC"); chrom.set_peaks(([0.,10.],[1.,2.])); exp.addChromatogram(chrom)
+    path = tmp_path / "indexed.mzML"
+    writer = ms.MzMLFile(); options = writer.getOptions(); options.setWriteIndex(True); writer.setOptions(options); writer.store(str(path),exp)
+    on_disk = ms.OnDiscMSExperiment()
+    assert ms.IndexedMzMLFileLoader().load(str(path), on_disk)
+    assert on_disk.getNrSpectra() == 5
+    assert list(on_disk.getChromatogram(0).get_peaks()[0]) == [0.,10.]
+
+
+def test_adduct_cli_negative_mode_uses_signed_native_bounds(tmp_path):
+    fm = feature_map([(10., 179.0561139162, 1000.), (10., 215.032792, 500.)])
+    for i in range(fm.size()):
+        f = fm[i]; f.setCharge(-1); fm[i] = f
+    inp, out = tmp_path / "negative.featureXML", tmp_path / "out.featureXML"
+    ms.FeatureXMLFile().store(str(inp), fm)
+    result = run_script("detect_adducts.py", str(inp), "--negative", "--out-features", str(out), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    actual = ms.FeatureMap(); ms.FeatureXMLFile().load(str(out), actual)
+    assert actual.size() == 2
+    assert all(f.getCharge() < 0 for f in actual)
+
+
+def test_feature_detector_cli_preserves_input_run_provenance(tmp_path):
+    source = tmp_path / "synthetic.mzML"
+    ms.MzMLFile().store(str(source), isotope_run())
+    for script in ("detect_features_metabo.py", "detect_features_centroided.py"):
+        output = tmp_path / (script + ".featureXML")
+        result = run_script(script, str(source), "--out-features", str(output), cwd=tmp_path)
+        assert result.returncode == 0, result.stderr
+        actual = ms.FeatureMap(); ms.FeatureXMLFile().load(str(output), actual)
+        assert actual.size() > 0
+        assert actual.getPrimaryMSRunPath() == [str(source)]
 
 if __name__ == "__main__":
     unittest.main()

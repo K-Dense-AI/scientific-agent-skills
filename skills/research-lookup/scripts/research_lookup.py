@@ -184,8 +184,10 @@ class ResearchLookup:
             raise ValueError("target_references must be at least 1")
         if max_results < 1:
             raise ValueError("max_results must be at least 1")
-        if extract_batch_size < 1:
-            raise ValueError("extract_batch_size must be at least 1")
+        if not 1 <= extract_batch_size <= 20:
+            raise ValueError("extract_batch_size must be between 1 and 20")
+        if search_mode not in {"turbo", "fast", "basic", "advanced"}:
+            raise ValueError("search_mode must be one of: turbo, fast, basic, advanced")
 
         self.force_backend = normalized_backend
         self.requested_backend = force_backend
@@ -240,11 +242,9 @@ class ResearchLookup:
         del query
         if self.force_backend:
             return self.force_backend
-        if self.parallel_available:
-            return "search"
-        if self.perplexity_available:
-            return "perplexity"
-        raise ValueError("No backend available.")
+        # A stored OpenRouter key is not consent to change the destination.
+        # Missing CLI errors follow the same opt-in fallback path as API failures.
+        return "search"
 
     def _is_academic_query(self, query: str) -> bool:
         if self.academic is not None:
@@ -290,11 +290,16 @@ class ResearchLookup:
                 f"parallel-cli exited with status {completed.returncode}: {detail}"
             )
         try:
-            return json.loads(completed.stdout)
+            payload = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
             raise RuntimeError(
                 "parallel-cli returned non-JSON output despite --json."
             ) from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("parallel-cli returned a non-object JSON response.")
+        if payload.get("type") == "error" or payload.get("error"):
+            raise RuntimeError(f"parallel-cli returned an error: {payload.get('error')}")
+        return payload
 
     @staticmethod
     def _usage_counts(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -363,7 +368,9 @@ class ResearchLookup:
             "result_count": len(results),
             "search_id": payload.get("search_id"),
             "session_id": payload.get("session_id"),
-            "status": payload.get("status"),
+            # V1 Search has no top-level status field.
+            "status": "ok",
+            "warnings": payload.get("warnings") or [],
         }
         return payload, ledger, results
 
@@ -378,7 +385,10 @@ class ResearchLookup:
         return [source for _, source in ranked]
 
     def _extract_sources(
-        self, sources: list[dict[str, Any]], search_ledger: list[dict[str, Any]]
+        self,
+        sources: list[dict[str, Any]],
+        search_ledger: list[dict[str, Any]],
+        session_id: str | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if self.extract_limit == 0:
             return sources, []
@@ -410,6 +420,8 @@ class ResearchLookup:
                 str(max(12000, len(urls) * 6000)),
                 "--json",
             ]
+            if session_id:
+                args.extend(["--session-id", session_id])
             timestamp = datetime.now(timezone.utc).isoformat()
             try:
                 payload = self._run_parallel_cli(args)
@@ -425,13 +437,26 @@ class ResearchLookup:
                 )
                 continue
             extraction_payloads.append(payload)
+            session_id = session_id or payload.get("session_id")
             batch_results = payload.get("results") or []
+            retrieved_urls: set[str] = set()
             for raw_result in batch_results:
                 source = dict(raw_result)
                 source["url"] = canonicalize_url(str(source.get("url") or ""))
-                source["extracted"] = True
+                excerpts = [
+                    excerpt
+                    for excerpt in source.get("excerpts") or []
+                    if isinstance(excerpt, str) and excerpt.strip()
+                ]
+                source["extraction_excerpts"] = excerpts
+                source["extracted"] = bool(source["url"] and excerpts)
+                if source["extracted"]:
+                    retrieved_urls.add(source["url"])
                 source["facets"] = ["extracted-evidence"]
                 extracted_sources.append(source)
+            unresolved_urls = [
+                url for url in urls if canonicalize_url(url) not in retrieved_urls
+            ]
             search_ledger.append(
                 {
                     "capability": "extract",
@@ -440,8 +465,12 @@ class ResearchLookup:
                     "result_count": len(batch_results),
                     "extract_id": payload.get("extract_id"),
                     "session_id": payload.get("session_id"),
-                    "status": payload.get("status"),
+                    "status": (
+                        "partial" if unresolved_urls or payload.get("errors") else "ok"
+                    ),
                     "errors": payload.get("errors") or [],
+                    "unresolved_urls": unresolved_urls,
+                    "warnings": payload.get("warnings") or [],
                 }
             )
         return deduplicate_sources([*sources, *extracted_sources]), extraction_payloads
@@ -542,7 +571,7 @@ class ResearchLookup:
 
         extraction_payloads: list[dict[str, Any]] = []
         if academic:
-            sources, extraction_payloads = self._extract_sources(sources, ledger)
+            sources, extraction_payloads = self._extract_sources(sources, ledger, session_id)
 
         packet = build_manuscript_packet(
             query=query,
@@ -558,6 +587,16 @@ class ResearchLookup:
         if errors:
             packet["warnings"].append(
                 "Some bounded search passes failed: " + "; ".join(errors)
+            )
+        if any(
+            entry.get("status") in {"partial", "error"}
+            for entry in ledger
+            if entry.get("capability") == "extract"
+        ):
+            packet["warnings"].append(
+                "Some Extract URLs were unavailable or returned no excerpts; inspect "
+                "errors and unresolved_urls in the search ledger. Redirected URLs may "
+                "also require manual reconciliation."
             )
         response = packet_markdown(packet)
         references = packet["references"]
@@ -601,25 +640,10 @@ class ResearchLookup:
 
     @staticmethod
     def _find_report_text(payload: Any) -> str:
-        if isinstance(payload, str):
-            return payload if len(payload) > 100 else ""
-        if isinstance(payload, list):
-            for item in payload:
-                found = ResearchLookup._find_report_text(item)
-                if found:
-                    return found
-            return ""
-        if isinstance(payload, dict):
-            for key in ("content", "report", "text", "output", "answer"):
-                if key in payload:
-                    found = ResearchLookup._find_report_text(payload[key])
-                    if found:
-                        return found
-            for value in payload.values():
-                found = ResearchLookup._find_report_text(value)
-                if found:
-                    return found
-        return ""
+        """Read the CLI text-output contract without mistaking basis for a report."""
+        output = payload.get("output", {}) if isinstance(payload, dict) else {}
+        content = output.get("content") if isinstance(output, dict) else None
+        return content if isinstance(content, str) else ""
 
     @staticmethod
     def _sources_from_payload(payload: Any) -> list[dict[str, str]]:
@@ -654,6 +678,11 @@ class ResearchLookup:
             f"{self.PARALLEL_SYSTEM_PROMPT}\n\nResearch topic:\n"
             f"{self._query_with_context(query)}"
         )
+        if len(research_query) > 15000:
+            raise ValueError(
+                "Research query plus context and instructions exceeds the CLI's "
+                "15,000-character limit; shorten it to avoid silent truncation."
+            )
         with tempfile.TemporaryDirectory(prefix="research-lookup-") as temp_dir:
             output_base = Path(temp_dir) / "report"
             args = [
@@ -679,13 +708,22 @@ class ResearchLookup:
                     ["--previous-interaction-id", self.previous_interaction_id]
                 )
             payload = self._run_parallel_cli(args, timeout=self.research_timeout + 60)
+            if payload.get("status") != "completed":
+                raise RuntimeError(
+                    f"Parallel Research is not completed: {payload.get('status')} "
+                    f"(run_id={payload.get('run_id')})."
+                )
             markdown_path = output_base.with_suffix(".md")
             content = (
                 markdown_path.read_text(encoding="utf-8")
                 if markdown_path.exists()
                 else self._find_report_text(payload)
             )
-        sources = self._sources_from_payload(payload)
+        if not content.strip():
+            raise RuntimeError("Parallel Research returned no text report.")
+        sources = self._sources_from_payload(
+            (payload.get("output") or {}).get("basis") or []
+        )
         text_citations = self._extract_citations_from_text(content)
         return {
             "success": True,
@@ -726,9 +764,9 @@ class ResearchLookup:
             "stream": False,
         }
         response = requests.post(
-            "https://api.parallel.ai/chat/completions",
+            "https://api.parallel.ai/v1beta/chat/completions",
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "x-api-key": api_key,
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -794,16 +832,13 @@ class ResearchLookup:
             ],
             "max_tokens": 8000,
             "temperature": 0.1,
-            "search_mode": "academic",
-            "search_context_size": "high",
+            "web_search_options": {"search_context_size": "high"},
         }
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://scientific-writer.local",
-                "X-Title": "Scientific Writer Research Tool",
             },
             json=data,
             timeout=90,
@@ -826,6 +861,7 @@ class ResearchLookup:
             "backend": "perplexity",
             "model": model,
             "usage": payload.get("usage") or {},
+            "raw_response": payload,
         }
 
     @staticmethod
@@ -833,6 +869,19 @@ class ResearchLookup:
         response: dict[str, Any], choice: dict[str, Any]
     ) -> list[dict[str, str]]:
         citations: list[dict[str, str]] = []
+        for annotation in choice.get("message", {}).get("annotations") or []:
+            if annotation.get("type") != "url_citation":
+                continue
+            item = annotation.get("url_citation") or {}
+            citations.append(
+                {
+                    "type": "source",
+                    "url": canonicalize_url(str(item.get("url") or "")),
+                    "title": str(item.get("title") or ""),
+                    "snippet": str(item.get("content") or ""),
+                    "date": "",
+                }
+            )
         search_results = (
             response.get("search_results")
             or choice.get("search_results")
@@ -1076,7 +1125,7 @@ Examples:
     )
     parser.add_argument(
         "--search-mode",
-        choices=["turbo", "basic", "advanced"],
+        choices=["turbo", "fast", "basic", "advanced"],
         default="basic",
         help="Mode for non-academic Search calls (academic calls use advanced)",
     )

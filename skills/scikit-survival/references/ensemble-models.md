@@ -1,6 +1,6 @@
 # Survival trees, forests, and boosting
 
-Verified for scikit-survival 0.28.0 on 2026-07-23.
+Verified for scikit-survival 0.28.0 on 2026-10-01.
 
 ## Model families
 
@@ -39,7 +39,8 @@ Each terminal node estimates:
 
 - a survival function using Kaplan-Meier;
 - a cumulative hazard function using Nelson-Aalen;
-- a risk summary representing expected events.
+- a risk score summing the estimated cumulative hazard over the training event
+  times; its magnitude is neither a probability nor an expected count at a named horizon.
 
 Forest predictions average tree predictions:
 
@@ -159,13 +160,25 @@ Current losses:
 
 - `"coxph"`: Cox partial-likelihood objective; `predict()` is a higher-is-riskier
   score, and baseline-based survival/cumulative-hazard methods are available.
-- `"ipcwls"`: IPC-weighted least-squares AFT objective.
+- `"ipcwls"`: intended IPC-weighted least-squares AFT objective; see the release
+  defects below before relying on it.
 - `"squared"`: squared-error time-oriented objective.
 
 Time-oriented losses do not make `predict()` a Cox risk score and do not provide
-the same baseline survival-function interface. Confirm prediction direction before
+the same baseline survival-function interface. Both non-Cox losses return exponentiated predictions on the original-time scale.
+Confirm prediction direction before
 using concordance or dynamic AUC; negate a predicted-time output only when that
 conversion is explicitly intended and reported.
+
+Released 0.28.0 `ipcwls` has two native/source-confirmed limitations in both
+boosting classes: positive times below 1 become negative after the internal log
+transform and the censoring-weight estimator rejects them; and the gradient
+omits IPC weights even though the reported loss uses them. With fixed iterations,
+full subsampling, and default sample weights, changing event/censor labels while
+keeping observed times fixed produced identical predictions on the synthetic
+fixture. Do not treat a successful `ipcwls` fit as validated IPC-weighted training
+or change time units merely to hide the error. Prefer a verified alternative such
+as `IPCRidge` when an IPC-weighted AFT fit is required.
 
 Current regularization controls:
 
@@ -275,7 +288,9 @@ These are candidate-selection prompts, not performance guarantees.
 
 ## Sources
 
-Official sources checked 2026-07-23:
+Official sources checked 2026-10-01:
+
+- [Released survival losses](https://github.com/sebp/scikit-survival/blob/v0.28.0/sksurv/ensemble/survival_loss.py) and [fit loops](https://github.com/sebp/scikit-survival/blob/v0.28.0/sksurv/ensemble/boosting.py) — IPCW caveats reproduced natively.
 
 - [Random survival forest user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/random-survival-forest.html)
 - [Gradient boosting user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/boosting.html)

@@ -3,7 +3,7 @@
 #
 # Larger fonts and thicker lines for presentations,
 # posters, and projected displays
-# Reviewed with Matplotlib 3.11.1 on 2026-07-23.
+# Reviewed with Matplotlib 3.11.2 on 2026-10-01.
 
 # Figure properties
 figure.dpi: 100
@@ -26,7 +26,7 @@ axes.spines.right: False
 axes.edgecolor: black
 axes.axisbelow: True
 axes.grid: False
-axes.prop_cycle: cycler('color', ['0072B2', 'D55E00', '009E73', 'CC79A7', '000000'])
+axes.prop_cycle: cycler('color', ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#000000"])
 
 # Tick properties
 xtick.major.size: 6

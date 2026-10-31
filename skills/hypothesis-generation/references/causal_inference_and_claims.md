@@ -107,8 +107,8 @@ Label the intended role before analysis and justify it with domain knowledge and
 
 Lipsitch, Tchetgen Tchetgen, and Cohen distinguish negative-control exposures and outcomes:
 
-- A negative-control exposure should not cause the target outcome through the proposed mechanism but should share relevant confounding/bias pathways.
-- A negative-control outcome should not be caused by the target exposure through the proposed mechanism but should share relevant bias pathways.
+- A negative-control exposure should not cause the target outcome but should share relevant confounding/bias pathways.
+- A negative-control outcome should not be caused by the target exposure but should share relevant bias pathways. Excluding only the proposed mechanism is insufficient if another causal pathway from exposure to control outcome remains.
 
 Specify:
 
@@ -118,7 +118,7 @@ Specify:
 - implication of control failure;
 - alternative reasons for a non-null control result.
 
-Negative controls detect some biases under assumptions; they do not prove absence of bias.
+Negative controls detect some biases under assumptions; they do not prove absence of bias. A non-null control can reflect a violated exclusion or shared-bias assumption, and its effect size does not generally quantify bias in the target estimate.
 
 ## Claim-language rules
 

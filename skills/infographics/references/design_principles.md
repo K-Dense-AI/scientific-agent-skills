@@ -202,9 +202,9 @@ Best for: Varied content types, flexible information, modern designs
 
 ---
 
-## The 60-40 Rule
+## The 60-40 Heuristic
 
-The optimal infographic balances visual and text content:
+An optional composition starting point, not a scientific optimum or accessibility criterion:
 
 - **60% Visual Elements**: Icons, charts, illustrations, images, shapes
 - **40% Text Content**: Headlines, labels, descriptions, data
@@ -462,10 +462,10 @@ Use invisible grids to align elements consistently:
 
 ### Contrast Requirements
 
-For accessibility (WCAG 2.1 AA):
+For accessibility ([WCAG 2.2 AA](https://www.w3.org/TR/WCAG22/)):
 - **Normal text**: 4.5:1 contrast ratio minimum
-- **Large text** (18pt+): 3:1 contrast ratio minimum
-- **Graphics and UI**: 3:1 contrast ratio minimum
+- **Large text** (18pt+ or 14pt+ bold): 3:1 contrast ratio minimum
+- **Meaningful graphical objects and UI components**: 3:1 against adjacent colors (see WCAG exceptions)
 
 Tools to check contrast:
 - WebAIM Contrast Checker
@@ -531,7 +531,8 @@ Tools to check contrast:
 | Relationship | Scatter plot |
 | Geographic | Map/choropleth |
 | Hierarchy | Treemap |
-| Flow/process | Sankey diagram |
+| Quantitative flows | Sankey diagram |
+| Sequential process | Labeled steps and arrows |
 
 ### Chart Best Practices
 
@@ -564,8 +565,8 @@ Tools to check contrast:
    - 3:1 for large text and graphics
 
 3. **Text size**
-   - Minimum 10pt for print
-   - Minimum 12px for digital
+   - Inspect at the intended print or display size
+   - Font-size requests in image prompts do not guarantee rendered size or readability
 
 4. **Don't rely on color legends**
    - Label data directly when possible
@@ -606,7 +607,7 @@ Before finalizing your infographic, verify:
 - [ ] Left-aligned body text
 
 ### Color
-- [ ] 60-30-10 distribution
+- [ ] Color distribution supports the message
 - [ ] Colorblind-safe palette
 - [ ] Sufficient contrast (4.5:1 text)
 - [ ] Consistent color meanings
@@ -614,7 +615,7 @@ Before finalizing your infographic, verify:
 
 ### Content
 - [ ] Clear story structure (intro, body, conclusion)
-- [ ] 60% visuals, 40% text (approximately)
+- [ ] Visual/text balance supports comprehension
 - [ ] Key message is prominent
 - [ ] Data is accurate and sourced
 - [ ] Call to action included
@@ -630,6 +631,7 @@ Before finalizing your infographic, verify:
 - [ ] Patterns/labels supplement color
 - [ ] Readable at intended size
 - [ ] Logical flow without visual cues
+- [ ] Short alt text plus a data table or long description with all essential values and relationships
 
 ---
 

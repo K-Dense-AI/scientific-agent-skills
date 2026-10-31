@@ -1,232 +1,112 @@
-# Getting Started with PennyLane
+# Getting started with PennyLane 0.45.1
 
-## What is PennyLane?
+## QNodes and measurements
 
-PennyLane is a cross-platform Python library for quantum computing, quantum machine learning, and quantum chemistry. It enables training quantum computers like neural networks through automatic differentiation and seamless integration with classical machine learning frameworks.
-
-## Installation
-
-Install PennyLane using uv. PennyLane 0.45.0 requires Python 3.11 or newer:
-
-```bash
-uv pip install "pennylane==0.45.0"
-```
-
-For specific device plugins (IBM, Amazon Braket, Google, Rigetti, etc.):
-
-```bash
-# IBM Qiskit
-uv pip install "pennylane-qiskit==0.45.0"
-
-# Amazon Braket
-uv pip install "amazon-braket-pennylane-plugin==1.34.1"
-
-# Google Cirq
-uv pip install "pennylane-cirq==0.44.0"
-
-# Rigetti
-uv pip install "pennylane-rigetti==0.40.0"
-```
-
-## Core Concepts
-
-### Quantum Nodes (QNodes)
-
-A QNode is a quantum function that can be evaluated on a quantum device. It combines a quantum circuit definition with a device:
+A quantum function queues operations and returns measurement objects. A QNode
+attaches execution and differentiation. This block is self-contained and tested:
 
 ```python
 import pennylane as qml
+from pennylane import numpy as np
 
-# Define a device
-dev = qml.device('default.qubit', wires=2)
+dev = qml.device("default.qubit", wires=["a", "b"], seed=42)
 
-# Create a QNode
-@qml.qnode(dev)
-def circuit(params):
-    qml.RX(params[0], wires=0)
-    qml.RY(params[1], wires=1)
-    qml.CNOT(wires=[0, 1])
-    return qml.expval(qml.PauliZ(0))
+def bell_function():
+    qml.Hadamard("a")
+    qml.CNOT(wires=["a", "b"])
+    return qml.probs(wires=["a", "b"])
+
+bell = qml.QNode(bell_function, dev)
+assert np.allclose(bell(), [0.5, 0.0, 0.0, 0.5])
+
+@qml.set_shots(100)
+@qml.qnode(dev, diff_method=None)
+def sample_bell():
+    qml.Hadamard("a")
+    qml.CNOT(wires=["a", "b"])
+    return qml.sample(wires=["a", "b"])
+
+samples = sample_bell()
+assert samples.shape == (100, 2)
+assert np.all(samples[:, 0] == samples[:, 1])
 ```
 
-### Devices
+`qml.expval`, `qml.var` and `qml.probs` can use analytic simulation or finite
+shots on compatible devices. `qml.sample` and `qml.counts` need finite shots.
+`qml.state`/`qml.density_matrix` are simulator diagnostics, not full-state
+measurements available directly from hardware. Basis-state/probability order is
+lexicographic in the **requested wire order**; preserve it when interpreting bits.
 
-Devices execute quantum circuits. PennyLane supports:
-- **Simulators**: `default.qubit`, `default.mixed`, `lightning.qubit`
-- **Hardware**: Access through plugins (IBM, Amazon Braket, Rigetti, etc.)
+## Differentiable and batched input
+
+Use `pennylane.numpy`, not ordinary NumPy, for Autograd trainability. Parameters
+must influence a measured quantity; extra unused parameters have zero gradients.
 
 ```python
-# Local simulator
-dev = qml.device('default.qubit', wires=4)
+import pennylane as qml
+from pennylane import numpy as np
 
-# Lightning high-performance simulator
-dev = qml.device('lightning.qubit', wires=10)
+dev = qml.device("default.qubit", wires=1)
+
+@qml.qnode(dev, interface="autograd", diff_method="backprop")
+def rotate(x):
+    qml.RY(x, wires=0)
+    return qml.expval(qml.Z(0))
+
+x = np.array(0.4, requires_grad=True)
+assert np.allclose(qml.grad(rotate)(x), -np.sin(x))
+values = rotate(np.array([0.1, 0.2, 0.3], requires_grad=False))
+assert np.allclose(values, np.cos([0.1, 0.2, 0.3]))
 ```
 
-### Measurements
+The array above is operator parameter broadcasting. A Python list comprehension
+is repeated execution, not vectorization. With vector features, index the final
+feature dimension (`inputs[..., i]`) or use an embedding template that handles
+batching. JAX `vmap` can express a dataset batch explicitly.
 
-PennyLane supports various measurement types:
+## Random streams and shot uncertainty
 
-```python
-@qml.qnode(dev)
-def measure_circuit():
-    qml.Hadamard(wires=0)
-    # Expectation value
-    return qml.expval(qml.PauliZ(0))
-
-@qml.qnode(dev)
-def measure_probs():
-    qml.Hadamard(wires=0)
-    # Probability distribution
-    return qml.probs(wires=[0, 1])
-
-@qml.qnode(dev)
-def measure_samples():
-    qml.Hadamard(wires=0)
-    # Sample measurements
-    return qml.sample(qml.PauliZ(0))
-```
-
-## Basic Workflow
-
-### 1. Build a Circuit
+A seed reproduces an execution **sequence**, not the same sample every time.
+Use independent streams when estimating variability:
 
 ```python
 import pennylane as qml
 import numpy as np
 
-dev = qml.device('default.qubit', wires=3)
+def make_sampler(seed):
+    dev = qml.device("default.qubit", wires=1, seed=seed)
+    @qml.set_shots(128)
+    @qml.qnode(dev, diff_method=None)
+    def sample():
+        qml.Hadamard(0)
+        return qml.sample(qml.Z(0))
+    return sample
 
-@qml.qnode(dev)
-def quantum_circuit(weights):
-    # Apply gates
-    qml.RX(weights[0], wires=0)
-    qml.RY(weights[1], wires=1)
-    qml.CNOT(wires=[0, 1])
-    qml.RZ(weights[2], wires=2)
-
-    # Measure
-    return qml.expval(qml.PauliZ(0) @ qml.PauliZ(1))
+a, b = make_sampler(12), make_sampler(12)
+a1, a2 = a(), a()
+b1, b2 = b(), b()
+assert np.array_equal(a1, b1)
+assert np.array_equal(a2, b2)
 ```
 
-### 2. Compute Gradients
+For independent Pauli outcomes, estimate the expectation's standard error from
+sample standard deviation divided by the square root of shots. Correlated device
+drift and error mitigation can invalidate this simple model. Report shots and
+repetitions, and keep analytic, sampled and noisy estimates distinct.
 
-```python
-# Automatic differentiation
-grad_fn = qml.grad(quantum_circuit)
-weights = np.array([0.1, 0.2, 0.3])
-gradients = grad_fn(weights)
-```
+## Dependencies and device choices
 
-### 3. Optimize Parameters
+`default.qubit` handles pure states, `default.mixed` density matrices and explicit
+noise channels, `lightning.qubit` compiled state-vector simulation. Their useful
+sizes depend on RAM, circuit, precision and gradients, not a fixed qubit limit.
+A complex128 state alone takes `16 * 2**n` bytes; a density matrix takes
+`16 * 4**n`, before work buffers. Measure speed instead of assuming a backend is
+always faster. `default.clifford` needs the optional Stim package and is limited
+to its documented supported operations/measurements.
 
-```python
-from pennylane import numpy as np
+## Sources
 
-# Define optimizer
-opt = qml.GradientDescentOptimizer(stepsize=0.1)
-
-# Optimization loop
-weights = np.array([0.1, 0.2, 0.3], requires_grad=True)
-for i in range(100):
-    weights = opt.step(quantum_circuit, weights)
-    if i % 20 == 0:
-        print(f"Step {i}: Cost = {quantum_circuit(weights)}")
-```
-
-## Device-Independent Programming
-
-Write circuits once, run anywhere:
-
-```python
-# Same circuit, different backends
-@qml.qnode(qml.device('default.qubit', wires=2))
-def circuit_simulator(x):
-    qml.RX(x, wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-# Switch to IBM hardware after configuring qiskit-ibm-runtime credentials
-from qiskit_ibm_runtime import QiskitRuntimeService
-
-service = QiskitRuntimeService()
-backend = service.least_busy(operational=True, simulator=False, min_num_qubits=2)
-
-@qml.qnode(qml.device('qiskit.remote', wires=backend.num_qubits, backend=backend))
-def circuit_hardware(x):
-    qml.RX(x, wires=0)
-    return qml.expval(qml.PauliZ(0))
-```
-
-## Common Patterns
-
-### Parameterized Circuits
-
-```python
-@qml.qnode(dev)
-def parameterized_circuit(params, x):
-    # Encode data
-    qml.RX(x, wires=0)
-
-    # Apply parameterized layers
-    for param in params:
-        qml.RY(param, wires=0)
-        qml.CNOT(wires=[0, 1])
-
-    return qml.expval(qml.PauliZ(0))
-```
-
-### Circuit Templates
-
-Use built-in templates for common patterns:
-
-```python
-from pennylane.templates import StronglyEntanglingLayers
-
-@qml.qnode(dev)
-def template_circuit(weights):
-    StronglyEntanglingLayers(weights, wires=range(3))
-    return qml.expval(qml.PauliZ(0))
-
-# Generate random weights for template
-n_layers = 2
-n_wires = 3
-shape = StronglyEntanglingLayers.shape(n_layers, n_wires)
-weights = np.random.random(shape)
-```
-
-## Debugging and Visualization
-
-### Print Circuit Structure
-
-```python
-print(qml.draw(circuit)(params))
-print(qml.draw_mpl(circuit)(params))  # Matplotlib visualization
-```
-
-### Inspect Operations
-
-```python
-with qml.tape.QuantumTape() as tape:
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-
-print(tape.operations)
-print(tape.measurements)
-```
-
-## Next Steps
-
-For detailed information on specific topics:
-- **Building circuits**: See `references/quantum_circuits.md`
-- **Quantum ML**: See `references/quantum_ml.md`
-- **Chemistry applications**: See `references/quantum_chemistry.md`
-- **Device management**: See `references/devices_backends.md`
-- **Optimization**: See `references/optimization.md`
-- **Advanced features**: See `references/advanced_features.md`
-
-## Resources
-
-- Official docs: https://docs.pennylane.ai
-- Codebook: https://pennylane.ai/codebook
-- QML demos: https://pennylane.ai/qml/demonstrations
-- Community forum: https://discuss.pennylane.ai
+- [QNode](https://docs.pennylane.ai/en/stable/code/api/pennylane.QNode.html)
+- [Measurements](https://docs.pennylane.ai/en/stable/introduction/measurements.html)
+- [set_shots](https://docs.pennylane.ai/en/stable/code/api/pennylane.set_shots.html)
+- [DefaultQubit](https://docs.pennylane.ai/en/stable/code/api/pennylane.devices.default_qubit.DefaultQubit.html)

@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/tui
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Extensions and custom tools render custom terminal UI through `@earendil-works/pi-tui`.
 
 ## Component Interface
@@ -67,7 +69,7 @@ if (matchesKey(data, Key.ctrl("c"))) { /* ... */ }
 
 ## Theming
 
-Use the `theme` passed into the callback or renderer — never import a global theme. `theme.fg(color, text)` covers general (`text`, `accent`, `muted`, `dim`, `searchMatchText`), status (`success`, `error`, `warning`), borders (`border`, `borderAccent`, `borderMuted`), messages (`userMessageText`, `customMessageText`, `customMessageLabel`), tools (`toolTitle`, `toolOutput`), diffs (`toolDiffAdded`/`Removed`/`Context`), markdown (`md*`), syntax (`syntax*`), thinking levels (`thinkingOff`…`thinkingMax`), and `bashMode`. `theme.bg(color, text)` covers `selectedBg`, `searchMatchBg`, `userMessageBg`, `customMessageBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`. Text styles: `theme.bold`, `theme.italic`, `theme.strikethrough`.
+Use the `theme` passed into the callback or renderer — never import a global theme. `theme.fg(color, text)` covers general (`text`, `accent`, `muted`, `dim`, `searchMatchText`), status (`success`, `error`, `warning`), borders (`border`, `borderAccent`, `borderMuted`), messages (`userMessageText`, `customMessageText`, `customMessageLabel`), tools (`toolTitle`, `toolOutput`), diffs (`toolDiffAdded`/`Removed`/`Context`), markdown (`md*`), syntax (`syntax*`), thinking levels (`thinkingOff`…`thinkingMax`), and `bashMode`. `theme.bg(color, text)` covers `selectedBg`, `searchMatchBg`, `userMessageBg`, `customMessageBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`. Text styles: `theme.bold`, `theme.italic`, `theme.strikethrough`; `theme.style()` composes styles, `theme.colors` exposes resolved colors, and `theme.appearance` reports light/dark.
 
 Components that pre-bake theme colors into cached strings must rebuild that content in `invalidate()` — clearing a render cache is not enough. This applies to `theme.fg`/`theme.bg` strings stored in child components, `highlightCode()` output, and child trees that embed colors. It is unnecessary when you pass theme callbacks that run at render time, for simple containers, or for stateless render.
 

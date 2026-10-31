@@ -20,8 +20,8 @@ more length, plus the pull-request process.
 - Broad "orchestrator" skills that route to other skills — they overlap every specialist by design.
 - A second provider for a service an existing skill already reaches.
 
-The general-purpose skills that do exist are narrow output-format helpers (`docx`, `pdf`, `pptx`,
-`generate-image`, `markdown-mermaid-writing`). They are not precedent for broadening scope.
+The general-purpose skills that do exist are narrow output-format helpers (`generate-image`,
+`markdown-mermaid-writing`). They are not precedent for broadening scope.
 
 ## Layout
 
@@ -283,16 +283,15 @@ DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ("doe_designs.py"
   no hardcoded local paths, shell scripts valid. Run repo-wide by `tests/_meta`; do not duplicate
   these in a per-skill suite.
 - `cli` — the `--help` and demo-block cases above.
-- `office` / `schematic` — behaviour for files several skills ship byte-identical copies of (the
-  OOXML tree under docx/pptx/xlsx; the AI schematic generator under five skills). `tests/_meta`
-  separately fails if those copies drift apart, so fix them together.
+- `schematic` — behaviour for the AI schematic generator that several skills ship byte-identical
+  copies of. `tests/_meta` separately fails if those copies drift apart, so fix them together.
 
 ### One environment per skill
 
 The project environment deliberately does not carry the skills' scientific packages. Their upstream
 pins are mutually exclusive — `opentrons` needs `numpy<2`, `esm` caps `transformers` below the
 version the `transformers` skill targets, `geniml` and `spikeinterface` pin `zarr<3` against the
-`zarr-python` skill's 3.x, `bioservices` caps `lxml<6` against `matchms`, and `pytdc`, `molfeat`,
+`zarr-python` skill's 3.x, `bioservices` caps `lxml<6` against `matchms`, and `pytdc`,
 `deepchem`, `histolab`, `vaex`, and `ete3` each need an interpreter older than 3.13. Installing them
 together forces every one of those skills to the losing side of a version fight.
 
@@ -308,6 +307,11 @@ Each entry lists the packages that skill documents, plus an optional `python` wh
 run on the default interpreter; uv downloads that interpreter on demand. Packages that cannot be
 installed at all — a GitHub-only SDK, a conda-forge-only library, a CUDA build — are recorded under
 `[unavailable]` with the reason, and the runner prints them so the gap shows up in test output.
+
+For a package needing extra isolated-build dependencies, an entry may set
+`uv_config = "tests/<name>/uv.toml"`. The runner applies that file only to that skill's uv
+process. Keep it inside the skill's test directory; `tests/_meta` checks the path and TOML.
+This supplies build dependencies, not missing system compilers or native libraries.
 
 Adding a skill with `scripts/` means adding its `[skills.<name>]` entry — `tests/_meta` fails
 without one. Use `packages = []` for skills whose bundled tooling is standard-library only; they

@@ -1,6 +1,8 @@
 # Echo-MS Detection of Molecules from an Enzymatic Reaction (Cell Free)
 
 **URL:** https://cloud.ginkgo.bio/protocols/echo-ms-cfps-detection
+**Service terms:** https://cloud.ginkgo.bio/terms/echo-ms-cfps-detection
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Beta
 **Price:** $44/sample
 **Turnaround:** up to 13 days
@@ -13,8 +15,9 @@ To run this protocol, the relevant analyte/method must first be onboarded (see [
 
 ## Input
 
-- **DNA Input:** Enzyme construct(s)
-- Reaction substrate/product and reaction conditions (provided with the order)
+- Enzyme DNA or AA sequence; contact Ginkgo for DNA sequences longer than 1800 bp
+- Analyte CAS ID and expected substrate concentration
+- Reaction timing/temperature constraints and per-well buffer, substrate, and cofactor conditions
 
 ## Output
 
@@ -32,9 +35,11 @@ To run this protocol, the relevant analyte/method must first be onboarded (see [
 1. Dispense molecule, buffers, reagents (Agilent Bravo 96)
 2. Incubate under reaction conditions (Inheco)
 
-### Phase 3 - Echo-MS Detection
+### Phase 3 - Dilution and Echo-MS Detection
 
-1. Acoustic ejection mass spectrometry readout of substrate/product
+1. Prepare a standard curve in diluted CFPS matrix
+2. Dilute reaction wells
+3. Measure substrate/product by Echo-MS; interpret within the onboarded matrix and detection limits
 
 ## Ordering
 

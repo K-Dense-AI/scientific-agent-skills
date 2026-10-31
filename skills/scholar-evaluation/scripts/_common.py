@@ -13,8 +13,8 @@ from typing import Any, Iterable
 
 SCHEMA_VERSION = "2.0"
 NOTICE = (
-    "DESCRIPTIVE DEVELOPMENTAL ASSESSMENT ONLY — NOT A DECISION "
-    "RECOMMENDATION — QUALIFIED HUMAN REVIEW REQUIRED"
+    "DESCRIPTIVE DEVELOPMENTAL ASSESSMENT ONLY - NOT A DECISION "
+    "RECOMMENDATION - QUALIFIED HUMAN REVIEW REQUIRED"
 )
 PROHIBITED_USES = {
     "admissions",
@@ -28,12 +28,12 @@ PROHIBITED_USES = {
 }
 ALLOWED_PURPOSE = "developmental_review_of_scholarly_work"
 ALLOWED_UNIT = "scholarly_work"
-ALLOWED_CLASSIFICATIONS = {
+ALLOWED_CLASSIFICATIONS = (
     "synthetic",
     "public_scholarly_work",
     "deidentified_low_stakes",
-}
-RATING_STATUSES = {"rated", "missing", "not_applicable"}
+)
+RATING_STATUSES = ("rated", "missing", "not_applicable")
 
 MAX_INPUT_BYTES = 2 * 1024 * 1024
 MAX_OUTPUT_BYTES = 2 * 1024 * 1024
@@ -172,7 +172,7 @@ def read_json(path: Path | str) -> Any:
         )
     except UnicodeDecodeError as error:
         raise ValidationError("INPUT_NOT_UTF8") from error
-    except json.JSONDecodeError as error:
+    except (json.JSONDecodeError, RecursionError) as error:
         raise ValidationError("JSON_INVALID") from error
     _scan_structure(data)
     return data
@@ -220,7 +220,12 @@ def failure_report(error: ValidationError) -> dict[str, Any]:
 
 
 def is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def is_identifier(value: Any) -> bool:
@@ -360,6 +365,12 @@ def _validate_scale(scale: Any, issues: list[Issue]) -> tuple[float, float, floa
             issues.append(Issue("ANCHOR_SCORE_DUPLICATE", f"{path}.anchors"))
         if min(anchor_scores) != minimum_f or max(anchor_scores) != maximum_f:
             issues.append(Issue("ANCHOR_BOUNDS_MISSING", f"{path}.anchors"))
+        ordered = sorted(anchor_scores)
+        if any(
+            not math.isclose(right - left, step_f, rel_tol=1e-9, abs_tol=0.0)
+            for left, right in zip(ordered, ordered[1:])
+        ):
+            issues.append(Issue("ANCHOR_STEP_MISMATCH", f"{path}.anchors"))
     return minimum_f, maximum_f, step_f
 
 
@@ -492,7 +503,7 @@ def validate_rubric(rubric: Any) -> list[Issue]:
             references=True,
         )
         validity_status = provenance.get("content_validity_status")
-        if validity_status not in {"not_established", "pilot_evidence", "documented"}:
+        if validity_status not in ("not_established", "pilot_evidence", "documented"):
             issues.append(
                 Issue(
                     "CONTENT_VALIDITY_STATUS_INVALID",
@@ -601,7 +612,10 @@ def validate_rubric(rubric: Any) -> list[Issue]:
                             Issue("ANCHOR_SCORE_INVALID", f"{anchor_path}.score")
                         )
                     else:
-                        criterion_anchor_scores.add(float(anchor["score"]))
+                        anchor_score = float(anchor["score"])
+                        if anchor_score in criterion_anchor_scores:
+                            issues.append(Issue("ANCHOR_SCORE_DUPLICATE", f"{anchor_path}.score"))
+                        criterion_anchor_scores.add(anchor_score)
                     validate_text(
                         anchor.get("description"),
                         f"{anchor_path}.description",
@@ -661,11 +675,11 @@ def validate_rubric(rubric: Any) -> list[Issue]:
                 )
             )
         reliability_status = protocol.get("inter_rater_reliability_status")
-        if reliability_status not in {
+        if reliability_status not in (
             "not_established",
             "pilot_evidence",
             "documented",
-        }:
+        ):
             issues.append(
                 Issue(
                     "INTER_RATER_RELIABILITY_STATUS_INVALID",
@@ -835,7 +849,7 @@ def validate_evaluation(
                 issues.append(Issue("UNCERTAINTY_INVALID", f"{path}.uncertainty"))
             if not evidence_ids:
                 issues.append(Issue("RATED_EVIDENCE_REQUIRED", f"{path}.evidence_ids"))
-        elif status in {"missing", "not_applicable"}:
+        elif status in ("missing", "not_applicable"):
             if rating.get("score") is not None:
                 issues.append(Issue("UNRATED_SCORE_MUST_BE_NULL", f"{path}.score"))
             if rating.get("uncertainty") is not None:
@@ -880,10 +894,12 @@ def score_evaluation(
     evaluation: dict[str, Any],
     *,
     weights: dict[str, float] | None = None,
+    round_output: bool = True,
 ) -> dict[str, Any]:
     """Calculate bounded descriptive rubric math without a recommendation."""
 
     selected_weights = weights or weights_by_criterion(rubric)
+    output_number = rounded if round_output else lambda value: value
     scale_minimum = float(rubric["scale"]["minimum"])
     scale_maximum = float(rubric["scale"]["maximum"])
     rating_by_id = {
@@ -904,7 +920,7 @@ def score_evaluation(
         item: dict[str, Any] = {
             "criterion_id": criterion_id,
             "status": status,
-            "weight": rounded(weight),
+            "weight": output_number(weight),
             "score": None,
             "uncertainty": None,
             "weighted_contribution": None,
@@ -923,11 +939,11 @@ def score_evaluation(
             rated_weight += weight
             item.update(
                 {
-                    "score": rounded(score),
-                    "uncertainty": rounded(uncertainty),
-                    "weighted_contribution": rounded(contribution),
-                    "lower_contribution": rounded(weight * lower),
-                    "upper_contribution": rounded(weight * upper),
+                    "score": output_number(score),
+                    "uncertainty": output_number(uncertainty),
+                    "weighted_contribution": output_number(contribution),
+                    "lower_contribution": output_number(weight * lower),
+                    "upper_contribution": output_number(weight * upper),
                 }
             )
         elif status == "missing":
@@ -964,17 +980,17 @@ def score_evaluation(
         ),
         "criteria": criteria_output,
         "aggregates": {
-            "total_weight": rounded(sum(selected_weights.values())),
-            "applicable_weight": rounded(applicable_weight),
-            "rated_weight": rounded(rated_weight),
-            "missing_weight": rounded(missing_weight),
-            "not_applicable_weight": rounded(not_applicable_weight),
-            "coverage_of_applicable_weight": rounded(coverage),
-            "weighted_sum": rounded(weighted_sum),
-            "normalized_score": rounded(normalized),
+            "total_weight": output_number(sum(selected_weights.values())),
+            "applicable_weight": output_number(applicable_weight),
+            "rated_weight": output_number(rated_weight),
+            "missing_weight": output_number(missing_weight),
+            "not_applicable_weight": output_number(not_applicable_weight),
+            "coverage_of_applicable_weight": output_number(coverage),
+            "weighted_sum": output_number(weighted_sum),
+            "normalized_score": output_number(normalized),
             "uncertainty_interval": {
-                "lower": rounded(lower_score),
-                "upper": rounded(upper_score),
+                "lower": output_number(lower_score),
+                "upper": output_number(upper_score),
                 "method": (
                     "weighted aggregation of criterion-level bounded uncertainty "
                     "intervals; not a confidence interval"

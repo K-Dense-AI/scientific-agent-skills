@@ -1,5 +1,8 @@
 # Modal Volumes
 
+Reviewed against SDK 1.6.0 and the official [Volumes guide](https://modal.com/docs/guide/volumes).
+Examples with training/model helpers are illustrative; no cloud persistence test was run.
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -54,6 +57,7 @@ vol = modal.Volume.from_name("model-store", create_if_missing=True)
 
 @app.function(volumes={"/models": vol})
 def use_model():
+    import json
     # Access files at /models/
     with open("/models/config.json") as f:
         config = json.load(f)
@@ -83,6 +87,7 @@ def save_results(results):
     os.makedirs("/data/outputs", exist_ok=True)
     with open("/data/outputs/results.json", "w") as f:
         json.dump(results, f)
+    vol.commit()
 ```
 
 ### Reading
@@ -90,6 +95,8 @@ def save_results(results):
 ```python
 @app.function(volumes={"/data": vol})
 def load_results():
+    import json
+    vol.reload()
     with open("/data/outputs/results.json") as f:
         return json.load(f)
 ```
@@ -102,12 +109,14 @@ def save_model():
     import torch
     model = train_model()
     torch.save(model.state_dict(), "/models/checkpoint.pt")
+    vol.commit()
 
 @app.function(volumes={"/models": vol}, gpu="L40S")
 def load_model():
     import torch
+    vol.reload()
     model = MyModel()
-    model.load_state_dict(torch.load("/models/checkpoint.pt"))
+    model.load_state_dict(torch.load("/models/checkpoint.pt", weights_only=True))
     return model
 ```
 
@@ -159,6 +168,10 @@ def reader():
         return f.read()
 ```
 
+Close all file handles first, and do not read/write the mount while `reload()` runs:
+it temporarily appears empty to the reloading container. Reload from the mounted
+Function; a local SDK call does not refresh a remote container's mount.
+
 ## Concurrent Access
 
 ### v1 Volumes
@@ -173,19 +186,20 @@ def reader():
 - Hundreds of concurrent writers (distinct files)
 - No file count limit
 - Improved random access performance
-- Up to 1 TiB per file, 262,144 files per directory
+- Files strictly smaller than 1 TiB; at most 262,144 files per directory
 
 ## Volumes v2
 
 v2 Volumes (beta) offer significant improvements:
+The official guide does not yet guarantee against data loss. Retain another copy
+of irreplaceable research data; do not treat v2 as the sole durable archive.
 
 | Feature | v1 | v2 |
 |---------|----|----|
 | Max files | 500,000 | Unlimited |
 | Concurrent writes | ~5 | Hundreds |
-| Max file size | No limit | 1 TiB |
+| Max file size | No documented limit | Less than 1 TiB |
 | Random access | Limited | Full support |
-| HIPAA compliance | No | Yes |
 | Hard links | No | Yes |
 
 Enable v2:
@@ -204,7 +218,8 @@ vol = modal.Volume.from_name("model-weights", create_if_missing=True)
 # Download once during image build
 def download_weights():
     from huggingface_hub import snapshot_download
-    snapshot_download("meta-llama/Llama-3-8B", local_dir="/models/llama3")
+    snapshot_download("openai-community/gpt2", local_dir="/models/gpt2")
+    vol.commit()
 
 image = (
     modal.Image.debian_slim()
@@ -212,6 +227,10 @@ image = (
     .run_function(download_weights, volumes={"/models": vol})
 )
 ```
+
+Mount the same Volume in consuming Functions. A cached `run_function` build step
+does not rerun if Volume files are later removed; use a dedicated download Function
+when population must be checked independently of the Image cache.
 
 ### Training Checkpoints
 
@@ -233,6 +252,7 @@ data_vol = modal.Volume.from_name("shared-data", create_if_missing=True)
 def preprocess():
     # Write processed data
     df.to_parquet("/data/processed.parquet")
+    data_vol.commit()
 
 @app.function(volumes={"/data": data_vol})
 def analyze():

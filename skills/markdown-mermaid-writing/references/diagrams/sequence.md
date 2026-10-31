@@ -12,6 +12,9 @@
 
 ## Exemplar Diagram
 
+This is an illustrative interaction sketch, not a complete OAuth/OIDC implementation
+or a provider endpoint contract. Fill in protocol checks from the chosen provider.
+
 ```mermaid
 sequenceDiagram
     accTitle: OAuth 2.0 Authorization Code Flow
@@ -31,7 +34,7 @@ sequenceDiagram
         I-->>U: Redirect with auth code
         U->>A: Send auth code
         A->>I: Exchange code for token
-        I-->>A: 🔐 Access + refresh token
+        I-->>A: 🔐 Access token (optional refresh token)
         A-->>U: ✅ Set session cookie
         Note over U,A: 🔒 User is now authenticated
     else ❌ Invalid credentials
@@ -44,7 +47,7 @@ sequenceDiagram
 ## Tips
 
 - Limit to **4–5 participants** — more becomes unreadable
-- Solid arrows (`->>`) for requests, dashed (`-->>`) for responses
+- Solid arrows (`->>`) for requests, dashed (`-->>`) for responses; open arrows (`-)`) can denote asynchronous messages
 - Use `alt/else/end` for conditional branches
 - Use `Note over X,Y:` for contextual annotations with emoji
 - Use `par/end` for parallel operations
@@ -95,7 +98,7 @@ sequenceDiagram
 
 ## Complex Example
 
-A microservices checkout flow with 6 participants grouped in `box` regions. Shows parallel calls, conditional branching, error handling with `break`, retry logic, and contextual notes — the full toolkit for complex sequences.
+A microservices checkout flow with 6 participants grouped in `box` regions. Shows parallel calls, conditional branching, retry logic, and contextual notes — the full toolkit for complex sequences.
 
 ```mermaid
 sequenceDiagram
@@ -139,9 +142,9 @@ sequenceDiagram
         Note over order: 📊 Order status: CONFIRMED
 
         par 📤 Async notifications
-            order->>notify: 📧 Send confirmation email
+            order-)notify: 📧 Send confirmation email
         and
-            order->>notify: 📱 Send push notification
+            order-)notify: 📱 Send push notification
         end
 
         order-->>gw: ✅ Order confirmed
@@ -168,7 +171,12 @@ sequenceDiagram
 ### Why this works
 
 - **`box` grouping** clusters participants by architectural layer — readers instantly see which services are client-facing vs backend
-- **`par` blocks** show parallel inventory + payment checks happening simultaneously, which is how real checkout systems work for performance
+- **`par` blocks** show parallel inventory + payment checks happening simultaneously, as an illustrative concurrency pattern; actual consistency and compensation rules must be specified
 - **Nested `alt`/`else`** covers the happy path AND two distinct failure modes, each with proper cleanup (void auth, release reservation)
 - **`loop` for retry logic** shows the payment retry pattern without cluttering the happy path
 - **Emoji in messages** makes scanning fast — 📦 for inventory, 💰 for payment, ✅/❌ for outcomes
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/sequenceDiagram.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

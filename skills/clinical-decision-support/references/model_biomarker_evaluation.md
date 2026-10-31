@@ -59,7 +59,7 @@ Calibration asks whether predicted probabilities agree with observed frequencies
 - observed versus predicted risk across meaningful ranges;
 - integrated or absolute calibration error when justified.
 
-The standard-library helper accepts calibration bins and reports a weighted absolute gap. Binning loses information and does not replace individual-level calibration analysis in an approved environment.
+The standard-library helper accepts calibration bins and reports a weighted absolute gap. Its `calibration_in_the_large_gap` field is mean predicted probability minus observed event proportion on the probability scale; it is not the logistic calibration intercept. Bin totals and observed events must match the same group and confusion matrix, including when disclosure suppression applies. Binning loses information and does not replace individual-level calibration analysis in an approved environment.
 
 Primary overview: [Van Calster et al., calibration](https://pubmed.ncbi.nlm.nih.gov/31842878).
 
@@ -69,7 +69,7 @@ Use proper scoring rules and decision-curve/net-benefit methods only with a pres
 
 ### Uncertainty
 
-Report intervals for performance estimates and explain resampling or analytic methods. The helper uses Wilson intervals for aggregate proportions. It does not model correlated observations, clustering, repeated measurements, censoring, or verification bias.
+Report intervals for performance estimates and explain resampling or analytic methods. A zero denominator is undefined, not zero performance: the helper emits `null` estimates/interval endpoints. Balanced accuracy requires both observed outcome classes, otherwise it is `null` and excluded from subgroup differences. The helper uses Wilson intervals for aggregate proportions. It does not model correlated observations, clustering, repeated measurements, censoring, or verification bias.
 
 ## External Validation
 
@@ -144,7 +144,7 @@ Input contains only:
 - aggregate calibration bins;
 - provenance and validation metadata.
 
-Output contains bounded descriptive metrics, uncertainty, suppression, and documented gaps. It never outputs a person-level class or recommendation.
+Output contains bounded descriptive metrics, uncertainty, suppression, and documented gaps. Invalid inputs return failure diagnostics with no partial group metrics. The helper emits JSON only; it does not produce calibration plots, bin-level Wilson intervals, forest plots, or fitted calibration models. It never outputs a person-level class or recommendation.
 
 ```bash
 python3 scripts/model_biomarker_evaluation.py \

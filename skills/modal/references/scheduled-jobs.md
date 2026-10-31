@@ -1,5 +1,9 @@
 # Modal Scheduled Jobs
 
+Reviewed against Modal 1.6.0 and official [scheduling documentation](https://modal.com/docs/guide/cron).
+Schedules were constructed locally only; these application-specific job bodies are
+illustrative and were not deployed or triggered.
+
 ## Overview
 
 Modal supports running functions automatically on a schedule, either using cron syntax or fixed intervals. Deploy scheduled functions with `modal deploy` and they run unattended in the cloud.
@@ -74,6 +78,9 @@ def daily_task():
 ```
 
 `modal.Period` resets its timer on each deployment. If you need a schedule that doesn't shift with deploys, use `modal.Cron`.
+Cron defaults to UTC; use `modal.Cron("0 9 * * *", timezone="America/New_York")`
+for a named timezone. Scheduled Functions must be callable with no required arguments.
+Make repeated scheduled writes idempotent; redeployment and retries are not exactly-once guarantees.
 
 ## Deploying Scheduled Functions
 
@@ -126,12 +133,14 @@ def etl_pipeline():
 def retrain():
     model = train_on_latest_data("/data/training/")
     torch.save(model.state_dict(), "/models/latest.pt")
+    model_vol.commit()
 ```
 
 ### Health Checks
 
 ```python
 @app.function(
+    image=modal.Image.debian_slim().uv_pip_install("requests"),
     schedule=modal.Period(minutes=5),
     secrets=[modal.Secret.from_name("slack-webhook")],
 )
@@ -139,7 +148,8 @@ def health_check():
     import os, requests
     status = check_all_services()
     if not status["healthy"]:
-        requests.post(os.environ["SLACK_URL"], json={"text": f"Alert: {status}"})
+        response = requests.post(os.environ["SLACK_URL"], json={"text": f"Alert: {status}"}, timeout=30)
+        response.raise_for_status()
 ```
 
 > The webhook URL is read from a Modal Secret (`SLACK_URL`), not hardcoded or taken

@@ -1,8 +1,8 @@
 # uncertainties recipes
 
-Verified against uncertainties 3.2.3 with NumPy 2.5.1 and SciPy 1.18.0. The package
-performs first-order (linear) propagation with analytic derivatives, tracking
-correlations automatically through every operation. Everything it does is the GUM
+Verified against uncertainties 3.2.3 with NumPy 2.5.3 and SciPy 1.18.1. The package
+performs first-order (linear) propagation with automatic differentiation (mostly analytic elementary derivatives), tracking
+correlations automatically through every operation. This implements first-order variance propagation, a part of the GUM
 uncertainty framework; it does not perform Monte Carlo propagation and does not check
 whether linearization was appropriate.
 
@@ -69,7 +69,9 @@ umath.sqrt(a)  # 1.00+/-0.10
 ```
 
 `umath` mirrors `math`: sqrt, exp, log, log10, log1p, expm1, the trigonometric and
-hyperbolic functions and their inverses, atan2, hypot, degrees, radians, fabs, erf.
+hyperbolic functions and their inverses, atan2, hypot, degrees, radians, and erf. `abs(UFloat)` and `umath.fabs` are deprecated
+in 3.2.3; the bundled evaluator uses `uncertainties.wrap` with an explicit derivative
+for absolute value and rejects the undefined derivative at zero.
 
 For arrays, `unumpy` provides the wrapped versions plus constructors and accessors:
 
@@ -109,17 +111,23 @@ the warnings about reporting one digit when the leading digit is 1 or 2.
 ## Where the uncertainty came from
 
 ```python
-result = a**2 + b
-result.derivatives[a]        # 2.0 -- the sensitivity coefficient
-result.error_components()    # {variable: contribution} for every input
+x = ufloat(1.0, 0.2)
+y = ufloat(2.0, 0.3)
+result = x**2 + y
+result.derivatives[x]        # 2.0 -- partial with respect to this independent input
+result.error_components()    # contributions keyed by independent Variable objects
 ```
 
-`error_components` is the uncertainty budget, keyed by the original variables. Sorting
-it descending tells you which input to improve.
+For independent original `ufloat` inputs this is a useful budget. For
+`correlated_values`, derivatives and components are keyed by internally constructed
+independent variables, not by the correlated derived objects `a` and `b` above.
+`result.derivatives[a]` therefore does not return a physical partial derivative.
+Compute sensitivities using independent placeholders and combine them with the full
+original covariance matrix; report covariance terms separately.
 
 ## Fitted parameters
 
-The covariance matrix from a fit is the correlation between parameters, and discarding
+The covariance matrix from a fit contains parameter variances and covariances, and discarding
 it is a routine error:
 
 ```python
@@ -127,6 +135,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from uncertainties import correlated_values
 
+# Illustrative integration: define model, x, y and standard uncertainties sigma.
 popt, pcov = curve_fit(model, x, y, sigma=sigma, absolute_sigma=True)
 slope, intercept = correlated_values(popt, pcov)   # keeps the correlation
 ```
@@ -161,7 +170,15 @@ On one synthetic straight-line fit the two give parameter standard deviations of
   and normal inputs with the same u are indistinguishable to it.
 - **No degrees of freedom.** Coverage factors are your problem; use
   `scripts/uncertainty_budget.py`.
-- **`float()` fails**, deliberately, on anything with an uncertainty. Comparison
-  operators compare nominal values.
+- **`float()` fails**, deliberately, on anything with an uncertainty. Ordering comparisons are deprecated in 3.2.3; explicitly compare `.nominal_value`
+  only when that is intended. Equality also depends on uncertainty/correlation and
+  is not a statistical hypothesis test.
 - **Object arrays are slow.** For large arrays, propagate analytically or by Monte Carlo
   rather than element-wise.
+
+Current references: [user guide](https://uncertainties.readthedocs.io/en/latest/user_guide.html),
+[technical guide](https://uncertainties.readthedocs.io/en/latest/tech_guide.html), and
+[SciPy curve_fit](https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html).
+`absolute_sigma=True` does not repair a wrong model, dependence ignored in sigma, poor
+conditioning, or the local linear approximation behind `pcov`. A 2-D `sigma` is the
+observation covariance matrix; a 1-D `sigma` is observation standard deviations.

@@ -14,7 +14,7 @@ returns float64 observations against a float32 `Box` is rejected -- otherwise
 
 The training and evaluation templates are thin wrappers over SB3, so they are
 covered by one small end-to-end run each: a real (tiny) PPO fit through
-`train_agent`, driven in a subprocess because it hardcodes `SubprocVecEnv`, and
+`train_agent`, driven in a subprocess to explicitly exercise `SubprocVecEnv`, and
 `evaluate_agent` loading the saved model back.
 """
 
@@ -81,10 +81,10 @@ class SpaceDefinitionTests(unittest.TestCase):
         for grid_size in (3, 5, 8):
             with self.subTest(grid_size=grid_size):
                 space = custom_env_template.CustomEnv(grid_size=grid_size).observation_space
-                self.assertEqual(space.shape, (2,))
+                self.assertEqual(space.shape, (4,))
                 self.assertEqual(space.dtype, np.float32)
-                np.testing.assert_allclose(space.low, [0.0, 0.0])
-                np.testing.assert_allclose(space.high, [grid_size - 1] * 2)
+                np.testing.assert_allclose(space.low, [0.0] * 4)
+                np.testing.assert_allclose(space.high, [grid_size - 1] * 4)
 
     def test_the_metadata_declares_the_render_modes_it_implements(self) -> None:
         self.assertEqual(
@@ -119,11 +119,12 @@ class ResetTests(unittest.TestCase):
                     np.array_equal(info["agent_position"], info["goal_position"])
                 )
 
-    def test_the_observation_is_the_agent_position_and_lies_in_the_space(self) -> None:
+    def test_the_observation_contains_agent_and_goal_and_lies_in_the_space(self) -> None:
         env = custom_env_template.CustomEnv()
         observation, info = env.reset(seed=3)
         self.assertTrue(env.observation_space.contains(observation))
-        np.testing.assert_allclose(observation, info["agent_position"])
+        np.testing.assert_allclose(observation[:2], info["agent_position"])
+        np.testing.assert_allclose(observation[2:], info["goal_position"])
 
     def test_the_info_distance_is_the_euclidean_distance_to_the_goal(self) -> None:
         env = placed_env(agent=(0, 0), goal=(3, 4))
@@ -139,7 +140,7 @@ class StepTests(unittest.TestCase):
                 env = placed_env(agent=(2, 2), goal=(4, 4))
                 observation, _, terminated, truncated, _ = env.step(action)
                 np.testing.assert_allclose(
-                    observation, [2 + row_delta, 2 + column_delta]
+                    observation[:2], [2 + row_delta, 2 + column_delta]
                 )
                 self.assertFalse(terminated)
                 self.assertFalse(truncated)
@@ -151,7 +152,7 @@ class StepTests(unittest.TestCase):
             with self.subTest(start=start, action=action):
                 env = placed_env(agent=start, goal=(2, 2))
                 observation, _, _, _, _ = env.step(action)
-                np.testing.assert_allclose(observation, expected)
+                np.testing.assert_allclose(observation[:2], expected)
                 self.assertTrue(env.observation_space.contains(observation))
 
     def test_reaching_the_goal_pays_one_and_terminates(self) -> None:
@@ -222,7 +223,7 @@ class EnvCheckerTests(unittest.TestCase):
         # the checker ran.
         class WrongDtypeEnv(custom_env_template.CustomEnv):
             def _get_obs(self):
-                return self._agent_position.astype(np.float64)
+                return super()._get_obs().astype(np.float64)
 
         with self.assertRaises(AssertionError):
             check_env(WrongDtypeEnv(), warn=True)
@@ -310,14 +311,34 @@ class EvaluationTests(unittest.TestCase):
         )
         self.assertEqual(deviation, 0.0)
 
-    def test_a_missing_normalisation_file_is_ignored_rather_than_fatal(self) -> None:
-        mean, _ = evaluate_agent.evaluate_agent(
-            str(self.model_path),
-            env_id="CartPole-v1",
-            n_eval_episodes=1,
-            vec_normalize_path=str(Path(self._directory.name) / "absent.pkl"),
-        )
-        self.assertGreater(mean, 0.0)
+    def test_a_missing_requested_normalisation_file_fails_loudly(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            evaluate_agent.evaluate_agent(
+                str(self.model_path), n_eval_episodes=1,
+                vec_normalize_path=str(Path(self._directory.name) / "absent.pkl"),
+            )
+
+    def test_seeded_evaluation_repeats_the_same_episode_returns(self) -> None:
+        first = evaluate_agent.evaluate_agent(str(self.model_path), n_eval_episodes=4, seed=91)
+        second = evaluate_agent.evaluate_agent(str(self.model_path), n_eval_episodes=4, seed=91)
+        self.assertEqual(first, second)
+
+    def test_video_is_encoded_from_rgb_frames(self) -> None:
+        pytest.importorskip("moviepy")
+        pytest.importorskip("pygame")
+        import imageio.v2 as imageio
+        with tempfile.TemporaryDirectory() as directory:
+            evaluate_agent.evaluate_agent(
+                str(self.model_path), n_eval_episodes=1, record_video=True,
+                video_folder=directory, video_length=4,
+            )
+            videos = list(Path(directory).glob("*.mp4"))
+            self.assertEqual(len(videos), 1)
+            with imageio.get_reader(videos[0]) as reader:
+                frame = reader.get_data(0)
+                self.assertEqual(frame.ndim, 3)
+                self.assertGreater(frame.std(), 0)
+                self.assertGreaterEqual(reader.count_frames(), 2)
 
     def test_comparing_models_reports_one_row_per_path(self) -> None:
         # The results are keyed by path, so the same checkpoint twice collapses
@@ -345,12 +366,15 @@ DRIVER = """
 import json, sys
 sys.path.insert(0, {scripts!r})
 import train_rl_agent
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
 if __name__ == "__main__":
     model = train_rl_agent.train_agent(
         env_id="CartPole-v1",
         n_envs=2,
         total_timesteps=16,
+        vec_env_cls=SubprocVecEnv,
+        algorithm_kwargs=dict(n_steps=8, batch_size=8, n_epochs=1),
         eval_freq=10 ** 9,
         save_freq=10 ** 9,
         log_dir={logs!r},
@@ -367,7 +391,7 @@ class TrainingPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             driver = root / "driver.py"
-            # train_agent hardcodes SubprocVecEnv, and spawn/forkserver
+            # This run requests SubprocVecEnv, and spawn/forkserver
             # re-imports the entry module, so it can only be launched from a
             # script guarded by `if __name__ == "__main__"`.
             driver.write_text(

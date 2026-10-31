@@ -8,7 +8,7 @@ Standard k-means/k-medoids adapted for time series:
 
 - `TimeSeriesKMeans` - K-means with temporal distance metrics (DTW, Euclidean, etc.)
 - `TimeSeriesKMedoids` - Uses actual time series as cluster centers
-- `TimeSeriesKShape` - Shape-based clustering algorithm
+- `KShape` - Shape-based clustering algorithm
 - `TimeSeriesKernelKMeans` - Kernel-based variant for nonlinear patterns
 
 **Use when**: Known number of clusters, spherical cluster shapes expected.
@@ -26,18 +26,18 @@ Efficient clustering for large collections:
 
 Specialized for alignment-based similarity:
 
-- `KASBA` - K-means with shift-invariant elastic averaging
+- `KASBA` - K-means with stochastic subgradient elastic barycenter averaging
 - `ElasticSOM` - Self-organizing map using elastic distances
 
 **Use when**: Time series have temporal shifts or warping.
 
 ## Spectral Methods
 
-Graph-based clustering:
+Scale- and shift-invariant centroid clustering:
 
-- `KSpectralCentroid` - Spectral clustering with centroid computation
+- `KSpectralCentroid` - K-Spectral Centroid clustering using shape-based alignment
 
-**Use when**: Non-convex cluster shapes, need graph-based approach.
+**Use when**: Series shape matters despite differences in scale and temporal shift.
 
 ## Deep Learning Clustering
 
@@ -74,7 +74,7 @@ Compute cluster centers for time series:
 
 - `mean_average` - Arithmetic mean
 - `ba_average` - Barycentric averaging with DTW
-- `kasba_average` - Shift-invariant averaging
+- `kasba_average` - Stochastic subgradient elastic barycenter averaging
 - `shift_invariant_average` - General shift-invariant method
 
 **Use when**: Need representative cluster centers for visualization or initialization.
@@ -105,7 +105,7 @@ centers = clusterer.cluster_centers_
 - **Large datasets**: TimeSeriesCLARA, TimeSeriesCLARANS
 - **Complex patterns**: Deep learning clusterers
 - **Interpretability**: Catch22Clusterer, SummaryClusterer
-- **Non-convex clusters**: KSpectralCentroid
+- **Scale/shift invariant shapes**: KSpectralCentroid
 
 ## Distance Metrics
 
@@ -117,7 +117,6 @@ Compatible distance metrics include:
 
 ## Evaluation
 
-Use clustering metrics from sklearn or aeon benchmarking:
-- Silhouette score
-- Davies-Bouldin index
-- Calinski-Harabasz index
+For elastic distances, compute a pairwise matrix and pass it to sklearn `silhouette_score(..., metric="precomputed")`. Davies-Bouldin and Calinski-Harabasz expect Euclidean feature vectors; do not pass a DTW matrix as features. With known class labels, `aeon.benchmarking.metrics.clustering.clustering_accuracy_score` optimally matches cluster IDs to class IDs.
+
+For Euclidean k-means set `distance="euclidean", averaging_method="mean"` explicitly. Elastic barycenter averaging supports only its documented distance subset; a distance callable alone does not guarantee a compatible averaging method. `TimeSeriesAgglomerative` (new in 1.6) supports fit-time labels but does not predict unseen cases; inspect `capability:predict` for clusterers.

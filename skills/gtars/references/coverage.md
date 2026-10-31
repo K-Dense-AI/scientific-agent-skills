@@ -1,8 +1,8 @@
 # Coverage, uniwig, and bigWig
 
-Verified against `gtars-cli==0.9.0` / `gtars-uniwig==0.9.0` on
-**2026-07-23**. The public BEDbase page is partly under construction; tagged CLI
-and crate source take precedence where examples differ.
+Source-reviewed against `gtars-cli==0.10.0` / `gtars-uniwig==0.9.0` on
+**2026-10-01**; CLI/Rust templates were not executed in this audit. Published
+crate source takes precedence when older guide examples differ.
 
 ## Distinguish two meanings of coverage
 
@@ -11,7 +11,7 @@ and crate source take precedence where examples differ.
 - `gtars uniwig` creates positional signal tracks (WIG, NPY, bedGraph, bigWig,
   and limited BAM-derived outputs).
 
-Python 0.9.2 does not export `gtars.uniwig`. Old examples using
+Python 0.10.0 does not export `gtars.uniwig`. Old examples using
 `gtars.uniwig.coverage_from_bed`, `coverage.normalize()`, `smooth()`,
 `call_peaks()`, or `to_bigwig()` are not current APIs.
 
@@ -46,7 +46,8 @@ python3 -B scripts/coverage_preflight.py \
 ```
 
 It validates local paths, bounds, sorting, Gtars `u32` coordinates, output
-collision, and a conservative dense-value budget. It writes and executes
+prefix collisions (including derived output files), and a dense-value budget
+rounded separately for each contig. It writes and executes
 nothing.
 
 ## Current batch CLI
@@ -95,8 +96,8 @@ shifts and ChIP fragment-body counts are not interchangeable.
 
 ## Streaming mode
 
-For very large **BED** input, 0.9.0 exposes a streaming processor whose state is
-bounded by smoothing/gap behavior:
+For large **BED** input, CLI 0.10.0 exposes a streaming processor. Memory still
+depends on the operation and interval distribution; pilot representative data:
 
 ```bash
 gtars uniwig \
@@ -174,7 +175,7 @@ Enable only uniwig:
 
 ```toml
 [dependencies]
-gtars = { version = "=0.9.0", default-features = false, features = ["uniwig"] }
+gtars = { version = "=0.10.0", default-features = false, features = ["uniwig"] }
 ```
 
 The wrapper re-exports `gtars_uniwig` as `gtars::uniwig`. The primary batch
@@ -214,11 +215,11 @@ streaming `OutputFormat`.
 - Start with one thread and one small synthetic contig. Increase only after
   measuring peak RSS, temporary disk, throughput, and deterministic equivalence.
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
 - [Gtars uniwig module guide](https://docs.bedbase.org/gtars/uniwig/)
-- [CLI uniwig parser at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/uniwig/cli.rs)
-- [CLI uniwig handler at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/uniwig/handlers.rs)
-- [Rust uniwig 0.9.0 source](https://github.com/databio/gtars/tree/v0.9.0/gtars-uniwig)
+- [CLI uniwig parser at gtars-v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/uniwig/cli.rs)
+- [CLI uniwig handler at gtars-v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/uniwig/handlers.rs)
+- [Rust uniwig 0.9.0 source](https://github.com/databio/gtars/tree/gtars-v0.10.0/gtars-uniwig)
 - [UCSC bedGraph format](https://genome.ucsc.edu/goldenPath/help/bedgraph.html)
 - [UCSC BigWig format](https://genome.ucsc.edu/goldenPath/help/bigWig.html)

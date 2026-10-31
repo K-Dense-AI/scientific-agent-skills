@@ -25,7 +25,7 @@ No API key required. Fully open and free.
 
 ## Common Parameters
 
-- `format=json` — response format (default json)
+- `format=json` or `.json` — request JSON explicitly; do not assume the default negotiated format
 - `limit` — results per page (default 20, max 1000)
 - `offset` — pagination offset
 - `order_by` — sort field (prefix `-` for descending)
@@ -56,7 +56,7 @@ No API key required. Fully open and free.
 /mechanism?molecule_chembl_id=CHEMBL25&format=json
 ```
 
-## Response Format (molecule)
+## Response Format (molecule collection)
 ```json
 {
   "page_meta": {"limit": 20, "offset": 0, "total_count": 150},
@@ -78,3 +78,8 @@ No API key required. Fully open and free.
 
 ## Rate Limits
 No strict limit. Keep under ~10 req/sec. No auth required.
+
+Single `/molecule/{id}.json` returns the molecule object directly, while list/search
+responses include `page_meta` and `molecules`. Follow `page_meta.next`. Molecular
+weights can be numeric strings; retain activity units, relation qualifiers and assay
+type rather than treating every reported value as comparable binding affinity.

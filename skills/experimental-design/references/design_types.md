@@ -42,7 +42,8 @@ three nuisance factors.)
 
 Each subject receives more than one condition, serving as its own control. This
 removes between-subject variation — usually the largest noise source — so these
-designs are far more powerful per subject.
+designs can improve precision when within-subject correlation and carry-over
+assumptions support them; the benefit is not automatic.
 
 - **Repeated measures:** the same units measured under several conditions or over
   time.
@@ -83,23 +84,25 @@ correlated, it is effectively the unit of replication too.
 - Power depends on the number of **clusters** far more than the number of individuals,
   and on the **intraclass correlation (ICC)**. Adding people to existing clusters
   helps much less than adding clusters.
-- The **design effect** `DEFF = 1 + (m − 1)·ICC` (m = cluster size) quantifies how
-  much the effective sample size shrinks; even a small ICC with large clusters costs
-  dearly. Power these by simulation (see **statistical-power**).
+- The **design effect** `DEFF = 1 + (m − 1)·ICC` (m = common cluster size) approximates the
+  variance inflation for an equal-size parallel design with exchangeable correlation;
+  unequal sizes or other designs require a suitable calculation. Even a small ICC
+  with large clusters costs dearly. Power these by simulation (see **statistical-power**).
 - Analyze with a method that accounts for clustering (mixed model with a cluster
   random effect, or GEE). Analyzing individuals as independent is pseudoreplication.
 
 ## Nested designs and pseudoreplication
 
 **Pseudoreplication** is treating non-independent measurements as independent
-replicates. It is the most common and most damaging design error in experimental
-biology, and it cannot be fixed after data collection — only by designing and
-analyzing at the correct level.
+replicates. It is a serious design and analysis error in experimental biology. Statistical
+modeling cannot create missing independent replication. If enough independent
+units were collected, a mistaken analysis can be corrected by respecting the
+nesting; no mixed model rescues one independently treated unit per arm.
 
 The principle: **the replicate is whatever the treatment is independently applied
-and randomized to.** Measurements taken below that level are *technical replicates* —
-they improve the precision of a single unit's value but do **not** add degrees of
-freedom for testing the treatment.
+and randomized to.** Measurements below that level can be biological subsamples (cells within mice)
+or technical repeated measurements. They characterize that unit but do **not**
+become independent treatment replicates.
 
 Worked examples:
 - **One dish per treatment, 50 cells imaged.** Treatment applied to the dish ⇒ n = 1
@@ -121,9 +124,14 @@ How to avoid it:
    measurements per unit (though technical replicates can reduce measurement noise).
 3. **Analyze with the nesting respected** — average to the unit level, or fit a mixed
    model with random effects for the nesting (cells in mice, fish in tanks, time in
-   subjects). The fixed-effect treatment test then uses the correct, larger error and
-   correct degrees of freedom.
+   subjects). Inference must still use a suitable covariance model and small-sample degrees
+   of freedom; few clusters can make routine asymptotic mixed-model or GEE tests
+   unreliable.
 
 Technical replicates are still worth taking — they sharpen each unit's estimate — but
 report and analyze them as what they are, never as independent biological replicates.
 For sample size of nested/clustered designs, use simulation in **statistical-power**.
+
+See the [NC3Rs experimental-unit guidance](https://eda.nc3rs.org.uk/experimental-design-unit)
+for animal, litter, cage, and split-plot examples. Different treatment factors can
+have different experimental units within one study.

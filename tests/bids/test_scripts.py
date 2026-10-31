@@ -49,6 +49,7 @@ class SchemaWriteTests(TemporaryReferencesTestCase):
         "schema_version": "1.2.1",
         "bids_version": "1.11.1",
         "objects": {"entities": {"subject": {"name": "sub"}}},
+        "rules": {"entities": ["subject"]},
     }
 
     def test_downloaded_schema_is_reserialised_with_stable_formatting(self) -> None:
@@ -73,12 +74,15 @@ class SchemaWriteTests(TemporaryReferencesTestCase):
         self.assertIn("schema 1.2.1", output)
         self.assertIn("BIDS 1.11.1", output)
 
-    def test_a_schema_without_version_fields_reports_unknown(self) -> None:
-        with mock.patch.object(update_schema, "fetch", return_value=b"{}"):
-            with mock.patch("builtins.print") as printed:
-                update_schema.update_schema("https://example.invalid/schema.json")
-        output = " ".join(str(call.args[0]) for call in printed.call_args_list)
-        self.assertIn("schema ? / BIDS ?", output)
+    def test_incomplete_schema_does_not_replace_existing_snapshot(self) -> None:
+        target = self.references / "bids_schema.json"
+        target.write_bytes(b"previous snapshot")
+        for payload in (b"{}", b"[]", b'{"bids_version":"1.11.2"}'):
+            with self.subTest(payload=payload):
+                with mock.patch.object(update_schema, "fetch", return_value=payload):
+                    with self.assertRaises(ValueError):
+                        update_schema.update_schema("https://example.invalid/schema.json")
+                self.assertEqual(target.read_bytes(), b"previous snapshot")
 
     def test_a_non_json_response_fails_before_anything_is_written(self) -> None:
         with mock.patch.object(update_schema, "fetch", return_value=b"<html>404</html>"):
@@ -103,11 +107,19 @@ class BepsWriteTests(TemporaryReferencesTestCase):
         output = " ".join(str(call.args[0]) for call in printed.call_args_list)
         self.assertIn("2 BEPs", output)
 
-    def test_the_counter_matches_the_format_of_the_shipped_file(self) -> None:
-        # The count is a byte-substring search, so it only stays correct while
-        # upstream keeps this exact indentation. Pin it against the real file.
-        shipped = (REFERENCES / "beps.yml").read_bytes()
-        self.assertEqual(shipped.count(b"\n-   number:"), 25)
+    def test_count_accepts_yaml_spacing_and_first_line(self) -> None:
+        self.assertEqual(update_schema.bep_numbers(b"- number: '001'\n-   number: 002\n"), ["001", "002"])
+
+    def test_rejects_error_payload_and_duplicate_ids_without_overwriting(self) -> None:
+        target = self.references / "beps.yml"
+        target.write_bytes(b"previous catalogue")
+        for payload in (b"<html>Denied</html>", b"- number: 001\n- number: 001\n"):
+            with self.subTest(payload=payload):
+                with mock.patch.object(update_schema, "fetch", return_value=payload):
+                    with self.assertRaises(ValueError):
+                        update_schema.update_beps()
+                self.assertEqual(target.read_bytes(), b"previous catalogue")
+
 
 
 class FetchTests(unittest.TestCase):
@@ -120,6 +132,18 @@ class FetchTests(unittest.TestCase):
         request = opened.call_args.args[0]
         self.assertEqual(request.full_url, "https://example.invalid/x.json")
         self.assertIn("bids-skill-updater", request.get_header("User-agent"))
+        self.assertEqual(opened.call_args.kwargs["timeout"], 30)
+        response.__enter__.return_value.read.assert_called_once_with(update_schema.MAX_BYTES + 1)
+
+    def test_oversized_response_and_non_https_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            update_schema.fetch("file:///etc/passwd")
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b"12345"
+        with mock.patch.object(update_schema, "MAX_BYTES", 4):
+            with mock.patch("urllib.request.urlopen", return_value=response):
+                with self.assertRaises(ValueError):
+                    update_schema.fetch("https://example.invalid/schema.json")
 
     def test_the_default_sources_are_https_and_upstream(self) -> None:
         self.assertTrue(update_schema.SCHEMA_URL.startswith("https://"))

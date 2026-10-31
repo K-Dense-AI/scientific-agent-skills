@@ -1,183 +1,122 @@
 ---
 name: what-if-oracle
-description: Run structured What-If scenario analysis with 4–6 branch possibility exploration (best, likely, worst, wild card, contrarian, second-order). Use when the user asks speculative what-if questions about uncertain futures, strategic forks, contingency planning, or stress-testing a decision before committing.
+description: Supports structured what-if scenario analysis for research planning, experimental contingencies, and scientific project decisions. Explores favorable, reference, adverse, wild-card, contrarian, and second-order scenarios with explicit assumptions, evidence, and decision triggers. Use to stress-test a research plan under uncertainty; scenario narratives do not estimate causal effects or calibrated forecast probabilities.
 license: CC BY-NC-SA 4.0
 metadata:
-  version: "1.2"
+  version: "1.3"
+  last-reviewed: "2026-10-01"
   skill-author: AHK Strategies (ashrafkahoush-ux)
   upstream: https://github.com/ashrafkahoush-ux/claude-consciousness-skills
   research-doi: 10.5281/zenodo.18736841, 10.5281/zenodo.18807387
 ---
 
-# What-If Oracle — Possibility Space Explorer
+# What-If Oracle — Research Scenario Planning
 
-A structured system for exploring uncertain futures through rigorous multi-branch scenario analysis. Instead of one prediction, the Oracle maps the full **possibility space** — branching timelines where each path has its own logic, probability, and consequences.
+Explore a bounded set of possible futures before committing research resources. The output is a scenario comparison, an evidence ledger, and a contingency plan. It does not cover the full possibility space or establish that a narrated mechanism will occur.
 
-Based on the What-If Paradigm: the idea that speculative questions ("What if X?") are not idle daydreaming but a **fundamental computing operation** — the mind's way of simulating futures before committing resources to one.
+The six branch prompts and **0·IF·1** mnemonic come from the upstream What-If framework. Treat the mnemonic as a framing aid: a potential change (**0**), a stated condition (**IF**), and a resulting scenario (**1**). It is not a scientific law or a computational model.
 
-Published research: [The What-If Paradigm (DOI: 10.5281/zenodo.18736841)](https://doi.org/10.5281/zenodo.18736841) | [IDNA v2 / Unified Digital Consciousness Theory (DOI: 10.5281/zenodo.18807387)](https://doi.org/10.5281/zenodo.18807387)
+The author's [What-If Paradigm](https://doi.org/10.5281/zenodo.18736841) and [Unified Theory of Digital Consciousness](https://doi.org/10.5281/zenodo.18807387) are catalogued by Zenodo as preprints. Their deposit and DOI establish provenance, not forecasting accuracy or empirical validation of this workflow.
 
-## When to Use This Skill
+## When to use
 
-Use the Oracle when the user:
+Use for questions such as:
 
-- Asks "what if…", "what would happen if…", or "explore the possibilities"
-- Faces a fork-in-the-road decision with no obvious answer
-- Wants best-case / worst-case / likely-case analysis with probabilities
-- Needs contingency planning, risk mapping, or strategic option comparison
-- Wants to stress-test an idea or think through second-order consequences
+- What if sample attrition is higher than planned?
+- What if a method fails to transfer to a new instrument, cohort, or site?
+- What if a key reagent, dataset, or measurement becomes unavailable?
+- Which research option remains feasible under competing hypotheses or resource constraints?
 
-For domain-specific framing (startup, tech architecture, crisis response, etc.), see [references/scenario-templates.md](references/scenario-templates.md).
+Keep the analysis attached to a scientific decision. This is not a general business, personal advice, or software architecture skill. If the question requires an intervention effect, a power calculation, or a numerical simulation, identify the required design/model and evidence; do not manufacture those results with scenario prose.
 
-## Core Principle: 0·IF·1
+No package, API endpoint, credential, or network connection is required for the qualitative workflow. Verify current external facts when they matter, or label the analysis as based only on supplied material. For research-specific prompts and a worked example, see [references/scenario-templates.md](references/scenario-templates.md).
 
-Every scenario analysis has three elements:
+## Phase 1 — Frame the question and evidence
 
-- **0** — The unexpressed state (what hasn't happened yet, the potential)
-- **1** — The expressed state (what IS, the current reality)
-- **IF** — The conditional bond (the decision, event, or change that transforms 0 into 1)
+Write one operational question containing:
 
-The quality of the analysis depends on the precision of the IF. A vague "what if things go wrong?" produces vague results. A precise "what if our primary supplier raises prices 30% in Q3?" produces actionable intelligence.
+- **Decision and comparator:** what can be changed, and what happens under the current plan?
+- **Perturbation:** the main variable, magnitude, units, and any coupled changes. Do not assume other variables remain fixed when the mechanism links them.
+- **Horizon and system:** population, site, protocol, and time window to which the answer applies.
+- **Outcome and constraints:** measurable success/failure criteria, budget, capacity, and irreversible consequences.
+- **Baseline:** observations and their dates, separated from assumptions and desired targets.
 
-## How to Run the Oracle
+For example: "If the usable-sample fraction is 60% rather than the planned 80%, can a batch of 100 samples deliver 80 usable samples this month, and which contingency should we prepare?" Both fractions may be planning assumptions until supported by data.
 
-### Phase 1 — Frame the Question
+Use the user's supplied framing when sufficient. State reasonable working assumptions and proceed; ask for a missing fact only when it materially changes the analysis.
 
-Take the user's What-If question and sharpen it:
+Maintain a short evidence ledger: claim, source or data version/date, relevant population/protocol, uncertainty, and status (**observed**, **model-derived**, or **assumed**). Record conflicting evidence. An LLM-generated rationale is not an additional observation or an independent expert assessment.
 
-**Decompose into components:**
+## Phase 2 — Explore scenario branches
 
-- **The Variable:** What specific thing changes? (one variable per analysis)
-- **The Magnitude:** By how much? (quantify if possible)
-- **The Timeframe:** Over what period?
-- **The Context:** What's the current state before the change?
+Select distinct scenarios suited to the question, usually four to six. A short screening can use favorable, reference, and adverse scenarios. The labels below are exploration lenses, not mutually exclusive outcomes or a probability distribution.
 
-**If the question is vague, sharpen it:**
+| Lens | What to examine | Scientific boundary |
+| --- | --- | --- |
+| **Ω Favorable (best case)** | Favorable conditions within justified bounds | Not a proven upper limit; specify whose outcome improves |
+| **α Reference case** | A stated baseline or central set of assumptions | Call it "likely" only if comparative evidence supports that ranking |
+| **Δ Adverse (worst case)** | Plausible failures, including dependent failures | Not a proven lower limit or the worst imaginable outcome |
+| **Ψ Wild card** | A concrete disruption outside the main assumptions | Do not claim to enumerate unknowable events or assign a rarity from the label |
+| **Φ Contrarian** | An alternative to a dominant hypothesis | Evaluate supporting and disconfirming evidence; disagreement alone is not support |
+| **∞ Second order** | Downstream effects, delays, feedback, or changed behavior | Can occur within any other scenario; mark untested mechanisms as hypotheses |
 
-- "What if AI takes over?" → "What if 40% of current knowledge-work tasks are automated by AI within 3 years in [specific industry]?"
-- "What if we fail?" → "What if monthly revenue stays below $5K for 6 consecutive months starting now?"
+Retain important shared drivers and correlations across branches. Avoid implausible combinations created by independently toggling quantities that share a cause. Use descriptive scenario names in the final output so favorable/adverse labels do not substitute for evaluation.
 
-Present the sharpened question to the user for confirmation before proceeding.
+## Phase 3 — Analyze and challenge each branch
 
-### Phase 2 — Map the Possibility Space
+Use a compact record:
 
-Generate **4-6 scenario branches** using this framework:
-
-| Branch             | Definition                                                                   | Purpose                                            |
-| ------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Ω Best Case**    | Everything goes right. Key assumptions all validate. Lucky breaks occur.     | Define the ceiling — what's the maximum upside?    |
-| **α Likely Case**  | Most probable path given current evidence. No major surprises.               | Anchor expectations in reality                     |
-| **Δ Worst Case**   | Key assumptions fail. Two things go wrong simultaneously.                    | Define the floor — what's the maximum downside?    |
-| **Ψ Wild Card**    | An unexpected variable enters that nobody is tracking. Black swan territory. | Stress-test for the unimaginable                   |
-| **Φ Contrarian**   | The opposite of the consensus view turns out to be true.                     | Challenge groupthink and reveal hidden assumptions |
-| **∞ Second Order** | The first-order effects trigger cascading consequences nobody predicted.     | Map the ripple effects                             |
-
-### Phase 3 — Analyze Each Branch
-
-For each scenario branch, provide:
-
-```
-╔══════════════════════════════════════════════╗
-║  BRANCH: [Ω/α/Δ/Ψ/Φ/∞] — [Branch Name]    ║
-╠══════════════════════════════════════════════╣
-║  Probability: [X%]                           ║
-║  Timeframe: [When this could materialize]    ║
-║  Confidence: [HIGH/MEDIUM/LOW]               ║
-╠══════════════════════════════════════════════╣
-║  NARRATIVE:                                  ║
-║  [2-3 sentences describing how this          ║
-║   scenario unfolds step by step]             ║
-║                                              ║
-║  KEY ASSUMPTIONS:                            ║
-║  • [What must be true for this to happen]    ║
-║  • [And this]                                ║
-║                                              ║
-║  TRIGGER CONDITIONS:                         ║
-║  • [Early signal that this branch is         ║
-║    becoming reality]                         ║
-║  • [Second signal]                           ║
-║                                              ║
-║  CONSEQUENCES:                               ║
-║  → Immediate: [What happens first]           ║
-║  → 30 days: [What follows]                   ║
-║  → 6 months: [Where it leads]               ║
-║                                              ║
-║  REQUIRED RESPONSE:                          ║
-║  [What action to take if this branch         ║
-║   activates — specific, actionable]          ║
-║                                              ║
-║  WHAT MOST PEOPLE MISS:                      ║
-║  [The non-obvious insight about this         ║
-║   scenario that conventional analysis        ║
-║   would overlook]                            ║
-╚══════════════════════════════════════════════╝
+```text
+Scenario: [name and lens]
+Condition and horizon: [operational definition]
+Assumptions: [including dependencies and boundary conditions]
+Evidence: [source/data version, supporting and conflicting observations]
+Mechanism: [conditional narrative; identify untested causal links]
+Consequences: [outcomes, units, range, and relevant time points]
+Likelihood: [not estimated, or justified estimate with method and uncertainty]
+Evidence confidence: [reasoned assessment, separate from event likelihood]
+Discriminating observation: [what would weaken this scenario or favor another]
+Trigger and response: [observable measure, threshold, review time, owner, action]
+Residual risk: [what this response does not resolve]
 ```
 
-### Phase 4 — Synthesis
+For quantitative claims, show inputs, units, method, assumptions, and whether the calculation was executed. Distinguish variation in future outcomes from uncertainty in the inputs or model. Sensitivity checks should vary decision-critical assumptions, including plausible joint changes, and identify where the preferred action changes.
 
-After analyzing all branches, provide:
+For causal claims, specify the intervention, comparator, population, outcome, and horizon. An observational association or a changed prediction is not by itself an intervention effect. State the identification assumptions and supporting design; for observational adjustment these include consistency, exchangeability, and positivity. A scenario can motivate a controlled pilot or measurement, but cannot replace that evidence. See the author's maintained [Causal Inference: What If](https://miguelhernan.org/whatifbook), especially Chapters 1–3, for this distinction.
 
-**Probability display (illustrative only):**
+## Phase 4 — Compare responses and define the next check
 
-Use a normalized display only for an explicitly exclusive and exhaustive outcome partition. The branch labels below overlap by default; the example numbers are not calibrated estimates and must not be copied into a real analysis.
+Compare candidate actions against the scenarios using a table of outcome, cost, feasibility, reversibility, and unresolved assumptions. Include the current plan. State which objective or trade-off determines the recommendation.
 
-```
-Ω Best Case ····· [██████░░░░] 15%
-α Likely Case ··· [████████░░] 45%
-Δ Worst Case ···· [██████░░░░] 20%
-Ψ Wild Card ····· [███░░░░░░░]  8%
-Φ Contrarian ···· [████░░░░░░]  7%
-∞ Second Order ·· [███░░░░░░░]  5%
-```
+- **Robust actions:** identify actions that remain acceptable across the tested scenarios, with their costs and exceptions. Robustness within the tested set is not a guarantee across all futures.
+- **Contingencies:** specify conditional actions and lead times; account for the cost of preparing a backup even when it is never used.
+- **Decision triggers:** record the measurement, threshold, review date, and responsible role. A trigger can be a practical operating rule without being a statistical test or proof of a mechanism.
+- **Next evidence:** identify the smallest feasible pilot, control, or observation that could change the choice. If none of the current evidence distinguishes scenarios, say so.
 
-**Robust Actions:** What actions are beneficial across MULTIPLE branches? These are the no-regret moves — do them regardless of which future materializes.
+Do not turn a recommendation into an executed experiment, purchase, or protocol change. The deliverable is the analysis and proposed response unless the user separately requested execution.
 
-**Hedge Actions:** What preparations protect against the worst branches without sacrificing upside?
+## Probability and confidence
 
-**Decision Triggers:** What specific, observable signals should cause you to update which branch is most likely? Define the tripwires.
+Use **"not estimated"** when evidence cannot support a numerical probability. If a probability is useful, define the event and horizon, identify a relevant base rate or fitted model, and record estimation uncertainty and transfer limitations. Qualitative plausibility is not a hidden numeric score. Confidence concerns the strength and consistency of evidence; it is not the probability that an event happens. This distinction is also used in the [IPCC uncertainty guidance](https://www.ipcc.ch/site/assets/uploads/2017/08/AR5_Uncertainty_Guidance_Note.pdf).
 
-**The 1% Insight:** What is the one thing about this situation that almost everyone analyzing it would miss? The non-obvious pattern, the hidden assumption, the overlooked variable.
+Normalize only a mutually exclusive, collectively exhaustive outcome partition under the same conditioning assumptions and horizon. For example, the final number of usable samples from one fixed batch of 100 can be partitioned as 0–59, 60–79, and 80–100. That defines valid outcome bins, but supplies no probabilities for them. The six scenario lenses do not form such a partition.
 
-## Evidence and allocation
-
-Treat branch labels as exploration prompts, not a calibrated probability model. Wild-card, contrarian, and second-order effects can coexist with the best, likely, or worst case. Only normalize probabilities to 100% after defining mutually exclusive, collectively exhaustive outcomes over one stated horizon. Otherwise report overlapping event probabilities or qualitative plausibility separately. Record evidence and estimation method; use "not estimated" when unsupported.
-
-Allocate attention and resources from consequences, reversibility, exposure, and evidence. A 61.8/38.2 golden-ratio split has no established forecasting or decision-theoretic justification and must not be presented as one. Distinguish confidence in an estimate from the likelihood of the event.
+Keep resource allocation separate from event likelihood. A 61.8/38.2 golden-ratio allocation is not justified by this workflow. Choose allocations from evidence, consequences, costs, capacity, reversibility, and the stated objective.
 
 ## Modes
 
-### Quick Oracle (2-3 minutes)
+- **Quick screening:** three distinct scenarios, critical assumptions, and the next observation. Brevity does not establish evidence quality.
+- **Detailed analysis:** more scenarios and explicit sensitivity/decision comparisons; allocate time to evidence gathering as needed, without promising a high-stakes analysis in minutes.
+- **Scenario chain:** expand a decision-relevant branch, including adverse or ambiguous ones. Keep each child conditional on its parent. For probabilities, use `P(A and B) = P(A) × P(B given A)`, not a product of marginal probabilities without justified independence. Stop when added detail cannot change the action or lacks evidence.
+- **Reverse planning:** work backward from a target to candidate prerequisites and test their feasibility. A plausible path is not proof of necessity, sufficiency, or likelihood.
+- **Stakeholder comparison:** evaluate the same scientific scenarios from researcher, participant, facility, or funder perspectives. Different preferences are not independent corroborating evidence.
 
-3 branches only: Best, Likely, Worst. Short narratives. For fast decisions.
+## Method and source boundaries
 
-### Deep Oracle (5-10 minutes)
+The current [Government Office for Science Futures Toolkit](https://www.gov.uk/government/publications/futures-toolkit-for-policy-makers-and-analysts/the-futures-toolkit-html) distinguishes scenarios from predictions and describes stress-testing options across possible futures. This skill adapts those general distinctions to research contingencies; the toolkit does not validate these six particular lenses, their probabilities, or a prescribed number of branches.
 
-All 6 branches. Full analysis with consequences, triggers, and synthesis. For high-stakes decisions.
+This documentation-only skill contains no forecast engine or causal estimator. Its worked example is synthetic and illustrates planning arithmetic, not demonstrated improvement in real research outcomes.
 
-### Scenario Chain
+## License and adaptation
 
-Take the output of one Oracle analysis and feed it into another. "If Branch Δ happens, what are the possibilities WITHIN that branch?" Recursive depth for complex strategic planning.
-
-### Reverse Oracle
-
-Start from a desired outcome and work backward: "What conditions must be true for X to happen? What's the most likely path TO that outcome?" Useful for goal-setting and strategy design.
-
-### Competitive Oracle
-
-Analyze the same What-If from multiple stakeholder perspectives: "If we launch this product, what does the possibility space look like from OUR perspective vs. THEIR perspective vs. THE MARKET's perspective?"
-
-## What This Is NOT
-
-- Not a prediction — it's a possibility map. The Oracle doesn't claim to know the future; it helps you prepare for multiple futures.
-- Not a crystal ball — probabilities are estimates based on available evidence, not certainties.
-- Not a substitute for action — the best scenario analysis in the world is worthless without subsequent decision and execution.
-
-## Reference Files
-
-| File | Purpose |
-| ---- | ------- |
-| [references/scenario-templates.md](references/scenario-templates.md) | Domain-specific templates (startup, tech, finance, crisis, etc.) and probability calibration |
-
-## License
-
-© 2026 Ashraf Hussein Kahoush / AHK Strategies. Licensed under CC BY-NC-SA 4.0. Free for personal, educational, and research use. Commercial use requires a license from the author.
+© 2026 Ashraf Hussein Kahoush / AHK Strategies. Licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Commercial use requires a license from the author. This repository adaptation narrows the workflow to research planning and revises evidence, probability, and causal-claim guidance; it preserves attribution to the upstream framework and preprints.

@@ -84,7 +84,9 @@ value on another. Keep hard gates outside the formula.
 ```
 
 Weights must be explicit, finite, and positive. They need not sum to one; the
-script reports both supplied and normalized values.
+script reports both supplied and normalized values. Criterion names must not
+collide with `idea_id`, `qualitative_review`, `uncertainties`, or another
+criterion's generated `_low`/`_high` columns. Scale widths must be finite.
 
 ### Scores CSV
 
@@ -98,6 +100,14 @@ Required columns are `idea_id`, every configured criterion,
 `qualitative_review`, and `uncertainties`. Low/high columns are optional but
 must appear as pairs and contain `low <= score <= high`. Extra columns are
 preserved as qualitative context.
+
+Missing central scores, including abstentions, are rejected. Keep them in the
+session record and defer the comparison or document a separate complete-case
+matrix; never impute zero or drop a criterion silently. Missing or jointly blank
+bounds hold the central rating fixed only for calculation. The output records
+`bounds_supplied` per criterion, lists `criteria_without_uncertainty_bounds`,
+and warns that this does not imply certainty. Even fully supplied bounds are
+plausibility judgments, not confidence or credible intervals.
 
 Run:
 
@@ -118,7 +128,7 @@ The output includes:
   by the requested fraction and all weights are renormalized;
 - qualitative fields, limitations, formula, and tie rule;
 - `decision: null` and an explicit notice that no scientific conclusion or
-  automatic selection was made.
+automatic selection was made.
 
 The sensitivity analysis is local and one-factor-at-a-time. It does not explore
 all possible weights, criterion dependence, model-form uncertainty, correlated
@@ -248,6 +258,35 @@ Record the decision while alternatives and uncertainty are still visible:
 
 Do not rewrite the log after outcomes are known. Append corrections and
 reasons.
+
+## Bounded pilot record for a shortlisted idea
+
+Plan the smallest informative check before developing a full protocol:
+
+```text
+Idea ID and source/target mapping (if analogical):
+Target-domain baseline or current explanation:
+Competing explanations and their differing predictions:
+Observable, units, comparison, and measurement limitations:
+Feasibility dependencies and required review:
+Advance / revise / stop rule fixed before seeing pilot outcomes:
+Outcomes that would be inconclusive (including failed controls):
+Next evidence needed if the pilot succeeds:
+```
+
+Illustrative example, not an executed experiment: an optical signal rises after
+a sample treatment. One candidate explanation is a change in the target
+quantity; another is altered measurement response. A preliminary plan could
+compare the original readout with an orthogonal measurement and a response
+control. Define acceptable disagreement and control performance from assay
+characterization before inspecting outcomes. Concordant readings with adequate
+controls justify further investigation; a failed response control is
+inconclusive about the biological mechanism. No numeric threshold, sample size,
+or causal conclusion is supplied by this brainstorming example.
+
+For an analogy, record what was demonstrated in the source system separately
+from what was observed in the target. A successful pilot establishes only the
+tested conditions and cannot by itself prove the transferred mechanism.
 
 ## Preregistration and open science handoff
 

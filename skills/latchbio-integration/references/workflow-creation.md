@@ -1,6 +1,6 @@
 # Python Workflow Creation
 
-This reference targets `latch==2.76.8`. Check the installed SDK with
+This reference targets `latch==2.77.1`. Check the installed SDK with
 `scripts/inspect_latch_sdk.py` before using version-sensitive symbols.
 
 ## Mental Model
@@ -41,9 +41,16 @@ def normalize_name(sample_name: str) -> str:
 
 @workflow
 def normalize_sample(sample_name: str) -> str:
-    """Normalize a sample identifier."""
+    """Normalize a sample identifier.
+
+    Replace embedded spaces with underscores.
+    """
     return normalize_name(sample_name=sample_name)
 ```
+
+In SDK 2.77.1, an explicit workflow docstring must contain a newline: the
+decorator splits it into a title and description. A one-line docstring raises
+`ValueError` during import. Use a multiline docstring, as above, or omit it.
 
 Use keyword arguments for task calls. They make graph wiring explicit and
 survive parameter reordering.
@@ -140,10 +147,12 @@ def validate_fastq(reads: LatchFile) -> bool:
     return validate_task(reads=reads)
 ```
 
-Metadata keys must match workflow parameter names. The SDK rejects metadata
-keys absent from the function signature.
+Metadata keys must match workflow parameter names. In SDK 2.77.1, the
+decorator drops unmatched metadata keys before its mismatch check; a typo can
+silently lose labels or rules. Compare the key sets before applying the
+decorator instead of relying on an exception.
 
-Although `about_page_path` is documented, SDK 2.76.8 can fail while serializing
+Although `about_page_path` is documented, SDK 2.77.1 can fail while serializing
 its `Path` value. Use `documentation=` and a descriptive workflow docstring
 until that defect is fixed.
 
@@ -214,12 +223,14 @@ use its promise truth checks rather than Python unary `not`.
 
 ## Caching, Retries, and Timeouts
 
-Named task decorators forward Flyte task options:
+Named task decorators forward Flyte task options. This skeleton is illustrative;
+replace the task body before execution:
 
 ```python
 from datetime import timedelta
 
 from latch import medium_task
+from latch.types import LatchFile
 
 
 @medium_task(
@@ -278,4 +289,4 @@ argument.
 - Map tasks: https://wiki.latch.bio/workflows/sdk/python/map-task
 - Caching: https://wiki.latch.bio/workflows/sdk/python/caching
 - Workflow environment: https://wiki.latch.bio/workflows/sdk/python/workflow-environment/overview
-- SDK source at the 2.76.8 release commit: https://github.com/latchbio/latch/tree/0faa9dcd8186444ac008f50adf95d43f0fa30e06
+- SDK source at the 2.77.1 release commit: https://github.com/latchbio/latch/tree/b3768e65c6d496868f6e530f11977d857ad85dc7

@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import canonical_contig, emit, naming_style  # noqa: E402
+from normalize_variant import special_alt  # noqa: E402
 
 COLUMNS = ["severity", "rule", "line", "detail"]
 VALID_BASES = set("ACGTNacgtn")
@@ -66,8 +67,8 @@ class Findings:
 def detect_format(path: Path) -> str:
     suffixes = [s.lower() for s in path.suffixes]
     for suffix, fmt in (
-        (".bed", "bed"), (".narrowpeak", "bed"), (".broadpeak", "bed"),
-        (".bedgraph", "bed"), (".gtf", "gtf"), (".gff3", "gff3"), (".gff", "gff3"),
+        (".bed", "bed"), (".narrowpeak", "narrowpeak"), (".broadpeak", "broadpeak"),
+        (".bedgraph", "bedgraph"), (".gtf", "gtf"), (".gff3", "gff3"), (".gff", "gff3"),
         (".vcf", "vcf"),
     ):
         if suffix in suffixes:
@@ -150,7 +151,7 @@ class SortState:
 # --------------------------------------------------------------------------
 
 
-def audit_bed(path: Path, find: Findings, genome: dict[str, int]) -> None:
+def audit_bed(path: Path, find: Findings, genome: dict[str, int], flavour: str = "bed") -> None:
     contigs: list[str] = []
     widths: Counter = Counter()
     total = zero_length = starts_at_zero = 0
@@ -204,10 +205,17 @@ def audit_bed(path: Path, find: Findings, genome: dict[str, int]) -> None:
                 "fatal", "bad_strand", lineno,
                 f"strand column is {fields[5]!r}; BED allows only +, - or .",
             )
-        if len(fields) >= 8:
+        if flavour == "narrowpeak":
+            try:
+                summit = int(fields[9])
+                if summit != -1 and not 0 <= summit < end - start:
+                    find.add("fatal", "bad_peak_offset", lineno, "peak must be -1 or an offset inside the interval")
+            except (IndexError, ValueError):
+                find.add("fatal", "bad_peak_offset", lineno, "narrowPeak needs an integer tenth column")
+        if flavour == "bed" and len(fields) >= 8:
             try:
                 thick_start, thick_end = int(fields[6]), int(fields[7])
-                if thick_start < start or thick_end > end:
+                if not start <= thick_start <= thick_end <= end:
                     find.add(
                         "warn", "thick_outside_feature", lineno,
                         f"thickStart/thickEnd {thick_start}-{thick_end} fall outside "
@@ -215,12 +223,12 @@ def audit_bed(path: Path, find: Findings, genome: dict[str, int]) -> None:
                     )
             except ValueError:
                 find.add("fatal", "non_integer_coordinate", lineno, "thickStart/thickEnd")
-        if len(fields) >= 12:
+        if flavour == "bed" and len(fields) >= 12:
             audit_bed12(find, lineno, fields, start, end)
 
         order.check(
             find, lineno, contig, start,
-            "bedtools and tabix assume sorted input and give wrong answers without it",
+            "tabix and bedtools -sorted require coordinate-sorted input",
         )
         check_bounds(find, genome, lineno, contig, end)
 
@@ -264,6 +272,12 @@ def audit_bed12(find: Findings, lineno: int, fields: list[str], start: int, end:
             f"blockCount {count} but {len(sizes)} sizes and {len(offsets)} starts",
         )
         return
+    if count < 1 or any(s <= 0 for s in sizes) or any(o < 0 for o in offsets):
+        find.add("fatal", "bad_block_geometry", lineno, "blocks need positive sizes/count and nonnegative offsets")
+    if any(o + s > end - start for o, s in zip(offsets, sizes)) or any(
+        a + s > b for a, s, b in zip(offsets, sizes, offsets[1:])
+    ):
+        find.add("fatal", "bad_block_geometry", lineno, "blocks must be ordered, nonoverlapping, and inside the feature")
     if offsets and offsets[0] != 0:
         find.add(
             "fatal", "first_block_offset", lineno,
@@ -282,8 +296,11 @@ def audit_bed12(find: Findings, lineno: int, fields: list[str], start: int, end:
 def audit_gff(path: Path, find: Findings, genome: dict[str, int], flavour: str) -> None:
     contigs: list[str] = []
     gtf_attrs = gff3_attrs = 0
+    circular: set[str] = set()
 
     for lineno, raw in enumerate(path.read_text().splitlines(), start=1):
+        if raw == "##FASTA":
+            break
         if not raw.strip() or raw.startswith("#"):
             continue
         fields = raw.split("\t")
@@ -294,6 +311,8 @@ def audit_gff(path: Path, find: Findings, genome: dict[str, int], flavour: str) 
             )
             continue
         contig, _, feature, start_s, end_s, _, strand, phase, attrs = fields
+        if flavour == "gff3" and "Is_circular=true" in attrs.split(";"):
+            circular.add(canonical_contig(contig))
         contigs.append(contig)
         try:
             start, end = int(start_s), int(end_s)
@@ -304,9 +323,8 @@ def audit_gff(path: Path, find: Findings, genome: dict[str, int], flavour: str) 
         if start < 1:
             find.add(
                 "fatal", "start_below_one", lineno,
-                f"start is {start}. GFF/GTF is 1-based, so 0 cannot occur -- this is "
-                "BED-style 0-based data in a 1-based file, and every feature is "
-                "shifted one base left",
+                f"start is {start}. GFF/GTF is 1-based; this may be a convention "
+                "error. Verify the source before shifting any records",
             )
         if end < start:
             find.add(
@@ -331,7 +349,11 @@ def audit_gff(path: Path, find: Findings, genome: dict[str, int], flavour: str) 
             gff3_attrs += 1
         elif '"' in attrs:
             gtf_attrs += 1
-        check_bounds(find, genome, lineno, contig, end)
+        if canonical_contig(contig) in circular and genome.get(canonical_contig(contig), end) < end:
+            find.add("warn", "circular_extent_unchecked", lineno,
+                     "circular GFF3 can extend beyond the landmark length; unwrap and validate feature semantics separately")
+        else:
+            check_bounds(find, genome, lineno, contig, end)
 
     if flavour == "gtf" and gff3_attrs > gtf_attrs:
         find.add(
@@ -368,10 +390,10 @@ def audit_vcf(path: Path, find: Findings, genome: dict[str, int]) -> None:
             continue
 
         fields = raw.split("\t")
-        if len(fields) < 5:
+        if len(fields) < 8:
             find.add(
                 "fatal", "too_few_columns", lineno,
-                "VCF data lines need at least CHROM POS ID REF ALT",
+                "VCF data lines need eight fixed fields: CHROM POS ID REF ALT QUAL FILTER INFO",
             )
             continue
         contig, pos_s, _, ref, alt = fields[:5]
@@ -381,11 +403,12 @@ def audit_vcf(path: Path, find: Findings, genome: dict[str, int]) -> None:
             continue
         pos = int(pos_s)
 
-        if pos < 1:
+        nonliteral = any(special_alt(one) for one in alt.split(","))
+        if pos < 1 and not nonliteral:
             find.add(
                 "fatal", "pos_below_one", lineno,
-                f"POS is {pos}. VCF is 1-based; POS 0 is reserved for telomere "
-                "records and cannot carry a REF allele",
+                f"POS is {pos}. Ordinary literal variants require POS >= 1; "
+                "telomeric breakends need separate structural validation",
             )
         if not ref or set(ref) - VALID_BASES:
             find.add(
@@ -395,22 +418,22 @@ def audit_vcf(path: Path, find: Findings, genome: dict[str, int]) -> None:
                 "indels with an anchor base shared by REF and ALT",
             )
         for one in alt.split(","):
-            if one in {"-", ""}:
+            if not special_alt(one) and (not one or set(one) - VALID_BASES):
                 find.add(
                     "fatal", "bad_alt_allele", lineno,
-                    f"ALT {one!r} is Ensembl/VEP notation; VCF needs the anchor base",
+                    f"ALT {one!r} is not a literal ACGTN allele or recognized special allele",
                 )
             elif one == ref:
                 find.add("warn", "ref_equals_alt", lineno, f"REF and ALT are both {ref}")
             elif (
-                not one.startswith(("<", "*", "."))
+                not special_alt(one)
                 and len(ref) > 1
                 and len(one) > 1
-                and ref[-1] == one[-1]
+                and (ref[-1].upper() == one[-1].upper() or ref[0].upper() == one[0].upper())
             ):
                 find.add(
                     "warn", "not_parsimonious", lineno,
-                    f"{ref}>{one} share a trailing base, so this record is not "
+                    f"{ref}>{one} share a removable flanking base, so this record is not "
                     "trimmed. Run normalize_variant.py before comparing or joining "
                     "on these alleles",
                 )
@@ -425,14 +448,18 @@ def audit_vcf(path: Path, find: Findings, genome: dict[str, int]) -> None:
         )
 
         far = pos + max(len(ref) - 1, 0)
-        check_bounds(
-            find,
-            genome or declared,
-            lineno,
-            contig,
-            far,
-            "the genome file" if genome else "the file's own ##contig headers",
-        )
+        if nonliteral:
+            find.add("warn", "structural_extent_unchecked", lineno,
+                     "nonliteral ALT: SV/gVCF extent, breakend syntax, and telomere bounds are not validated")
+        else:
+            check_bounds(
+                find,
+                genome or declared,
+                lineno,
+                contig,
+                far,
+                "the genome file" if genome else "the file's own ##contig headers",
+            )
 
     if not header_seen:
         find.add(
@@ -449,9 +476,10 @@ def audit_naming(find: Findings, contigs: list[str]) -> None:
         prefixed = sorted({c for c in contigs if c.startswith("chr")})[:3]
         plain = sorted({c for c in contigs if not c.startswith("chr")})[:3]
         find.add(
-            "fatal", "mixed_contig_naming", "file",
+            "warn", "mixed_contig_naming", "file",
             f"the file mixes chr-prefixed ({', '.join(prefixed)}) and plain "
-            f"({', '.join(plain)}) contig names; any join will match one subset",
+            f"({', '.join(plain)}) contig names; this can be valid for custom references. "
+            "Compare exact names with the intended sequence dictionary",
         )
 
 
@@ -460,7 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Audit a BED/GTF/GFF3/VCF file against its format's conventions."
     )
     parser.add_argument("file", type=Path)
-    parser.add_argument("--format", choices=("bed", "gtf", "gff3", "vcf"))
+    parser.add_argument("--format", choices=("bed", "bedgraph", "narrowpeak", "broadpeak", "gtf", "gff3", "vcf"))
     parser.add_argument(
         "--genome", type=Path, help=".chrom.sizes or .fai to bounds-check against"
     )
@@ -484,8 +512,8 @@ def main(argv: list[str] | None = None) -> int:
     genome = load_genome(args.genome)
     find = Findings(args.max_examples)
 
-    if fmt == "bed":
-        audit_bed(args.file, find, genome)
+    if fmt in {"bed", "bedgraph", "narrowpeak", "broadpeak"}:
+        audit_bed(args.file, find, genome, fmt)
     elif fmt in {"gtf", "gff3"}:
         audit_gff(args.file, find, genome, fmt)
     else:

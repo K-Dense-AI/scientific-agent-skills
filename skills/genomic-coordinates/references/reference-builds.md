@@ -5,8 +5,8 @@ files can share contig names, share a coordinate range, join cleanly, and refer
 to different parts of the genome.
 
 All lengths below were read from the UCSC `bigZips` `chrom.sizes` for each
-assembly and cross-checked against the NCBI assembly report for GRCh37.p13,
-verified 2026-07-26. `scripts/check_contigs.py` carries the same table and
+assembly; all 24 nuclear lengths in the bundled tables were rechecked against
+those downloads on 2026-10-01. GRCh37 mitochondrial context is documented by UCSC. `scripts/check_contigs.py` carries the same table and
 matches files against it.
 
 ## Discriminating lengths
@@ -33,11 +33,10 @@ everything else but does not distinguish GRCh37 from GRCh38.
 
 Consequences:
 
-- Every mitochondrial coordinate differs between an hg19 BAM and a GRCh37 VCF.
-  Nuclear coordinates are identical, so the pipeline runs and only mtDNA results
-  are wrong — which is the hardest kind of error to notice.
-- Mitochondrial heteroplasmy and haplogroup calls made against hg19 cannot be
-  compared to anything rCRS-based without re-calling.
+- Mitochondrial coordinates and alleles cannot be compared by renaming alone;
+  some positions agree while others shift or refer to different bases.
+- Use reference-aware sequence mapping and allele checks, or re-call from reads,
+  before comparing mtDNA calls. Re-calling is not the only possible conversion.
 
 The two also differ in naming and in alternate-haplotype handling:
 
@@ -51,47 +50,38 @@ The two also differ in naming and in alternate-haplotype handling:
 ### The b37 family
 
 `b37` (Broad) is GRCh37 with plain naming and rCRS `MT`. `hs37d5` (1000 Genomes
-phase 2) is b37 plus a decoy contig (`hs37d5`) and the EBV genome. Primary
-coordinates are identical across all three, so they interconvert by renaming
-contigs — no liftover. Reads that map to the decoy in `hs37d5` will map somewhere
-in the primary assembly in b37, which changes coverage and variant calls in the
-affected regions even though the coordinate system did not move.
+phase 2) is b37 plus a decoy contig (`hs37d5`) and the EBV genome. Shared primary
+sequences can use an audited name map without liftover. Whole files are not
+equivalent: decoy/EBV records have no counterpart in a smaller reference, and
+reads may map elsewhere or remain unmapped when decoys are removed.
 
 ## GRCh38 and its ALT contigs
 
-hg38 as UCSC ships it has 25 primary contigs, **261 `_alt`** contigs, 42
-`_random`, and 127 `chrUn_`. The ALT contigs are alternate representations of
+The base UCSC `hg38.chrom.sizes` download checked in this review has 455
+sequences: 25 primary/mitochondrial, **261 `_alt`**, 42 `_random`, and 127 `chrUn_`.
+These counts describe that download, not every GRCh38 patch or analysis set. The ALT contigs are alternate representations of
 regions that are genuinely polymorphic — mostly MHC, and the HLA haplotypes.
 
-They break naive analysis in a specific way: a read from an ALT region can map
-equally well to the primary contig and to its ALT, so both alignments get
-`MAPQ 0` and every variant caller with a MAPQ filter drops the region entirely.
-Coverage plots show a hole where the MHC should be.
+ALT sequence can affect multi-mapping, MAPQ and downstream coverage. The
+outcome depends on the aligner and its ALT handling; equal alignments do not
+universally receive MAPQ 0. Use the reference bundle and ALT-aware alignment
+procedure documented for the chosen pipeline. A no-ALT set is a distinct
+analysis choice, not a universal default.
 
-The usual fixes:
-
-- **No-ALT analysis set** — the primary assembly with ALT contigs removed. The
-  simplest option and the right default unless you specifically want HLA typing.
-- **ALT-aware alignment** — `bwa-mem` with the `.alt` file and `bwa-postalt.js`,
-  which lifts ALT alignments back to the primary contigs.
-
-Analysis sets also hard-mask the pseudoautosomal regions on chrY, so that PAR
-reads map to chrX rather than splitting between the two. Contig *lengths* are
-unchanged by masking, so `check_contigs.py` still identifies a masked analysis
-set as GRCh38 — masking is invisible in the contig table and has to be checked
-by looking at the sequence.
+Some analysis sets mask duplicated regions such as chrY PARs. Contig lengths
+cannot reveal masking or same-length substitutions. Record the exact FASTA
+checksum and sequence dictionary, not just a build label.
 
 Patch releases (`GRCh38.p13`, `p14`) add `_fix` and new `_alt` contigs but never
-move a coordinate on a primary chromosome. A p13 coordinate is a p14 coordinate.
+move a coordinate on a primary chromosome. Shared unchanged sequences keep their coordinates; patch-contig availability differs.
 
 ## T2T-CHM13
 
-CHM13v2.0 is a genuinely different assembly, not a patch: every coordinate
-differs, and it adds sequence that has no GRCh38 coordinate at all (centromeric
-satellite arrays, acrocentric short arms). There is no clean liftover for the
-newly resolved regions, because there is nothing to lift them to. Most public
-annotation, most clinical variant databases, and most published coordinates are
-still GRCh38.
+CHM13v2.0/hs1 is a different assembly, not a GRCh38 patch. Many coordinates
+shift and newly resolved sequence may lack a GRCh38 counterpart. The v2.0
+bundle includes chromosome Y from HG002, not the CHM13 cell line. Choose
+annotations explicitly released for the target assembly and treat unresolved
+or multi-mapped liftover regions as such.
 
 ## Contig naming
 
@@ -108,23 +98,25 @@ Note that the accession's version suffix, not the base accession, carries the
 build. `NC_000001.10` and `NC_000001.11` differ only in the last character and
 are different assemblies.
 
-Renaming is the fix, and `bcftools annotate --rename-chrs`, `samtools reheader`,
+When sequences are proven identical, renaming is the fix; `bcftools annotate --rename-chrs`, `samtools reheader`,
 and a two-column mapping file all do it. Two rules:
 
 - Rename the **smaller, cheaper** file, and rename it to match the reference —
   never rename the reference.
-- `chrM` ↔ `MT` is a rename **only** between GRCh37 and GRCh38-family files. Between
-  hg19 and anything rCRS-based it is a lie, because the sequences differ.
+- `chrM` ↔ `MT` is safe only after confirming the mitochondrial sequences match.
+  GRCh37/GRCh38 commonly use rCRS, while hg19 uses a different chrM. This says
+  nothing about nuclear compatibility between GRCh37 and GRCh38.
 
-A join across naming schemes does not error. It returns the rows that happen to
+An ordinary text join across naming schemes may not error. It returns the rows that happen to
 match — often zero, sometimes a misleading subset when one file is partly
-renamed. `check_contigs.py` reports the naming style of each file and refuses to
-call two files compatible when they disagree.
+renamed. `check_contigs.py` reports style and exact-name conflicts, but alias folding
+is diagnostic only. The normalizer requires exact FASTA names and does not
+silently map `chrM` to `MT` or a case variant.
 
 ## Liftover
 
 `liftOver` (UCSC, with a `.chain` file) and `CrossMap` (which also handles BAM,
-VCF, and BigWig) are the working tools. Both are approximate by nature:
+VCF, and BigWig) are the working tools. Both depend on a specific source-to-target chain and supported format semantics:
 
 - **Coordinates can vanish.** A region deleted from the newer assembly has no
   target. liftOver writes these to its unmapped file, which is easy to ignore and
@@ -139,16 +131,29 @@ VCF, and BigWig) are the working tools. Both are approximate by nature:
   different length, or split.
 - **Variants need more than coordinates.** After lifting a VCF, `REF` may no
   longer match the new reference, and if the segment inverted, `REF` and `ALT`
-  need reverse-complementing. `CrossMap vcf` handles this; a coordinate-only lift
-  does not. Always re-run `normalize_variant.py` against the *target* reference
+  need reverse-complementing. CrossMap has VCF-specific handling and rejected-record output; inspect both
+  mapped and unmapped files. Support varies by variant type, and a successful
+  coordinate mapping alone does not establish allele or genotype correctness. Always re-run `normalize_variant.py` against the *target* reference
   afterwards and count the `MISMATCH` rows.
 
 Lifting twice — 37 → 38 → 37 — does not reliably return the original
-coordinates. When the original data can be re-processed against the target build,
-that is more accurate than any liftover.
+coordinates. Reprocessing reads against the target build can avoid some liftover losses,
+but accuracy still depends on the pipeline; it is not a universal guarantee.
 
 ## A note on what to record
 
 Coordinates in a results table, a figure, or a supplementary file should say
 which build they are in, next to the numbers. "chr7:5,530,601-5,530,625" is not a
 location. "chr7:5,530,601-5,530,625 (GRCh38)" is.
+
+
+## Official sources reviewed 2026-10-01
+
+- UCSC size tables: [hg19](https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.chrom.sizes),
+  [hg38](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.chrom.sizes),
+  [hs1](https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.chrom.sizes).
+- [UCSC assembly FAQ](https://genome.ucsc.edu/FAQ/FAQreleases.html): mitochondrial
+  reference and naming differences. Sizes are signatures, not sequence checksums.
+- [T2T CHM13 release notes](https://github.com/marbl/CHM13): v2.0 and HG002 Y.
+- [CrossMap documentation](https://crossmap.readthedocs.io/en/latest/): format-specific
+  mapping and VCF limitations. No whole-genome liftover was executed in this review.

@@ -1,124 +1,121 @@
-# Official Sources
+# Official Sources and Verification
 
-Research cut-off: **2026-07-23**. Every URL below was consulted on that
-date. Undated living documentation is labeled "living docs"; a date in
-parentheses is the page/release date visible in the source.
+Reviewed **2026-10-01**. This ledger covers all bundled commands, parsers,
+planning assumptions, and reference guidance. Living documentation is not a
+claim that every host, driver, or scheduler configuration was exercised.
 
-## psutil
+## Python and psutil
 
-- [psutil 7.2.2 documentation](https://psutil.readthedocs.io/) — living docs.
-  Used for logical versus physical CPU counts, the warning that system CPU
-  count can differ from process-usable CPUs under affinity/cgroups/Windows
-  processor groups, `Process.cpu_affinity()`, `virtual_memory()`,
-  `swap_memory()`, and `disk_usage()`.
-- [psutil 7.2.2 on PyPI](https://pypi.org/project/psutil/7.2.2/) — current
-  stable package pin verified 2026-07-23.
+- [psutil 7.2.2 reference](https://psutil.readthedocs.io/stable/index.html) and
+  [release source](https://github.com/giampaolo/psutil/tree/release-7.2.2) verify
+  `cpu_count(logical=...)`, `Process.cpu_affinity()`, `virtual_memory()`,
+  `swap_memory()`, disk semantics, and `psutil.Error` failures. The optional
+  tested package remains **7.2.2**, matching the current
+  [PyPI release metadata](https://pypi.org/pypi/psutil/json). Development/latest
+  documentation can describe a newer version; it does not change this pin.
+- [Python os reference](https://docs.python.org/3/library/os.html) verifies
+  CPU affinity, `statvfs`, `sysconf`, and CPU-count overrides introduced in
+  Python 3.13. The calling-thread/process count is not a cgroup quota detector.
+- [CPython 3.14.8 shutil source](https://github.com/python/cpython/blob/v3.14.8/Lib/shutil.py)
+  confirms POSIX `disk_usage().free` uses `f_bavail`, not `f_bfree`. Both are
+  read separately by the detector when available.
+- [Python 3.14.8 concurrent.futures documentation source](https://github.com/python/cpython/blob/v3.14.8/Doc/library/concurrent.futures.rst)
+  confirms process-aware defaults, the Windows ProcessPoolExecutor ceiling
+  of 61, and the changed process start method.
+- [Python 3.14.8 multiprocessing documentation source](https://github.com/python/cpython/blob/v3.14.8/Doc/library/multiprocessing.rst)
+  confirms the forkserver/spawn defaults and `os.process_cpu_count()` pool
+  default. These are executor-specific constraints; the generic planner does
+  not launch an executor or promise that every worker count fits every API.
 
-## Python
+## Linux, containers, and disk
 
-- [Python `os` documentation](https://docs.python.org/3/library/os.html) —
-  Python 3.14.6 living docs. Used for `os.cpu_count()`,
-  `os.process_cpu_count()`, and `os.sched_getaffinity()`.
-- [Python multiprocessing](https://docs.python.org/3/library/multiprocessing.html)
-  — Python 3.14.6 living docs. Used for process-aware pool defaults and the
-  Python 3.14 start-method change.
-- [Python concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html)
-  — Python 3.14.6 living docs. Used for `ProcessPoolExecutor` defaults,
-  Windows' 61-worker maximum, and `ThreadPoolExecutor` defaults.
-
-## Linux procfs and cgroup v2
-
-- [Linux kernel `/proc` filesystem documentation](https://docs.kernel.org/filesystems/proc.html)
-  — living kernel docs. Used for `Cpus_allowed` and
-  `Cpus_allowed_list`.
-- [Linux kernel cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)
-  — living kernel docs; page history begins 2014-07-15. Used for
-  `cpu.max`, `cpuset.cpus.effective`, `memory.current`, `memory.high`,
-  `memory.max`, hierarchy, reclaim, and cgroup OOM behavior.
-- [Linux kernel cpuset documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v1/cpusets.html)
-  — living kernel docs. Used to cross-check the interaction between affinity
-  masks and cpuset constraints.
-
-## Containers and OCI
-
+- [Kernel procfs documentation](https://docs.kernel.org/filesystems/proc.html)
+  verifies `MemAvailable`, CPU topology/affinity fields, and the mountinfo
+  root/mountpoint fields used to locate a cgroup2 mount.
+- [Kernel cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+  verifies `cpu.max`, `cpuset.cpus.effective`, `memory.current`, `memory.high`,
+  `memory.max`, hierarchical limits, and namespace-relative membership.
+  Hidden ancestors cannot be measured from a restricted mount. `memory.high`
+  remains a pressure boundary; remaining capacity is not a reservation.
 - [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/)
-  — living docs. Used for Docker's default lack of constraints, `--cpus`,
-  quota/period, cpusets, and memory controls.
-- [OCI Runtime Specification: Linux resources](https://specs.opencontainers.org/runtime-spec/config-linux/?v=v1.3.0)
-  — OCI Runtime Spec 1.3.0. Used for CPU, memory, cgroup, and device resource
-  semantics.
+  verifies default unconstrained configuration, quota/period, cpusets, memory,
+  and why host-visible swap is not necessarily container-usable swap.
+- [OCI Runtime Specification 1.3.0 Linux configuration](https://github.com/opencontainers/runtime-spec/blob/v1.3.0/config-linux.md)
+  verifies CPU/memory/device controls independently of container markers.
 
 ## NVIDIA
 
-- [NVIDIA System Management Interface manual](https://docs.nvidia.com/deploy/nvidia-smi/index.html)
-  — living docs. Used for fixed `--query-gpu` fields and
-  `--format=csv,noheader,nounits`; NVIDIA notes that index ordering is not
-  stable, which is why snapshots do not claim a persistent identity.
-- [NVIDIA Container Toolkit specialized configurations](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html)
-  — living docs. Used for `NVIDIA_VISIBLE_DEVICES`, driver capabilities, and
-  runtime constraints.
-- [NVIDIA `CUDA_VISIBLE_DEVICES`](https://docs.nvidia.com/deploy/topics/topic_5_2_1.html)
-  — official deployment documentation. Used for CUDA application visibility.
-- [NVIDIA CUDA compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/latest/why-cuda-compatibility.html)
-  — living docs. Used to distinguish management visibility from compatible
-  GPU, driver, CUDA runtime, and dynamically linked libraries.
+- [nvidia-smi manual](https://docs.nvidia.com/deploy/nvidia-smi/index.html)
+  verifies selective `--query-gpu` and `--format=csv,noheader,nounits` queries,
+  unsupported `N/A` values, unstable indices, and output compatibility limits.
+  The detector requests index/name/memory/driver/compute capability and retries
+  without compute capability on a command error. No NVIDIA hardware was
+  available for a driver-specific `--help-query-gpu` check in this review.
+- [Container Toolkit configuration](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html)
+  verifies `NVIDIA_VISIBLE_DEVICES` and driver-capability semantics. These are
+  container-start configuration inputs; their presence in a running process
+  does not prove kernel device isolation.
+- [CUDA visibility](https://docs.nvidia.com/deploy/topics/topic_5_2_1.html) and
+  [CUDA compatibility](https://docs.nvidia.com/deploy/cuda-compatibility/latest/why-cuda-compatibility.html)
+  distinguish application enumeration from management visibility and runtime
+  compatibility.
+- [MIG device enumeration](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/mig-device-names.html)
+  explains why physical management GPU counts are not framework-device counts.
 
-## AMD ROCm
+## AMD
 
-- [AMD SMI CLI tool](https://rocm.docs.amd.com/projects/amdsmi/en/docs-7.2.0/how-to/amdsmi-cli-tool.html)
-  — AMD SMI 7.2.0 docs. Used for read-only `list`/`static` JSON output and the
-  meaning of unavailable fields.
-- [ROCm SMI Python/CLI usage](https://rocm.docs.amd.com/projects/rocm_smi_lib/en/latest/how-to/use-python.html)
-  — living docs. Used for the legacy `rocm-smi` read-only fallback.
-- [ROCm GPU isolation techniques](https://rocm.docs.amd.com/en/docs-7.2.4/conceptual/gpu-isolation.html)
-  — ROCm 7.2.4 docs. Used for `ROCR_VISIBLE_DEVICES`,
-  `HIP_VISIBLE_DEVICES`, `CUDA_VISIBLE_DEVICES`, Docker device isolation, and
-  the warning that environment variables are not isolation for untrusted code.
+- [AMD SMI CLI reference](https://rocm.docs.amd.com/projects/amdsmi/en/latest/how-to/amdsmi-cli-tool.html)
+  currently identifies **27.0.0**. It verifies `static --asic --vram --json`,
+  unavailable fields, and APU/partition differences. The narrower query avoids
+  collecting every static field, including unrelated board and topology data.
+- [AMD SMI command source](https://github.com/ROCm/amdsmi/blob/a044536b8d690a9ae5962a93e7596d9eec2030b7/amdsmi_cli/amdsmi_commands.py)
+  verifies nested JSON `vram.size: {value, unit}`.
+  [The matching C++ implementation](https://github.com/ROCm/amdsmi/blob/a044536b8d690a9ae5962a93e7596d9eec2030b7/src/amd_smi/amd_smi.cc)
+  divides byte totals by 1024 squared despite labeling the result `MB`.
+  The parser preserves that binary conversion. This pinned source check does
+  not establish every installed AMD SMI release's output shape.
+- [ROCm SMI CLI reference](https://rocm.docs.amd.com/projects/rocm_smi_lib/en/latest/how-to/use-python.html)
+  and [official CLI source](https://github.com/ROCm/rocm_smi_lib/blob/master/python_smi_tools/rocm_smi.py)
+  verify the retained `--showproductname --showmeminfo vram --json` fallback
+  and flat byte-valued memory fields.
 - [ROCm environment variables](https://rocm.docs.amd.com/en/latest/reference/environment-variables/index.html)
-  — living docs. Used for AMD's Linux/Windows visibility-variable
-  recommendations.
+  verifies visibility-variable scopes and recommends `ROCR_VISIBLE_DEVICES`
+  on Linux and `HIP_VISIBLE_DEVICES` on Windows. The detector does not claim
+  to cover every isolation variable or runtime. The old separate GPU-isolation
+  URL was inaccessible; the current environment reference and container
+  documentation support the bounded guidance retained here.
 
-## Apple
+## Apple, Windows, and Slurm
 
-- [Apple: Determining system capabilities](https://developer.apple.com/documentation/kernel/1387446-sysctlbyname/determining_system_capabilities)
-  — living Apple Developer docs. Used for `hw.logicalcpu`,
-  `hw.physicalcpu`, `hw.memsize`, performance levels, and the distinction
-  between logical and physical cores.
-- [Apple `sysctl(3)` manual](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/sysctl.3.html)
-  — archived official manual. Used to cross-check physical-memory fields.
-- [Apple Developer Technical Support: system_profiler and integrated/SoC memory](https://developer.apple.com/forums/thread/688443)
-  — Apple DTS response dated 2021-08-24. Used for parseable
-  `system_profiler` output and the warning that DIMM-style details do not map
-  cleanly to integrated or Apple silicon memory.
-- The fixed `system_profiler SPDisplaysDataType -json` and named `sysctl -n`
-  queries were smoke-checked locally on Darwin 25.5.0 on 2026-07-23. The
-  script never requests the full system profile.
+- [Apple system capabilities](https://developer.apple.com/documentation/kernel/1387446-sysctlbyname/determining_system_capabilities)
+  was read through its official documentation JSON representation; it verifies
+  `hw.logicalcpu`/`hw.physicalcpu` and performance-level semantics.
+  [Archived sysctl manual](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/sysctl.3.html)
+  cross-checks memory reporting.
+- [Apple DTS system_profiler discussion](https://developer.apple.com/forums/thread/688443)
+  explains integrated/SoC memory interpretation. The fixed `sysctl -n` and
+  `system_profiler SPDisplaysDataType -json` probes were executed locally on
+  macOS during this review. Intel/AMD display-vendor handling is synthetic,
+  and no Metal framework workload was executed.
+- [Windows processor groups](https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups),
+  [GetLogicalProcessorInformation](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformation),
+  and [GetLogicalProcessorInformationEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex)
+  distinguish topology, group-limited observations, and Windows 11/Server 2022
+  defaults spanning groups. Windows behavior was covered by mocks only.
+- [Slurm sbatch](https://slurm.schedmd.com/sbatch.html),
+  [srun](https://slurm.schedmd.com/srun.html), and
+  [CPU management](https://slurm.schedmd.com/cpu_management.html) verify every
+  allowlisted allocation variable, compressed task lists, the current
+  `SLURM_NODEID` index, memory units/scope, and site-dependent enforcement.
+  Scheduler tests are synthetic; no Slurm allocation or accounting call was
+  executed. Job/step and heterogeneous-component scope must still be checked
+  in the workload's actual environment.
 
-## Slurm
+## Verification boundary
 
-- [Slurm `sbatch`](https://slurm.schedmd.com/sbatch.html) — living SchedMD
-  docs. Used for exact output environment-variable scopes:
-  `SLURM_CPUS_ON_NODE`, `SLURM_CPUS_PER_TASK`,
-  `SLURM_JOB_CPUS_PER_NODE`, `SLURM_MEM_PER_CPU`,
-  `SLURM_MEM_PER_NODE`, `SLURM_NTASKS`, and GPU variables. Also used for
-  the explicit warning that memory requests require configured enforcement.
-- [Slurm CPU Management Guide](https://slurm.schedmd.com/cpu_management.html)
-  — living SchedMD docs. Used for `task/affinity`, `task/cgroup`,
-  `ConstrainCores`, binding, and logical CPU/core allocation examples.
-- [Slurm `srun`](https://slurm.schedmd.com/srun.html) — updated
-  2026-07-14. Used for task confinement and GPU binding behavior.
-- [Slurm `scontrol`](https://slurm.schedmd.com/scontrol.html) — living docs.
-  Used for the read-only `scontrol show job` interpretation workflow.
-- [Slurm `sstat`](https://slurm.schedmd.com/sstat.html) — living docs. Used
-  for post-launch job-step accounting semantics.
-
-## Windows
-
-- [Microsoft: Processor Groups](https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups)
-  — living Microsoft docs. Used for the distinction between system logical
-  processors, physical cores, and processor-group scheduling.
-- [GetLogicalProcessorInformation](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformation)
-  — living Microsoft docs. Used for logical/physical relationships and the
-  current-group limitation on systems over 64 logical processors.
-- [GetLogicalProcessorInformationEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex)
-  — page dated 2023-03-06. Used for system-wide processor-group topology.
+The network-free suite exercises Linux cgroup hierarchy/delegated mounts,
+Slurm heterogeneous node counts, macOS/Windows probes, legacy/current AMD
+parsers, NVIDIA CSV, malformed snapshots, private output, and infeasible
+memory plans. All four CLI helpers were exercised on redacted local snapshots.
+No stress tests, large allocations, write-capacity probes, device changes,
+framework accelerator execution, or scheduler submissions were performed.

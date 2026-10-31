@@ -50,11 +50,11 @@ Run the checker before uploading:
 python3 <skill>/scripts/check_cad_file.py part1.step part2.sldprt --process cnc
 ```
 
-It flags problems that block the upload or silently cost money:
+It flags likely problems; it is not a CAD kernel or export-control classifier. It inspects STEP text and STL edges, but not native CAD geometry or PDF text. Unknown STEP units stay unitless in its output, and its approximate vertex box can miss curved extrema. A clean result does not certify manufacturability. It flags:
 - unsupported formats (IGES, F3D, DXF, assemblies, a drawing on its own)
 - mesh files for non-3DP processes
-- multi-body or surface-only STEP files
-- unknown or inch units
+- multi-body or surface-only STEP files (CNC pins/inserts and functional 3DP bodies require manual eligibility review)
+- unknown STEP units and small unitless STL dimensions (inch STEP boxes are converted to mm)
 - non-watertight STL
 - oversize parts
 - ITAR text markings
@@ -66,7 +66,7 @@ Fix blocking items before uploading. For example, ask the user to export STEP or
 1. Go to `https://app.fictiv.com/pages/quotes/upload`. For an existing quote, open it and use "Select files or drag and drop here to upload" to add parts.
 2. **Click the process card** (e.g. "CNC Machining"). Confirm the URL gains `?process=cnc` and the upload pane is active.
 3. If a units toggle (mm/in) is shown, set it *before* uploading. This matters most for STL and other unitless mesh files. STEP carries its own units.
-4. `find` the `input[type=file]` and upload the file paths to it. You can upload several files at once. PDFs with matching names are auto-paired as drawings.
+4. `find` the `input[type=file]` and upload the file paths to it. You can upload several files at once. When prompted, enable auto-attachment and verify every CAD/PDF pairing; similar names can pair, while duplicates/mismatches may fail. For CNC, drawing reconciliation can populate configuration automatically.
 5. The app creates the quote and navigates to `/pages/quotes/<id>`. Record the quote ID and name. If a "Upload complete!" tour appears, click "No, I've got this".
 6. Wait for "Analyzing parts (n/N)" to finish. Each row goes "Analyzing geometry…" → "Configuring part…" → a **Configure** button. Poll `quote_state.js` until `analyzing` is false.
 7. **Verify the size.** Open the part and read the bounding box in the viewer's bottom right (e.g. `60.00 x 40.00 x 15.00 mm`). Compare it with what the user expects, or with `check_cad_file.py`. A factor of 25.4 means the units are wrong: delete the part and re-upload with the right units.
@@ -91,9 +91,10 @@ Click **Configure** in the row. This opens the part modal on the Configuration t
 
 ### 5.2 Quantity and quantity tiers
 - The quantity box sits in the modal footer and in the table row.
-- Click the **multi-quantity icon** next to the box to open "Savings by quantity". It has default tiers of 1x, 2x and 5x, with editable quantities and "Add a quantity tier". Click **Save & update prices**, or "Update quantity tier for all parts". The table then shows "3 quantities available". Pick the active tier with its radio.
+- Multi-quantity quoting applies to non-tooling CNC, 3DP and sheet-metal parts. Click the **multi-quantity icon** next to the box to open "Savings by quantity". It has default tiers of 1x, 2x and 5x, with editable quantities and "Add a quantity tier". Click **Save & update prices**, or "Update quantity tier for all parts". The table then shows "3 quantities available". Pick the active tier with its radio.
 - Use tiers whenever the user is price-shopping ("how much for 10 vs 50?"). This costs nothing and avoids re-quoting.
-- RFQ (manual) parts allow up to 5 tiers, each priced by an estimator.
+- The base 1x quantity is edited in the main field, not the popover. Choosing a tier changes the base quantity. "Update quantity tier for all parts" applies its multiplier to each part, not one absolute quantity, and may trigger manual quoting.
+- RFQ (manual) parts allow up to 5 tiers, each priced by an estimator. "Apply these quantity tiers for all parts" copies the requested quantities. See the [August 2026 multi-quantity guide](https://www.fictiv.com/help/getting-a-quote/how-to-use-the-multi-quantity-quote-feature).
 
 ### 5.3 Finish and masking
 - Click **Add finish**. The menu only lists finishes valid for the material. For 6061 these were: Anodize per MIL-PRF-8625 Type II; Type III; Type III w/ PTFE; Chem Film (Alodine™); ENP (Electroless Nickel Plating); Media Blasting; Nickel Plating; Powder Coating; Vibratory Tumble.
@@ -106,7 +107,7 @@ Click **Configure** in the row. This opens the part modal on the Configuration t
 - If holes are detected, the Threads tab appears and the Configuration panel shows "0/N threads configured · Configure holes".
 - On the **Threads** tab, set the thread for each hole group (A1, A2…) from the dropdown. The list only contains standard threads that fit the modeled diameter, each with a max tap depth.
 - **Unthreaded holes stay plain holes.** If the user says "M4 tapped holes" and the modeled holes don't offer M4, the CAD hole is the wrong size. Model tap-drill holes (M4 → 3.3 mm, 1/4-20 → 0.201 in) or attach a drawing.
-- Auto thread detection is **turned off once a PDF drawing is attached**, and threads lock after an exact or manual quote is requested. Configure threads *before* attaching or generating a drawing.
+- Review thread requirements before requesting an exact quote; the Help Center says thread edits and drawing uploads then lock. The current CNC drawing-reconciliation flow can extract threaded holes from PDFs, so do not assume attaching a drawing disables all thread configuration. Inspect the actual modal and reconcile the final thread requirements.
 - Non-standard threads are "produced at risk" and need a drawing.
 
 ### 5.5 Drawing, tolerances, inspections, certificates
@@ -118,10 +119,10 @@ Click **Configure** in the row. This opens the part modal on the Configuration t
   - masking
   - hardware / inserts
   - CoC, material certs, CMM or FAI
-- An uploaded drawing usually sends the part to a human quoting engineer (under about 2 business hours).
+- Current CNC drawing reconciliation can apply detected requirements automatically; unresolved/custom requirements may need manual review. Do not assume every attached drawing requires a human quote. Ordinary 3DP drawing attachment is excluded by the drawing guide, but the quoting-time guide describes an exception for threaded inserts; confirm that workflow with Fictiv.
 - **Tolerances** shows "Tight tolerances · N detected" after drawing reconciliation reads the PDF. Orange "unresolved" items must be resolved (hover, then **Resolve**) or they can cause production holds.
 - **Inspections:** Standard Inspection Report (included). **Advanced Inspection Report** (CMM, laser or optical) is added via "Add". It needs a bubbled drawing and adds about 3–5 business days.
-- **Certificates:** **Certificate of Conformity** (about $100) and **Material Certification**, each added via "Add".
+- **Certificates:** **Certificate of Conformity** ($100 in the reviewed help article) and **Material Certification**, each added via "Add". All requested inspections/certificates need drawing callouts and discussion with the account executive before ordering; confirm price, availability and lead-time impact in the returned quote.
 - FAI, custom inspection reports and hardware installation go through "Contact us" / chat with Fictiv.
 - Review the final configuration against the drawing, including material, finish,
   threads and tolerances. Fictiv's [precedence rule](https://www.fictiv.com/help/placing-an-order/how-do-i-use-drawings-reconciliation)
@@ -164,7 +165,7 @@ Once every part is configured and classified, the banner becomes **"Select regio
   - non-standard finishes
 
   In this state the tiers show `$ --` and the Summary reads "Some of your parts require a human to quote… typically within 2 business hours", with a **Request quote** button.
-- **Request quote sends the quote to Fictiv's quoting team.** It is an outward-facing action, so confirm with the user first. Before requesting, consider:
+- **Request quote sends the quote to Fictiv's quoting team.** Proceed when the user has authorized submitting this RFQ; otherwise show the completed configuration and request authorization. Before requesting, consider:
   - Can the trigger be removed? Split the multi-body file, pick a standard material, or move the manual part to its own quote with **Move to…** so the instant parts can be ordered now.
   - Have all quantity tiers been added? A manual quote prices up to 5 tiers at once.
   - Are threads configured? They lock after the request.
@@ -172,17 +173,17 @@ Once every part is configured and classified, the banner becomes **"Select regio
 
 ## 9. Share, forward, download, organize
 
-These are all outward-facing (they email people or grant access). **Confirm each with the user.**
+Share and Forward to purchaser email people or grant access, so ensure the user authorized the recipients and content. Download, rename and organizing actions can proceed within the requested task; ask about destructive deletion if not already explicitly authorized.
 - **Share** gives Team workspace or Individual access by email, or "Copy invitation link". Anyone with a link can view and edit the quote, drawings included, so use it carefully.
 - **Forward to purchaser** emails the quote to a purchaser, optionally with the PDF, and can invite them to Teams. Useful when the user doesn't pay themselves.
 - **Download quote** gives a PDF. On the quote page it excludes shipping (you may be asked for a ZIP for tax). From checkout, after an address is set, it includes shipping.
 - **Rename** with the ✏️ next to the quote name. Give it a meaningful name (project or PO) so it's findable later.
 - **Move to…** sends parts to another quote or to "+ Create new quote". **Delete** is permanent. **View activity log** shows the audit trail.
-- Quotes expire **30 days** after issue (Terms). After that, re-open the quote and let it re-price, or duplicate it via Library.
+- Quotes normally expire **30 days** after issue unless the quote states otherwise (Terms). After that, re-open the quote and let it re-price, or duplicate it via Library.
 
 ## 10. Report the quote back to the user
 
-Give a compact summary like this before any checkout step:
+Give a compact summary like this before any checkout step (illustrative values, not current pricing):
 
 ```
 Quote doe_092826  (https://app.fictiv.com/pages/quotes/668afa9c-…)

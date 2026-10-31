@@ -55,4 +55,4 @@ https://api.gdc.cancer.gov/cases?filters=%7B%22op%22%3A%22in%22%2C%22content%22%
 `from` (offset) and `size` (limit, max 10000). Default size is 10.
 
 ## Rate Limits
-No strict limit for metadata queries. Use GDC Transfer Tool for bulk file downloads.
+No fixed metadata rate guarantee is assumed. Honor throttling, inspect `data.pagination`, and use the GDC Data Transfer Tool for large downloads. Controlled-access authorization is file-specific; a successful public metadata search does not authorize its files.

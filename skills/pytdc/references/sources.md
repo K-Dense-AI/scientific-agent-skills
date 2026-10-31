@@ -1,9 +1,12 @@
 # Sources and verification record
 
-Research performed **2026-07-23** with targeted Parallel search/extract, official
-PyPI JSON metadata, the PyTDC 1.1.15 source distribution, and an isolated import/API
-smoke test. Web results were treated as untrusted text; only authoritative sources
-below determined the skill.
+Reviewed **2026-10-01** against current official documentation, PyPI metadata,
+and a freshly fetched, SHA-256-verified PyTDC 1.1.15 source distribution. Current
+upstream `main` was also inspected at commit
+`c310c35f27e3f506411018ac43d97b8ba23ca652`. Executed checks used the installed
+PyTDC runtime with small local synthetic files and blocked HTTP calls, except
+separate explicitly bounded public Dataverse probes. No full dataset, checkpoint,
+remote oracle, docking, or authenticated scientific workflow was run.
 
 ## Release and package metadata
 
@@ -38,8 +41,8 @@ below determined the skill.
 
 The pinned smoke environment uses CPython 3.11. PyTDC itself does not publish a
 supported Python range, so this skill describes Python 3.11 plus setuptools 80.9.0
-as the verified target rather than claiming broader upstream support. On the tested
-macOS ARM64 resolver, the environment contained 123 packages and included large
+as the verified target rather than claiming broader upstream support. On the current tested
+macOS ARM64 resolver, the test environment contained 128 packages (including pytest) and included large
 Torch, RDKit, TileDB, Arrow, and scientific-Python artifacts.
 
 ## Official source used for API verification
@@ -98,8 +101,15 @@ that `main` or old generated documentation exactly matched 1.1.15.
       displayed release is behind PyPI 1.1.15.
 12. [Harvard Dataverse TDC collection](https://doi.org/10.7910/DVN/21LKWG)
     - Persistent collection identifier linked by the official README. The landing
-      page was unavailable to the extraction service during this research, so file
-      sizes/collection-level terms were not inferred from it.
+      page is not treated as a universal license for individual datasets.
+13. [Dataverse Data Access API](https://guides.dataverse.org/en/latest/api/dataaccess.html)
+    - GET file bytes by numeric ID, public/restricted access distinction, and
+      optional format behavior; PyTDC supplies no auth or pagination.
+14. [PrimeKG resource source](https://github.com/mims-harvard/TDC/blob/main/tdc/resource/primekg.py)
+    - Grouped graph mapping, `node_type` parameter, feature files and lossy
+      undirected display-name graph.
+15. [Chemical evaluator source](https://github.com/mims-harvard/TDC/blob/main/tdc/chem_utils/evaluator.py)
+    - Actual KL/FCD transformations and SciPy compatibility failure.
 
 ## Primary TDC papers
 
@@ -163,3 +173,49 @@ come from package source and official API documentation.
    downloads the `fpscores` artifact when it is absent.
 10. **Separate fork/package.** `pytdc-nextml` is a distinct package/repository and
    was not treated as an upgrade or replacement for official PyPI `PyTDC`.
+
+## Current executed evidence and corrections
+
+- CPython 3.11.11, PyTDC 1.1.15, setuptools 80.9.0, NumPy 1.26.4, pandas 2.3.3,
+  scikit-learn 1.9.1, RDKit 2023.9.6. Unpinned setuptools caused an actual
+  `ModuleNotFoundError: pkg_resources`; the pinned runtime imports successfully.
+- All bundled task imports, registry keys, constructor names and generic split
+  defaults were checked against the installed package. CLI help/discovery/plan
+  commands and local ADME, label selection, random/scaffold/cold splits, QED,
+  cached benchmark evaluation and local PrimeKG semantics were exercised.
+- Public `Evaluator` forwards threshold **0.5** to `pr@k` and `rp@k`, despite
+  upstream prose and the lower-level functions documenting 0.9. Regression arrays
+  produce different results at the two thresholds. `pr-auc` is average precision.
+- KL returns mean `exp(-KL)`, higher for closer distributions. Unpatched native
+  execution fails on modern SciPy's missing `histogram` export. A **test-only**
+  NumPy histogram alias tested identical and changed molecular distributions;
+  this is not evidence of an unpatched compatible workflow. The legacy histogram
+  also can produce NaN when all sampled values fall outside reference bins.
+- FCD TensorFlow transforms raw distance by `exp(-0.2 * FCD)`; PyTorch returns
+  raw distance. Both adapters were tested with controlled model outputs, with
+  no ChemNet weights or real embedding inference. This is adapter testing only.
+- Kabsch wrapper ignores `translate`; direct `kabsch_rmsd(..., translate=True)`
+  aligns a translated tiny coordinate fixture. Benchmark scores are rounded
+  before mean/population-SD aggregation. Zero-test-fraction random train/valid
+  splits stay identical across requested seeds.
+- The bundled molecular helper now marks invalid/zero-atom inputs with null scores
+  and preserves positions. Benchmark input rejects normalized-name collisions,
+  inconsistent run coverage/lengths, and mismatched fixed-test counts. The cache
+  audit no longer reports a truncated scan complete at a directory boundary.
+- Official release/tag APIs returned empty lists. ReadTheDocs still identifies
+  0.4.1. No separate fork was substituted for official PyTDC.
+
+Public Dataverse verification used read-only `GET /api/files/{file_id}/metadata`
+for Caco2 4259569, Davis 5219748, BindingDB Patent 4724851, MOSES 4170962,
+PrimeKG 6180626, ADMET group 4426004, drug-combination group 4426002 and DTI DG
+group 4742443. Curl returned HTTP 200, expected artifact labels, and
+`restricted: false` for each. Python urllib requests received HTTP 403 in this
+environment, so these are curl/public endpoint checks, not proof that the package
+downloader works end to end. HTTP range GETs of Caco2 and PrimeKG returned 512
+bytes each and the expected tabular headers; full downloads were not performed.
+The metadata response's `id` belongs to the file-metadata record; retain the
+requested datafile ID for download rather than replacing it with that value.
+
+`python tests/run_all.py --isolated pytdc` passed 30 tests; spec validation and
+nine metadata/plan CLI invocations passed. Real local runtime checks are separate
+from the two controlled FCD adapters and the explicit KL compatibility alias.

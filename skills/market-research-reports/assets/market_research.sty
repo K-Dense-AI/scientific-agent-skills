@@ -1,11 +1,18 @@
 % market_research.sty - evidence-first market report styling
 % Intended for XeLaTeX or LuaLaTeX; no external images are required.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{market_research}[2026/07/23 v1.1 Evidence-first market reports]
+\ProvidesPackage{market_research}[2026/10/01 v1.2 Evidence-first market reports]
 
 \RequirePackage[margin=1in]{geometry}
 \RequirePackage{setspace}
-\RequirePackage{helvet}
+\RequirePackage{fontspec}
+\setsansfont{texgyreheros}[
+  Extension=.otf,
+  UprightFont=*-regular,
+  BoldFont=*-bold,
+  ItalicFont=*-italic,
+  BoldItalicFont=*-bolditalic
+]
 \RequirePackage[table]{xcolor}
 \RequirePackage{graphicx}
 \RequirePackage{booktabs}
@@ -23,6 +30,7 @@
 \renewcommand{\familydefault}{\sfdefault}
 \setstretch{1.12}
 \setlength{\parskip}{0.45em}
+\setlength{\emergencystretch}{1em}
 
 % Colorblind-aware structural palette.
 \definecolor{mrnavy}{RGB}{0,68,100}

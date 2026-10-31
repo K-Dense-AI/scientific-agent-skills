@@ -1,6 +1,8 @@
 # Minibinder Expression with Strep-tag Purification and Yield via A280
 
 **URL:** https://cloud.ginkgo.bio/protocols/minibinder-strep-tag-a280
+**Service terms:** https://cloud.ginkgo.bio/terms/minibinder-strep-tag-a280
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $149/sample
 **Turnaround:** up to 11 days
@@ -8,7 +10,7 @@
 
 ## Overview
 
-End-to-end automated workflow for expressing and purifying StrepII-tagged designed minibinder candidates in a cell-free system, built to screen binder designs before scale-up. Linear DNA templates are expressed in 100 uL CFPS reactions for 20 hours, purified with StreptactinXT magnetic beads on the Agilent Bravo, and quantified from the eluate by A280 on the BMG PHERAstar. Purity and size assessment are performed on the Revvity LabChip.
+Automated cell-free expression of StrepII-tagged minibinders in 100 uL reactions, typically for 20 hours, followed by magnetic bead purification and A280 eluate quantification. The catalog also mentions LabChip, but the service terms list A280 yield and reporting without a LabChip deliverable. Confirm purity/size measurements separately; this service does not measure binding affinity.
 
 ## Input
 
@@ -24,25 +26,13 @@ End-to-end automated workflow for expressing and purifying StrepII-tagged design
 
 ## Automated Workflow
 
-### Phase 1 - CFPS Reaction Setup & Incubation
+1. Express the tagged construct in CFPS.
+2. Capture on Strep-tag affinity magnetic beads, wash, and elute.
+3. Quantify purified eluate by A280 and review plate controls.
 
-1. Retrieve plates (HRB TundraStore)
-2. Stamp DNA templates (Agilent Bravo)
-3. Seal plate (Agilent PlateLoc)
-4. Incubate shaking at 30 deg C (Thermo Cytomat)
-
-### Phase 2 - Quantification Prep
-
-1. Dispense PBS diluent (BioTek MultiFlo)
-2. Seal plate (Agilent PlateLoc)
-3. Store at 4 deg C (HRB TundraStore)
-
-### Phase 3 - LabChip Quantification
-
-1. Unseal plate (Azenta XPeel)
-2. LabChip quantification (Revvity LabChip)
-3. Seal plate (Agilent PlateLoc)
-4. Store at 4 deg C (HRB TundraStore)
+The catalog's instrument diagram instead shows CFPS, dilution, and LabChip without
+the purification step. Use the confirmed service scope above for planning and ask
+Ginkgo to resolve this diagram inconsistency before execution.
 
 ## Ordering
 
@@ -54,5 +44,5 @@ End-to-end automated workflow for expressing and purifying StrepII-tagged design
 ## Use Cases
 
 - Screening designed minibinder/binder candidates before scale-up
-- Rapid yield and purity comparison across binder designs
+- Rapid purified-yield comparison across binder designs
 - Cell-free triage of de novo designed proteins

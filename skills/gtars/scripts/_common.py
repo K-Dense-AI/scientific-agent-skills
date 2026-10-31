@@ -174,7 +174,10 @@ def iter_text_lines(
             else raw_handle
         )
         try:
-            for line_number, raw_line in enumerate(stream, start=1):
+            # Bound the read itself: iteration would allocate an entire malformed
+            # or decompressed line before the length check could reject it.
+            lines = iter(lambda: stream.readline(max_line_bytes + 1), b"")
+            for line_number, raw_line in enumerate(lines, start=1):
                 if line_number > max_records:
                     raise SafetyError("record limit exceeded")
                 if len(raw_line) > max_line_bytes:
@@ -212,6 +215,18 @@ def sha256_file(path: Path, *, max_bytes: int) -> tuple[str, int]:
                 raise SafetyError("file exceeds hash byte limit")
             digest.update(chunk)
     return digest.hexdigest(), total
+
+
+def prefix_collision_count(prefix: Path) -> int:
+    """Conservatively reserve a complete output prefix, including derived files."""
+    collisions = 0
+    with os.scandir(prefix.parent) as entries:
+        for index, entry in enumerate(entries, start=1):
+            if index > HARD_MAX_FILES:
+                raise SafetyError("output directory exceeds file-count inspection limit")
+            if entry.name.startswith(prefix.name):
+                collisions += 1
+    return collisions
 
 
 def load_json(path: Path, *, max_bytes: int) -> Any:

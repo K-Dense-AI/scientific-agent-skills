@@ -183,7 +183,7 @@ STANDARDS: dict[str, StandardProfile] = {
     "iso-14971": StandardProfile(
         key="iso-14971",
         label="ISO 14971 application of risk management to medical devices",
-        assurance_lane="no certification scheme; assessed inside other lanes",
+        assurance_lane="risk evidence assessed inside a declared assurance lane",
         activities_section="lifecycle_activities",
         scope_activities=DEVICE_LIFECYCLE_ACTIVITIES,
         scope_item_section="products",

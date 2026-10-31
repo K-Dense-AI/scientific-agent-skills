@@ -4,7 +4,7 @@ The current Registry API is object- and transaction-based. Older examples that
 call `Project.create`, `Table.create`, `Record.create`, `Record.list`,
 `record.update`, or `record.delete` do not match the current SDK.
 
-This reference targets `latch==2.76.8`.
+This reference targets `latch==2.77.1`.
 
 ## Object Model
 
@@ -67,6 +67,10 @@ for page in table.list_records(page_size=100):
         )
 ```
 
+`page_size` must be positive. The SDK uses limit/offset pagination and sorts by
+record ID; concurrent edits can change the result set between pages. Export a
+quiescent table when a consistent scientific snapshot is required.
+
 Record names are unique only within their table. Use `record.id` when a global
 identifier is required.
 
@@ -85,7 +89,7 @@ table_id = record.get_table_id()
 `Table.get_dataframe()` requires the pandas extra:
 
 ```bash
-uv pip install "latch[pandas]==2.76.8"
+uv pip install "latch[pandas]==2.77.1"
 ```
 
 ```python
@@ -272,4 +276,4 @@ Important behavior:
 - Table objects: https://wiki.latch.bio/registry/sdk/table-objects
 - Record objects: https://wiki.latch.bio/registry/sdk/record-objects
 - Workflow Registry tutorial: https://wiki.latch.bio/workflows/sdk/api/registry-usage-tutorial
-- Registry source in the 2.76.8 release commit: https://github.com/latchbio/latch/tree/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch/registry
+- Registry source in the 2.77.1 release commit: https://github.com/latchbio/latch/tree/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch/registry

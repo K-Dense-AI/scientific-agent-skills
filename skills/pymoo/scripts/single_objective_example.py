@@ -18,12 +18,12 @@ import numpy as np
 def run_single_objective_optimization():
     """Run single-objective optimization example."""
 
-    # Define the problem - Sphere function (sum of squares)
+    # Define the problem - Sphere function (sum of squared distances from 0.5)
     problem = get_problem("sphere", n_var=10)
 
     # Configure the algorithm
     algorithm = GA(
-        pop_size=100,
+        pop_size=40,
         sampling=FloatRandomSampling(),
         crossover=SBX(prob=0.9, eta=15),
         mutation=PM(eta=20),
@@ -31,7 +31,7 @@ def run_single_objective_optimization():
     )
 
     # Define termination criteria
-    termination = get_termination("n_gen", 100)
+    termination = get_termination("n_gen", 50)
 
     # Run optimization
     result = minimize(
@@ -48,7 +48,7 @@ def run_single_objective_optimization():
     print("="*60)
     print(f"Best solution: {result.X}")
     print(f"Best objective value: {result.F[0]:.6f}")
-    print(f"Number of generations: {result.algorithm.n_gen}")
+    print(f"Completed generations: {result.algorithm.n_gen - 1}")
     print(f"Number of function evaluations: {result.algorithm.evaluator.n_eval}")
     print("="*60)
 

@@ -46,12 +46,12 @@ For a two-qubit operator, `"ZI"` applies `Z` to qubit 1 and identity to qubit 0.
 When translating a bitstring into graph vertices or variables, write and test an explicit conversion:
 
 ```python
-def qiskit_bitstring_to_qubit_values(bitstring: str) -> list[int]:
-    """Return values ordered as qubit/classical-bit 0, 1, ..."""
+def qiskit_bitstring_to_classical_values(bitstring: str) -> list[int]:
+    """Decode one register in classical-bit order 0, 1, ..."""
     return [int(bit) for bit in reversed(bitstring.replace(" ", ""))]
 ```
 
-Spaces can appear between multiple classical registers in formatted count keys.
+This yields classical-bit order, not qubit order. Map through each `measure(qubit, clbit)` instruction before interpreting variables. For multiple registers or `join_data`, decode with the recorded register order; blindly stripping spaces does not establish the qubit mapping.
 
 ## Gates and Instructions
 
@@ -96,7 +96,7 @@ circuit.cx(0, 1)
 circuit.measure([0, 1], [0, 1])
 ```
 
-`measure_all()` adds measurements and, unless suitable classical bits already exist, creates a register named `meas`:
+`measure_all()` defaults to `add_bits=True`, adding a new register even when classical bits already exist (a name collision can change `meas`). Use `add_bits=False` only when sufficient classical bits exist and their ordering is intended:
 
 ```python
 circuit = QuantumCircuit(2)

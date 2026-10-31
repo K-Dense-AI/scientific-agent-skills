@@ -1,6 +1,10 @@
 # Security Validation Record
 
-Validation date: **2026-07-23** (local project date).
+Historical security-scan date: **2026-07-23** (local project date). These scan results describe that run, not a fresh scan of later edits.
+
+## Maintenance validation 2026-10-01
+
+The isolated Python 3.13 suite passes **31 tests**, including strict calendar dates, rejection of nonstandard JSON numeric constants, a 64-level JSON nesting bound, and correct scaffold date provenance. Skill specification validation also passes. The original runtime scope remains local-only. Repository-wide security scanning is handled separately by the collection maintainer; the historical scanner findings below are not evidence of a new scan.
 
 ## Baseline
 
@@ -58,8 +62,7 @@ Neither LOW finding permits data transmission, credential access, scientific sco
 ## Reproduction
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
-  -s tests/hypothesis-generation -p "test_*.py" -v
+PYTHONDONTWRITEBYTECODE=1 python tests/run_all.py --isolated hypothesis-generation
 
 uv run skills-ref validate skills/hypothesis-generation
 

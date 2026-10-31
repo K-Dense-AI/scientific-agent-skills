@@ -1,432 +1,196 @@
-# Spatial Transcriptomics Models
+# Spatial models: scvi-tools 1.5.1 compatibility workflows
 
-This document covers models for analyzing spatially-resolved transcriptomics data in scvi-tools.
+Upstream moved ongoing maintenance of DestVI, Stereoscope, Tangram, GIMVI, SCVIVA,
+RESOLVI and DIAGVI to [scVIVA-tools](https://scviva-tools.readthedocs.io/en/latest/)
+starting with scvi-tools 1.5. The classes below remain in 1.5.1; these source-verified
+examples support existing pinned workflows and were not biologically validated.
+For new spatial analyses, check the companion package's current API rather than
+assuming these namespaces will persist. No spatial model fitting was executed in
+this refresh.
 
-## DestVI (Deconvolution of Spatial Transcriptomics using Variational Inference)
+## Shared preparation
 
-**Purpose**: Multi-resolution deconvolution of spatial transcriptomics using single-cell reference data.
+Keep measured counts for count-based spatial models, unique gene IDs, cell/spot
+IDs, spatial coordinates and slide/library metadata. Align reference and spatial
+genes **before** training a reference that will be transferred. Merely having some
+gene overlap is insufficient when a method expects identical columns.
 
-**Key Features**:
-- Estimates cell type proportions at each spatial location
-- Uses single-cell RNA-seq reference for deconvolution
-- Multi-resolution approach (global and local patterns)
-- Accounts for spatial correlation
-- Provides uncertainty quantification
+```python
+# sc_adata and spatial_adata already contain measured layers['counts'].
+assert sc_adata.var_names.is_unique and spatial_adata.var_names.is_unique
+shared = sc_adata.var_names[sc_adata.var_names.isin(spatial_adata.var_names)]
+assert len(shared) > 0
+sc_adata = sc_adata[:, shared].copy()
+spatial_adata = spatial_adata[:, shared].copy()
+assert sc_adata.var_names.equals(spatial_adata.var_names)
+```
 
-**When to Use**:
-- Deconvolving Visium or similar spatial transcriptomics
-- Have scRNA-seq reference data with cell type labels
-- Want to map cell types to spatial locations
-- Interested in spatial organization of cell types
-- Need probabilistic estimates of cell type abundance
+Choose informative shared genes and check reference cell types/assays and spatial
+QC, not just a nonzero overlap count. Load spatial data with the current reader for
+the assay; preserve coordinates and image scale metadata. Do not assume a Visium
+reader creates a `counts` layer. Independent slides need separate spatial neighborhoods.
 
-**Data Requirements**:
-- **Spatial data**: Visium or similar spot-based measurements (target data)
-- **Single-cell reference**: scRNA-seq with cell type annotations
-- Both datasets should share genes
+## CondSCVI to DestVI
 
-**Basic Usage** (DestVI requires a `CondSCVI` reference model, not plain `SCVI`):
 ```python
 from scvi.model import CondSCVI, DestVI
 
-# Step 1: Train the single-cell LVM (CondSCVI) on the labeled reference
 CondSCVI.setup_anndata(sc_adata, layer="counts", labels_key="cell_type")
-sc_model = CondSCVI(sc_adata, weight_obs=False)
-sc_model.train(max_epochs=300)
-
-# Step 2: Set up the spatial data and build DestVI from the trained reference
+reference = CondSCVI(sc_adata, weight_obs=False)
+reference.train(max_epochs=300)
 DestVI.setup_anndata(spatial_adata, layer="counts")
-st_model = DestVI.from_rna_model(spatial_adata, sc_model)
-st_model.train(max_epochs=2500)
-
-# Step 3: Get cell type proportions per spot
-proportions = st_model.get_proportions()
+destvi = DestVI.from_rna_model(spatial_adata, reference)
+destvi.train(max_epochs=2500)
+proportions = destvi.get_proportions()  # spots-by-cell-types DataFrame
 spatial_adata.obsm["proportions"] = proportions
-
-# Step 4: Get cell type-specific expression
-# Expression of genes specific to each cell type at each spot
-ct_expression = st_model.get_scale_for_ct("T cells")
+for cell_type in proportions.columns:
+    spatial_adata.obs[f"prop_{cell_type}"] = proportions[cell_type]
+cell_type_expression = destvi.get_scale_for_ct("T cells")
 ```
 
-**Key Parameters**:
-- `weight_obs` (CondSCVI): downweight common cell types when training the reference
-- `amortization`: Amortization strategy ("both", "latent", "proportion")
-- `n_latent`: Latent dimensionality (inherited from the CondSCVI reference)
+DestVI requires a labeled **CondSCVI**, not SCVI, reference. The example's epoch
+counts are starting configurations, not convergence guarantees. Inspect reference
+fit and abundance support, sensitivity to cell-type granularity, and tissue markers.
+`get_gamma()` exposes within-type latent variables; it is not a matrix of gene
+scaling factors. DataFrame outputs use label/`.iloc` indexing, not `[:, i]`.
 
-**Outputs**:
-- `get_proportions()`: Cell type proportions at each spot
-- `get_scale_for_ct(cell_type)`: Cell type-specific expression patterns
-- `get_gamma()`: Proportion-specific gene expression scaling
-
-**Visualization**:
-```python
-import scanpy as sc
-import matplotlib.pyplot as plt
-
-# Visualize specific cell type proportions spatially
-sc.pl.spatial(
-    spatial_adata,
-    color="T cells",  # If proportions added to .obs
-    spot_size=150
-)
-
-# Or use obsm directly
-for ct in cell_types:
-    plt.figure()
-    sc.pl.spatial(
-        spatial_adata,
-        color=spatial_adata.obsm["proportions"][ct],
-        title=f"{ct} proportions"
-    )
-```
+The base model does not automatically use a spatial-neighbor prior simply because
+coordinates are present. Cell proportions are model estimates, not direct cell counts
+or proof that every reference type is present in every spot. Infer within-type
+expression only where that type is supported.
 
 ## Stereoscope
 
-**Purpose**: Cell type deconvolution for spatial transcriptomics using probabilistic modeling.
-
-**Key Features**:
-- Reference-based deconvolution
-- Probabilistic framework for cell type proportions
-- Works with various spatial technologies
-- Handles gene selection and normalization
-
-**When to Use**:
-- Similar to DestVI but simpler approach
-- Deconvolving spatial data with reference
-- Faster alternative for basic deconvolution
-
-**Basic Usage** (Stereoscope is split into two `scvi.external` models):
 ```python
 from scvi.external import RNAStereoscope, SpatialStereoscope
 
-# Train the single-cell reference model
 RNAStereoscope.setup_anndata(sc_adata, labels_key="cell_type", layer="counts")
-sc_model = RNAStereoscope(sc_adata)
-sc_model.train(max_epochs=100)
-
-# Build the spatial model from the trained reference
+rna = RNAStereoscope(sc_adata)
+rna.train(max_epochs=100)
 SpatialStereoscope.setup_anndata(spatial_adata, layer="counts")
-spatial_model = SpatialStereoscope.from_rna_model(spatial_adata, sc_model)
-spatial_model.train(max_epochs=2000)
-
-# Get cell-type proportions per spot
-proportions = spatial_model.get_proportions()
+spatial = SpatialStereoscope.from_rna_model(spatial_adata, rna)
+spatial.train(max_epochs=2000)
+proportions = spatial.get_proportions()
 ```
+
+Both datasets need aligned shared genes. Compare reference adequacy and held-out
+markers; there is no universal guarantee that this workflow is faster or more
+accurate than DestVI on a new assay.
 
 ## Tangram
 
-**Purpose**: Spatial mapping and integration of single-cell data to spatial locations.
+The 1.5.1 wrapper is PyTorch, uses **MuData**, and optimizes a cell-to-location
+mapping. It is not a generic optimal-transport API. Its projection methods differ
+from the standalone `tangram-sc` package, so do not mix their signatures.
 
-**Key Features**:
-- Maps single cells to spatial coordinates
-- Learns optimal transport between single-cell and spatial data
-- Gene imputation at spatial locations
-- Cell type mapping
-
-**When to Use**:
-- Mapping cells from scRNA-seq to spatial locations
-- Imputing unmeasured genes in spatial data
-- Understanding spatial organization at single-cell resolution
-- Integrating scRNA-seq and spatial transcriptomics
-
-**Data Requirements**:
-- Single-cell RNA-seq data with annotations
-- Spatial transcriptomics data
-- Shared genes between modalities
-
-> scvi-tools wraps the Tangram method as `scvi.external.Tangram`. The example
-> below uses the standalone `tangram-sc` package, whose helper functions
-> (annotation/gene projection) are convenient for downstream analysis.
-
-**Basic Usage**:
 ```python
-import tangram as tg
+from mudata import MuData
+from scvi.external import Tangram
 
-# Map cells to spatial locations
-ad_map = tg.map_cells_to_space(
-    adata_sc=sc_adata,
-    adata_sp=spatial_adata,
-    mode="cells",  # or "clusters" for cell type mapping
-    density_prior="rna_count_based"
+# sc_mapping and sp_mapping have identical selected genes/order and
+# appropriately processed expression for Tangram (not a count likelihood).
+assert sc_mapping.var_names.equals(sp_mapping.var_names)
+map_data = MuData({"sc": sc_mapping, "sp": sp_mapping})
+Tangram.setup_mudata(
+    map_data, density_prior_key=None,
+    modalities={"sc_layer": "sc", "sp_layer": "sp", "density_prior_key": "sp"},
 )
-
-# Get mapping matrix (cells × spots)
-mapping = ad_map.X
-
-# Project cell annotations to space
-tg.project_cell_annotations(
-    ad_map,
-    spatial_adata,
-    annotation="cell_type"
+tangram = Tangram(map_data)
+tangram.train()
+mapper = tangram.get_mapper_matrix()
+projected_types = Tangram.project_cell_annotations(
+    sc_mapping, sp_mapping, mapper, sc_mapping.obs["cell_type"],
 )
-
-# Impute genes in spatial data
-genes_to_impute = ["CD3D", "CD8A", "CD4"]
-tg.project_genes(ad_map, spatial_adata, genes=genes_to_impute)
+projected_genes = Tangram.project_genes(sc_mapping, sp_mapping, mapper)
 ```
 
-**Visualization**:
-```python
-# Visualize cell type mapping
-sc.pl.spatial(
-    spatial_adata,
-    color="cell_type_projected",
-    spot_size=100
-)
-```
+This explicit example omits a density prior. To use one, create a correctly normalized
+spatial `.obs` column and pass its key; the default string alone is not a computed
+prior. The 1.5.1 implementation's feature-equality guard is ineffective (it tests a
+one-element tuple), so the explicit assertion is necessary. Tangram densifies its
+registered matrices and is not minibatched; estimate memory before fitting.
+Projection results are predictions, not observed expression or exact cell locations.
+Validate with held-out genes and spatial controls, and preserve the mapping's cell
+and spot order when projecting full-feature objects.
 
-## gimVI (Gaussian Identity Multivi for Imputation)
-
-**Purpose**: Cross-modality imputation between spatial and single-cell data.
-
-**Key Features**:
-- Joint model of spatial and single-cell data
-- Imputes missing genes in spatial data
-- Enables cross-dataset queries
-- Learns shared representations
-
-**When to Use**:
-- Imputing genes not measured in spatial data
-- Joint analysis of spatial and single-cell datasets
-- Mapping between modalities
-
-**Basic Usage**:
-```python
-# gimVI (scvi.external) jointly models a single-cell and a spatial dataset
-scvi.external.GIMVI.setup_anndata(sc_adata, layer="counts")
-scvi.external.GIMVI.setup_anndata(spatial_adata, layer="counts")
-
-model = scvi.external.GIMVI(sc_adata, spatial_adata)
-model.train()
-
-# Per-dataset latent representations and imputed expression
-sc_latent, spatial_latent = model.get_latent_representation()
-_, imputed_spatial = model.get_imputed_values(normalized=True)
-```
-
-## scVIVA (Variation in Variational Autoencoders for Spatial)
-
-**Purpose**: Analyzing cell-environment relationships in spatial data.
-
-**Key Features**:
-- Models cellular neighborhoods and environments
-- Identifies environment-associated gene expression
-- Accounts for spatial correlation structure
-- Cell-cell interaction analysis
-
-**When to Use**:
-- Understanding how spatial context affects cells
-- Identifying niche-specific gene programs
-- Cell-cell interaction studies
-- Microenvironment analysis
-
-**Data Requirements**:
-- Spatial transcriptomics with coordinates
-- Cell type annotations (optional)
-
-**Basic Usage** (scVIVA lives in `scvi.external`):
-```python
-# scVIVA jointly models each cell and its niche. Precompute neighborhood
-# composition / embeddings first, then register the resulting keys.
-scvi.external.SCVIVA.preprocess_anndata(
-    spatial_adata,
-    sample_key="sample",
-    labels_key="cell_type",
-    cell_coordinates_key="spatial",  # coordinates in .obsm
-)
-
-scvi.external.SCVIVA.setup_anndata(
-    spatial_adata,
-    labels_key="cell_type",
-    sample_key="sample",
-)
-
-model = scvi.external.SCVIVA(spatial_adata)
-model.train()
-
-# Latent representation capturing cell state in its spatial context
-spatial_adata.obsm["X_scVIVA"] = model.get_latent_representation()
-```
-
-See the [scVIVA user guide](https://docs.scvi-tools.org/en/stable/user_guide/models/scviva.html)
-for the exact preprocessing keys and niche/environment outputs.
-
-## ResolVI
-
-**Purpose**: Addressing spatial transcriptomics noise through resolution-aware modeling.
-
-**Key Features**:
-- Accounts for spatial resolution effects
-- Denoises spatial data
-- Multi-scale analysis
-- Improves downstream analysis quality
-
-**When to Use**:
-- Noisy spatial data
-- Multiple spatial resolutions
-- Need denoising before analysis
-- Improving data quality
-
-**Basic Usage** (ResolVI lives in `scvi.external`):
-```python
-scvi.external.RESOLVI.setup_anndata(
-    spatial_adata,
-    layer="counts",
-)
-
-model = scvi.external.RESOLVI(spatial_adata)
-model.train()
-
-# Denoised / corrected expression
-denoised = model.get_normalized_expression()
-```
-
-## Model Selection for Spatial Transcriptomics
-
-### DestVI
-**Choose when**:
-- Need detailed deconvolution with reference
-- Have high-quality scRNA-seq reference
-- Want multi-resolution analysis
-- Need uncertainty quantification
-
-**Best for**: Visium, spot-based technologies
-
-### Stereoscope
-**Choose when**:
-- Need simpler, faster deconvolution
-- Basic cell type proportion estimates
-- Limited computational resources
-
-**Best for**: Quick deconvolution tasks
-
-### Tangram
-**Choose when**:
-- Want single-cell resolution mapping
-- Need to impute many genes
-- Interested in cell positioning
-- Optimal transport approach preferred
-
-**Best for**: Detailed spatial mapping
-
-### gimVI
-**Choose when**:
-- Need bidirectional imputation
-- Joint modeling of spatial and single-cell
-- Cross-dataset queries
-
-**Best for**: Integration and imputation
-
-### scVIVA
-**Choose when**:
-- Interested in cellular environments
-- Cell-cell interaction analysis
-- Neighborhood effects
-
-**Best for**: Microenvironment studies
-
-### ResolVI
-**Choose when**:
-- Data quality is a concern
-- Need denoising
-- Multi-scale analysis
-
-**Best for**: Noisy data preprocessing
-
-## Complete Workflow: Spatial Deconvolution with DestVI
+## GIMVI
 
 ```python
 import scvi
-import scanpy as sc
-import squidpy as sq
 
-# ===== Part 1: Prepare single-cell reference =====
-# Load and process scRNA-seq reference
-sc_adata = sc.read_h5ad("reference_scrna.h5ad")
-
-# QC and filtering
-sc.pp.filter_genes(sc_adata, min_cells=10)
-sc.pp.highly_variable_genes(sc_adata, n_top_genes=4000)
-
-# Train the CondSCVI reference model (labels_key carries cell types)
-from scvi.model import CondSCVI, DestVI
-
-CondSCVI.setup_anndata(
-    sc_adata,
-    layer="counts",
-    labels_key="cell_type",
-)
-
-sc_model = CondSCVI(sc_adata, weight_obs=False)
-sc_model.train(max_epochs=300)
-
-# ===== Part 2: Load spatial data =====
-spatial_adata = sc.read_visium("path/to/visium")
-spatial_adata.var_names_make_unique()
-
-# QC spatial data
-sc.pp.filter_genes(spatial_adata, min_cells=10)
-
-# ===== Part 3: Run DestVI =====
-DestVI.setup_anndata(
-    spatial_adata,
-    layer="counts"
-)
-
-destvi_model = DestVI.from_rna_model(
-    spatial_adata,
-    sc_model,
-)
-
-destvi_model.train(max_epochs=2500)
-
-# ===== Part 4: Extract results =====
-# Get proportions
-proportions = destvi_model.get_proportions()
-spatial_adata.obsm["proportions"] = proportions
-
-# Add proportions to .obs for easy plotting
-for i, ct in enumerate(sc_model.adata.obs["cell_type"].cat.categories):
-    spatial_adata.obs[f"prop_{ct}"] = proportions[:, i]
-
-# ===== Part 5: Visualization =====
-# Plot specific cell types
-cell_types = ["T cells", "B cells", "Macrophages"]
-
-for ct in cell_types:
-    sc.pl.spatial(
-        spatial_adata,
-        color=f"prop_{ct}",
-        title=f"{ct} proportions",
-        spot_size=150,
-        cmap="viridis"
-    )
-
-# ===== Part 6: Spatial analysis =====
-# Compute spatial neighbors
-sq.gr.spatial_neighbors(spatial_adata)
-
-# Spatial autocorrelation of cell types
-for ct in cell_types:
-    sq.gr.spatial_autocorr(
-        spatial_adata,
-        attr="obs",
-        mode="moran",
-        genes=[f"prop_{ct}"]
-    )
-
-# ===== Part 7: Save results =====
-destvi_model.save("destvi_model")
-spatial_adata.write("spatial_deconvolved.h5ad")
+scvi.external.GIMVI.setup_anndata(sc_adata, layer="counts")
+scvi.external.GIMVI.setup_anndata(spatial_panel_adata, layer="counts")
+gimvi = scvi.external.GIMVI(sc_adata, spatial_panel_adata)
+gimvi.train()
+sc_latent, spatial_latent = gimvi.get_latent_representation()
+_, imputed_spatial = gimvi.get_imputed_values(normalized=True)
 ```
 
-## Best Practices for Spatial Analysis
+Unlike DestVI, GIMVI can use a spatial feature subset to predict unmeasured genes;
+each spatial gene must be identifiable in the sequencing feature space. Preserve
+full RNA features and gene mapping rather than reducing both matrices blindly to
+the measured spatial panel. Evaluate imputation on held-out measured genes and do
+not use imputed values as independent experimental validation.
 
-1. **Reference quality**: Use high-quality, well-annotated scRNA-seq reference
-2. **Gene overlap**: Ensure sufficient shared genes between reference and spatial
-3. **Spatial coordinates**: Properly register spatial coordinates in `.obsm["spatial"]`
-4. **Validation**: Use known marker genes to validate deconvolution
-5. **Visualization**: Always visualize results spatially to check biological plausibility
-6. **Cell type granularity**: Consider appropriate cell type resolution
-7. **Computational resources**: Spatial models can be memory-intensive
-8. **Quality control**: Filter low-quality spots before analysis
+## SCVIVA
+
+The preprocessing method is named `preprocessing_anndata`, not
+`preprocess_anndata`. It needs labels, coordinates, sample membership and an
+expression embedding before neighborhood construction.
+
+```python
+# spatial_adata.obsm['X_scVI'] already contains an expression embedding.
+# Each sample has enough cells for the selected neighbor count.
+scvi.external.SCVIVA.preprocessing_anndata(
+    spatial_adata, sample_key="sample", labels_key="cell_type",
+    cell_coordinates_key="spatial", expression_embedding_key="X_scVI",
+    k_nn=20,
+)
+scvi.external.SCVIVA.setup_anndata(
+    spatial_adata, layer="counts", sample_key="sample", labels_key="cell_type",
+    cell_coordinates_key="spatial", expression_embedding_key="X_scVI",
+)
+scviva = scvi.external.SCVIVA(spatial_adata)
+scviva.train()
+spatial_adata.obsm["X_scVIVA"] = scviva.get_latent_representation()
+```
+
+Keep sample boundaries and coordinate units explicit; do not connect separate slides
+in a common numerical coordinate plane. Neighborhood effects are associations,
+not evidence of cell-cell causal signaling. Test robustness to neighborhood size,
+label uncertainty and tissue coverage.
+
+## RESOLVI
+
+RESOLVI models expression contamination/background and misassignment in
+single-cell-resolution spatial assays. It is not a general multiscale resolution
+converter or a generic substitute for spot deconvolution.
+
+```python
+scvi.external.RESOLVI.setup_anndata(
+    spatial_adata, layer="counts", batch_key="slide",
+    prepare_data_kwargs={"spatial_rep": "spatial", "n_neighbors": 10},
+)
+resolvi = scvi.external.RESOLVI(spatial_adata)
+resolvi.train()
+corrected_expression = resolvi.get_normalized_expression()
+```
+
+Setup prepares spatial neighbors by default. Supply the actual coordinate key:
+its internal default is `X_spatial`, whereas many readers use `spatial`. There must
+be enough cells within each slide for the requested neighborhood. Its validation
+split support differs from SCVI; 1.5 raises errors for unsupported validation settings.
+Assess contamination assumptions and rare-cell preservation using external controls.
+
+For plotting proportions, put named columns in `.obs` and use the appropriate
+spatial plotting API with correct image/coordinate scaling. Do not pass a Series
+as a `color` key or treat spatial autocorrelation of inferred proportions as
+independent confirmation of the same model.
+
+Sources: [spatial maintenance](https://github.com/scverse/scvi-tools/blob/1.5.1/docs/user_guide/models/destvi.md),
+[DestVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/model/_destvi.py),
+[Stereoscope](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/stereoscope/_model.py),
+[Tangram](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/tangram/_model.py),
+[GIMVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/gimvi/_model.py),
+[SCVIVA](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/scviva/_model.py),
+[RESOLVI](https://github.com/scverse/scvi-tools/blob/1.5.1/src/scvi/external/resolvi/_model.py).

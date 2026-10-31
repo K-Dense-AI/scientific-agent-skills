@@ -64,8 +64,18 @@ def generate_scaffold(
         rubric_id=rubric["rubric_id"],
     )
     process = _load_companion(process, report_type="bias_and_process_check")
+    expected_record = {
+        "evaluation_id": evaluation["evaluation_id"],
+        "work_id": evaluation["work_id"],
+    }
+    for companion in (agreement, sensitivity):
+        if companion is not None and (
+            not isinstance(companion.get("evaluation_records"), list)
+            or expected_record not in companion["evaluation_records"]
+        ):
+            raise _common.ValidationError("COMPANION_EVALUATION_NOT_INCLUDED")
     if traceability and (
-        traceability.get("status") not in {"pass", "fail"}
+        traceability.get("status") not in ("pass", "fail")
         or not isinstance(traceability.get("error_count"), int)
     ):
         raise _common.ValidationError("COMPANION_REPORT_INVALID")
@@ -79,12 +89,12 @@ def generate_scaffold(
         sensitivity.get("rank_instability_detected"), bool
     ):
         raise _common.ValidationError("COMPANION_REPORT_INVALID")
-    if process and process.get("status") not in {
+    if process and process.get("status") not in (
         "invalid",
         "blocked",
         "incomplete",
         "complete_for_low_stakes_process",
-    }:
+    ):
         raise _common.ValidationError("COMPANION_REPORT_INVALID")
     criterion_scaffold = []
     for result in score_report["criteria"]:
@@ -164,6 +174,8 @@ def generate_scaffold(
             "Missing and not-applicable ratings limit comparability.",
             "Criterion uncertainty intervals are bounded judgment ranges, not confidence intervals.",
             "Journal, citation, prestige, institution, venue, and attention indicators do not establish quality.",
+            "Companion identifiers establish membership, not unchanged input content; regenerate checks after edits.",
+            "The process checklist is a separate self-attestation, not verification of this work or rubric.",
         ],
         "private_source_content_included": False,
         "person_ranking_provided": False,

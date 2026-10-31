@@ -15,7 +15,7 @@ does it expand to, what is it descended from, and how many sequences carry it.
     python3 resolve_lineage.py XFG --descendants
     python3 resolve_lineage.py 2.3.4.4b --instance h5n1
 
-Exit code is 1 when any name is withdrawn or unknown, so it works as a gate on
+Exit code is 1 when any name is withdrawn, unknown or unverified, so it gates
 a manuscript's lineage list.
 """
 from __future__ import annotations
@@ -26,6 +26,7 @@ import sys
 
 from lapis_client import (
     LapisError,
+    SnapshotChanged,
     children_map,
     count,
     data_version,
@@ -41,6 +42,7 @@ from lapis_client import (
     pick_lineage_field,
     recombinant_parents,
     resolve_base_url,
+    surveillance_filters,
     unalias_full,
 )
 
@@ -99,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             definition = lineage_definition(base_url, lineage_field)
         except LapisError as exc:
-            print(f"warning: no lineage definition for {lineage_field}: {exc}", file=sys.stderr)
+            print(f"error: no lineage definition for {lineage_field}: {exc}", file=sys.stderr)
+            return 2
 
     aliases: dict = {}
     notes: dict = {}
@@ -108,28 +111,29 @@ def main(argv: list[str] | None = None) -> int:
             aliases = fetch_pango_aliases()
             notes = fetch_lineage_notes()
         except LapisError as exc:
-            print(f"warning: pango-designation unreachable: {exc}", file=sys.stderr)
+            print(f"error: pango-designation unreachable: {exc}", file=sys.stderr)
+            return 2
 
-    # Inverted once: the SARS-CoV-2 definition holds ~5,500 entries, so
+    # Inverted once: the SARS-CoV-2 definition holds thousands of entries, so
     # rebuilding it per name makes a list of lineages quadratic.
     children = children_map(definition)
 
     rows: list[dict] = []
     failures = 0
     for raw in args.names:
-        name = normalise(raw)
+        name = normalise(raw) if lineage_field in PANGO_FIELDS else raw.strip()
         note = notes.get(name, {})
         in_definition = name in definition
 
         if note.get("status") == "withdrawn":
             status = "withdrawn"
-        elif note.get("status") == "designated" or in_definition:
+        elif note.get("status") == "designated" or (in_definition and lineage_field not in PANGO_FIELDS):
             status = "current"
         elif notes or definition:
             status = "unknown"
         else:
             status = "unverified"
-        if status in {"withdrawn", "unknown"}:
+        if status in {"withdrawn", "unknown", "unverified"}:
             failures += 1
 
         detail = note.get("note", "")
@@ -146,12 +150,17 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_counts:
             try:
                 query = f"{name}*" if has_index else name
-                sequences = count(base_url, {lineage_field: query})
+                sequences = count(base_url, surveillance_filters(schema, {lineage_field: query}))
+            except SnapshotChanged as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
             except LapisError as exc:
                 # An indexed column rejects an unknown lineage outright rather
                 # than answering 0 -- which is the one place a typo is caught
                 # for you. An unindexed column would have returned 0 instead.
                 sequences = "n/a" if "not a valid lineage" in str(exc) else "error"
+                if sequences == "error":
+                    failures += 1
 
         rows.append(
             {
@@ -159,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
                 "status": status,
                 "unaliased": unalias_full(name, aliases) if aliases else "",
                 "parent": chain[0] if chain else "",
-                "recombinant_of": "+".join(recombinant_parents(name, aliases)) if aliases else "",
+                "recombinant_of": "+".join(recombinant_parents(unalias_full(name, aliases), aliases)) if aliases else "",
                 "descendants": ", ".join(kids) if args.descendants else len(kids),
                 "sequences": sequences,
                 "detail": detail,
@@ -169,28 +178,28 @@ def main(argv: list[str] | None = None) -> int:
     print(emit(rows, COLUMNS, args.format))
     sys.stdout.flush()
 
-    if args.format != "json":
+    print(
+        f"\n# {schema['name']} via {base_url} | data version {version}"
+        f"\n# lineage column {lineage_field}"
+        f"{' with a lineage index' if has_index else ' with no lineage index'}"
+        + (
+            f"\n# nomenclature from pango-designation ({len(notes)} names, "
+            f"{sum(1 for v in notes.values() if v['status'] == 'withdrawn')} withdrawn)"
+            f"\n# source content {pango_provenance()}"
+            if notes
+            else ""
+        )
+        + ("\n# 'sequences' counts the lineage and its descendants" if has_index else "")
+        + f"\n# record filters {surveillance_filters(schema, {})}",
+        file=sys.stderr,
+    )
+    others = [n for n, _ in lineage_field_candidates(schema) if n != lineage_field]
+    if others:
         print(
-            f"\n# {schema['name']} via {base_url} | data version {version}"
-            f"\n# lineage column {lineage_field}"
-            f"{' with a lineage index' if has_index else ' with no lineage index'}"
-            + (
-                f"\n# nomenclature from pango-designation ({len(notes)} names, "
-                f"{sum(1 for v in notes.values() if v['status'] == 'withdrawn')} withdrawn)"
-                f"\n# source blobs {pango_provenance()}"
-                if notes
-                else ""
-            )
-            + ("\n# 'sequences' counts the lineage and its descendants" if has_index else ""),
+            f"# other lineage-like columns here: {', '.join(others)} "
+            f"(select one with --lineage-field)",
             file=sys.stderr,
         )
-        others = [n for n, _ in lineage_field_candidates(schema) if n != lineage_field]
-        if others:
-            print(
-                f"# other lineage-like columns here: {', '.join(others)} "
-                f"(select one with --lineage-field)",
-                file=sys.stderr,
-            )
     return 1 if failures else 0
 
 

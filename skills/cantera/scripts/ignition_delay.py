@@ -120,7 +120,7 @@ def run(config_path, output_dir):
     config_path, output_dir = Path(config_path), Path(output_dir)
     if output_dir.exists():
         raise ValueError("Output directory exists; choose a new directory")
-    config = json.loads(config_path.read_text())
+    config = json.loads(config_path.read_text(encoding="utf-8"))
     validate(config)
     if config["samples"] > 50000:
         raise ValueError("CLI samples must be at most 50000 to permit refinement runs")
@@ -130,7 +130,8 @@ def run(config_path, output_dir):
     if local.is_file():
         effective["mechanism"] = str(local.resolve())
     gas = load_gas(effective)
-    snapshot = gas.write_yaml()
+    # Hash the exact bytes written, including on platforms with CRLF text translation.
+    snapshot = gas.write_yaml(precision=17).encode("utf-8")
     source = next((Path(d) / effective["mechanism"] for d in ct.get_data_directories()
                    if (Path(d) / effective["mechanism"]).is_file()), None)
     variants = {
@@ -160,7 +161,7 @@ def run(config_path, output_dir):
         "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
         "mechanism": {"requested": config["mechanism"], "phase": gas.name,
                       "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest() if source else None,
-                      "snapshot_sha256": hashlib.sha256(snapshot.encode()).hexdigest(),
+                      "snapshot_sha256": hashlib.sha256(snapshot).hexdigest(),
                       "species_count": gas.n_species, "reaction_count": gas.n_reactions,
                       "initial_normalized_mole_fractions": {name: float(x) for name, x in zip(gas.species_names, gas.X) if x > 0}},
         "definition": "Time of global maximum finite-difference dT/dt on a uniform output grid; requires the specified temperature rise and an interior maximum",
@@ -169,10 +170,10 @@ def run(config_path, output_dir):
         "mechanism_experimental_validity": "not_assessed",
     }
     output_dir.mkdir(parents=True)
-    (output_dir / "mechanism.yaml").write_text(snapshot)
-    (output_dir / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    (output_dir / "mechanism.yaml").write_bytes(snapshot)
+    (output_dir / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     for name, history in histories.items():
-        with (output_dir / f"{name}.csv").open("w", newline="") as handle:
+        with (output_dir / f"{name}.csv").open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
             writer.writerow(["time_s", "temperature_k", "pressure_pa", "volume_m3", "mass_kg",
                              "internal_energy_j", "enthalpy_j", *[f"X_{s}" for s in config["tracked_species"]]])

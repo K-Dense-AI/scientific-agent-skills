@@ -1,6 +1,6 @@
 """Curated sRGB palettes for scientific figures.
 
-Sources were checked 2026-07-23. Palette selection alone never establishes
+Sources were checked 2026-10-01. Palette selection alone never establishes
 accessibility: audit the rendered foreground/background contrast and add
 redundant encodings.
 

@@ -1,6 +1,6 @@
 # UMAP API Reference
 
-Reference for **umap-learn 0.5.12** (Python >=3.9; `scikit-learn>=1.6`). See [official API guide](https://umap-learn.readthedocs.io/en/latest/api.html) and the 0.5.12 GitHub tag for the full upstream reference.
+Reference checked 2026-10-01 for **umap-learn 0.5.12** (Python >=3.9; `scikit-learn>=1.6`). The [hosted API guide](https://umap-learn.readthedocs.io/en/latest/api.html) still identifies 0.5.8; use the [released implementation](https://github.com/lmcinnes/umap/blob/release-0.5.12/umap/umap_.py) for exact signatures and return contracts. All calculations run locally; the package has no service endpoint, authentication, or pagination requirement. Examples assume finite numeric arrays with stable sample/feature ordering. Core synthetic checks used native Numba JIT; TensorFlow examples are illustrative and source-checked only.
 
 ## UMAP Class
 
@@ -28,9 +28,9 @@ Dimension of the embedding space. Unlike t-SNE, UMAP scales well with increasing
 
 #### metric (str or callable, default: 'euclidean')
 Distance metric to use. Accepts:
-- Any metric from scipy.spatial.distance
-- Any metric from sklearn.metrics
-- Custom callable distance functions (must be compiled with Numba)
+- Recognized names in UMAP/PyNNDescent; not every SciPy or scikit-learn metric is accepted, and sparse support differs from dense support
+- `"precomputed"`: distances, not similarities; see the recipe below
+- Custom Numba-compatible callables returning a distance; return `(distance, gradient)` to enable inverse transformation
 
 **Common metrics:**
 - `'euclidean'`: Standard Euclidean distance (default)
@@ -50,7 +50,7 @@ Distance metric to use. Accepts:
 Distance metric for the embedding space. Most workflows should keep the Euclidean default; advanced workflows can use a supported output metric with `output_metric_kwds`.
 
 #### min_dist (float, default: 0.1)
-Effective minimum distance between embedded points. Controls how tightly points are packed together. Smaller values result in clumpier embeddings.
+A parameter of the fitted low-dimensional attraction curve, not a hard pairwise-distance bound. Smaller values favor clumpier embeddings. Require `0 <= min_dist <= spread`.
 
 **Tuning guidance:**
 - Use 0.0 for clustering applications
@@ -62,27 +62,28 @@ Effective scale of embedded points. Combined with `min_dist` to control clumped 
 
 ### Training Parameters
 
-#### n_epochs (int, default: None)
-Number of training epochs. If None, automatically determined based on dataset size (typically 200-500 epochs).
+#### n_epochs (int, list of int, or None; default: None)
+Optimization epochs. With `None`, standard UMAP uses 500 epochs up to 10,000 samples and 200 above that; densMAP adds 200. A list requests intermediate embeddings in `embedding_list_`, while `embedding_` is the final result.
 
 **Manual tuning:**
 - Smaller datasets may need 500+ epochs
 - Larger datasets may converge with 200 epochs
-- More epochs = better optimization but slower training
+- More epochs increase cost; scientific validity still requires external checks
 
 #### learning_rate (float, default: 1.0)
 Initial learning rate for the SGD optimizer. Higher values lead to faster convergence but may overshoot optimal solutions.
 
 #### init (str or np.ndarray, default: 'spectral')
 Initialization method for the embedding:
-- `'spectral'`: Use spectral embedding (default, usually best)
+- `'spectral'`: Spectral initialization (default)
 - `'random'`: Random initialization
-- `'pca'`: Initialize with PCA
+- `'pca'`: Initialize with PCA (TruncatedSVD for sparse input)
+- `'tswspectral'`: Truncated-SVD warm start for spectral initialization
 - numpy array: Custom initialization (shape: (n_samples, n_components))
 
 ### Advanced Structural Parameters
 
-#### local_connectivity (int, default: 1.0)
+#### local_connectivity (float, default: 1.0)
 Number of nearest neighbors assumed to be locally connected. Higher values give more connected manifolds.
 
 #### set_op_mix_ratio (float, default: 1.0)
@@ -99,16 +100,17 @@ Number of negative samples to select per positive sample. Higher values lead to 
 #### target_n_neighbors (int, default: -1)
 Number of nearest neighbors to use when constructing target simplicial set. If -1, uses n_neighbors value.
 
-#### target_metric (str, default: 'categorical')
+#### target_metric (str or callable, default: 'categorical')
 Distance metric for target values (labels):
 - `'categorical'`: For classification tasks
-- Any other metric for regression tasks
+- A supported continuous metric such as `"l2"` for regression targets; `-1` is not a generic missing-value marker
 
 #### target_weight (float, default: 0.5)
 Weight applied to target information vs. data structure. Range 0.0 to 1.0:
-- 0.0: Pure unsupervised embedding (ignores labels)
-- 0.5: Balanced (default)
-- 1.0: Pure supervised embedding (only considers labels)
+- Lower values emphasize the feature graph; higher values emphasize target agreement
+- 0.5 is the default
+- With categorical targets in 0.5.12, even 0.0 changes edges between classes; omit `y` for an unsupervised fit
+- 1.0 strongly suppresses cross-class connections; it does not discard the feature graph
 
 ### Transform Parameters
 
@@ -116,12 +118,12 @@ Weight applied to target information vs. data structure. Range 0.0 to 1.0:
 Size of the nearest neighbor search queue for transform operations. Larger values improve transform accuracy but increase memory usage and computation time.
 
 #### transform_seed (int, default: 42)
-Random seed for transform operations. Ensures reproducibility of transform results.
+Random seed for transform operations; keep query order and software environment fixed when checking reproducibility.
 
 #### transform_mode (str, default: 'embedding')
 Method for transforming new data:
 - `'embedding'`: Standard approach (default)
-- `'graph'`: Use nearest neighbor graph
+- `'graph'`: `fit_transform` returns the sparse training graph `(n_train, n_train)`; `transform` returns a bipartite graph `(n_new, n_train)`, not embedding coordinates
 
 ### Performance Parameters
 
@@ -129,7 +131,7 @@ Method for transforming new data:
 Whether to use a memory-efficient implementation. Set to False only if memory is not a constraint and you want faster performance.
 
 #### n_jobs (int, default: -1)
-Number of parallel jobs to use where supported. `-1` uses all available processors. Setting `random_state` can limit parallel optimization in favor of reproducibility.
+Number of parallel jobs to use where supported. `-1` uses all available processors. A non-None `random_state` forces `n_jobs=1` in standard UMAP.
 
 #### verbose (bool, default: False)
 Whether to print progress messages during fitting.
@@ -138,32 +140,32 @@ Whether to print progress messages during fitting.
 Keyword arguments passed to the tqdm progress bar when progress reporting is enabled.
 
 #### unique (bool, default: False)
-Whether to consider only unique data points. Set to True if you know your data contains many duplicates to improve performance.
+Fit unique feature rows and map the resulting coordinates back to input rows. Audit duplicate rows with conflicting labels. Unsupported with precomputed distances or precomputed neighbors.
 
 #### force_approximation_algorithm (bool, default: False)
-Force use of approximate nearest neighbor search even for small datasets. Can improve performance on large datasets.
+Use approximate search even below the usual small-data threshold. Large inputs already take that path; this is not a general large-data speed switch.
 
 #### angular_rp_forest (bool, default: False)
 Whether to use angular random projection forest for nearest neighbor search. Can improve performance for normalized data in high dimensions.
 
 ### DensMAP Parameters
 
-DensMAP is a variant that preserves local density information.
+densMAP adds a local density correlation objective; it does not guarantee exact density preservation.
 
 #### densmap (bool, default: False)
-Whether to use the DensMAP algorithm instead of standard UMAP. Preserves local density in addition to topological structure.
+Whether to use the DensMAP algorithm instead of standard UMAP. Encourages local density relationships as well as neighborhood structure. Only Euclidean output is supported, and new-data transform/inverse transform are unavailable.
 
 #### dens_lambda (float, default: 2.0)
 Weight of density preservation term in DensMAP optimization. Higher values emphasize density preservation.
 
 #### dens_frac (float, default: 0.3)
-Fraction of dataset used for density estimation in DensMAP.
+Fraction of optimization epochs using the density objective, after the initial `(1 - dens_frac)` fraction uses the standard UMAP objective.
 
 #### dens_var_shift (float, default: 0.1)
-Regularization parameter for density estimation in DensMAP.
+Positive stabilizer added to variance of embedded local radii in the density objective.
 
 #### output_dens (bool, default: False)
-Whether to output local density estimates in addition to the embedding. When enabled, `fit_transform()` returns `(embedding, original_local_radii, embedded_local_radii)` and fitted objects expose density-related attributes such as `rad_orig_` and `rad_emb_`.
+Whether to output log-transformed local-radius estimates in addition to the embedding; larger radii indicate sparser neighborhoods. These are not density probabilities. Also supported with `densmap=False`. When enabled, `fit_transform()` returns `(embedding, original_local_radii, embedded_local_radii)` and fitted objects expose density-related attributes such as `rad_orig_` and `rad_emb_`.
 
 ### Other Parameters
 
@@ -174,162 +176,80 @@ Parameter controlling embedding. If None, determined automatically from min_dist
 Parameter controlling embedding. If None, determined automatically from min_dist and spread.
 
 #### random_state (int, RandomState instance, or None, default: None)
-Random state for reproducibility. Set to an integer for reproducible results.
+Random state for reproducibility within the same environment. Save input ordering, preprocessing and dependency versions; cross-version equality is not guaranteed.
 
 #### metric_kwds (dict, default: None)
 Additional keyword arguments for the distance metric.
 
 #### disconnection_distance (float, default: None)
-Distance threshold for considering points disconnected. If None, uses max distance in the graph.
+Prunes neighbor edges with distance greater than or equal to this threshold. `None` chooses a built-in cutoff for certain bounded metrics, otherwise infinity. It does not use the observed graph maximum. Inspect disconnected vertices and nonfinite coordinates.
 
 #### precomputed_knn (tuple, default: (None, None, None))
-Precomputed k-nearest neighbors as (knn_indices, knn_dists, knn_search_index). Useful for reusing expensive computations.
+Precomputed neighbors as `(knn_indices, knn_dists, knn_search_index)`, or the two arrays alone. Arrays must correspond to the same input rows/metric and include each row itself first at zero distance. Supply at least `n_neighbors` columns; retain a compatible PyNNDescent `NNDescent` search index for new-data transforms. Without it, `transform(new_data)` is unsupported. Unlike `metric="precomputed"`, `X` remains the feature matrix.
 
-## Methods
+## Methods and outputs
 
-### fit(X, y=None, ensure_all_finite=True, **kwargs)
-Fit the UMAP model to the data.
+| Method | Released 0.5.12 contract |
+| --- | --- |
+| `fit(X, y=None, ensure_all_finite=True, **kwargs)` | Returns `self`. `X` is samples by features, or square training distances for a precomputed metric. |
+| `fit_transform(X, y=None, ensure_all_finite=True, **kwargs)` | Returns coordinates; with `output_dens=True` returns `(embedding, rad_orig, rad_emb)`; with graph mode returns a sparse graph. |
+| `transform(X, ensure_all_finite=True)` | Coordinates for new rows, or bipartite graph in graph mode. Precomputed metrics require new-to-training distances with unchanged training-column order. |
+| `inverse_transform(X)` | Approximate reconstruction from coordinates. Requires dense training features and a gradient-capable input metric; unavailable for densMAP, precomputed metric, or graph mode. |
+| `update(X, ensure_all_finite=True)` | Mutates the fitted model and returns **None**. Adds feature rows and can move old points. Rejects supervised models and precomputed metrics; not equivalent to transforming new rows. Revalidate after an update. |
+| `get_feature_names_out(input_features=None)` | Names such as `umap0`, `umap1`; `input_features` is ignored. |
 
-**Parameters:**
-- `X`: array-like, shape (n_samples, n_features) - Training data
-- `y`: array-like, shape (n_samples,), optional - Target values for supervised dimension reduction
-- `ensure_all_finite`: bool or sklearn-compatible option - Controls finite-value validation during fitting
+`ensure_all_finite` accepts `True`, `False`, or `"allow-nan"`, but bypassing the
+check does not make distance calculations missing-value aware. Clean or impute
+inputs deliberately. Treat nonfinite **outputs** as a failed support check, even
+when inputs are finite.
 
-**Returns:**
-- `self`: Fitted UMAP object
+Use `embedding_`, `graph_`, `rad_orig_`/`rad_emb_` (when requested), and
+`embedding_list_` (when requested) for results. Graph storage formats can vary;
+use `.tocsr()` when CSR operations are required. Attributes beginning with `_`
+are implementation details, may be missing on different search paths, and are
+not portable persistence contracts. Keep training data, preprocessing, feature
+schema, row IDs, metric, and software versions with the model.
 
-**Attributes set:**
-- `embedding_`: The embedded representation of training data
-- `graph_`: Fuzzy simplicial set approximation to the manifold
-- `_raw_data`: Copy of the training data
-- `_small_data`: Whether the dataset is considered small
-- `_metric_kwds`: Processed metric keyword arguments
-- `_n_neighbors`: Actual n_neighbors used
-- `_initial_alpha`: Initial learning rate
-- `_a`, `_b`: Curve parameters
-
-### fit_transform(X, y=None)
-Fit the model and return the embedded representation.
-
-**Parameters:**
-- `X`: array-like, shape (n_samples, n_features) - Training data
-- `y`: array-like, shape (n_samples,), optional - Target values for supervised dimension reduction
-
-**Returns:**
-- `X_new`: array, shape (n_samples, n_components) - Embedded data
-
-### transform(X)
-Transform new data into the existing embedded space.
-
-**Parameters:**
-- `X`: array-like, shape (n_samples, n_features) - New data to transform
-
-**Returns:**
-- `X_new`: array, shape (n_samples, n_components) - Embedded representation of new data
-
-**Important notes:**
-- The model must be fitted before calling transform
-- Transform quality depends on similarity between training and test distributions
-- Under distribution shift, validate neighborhood support and downstream performance; Parametric UMAP is not an automatic remedy.
-
-### inverse_transform(X)
-Transform data from the embedded space back to the original data space.
-
-**Parameters:**
-- `X`: array-like, shape (n_samples, n_components) - Embedded data points
-
-**Returns:**
-- `X_new`: array, shape (n_samples, n_features) - Reconstructed data in original space
-
-**Important notes:**
-- Computationally expensive operation
-- Works poorly outside the convex hull of the training embedding
-- Reconstruction quality varies by region
-
-### update(X, ensure_all_finite=True)
-Update the model with new data. Allows incremental fitting.
-
-**Parameters:**
-- `X`: array-like, shape (n_samples, n_features) - New data to incorporate
-- `ensure_all_finite`: bool or sklearn-compatible option - Controls finite-value validation during update
-
-**Returns:**
-- `self`: Updated UMAP object
-
-**Note:** Experimental feature, may not preserve all properties of batch training.
-
-### get_feature_names_out(input_features=None)
-Return output feature names for sklearn pipeline compatibility (added in 0.5.x).
-
-**Parameters:**
-- `input_features`: array-like of str, optional - Ignored; present for sklearn API compatibility
-
-**Returns:**
-- `ndarray` of shape `(n_components,)` with names like `umap0`, `umap1`, ...
-
-## Attributes
-
-### embedding_
-array, shape (n_samples, n_components) - The embedded representation of the training data.
-
-### graph_
-scipy.sparse.csr_matrix - The weighted adjacency matrix of the fuzzy simplicial set approximation to the manifold.
-
-### _raw_data
-array - Copy of the raw training data.
-
-### _sparse_data
-bool - Whether the training data was sparse.
-
-### _small_data
-bool - Whether the dataset was considered small (uses different algorithm for small datasets).
-
-### _input_hash
-str - Hash of the input data for caching purposes.
-
-### _knn_indices
-array - Indices of k-nearest neighbors for each training point.
-
-### _knn_dists
-array - Distances to k-nearest neighbors for each training point.
-
-### _rp_forest
-list - Random projection forest used for approximate nearest neighbor search.
+A transform is meaningful only for samples supported by the training distribution.
+It does not update the trained embedding. Inverse output is in the **preprocessed**
+feature space; use the fitted scaler's `inverse_transform` to restore units when
+appropriate. Avoid treating interpolated samples between separated groups as
+scientifically realizable observations.
 
 ## ParametricUMAP Class
 
 `umap.parametric_umap.ParametricUMAP(batch_size=None, dims=None, encoder=None, decoder=None, parametric_reconstruction=False, parametric_reconstruction_loss_fcn=None, parametric_reconstruction_loss_weight=1.0, autoencoder_loss=False, reconstruction_validation=None, global_correlation_loss_weight=0, landmark_loss_fn=None, landmark_loss_weight=1.0, keras_fit_kwargs={}, **kwargs)`
 
-Install with `uv pip install "umap-learn[parametric-umap]==0.5.12"`. Parametric UMAP uses neural networks to learn the embedding function.
+Install with `uv pip install "umap-learn[parametric-umap]==0.5.12"`. The released module imports TensorFlow and Keras 3 (`keras.ops`) even though the package extra only declares `tensorflow>=2.1`; resolve a compatible modern pair. The [parametric source](https://github.com/lmcinnes/umap/blob/release-0.5.12/umap/parametric_umap.py) was reviewed; neural training/persistence was not executed in this audit.
 
 ### Additional Parameters (beyond UMAP)
 
-#### encoder (tensorflow.keras.Model, default: None)
+#### encoder (Keras 3 Model, default: None)
 Keras model for encoding data to embeddings. If None, uses default 3-layer architecture with 100 neurons per layer.
 
-#### decoder (tensorflow.keras.Model, default: None)
+#### decoder (Keras 3 Model, default: None)
 Keras model for decoding embeddings back to data space. Only used if parametric_reconstruction=True.
 
 #### parametric_reconstruction (bool, default: False)
-Whether to use parametric reconstruction. Requires decoder model.
+Enable a decoder-based inverse. A default decoder is built when none is supplied.
 
 #### parametric_reconstruction_loss_fcn (callable, default: None)
-Custom reconstruction loss function for decoder training.
+Custom reconstruction loss. Default is binary cross entropy **from logits**, with targets in `[0, 1]` and a linear decoder output. For continuous standardized features, choose an appropriate loss such as mean squared error; inverse decoder outputs are logits under the default loss.
 
 #### parametric_reconstruction_loss_weight (float, default: 1.0)
 Weight applied to the parametric reconstruction loss.
 
 #### autoencoder_loss (bool, default: False)
-Whether to include reconstruction loss in the optimization. Requires decoder model.
+With `parametric_reconstruction=True`, also backpropagate reconstruction loss through the encoder; otherwise the encoder is trained on the embedding objective.
 
 #### global_correlation_loss_weight (float, default: 0)
 Weight for global correlation loss, used to encourage preservation of broad distance relationships.
 
-#### reconstruction_validation (tuple, default: None)
-Validation data (X_val, y_val) for monitoring reconstruction loss during training.
+#### reconstruction_validation (array, default: None)
+Held-out feature array `X_val`, not an `(X_val, y_val)` tuple. Preprocess it using training-fitted transforms.
 
 #### dims (tuple, default: None)
-Input dimensions for the encoder network. Required if providing custom encoder.
+Input shape for reshaping features before neural fitting. Inferred for flat features; supply it for a structured input such as images. Encoder output dimension must match `n_components`. At inference, provide the encoder input shape; `transform` does not repeat training-time reshaping.
 
 #### batch_size (int, default: None)
 Batch size for neural network training. If None, determined automatically.
@@ -348,35 +268,41 @@ Additional keyword arguments passed to the Keras fit() method.
 
 ### Methods
 
-Same as UMAP class, but transform() and inverse_transform() use learned neural networks for faster inference.
+`fit` and `fit_transform` accept `(X, y=None, precomputed_distances=None, landmark_positions=None)`, not the base class finite-check keyword. `transform(X, batch_size=None)` calls the encoder. `inverse_transform(X)` calls a trained decoder only when `parametric_reconstruction=True`; otherwise it falls back to the ordinary approximate inverse. Do not assume every base-class mode or update method is a supported neural workflow.
 
 #### fit(X, y=None, precomputed_distances=None, landmark_positions=None)
 Fit the parametric model. `landmark_positions` can be used for landmarked retraining workflows.
 
 #### save(save_location, verbose=True, exclude_raw_data=False)
-Save the Parametric UMAP object and Keras networks. Use `load_ParametricUMAP(save_location)` to load it again; plain pickle is not sufficient for models that contain Keras networks.
+Create `save_location` first, then save the object and networks. `load_ParametricUMAP(save_location, verbose=True)` reads a pickle and Keras files: load only trusted directories. In released 0.5.12 the saver writes `parametric_model.keras`, but the loader checks `parametric_model`. Validate encoder/decoder predictions after roundtrip and do not claim full training-state restoration. `exclude_raw_data=True` removes selected raw-data attributes during saving, not every possible training-data representation.
 
-## Utility Functions
+## Utility functions
 
-### umap.nearest_neighbors(X, n_neighbors, metric, metric_kwds={}, angular=False, random_state=None)
-Compute k-nearest neighbors for the data.
+Import these from **`umap.umap_`**, not from the top-level `umap` package.
+They expose lower-level implementation details; ordinary workflows should use `UMAP`.
 
-**Returns:** (knn_indices, knn_dists, rp_forest)
+```python
+from umap.umap_ import (
+    nearest_neighbors, fuzzy_simplicial_set, simplicial_set_embedding, find_ab_params,
+)
+```
 
-### umap.fuzzy_simplicial_set(X, n_neighbors, random_state, metric, metric_kwds={}, knn_indices=None, knn_dists=None, angular=False, set_op_mix_ratio=1.0, local_connectivity=1.0, apply_set_operations=True, verbose=False, return_dists=None)
-Construct fuzzy simplicial set representation of the data.
-
-**Returns:** Fuzzy simplicial set as sparse matrix
-
-### umap.simplicial_set_embedding(data, graph, n_components, initial_alpha, a, b, gamma, negative_sample_rate, n_epochs, init, random_state, metric, metric_kwds, densmap, densmap_kwds, output_dens, output_metric, output_metric_kwds, euclidean_output, parallel=False, verbose=False)
-Perform the optimization to find a low-dimensional embedding.
-
-**Returns:** Embedding array
-
-### umap.find_ab_params(spread, min_dist)
-Fit a, b params for the UMAP curve from spread and min_dist.
-
-**Returns:** (a, b) tuple
+- `nearest_neighbors(X, n_neighbors, metric, metric_kwds, angular, random_state,
+  low_memory=True, use_pynndescent=True, n_jobs=-1, verbose=False)` returns
+  `(indices, distances, search_index)`. The third value is an NNDescent index on
+  the approximate-search path, or `None` for precomputed distances.
+- `fuzzy_simplicial_set(X, n_neighbors, random_state, metric, metric_kwds={},
+  knn_indices=None, knn_dists=None, angular=False, set_op_mix_ratio=1.0,
+  local_connectivity=1.0, apply_set_operations=True, verbose=False,
+  return_dists=None)` returns **`(graph, sigmas, rhos)`** when `return_dists=None`.
+  Passing `False` or `True` adds a fourth item: `None` or the sparse distances.
+- `simplicial_set_embedding(data, graph, n_components, initial_alpha, a, b,
+  gamma, negative_sample_rate, n_epochs, init, random_state, metric, metric_kwds,
+  densmap, densmap_kwds, output_dens, output_metric=euclidean_grad,
+  output_metric_kwds={}, euclidean_output=True, parallel=False, verbose=False,
+  tqdm_kwds=None)` returns **`(embedding, auxiliary_data)`**. `euclidean_grad`
+  denotes the function in `umap.distances`, not a string metric.
+- `find_ab_params(spread, min_dist)` returns `(a, b)` for the embedding curve.
 
 ## AlignedUMAP Class
 
@@ -390,22 +316,20 @@ UMAP variant for aligning multiple related datasets.
 Strength of alignment regularization between datasets.
 
 #### alignment_window_size (int, default: 3)
-Number of adjacent datasets to align.
+Number of slices to consider on either side; consecutive mappings are chained across the window.
 
 ### Methods
 
-#### fit(X, relations=..., y=None)
+#### fit(X, y=None, **fit_params)
 Fit model to multiple datasets.
 
 **Parameters:**
 - `X`: list of arrays - List of datasets to align
-- `relations`: list of dictionaries - Mappings between sample indices in consecutive datasets; required for meaningful alignment
+- `relations`: required keyword in `fit_params`; list of `len(X)-1` dictionaries mapping **previous-slice row index -> next-slice row index**. Use stable scientific IDs to construct one-to-one matches; validate ranges and missing/duplicate matches. Each mapping must be nonempty. Partial mappings are allowed; unrelated rows need no match.
+- `fit` returns `self`; `fit_transform` returns `embeddings_`. No ordinary new-row `transform` is implemented.
 
-#### update(X, relations=..., y=None)
-Append a new dataset to an existing aligned model. Use backward-looking relation mappings from the new dataset to the prior window.
-
-**Returns:**
-- `self`: Fitted model
+#### update(X, y=None, **fit_params)
+Append a dataset using **one dictionary** passed as `relations={previous_slice_index: new_slice_index}`. This has the same forward direction as each dictionary used by `fit`, not a backward mapping from the new slice. The method mutates the model and returns **None** in 0.5.12. Do not assign its return to the mapper.
 
 ### Attributes
 
@@ -424,7 +348,7 @@ reducer = umap.UMAP(
     n_neighbors=15,          # Balance local/global structure
     n_components=2,          # Output dimensions
     metric='euclidean',      # Distance metric
-    min_dist=0.1,           # Minimum distance between points
+    min_dist=0.1,           # Effective packing parameter, not a hard bound
     spread=1.0,             # Scale of embedded points
     random_state=42,        # Reproducibility
     n_epochs=200,           # Training iterations (None = auto)
@@ -454,11 +378,11 @@ embedding = reducer.fit_transform(data, y=labels)
 ### Clustering Preprocessing
 
 ```python
-# Optimized for clustering
+# Candidate settings for clustering; compare to an unreduced baseline
 reducer = umap.UMAP(
     n_neighbors=30,      # More global structure
     min_dist=0.0,        # Allow tight packing
-    n_components=10,     # Higher dimensions for density
+    n_components=10,     # Higher-dimensional candidate; density is still distorted
     metric='euclidean',
     random_state=42
 )
@@ -479,40 +403,42 @@ def custom_distance(x, y):
         result += abs(x[i] - y[i])
     return result
 
-reducer = umap.UMAP(metric=custom_distance)
+reducer = umap.UMAP(metric=custom_distance, random_state=42, n_jobs=1)
 embedding = reducer.fit_transform(data)
 ```
 
-### Parametric UMAP with Custom Architecture
+### Parametric UMAP with Custom Architecture (illustrative, not executed)
 
 ```python
-import tensorflow as tf
+import keras
 from umap.parametric_umap import ParametricUMAP
 
 # Define custom encoder
-encoder = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(shape=(input_dim,)),
-    tf.keras.layers.Dense(256, activation='relu'),
-    tf.keras.layers.Dropout(0.3),
-    tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dropout(0.3),
-    tf.keras.layers.Dense(2)  # Output dimension
+encoder = keras.Sequential([
+    keras.layers.InputLayer(shape=(input_dim,)),
+    keras.layers.Dense(256, activation='relu'),
+    keras.layers.Dropout(0.3),
+    keras.layers.Dense(128, activation='relu'),
+    keras.layers.Dropout(0.3),
+    keras.layers.Dense(2)  # Output dimension
 ])
 
 # Define decoder for reconstruction
-decoder = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(shape=(2,)),
-    tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dense(256, activation='relu'),
-    tf.keras.layers.Dense(input_dim)
+decoder = keras.Sequential([
+    keras.layers.InputLayer(shape=(2,)),
+    keras.layers.Dense(128, activation='relu'),
+    keras.layers.Dense(256, activation='relu'),
+    keras.layers.Dense(input_dim)
 ])
 
+# Linear decoder and MSE suit continuous features (e.g., training-standardized data).
 # Train parametric UMAP with autoencoder
 embedder = ParametricUMAP(
     encoder=encoder,
     decoder=decoder,
     dims=(input_dim,),
     parametric_reconstruction=True,
+    parametric_reconstruction_loss_fcn=keras.losses.MeanSquaredError(),
     autoencoder_loss=True,
     batch_size=128,
     n_neighbors=15,
@@ -533,14 +459,15 @@ reconstructed = embedder.inverse_transform(embedding)
 reducer = umap.UMAP(
     densmap=True,           # Enable DensMAP
     dens_lambda=2.0,       # Weight of density preservation
-    dens_frac=0.3,         # Fraction for density estimation
-    output_dens=True,      # Output density estimates
+    dens_frac=0.3,         # Final fraction of optimization epochs
+    output_dens=True,      # Output log local radii, not probabilities
     n_neighbors=15,
     min_dist=0.1,
     random_state=42
 )
 
-embedding, original_density, embedded_density = reducer.fit_transform(data)
+embedding, rad_orig, rad_emb = reducer.fit_transform(data)
+assert rad_orig.shape == rad_emb.shape == (len(data),)
 ```
 
 ### Aligned UMAP for Time Series
@@ -572,3 +499,47 @@ aligned_embeddings = mapper.embeddings_
 # aligned_embeddings[0] is day1 embedding
 # aligned_embeddings[1] is day2 embedding, etc.
 ```
+
+### Precomputed distances and neighbors
+
+Distance matrices must be nonnegative and finite with training shape `(n, n)`,
+symmetric with zero diagonal. Do not pass a similarity matrix or a new-to-new
+matrix to `transform`. Dense storage costs quadratic memory.
+
+```python
+from sklearn.metrics import pairwise_distances
+
+D_train = pairwise_distances(X_train)
+D_test_to_train = pairwise_distances(X_test, X_train)
+mapper = umap.UMAP(metric="precomputed", n_neighbors=10,
+                   random_state=42, n_jobs=1)
+train_embedding = mapper.fit_transform(D_train)
+test_embedding = mapper.transform(D_test_to_train)
+assert test_embedding.shape == (len(X_test), 2)
+```
+
+For repeated fits on the same **features**, reuse a neighbor search instead:
+
+```python
+from sklearn.utils import check_random_state
+from umap.umap_ import nearest_neighbors
+
+knn = nearest_neighbors(data, n_neighbors=30, metric="euclidean",
+                        metric_kwds={}, angular=False,
+                        random_state=check_random_state(42), n_jobs=1)
+mapper = umap.UMAP(n_neighbors=30, precomputed_knn=knn,
+                   random_state=42, n_jobs=1).fit(data)
+new_embedding = mapper.transform(new_data)
+```
+
+Do not reuse neighbors after changing row order, features, scaling, metric, or
+training folds. Retain the compatible search index for transforms; just the two
+neighbor arrays suffice for fitting but not for transforming new samples.
+
+## Official sources reviewed
+
+- [Release 0.5.12](https://github.com/lmcinnes/umap/releases/tag/release-0.5.12)
+- [Core source](https://github.com/lmcinnes/umap/blob/release-0.5.12/umap/umap_.py), [aligned source](https://github.com/lmcinnes/umap/blob/release-0.5.12/umap/aligned_umap.py), [parametric source](https://github.com/lmcinnes/umap/blob/release-0.5.12/umap/parametric_umap.py)
+- [Supervised UMAP](https://umap-learn.readthedocs.io/en/latest/supervised.html), [clustering](https://umap-learn.readthedocs.io/en/latest/clustering.html), [reproducibility](https://umap-learn.readthedocs.io/en/latest/reproducibility.html)
+- [densMAP](https://umap-learn.readthedocs.io/en/latest/densmap_demo.html), [aligned mappings](https://umap-learn.readthedocs.io/en/latest/aligned_umap_politics_demo.html), [precomputed neighbors](https://umap-learn.readthedocs.io/en/latest/precomputed_k-nn.html)
+- [HDBSCAN API](https://hdbscan.readthedocs.io/en/latest/api.html)

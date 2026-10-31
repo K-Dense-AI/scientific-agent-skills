@@ -490,8 +490,8 @@ class PangoProvenanceTests(unittest.TestCase):
             }
         )
         text = lapis_client.pango_provenance()
-        self.assertIn("alias_key.json@0deb39eeac80", text)
-        self.assertIn("lineage_notes.txt@b63582d49216", text)
+        self.assertIn("alias_key.json@sha256:0deb39eeac8012345", text)
+        self.assertIn("lineage_notes.txt@sha256:b63582d4921612345", text)
         lapis_client.PANGO_BLOBS.clear()
 
     def test_no_fetch_yields_empty_provenance(self):
@@ -588,58 +588,40 @@ class MonthWindowTests(unittest.TestCase):
 
 
 class CohortCurveTests(unittest.TestCase):
-    def test_cumulative_fractions_are_monotonic(self):
-        from datetime import date
-
+    def test_actual_collection_date_not_month_end(self):
         rows = [
-            {"dateSubmitted": "2026-02-05", "count": 10},   # lag 5
-            {"dateSubmitted": "2026-02-20", "count": 30},   # lag 20
-            {"dateSubmitted": "2026-03-20", "count": 60},   # lag 48
+            {"date": "2026-01-01", "dateSubmitted": "2026-02-05", "count": 10},
+            {"date": "2026-01-31", "dateSubmitted": "2026-02-05", "count": 30},
+        ]
+        with patch.object(reporting_lag, "aggregated", return_value=rows) as query:
+            curve, dated, excluded = reporting_lag.cohort_curve("u", {}, "dateSubmitted", "date")
+        self.assertEqual((dated, excluded), (40, 0))
+        self.assertEqual(curve[7], 0.75)
+        self.assertEqual(curve[30], 0.75)
+        self.assertEqual(curve[45], 1.0)
+        self.assertEqual(query.call_args.args[2], ["date", "dateSubmitted"])
+
+    def test_imprecise_negative_missing_and_future_dates_excluded(self):
+        from datetime import date
+        rows = [
+            {"lower": "2026-01-01", "upper": "2026-01-31", "released": "2026-02-05", "count": 10},
+            {"lower": "2026-01-10", "upper": "2026-01-10", "released": "2026-01-01", "count": 4},
+            {"lower": None, "upper": None, "released": "2026-01-01", "count": 2},
+            {"lower": "2026-01-10", "upper": "2026-01-10", "released": "2026-03-01", "count": 3},
+            {"lower": "2026-01-10", "upper": "2026-01-10", "released": "2026-01-15", "count": 5},
         ]
         with patch.object(reporting_lag, "aggregated", return_value=rows):
-            result = reporting_lag.cohort_curve("u", {}, "dateSubmitted", date(2026, 1, 31))
-        assert result is not None
-        curve, dated, undated = result
-        self.assertEqual((dated, undated), (100, 0))
-        self.assertAlmostEqual(curve[7], 0.10)
-        self.assertAlmostEqual(curve[21], 0.40)
-        self.assertAlmostEqual(curve[60], 1.00)
-        values = [curve[o] for o in reporting_lag.OFFSETS]
-        self.assertEqual(values, sorted(values))
-
-    def test_submission_before_cohort_end_clamps_to_zero_lag(self):
-        from datetime import date
-
-        rows = [{"dateSubmitted": "2026-01-10", "count": 5}]
-        with patch.object(reporting_lag, "aggregated", return_value=rows):
-            result = reporting_lag.cohort_curve("u", {}, "dateSubmitted", date(2026, 1, 31))
-        assert result is not None
-        self.assertAlmostEqual(result[0][7], 1.0)
+            curve, dated, excluded = reporting_lag.cohort_curve("u", {}, "released", "lower", "upper", date(2026, 2, 1))
+        self.assertEqual((dated, excluded), (5, 19))
+        self.assertEqual(curve[7], 1.0)
 
     def test_empty_cohort_returns_none(self):
-        from datetime import date
-
         with patch.object(reporting_lag, "aggregated", return_value=[]):
-            self.assertIsNone(
-                reporting_lag.cohort_curve("u", {}, "dateSubmitted", date(2026, 1, 31))
-            )
+            self.assertIsNone(reporting_lag.cohort_curve("u", {}, "dateSubmitted", "date"))
 
-    def test_undated_rows_leave_the_denominator_and_are_counted(self):
-        # Excluding them is right -- they cannot be placed in any lag bucket --
-        # but the count has to surface so the caller can report it.
-        from datetime import date
-
-        rows = [
-            {"dateSubmitted": None, "count": 7},
-            {"dateSubmitted": "2026", "count": 3},
-            {"dateSubmitted": "2026-02-05", "count": 5},
-        ]
-        with patch.object(reporting_lag, "aggregated", return_value=rows):
-            result = reporting_lag.cohort_curve("u", {}, "dateSubmitted", date(2026, 1, 31))
-        assert result is not None
-        curve, dated, undated = result
-        self.assertEqual((dated, undated), (5, 10))
-        self.assertAlmostEqual(curve[7], 1.0)
+    def test_all_invalid_preserves_exclusion_count(self):
+        with patch.object(reporting_lag, "aggregated", return_value=[{"count": 7}]):
+            self.assertEqual(reporting_lag.cohort_curve("u", {}, "dateSubmitted", "date"), ({}, 0, 7))
 
 
 class MutationProfileTests(unittest.TestCase):
@@ -903,6 +885,126 @@ class ResolveLineageCliTests(unittest.TestCase):
     def test_lowercase_input_is_normalised(self):
         self.assertEqual(resolve_lineage.normalise("xfg.1.1"), "XFG.1.1")
         self.assertEqual(resolve_lineage.normalise(" ba.2 "), "BA.2")
+
+
+class RefreshRegressionTests(unittest.TestCase):
+    def test_discovery_uses_the_same_exact_date_subset(self):
+        lower, upper = "sampleCollectionDateRangeLower", "sampleCollectionDateRangeUpper"
+        calls = []
+        def aggregate(base, filters, fields=()):
+            calls.append(tuple(fields))
+            if "clade" in fields:
+                return [{"clade": "PARTIAL", lower: "2026-01-01", upper: "2026-01-31", "count": 100},
+                        {"clade": "EXACT", lower: "2026-01-06", upper: "2026-01-06", "count": 5}]
+            return [{lower: "2026-01-06", upper: "2026-01-06", "count": 5}]
+        out = io.StringIO()
+        with patch.object(lineage_prevalence, "describe_instance", return_value=H5N1_SCHEMA), \
+             patch.object(lineage_prevalence, "data_version", return_value="v1"), \
+             patch.object(lineage_prevalence, "aggregated", side_effect=aggregate), \
+             redirect_stdout(out), redirect_stderr(io.StringIO()):
+            code = lineage_prevalence.main(["--top", "1", "--since", "2026-01-05", "--until", "2026-01-11", "--format", "json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out.getvalue())["rows"][0]["lineage"], "EXACT")
+        self.assertIn(("clade", lower, upper), calls)
+
+    def test_snapshot_mismatch_refused(self):
+        lapis_client._DATA_VERSIONS.clear()
+        lapis_client.record_version("test", {"info": {"dataVersion": "1"}}, {}, "sample/aggregated")
+        with self.assertRaises(lapis_client.SnapshotChanged):
+            lapis_client.record_version("test", {"info": {"dataVersion": "2"}}, {}, "sample/aggregated")
+        lapis_client._DATA_VERSIONS.clear()
+
+    def test_missing_data_version_refused(self):
+        with self.assertRaises(lapis_client.LapisError):
+            lapis_client.record_version("test", {"data": []}, {}, "sample/aggregated")
+
+    def test_header_version_supported(self):
+        lapis_client._DATA_VERSIONS.clear()
+        lapis_client.record_version("test", {}, {"lapis-data-version": "3"}, "sample/lineageDefinition/pangoLineage")
+        self.assertEqual(lapis_client.data_version("test"), "3")
+        lapis_client._DATA_VERSIONS.clear()
+
+    def test_pango_digest_is_of_bytes_not_etag(self):
+        import hashlib
+        content = b"lineage data"
+        response = io.BytesIO(content)
+        response.headers = {"ETag": "unrelated-cache-validator"}
+        with patch.object(lapis_client.urllib.request, "urlopen", return_value=response):
+            lapis_client._fetch_text("https://example.test/pango")
+        self.assertEqual(lapis_client.PANGO_BLOBS.pop("https://example.test/pango"), hashlib.sha256(content).hexdigest())
+
+    def test_record_defaults_and_explicit_override(self):
+        sc = schema(types={"versionStatus": "string", "isRevocation": "boolean", "dataUseTerms": "string"})
+        self.assertEqual(lapis_client.surveillance_filters(sc, {}), {"versionStatus": "LATEST_VERSION", "isRevocation": "false", "dataUseTerms": "OPEN"})
+        self.assertEqual(lapis_client.surveillance_filters(sc, {"versionStatus": "REVISED_VERSION"})["versionStatus"], "REVISED_VERSION")
+
+    def test_numeric_field_cannot_be_a_date(self):
+        with self.assertRaises(lapis_client.LapisError):
+            lapis_client.pick_date_field(schema(types={"age": "int"}), preferred="age")
+
+    def test_zero_reference_counts_are_low(self):
+        self.assertTrue(all(lapis_client.flag_low_coverage({"w1": 0, "w2": 0}).values()))
+
+    def test_weekly_bins_exclude_partial_ranges(self):
+        rows = [{"lower": "2026-01-01", "upper": "2026-01-31", "count": 9},
+                {"lower": "2026-01-06", "upper": "2026-01-06", "count": 3}]
+        with patch.object(lineage_prevalence, "aggregated", return_value=rows):
+            weeks, excluded = lineage_prevalence.weekly_counts("u", {}, "lower", ["2026-01-05"], "upper")
+        self.assertEqual((weeks, excluded), ({"2026-01-05": 3}, 9))
+
+    def test_prevalence_rejects_date_override(self):
+        with patch.object(lineage_prevalence, "describe_instance", return_value=schema()), redirect_stderr(io.StringIO()):
+            self.assertEqual(lineage_prevalence.main(["XFG", "--where", "dateFrom=2026-01-01"]), 2)
+
+    def test_mutation_absence_is_not_zero(self):
+        a = {"mutation": "S:A10T", "sequenceName": "S", "position": 10, "count": 8, "coverage": 10, "proportion": 0.8}
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(mutation_profile, "describe_instance", return_value=schema()), \
+             patch.object(mutation_profile, "count", return_value=10), \
+             patch.object(mutation_profile, "mutations", side_effect=[[a], []]), \
+             patch.object(mutation_profile, "data_version", return_value="v1"), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = mutation_profile.main(["A", "--versus", "B", "--format", "json"])
+        row = json.loads(out.getvalue())[0]
+        self.assertEqual(code, 0)
+        self.assertEqual(row["verdict"], "not_comparable")
+        self.assertIsNone(row["prop_b"])
+        self.assertIsNone(row["coverage_b"])
+        self.assertEqual(row["coverage_a"], 10)
+        self.assertIn("data version v1", err.getvalue())
+
+    def test_unindexed_names_keep_case_and_fail_verification(self):
+        out = io.StringIO()
+        with patch.object(resolve_lineage, "describe_instance", return_value=schema(types={"clade": "string"}, lineage_indexed=[])), \
+             patch.object(resolve_lineage, "data_version", return_value="v1"), \
+             patch.object(resolve_lineage, "count", return_value=5) as query, \
+             redirect_stdout(out), redirect_stderr(io.StringIO()):
+            code = resolve_lineage.main(["Ia", "--format", "json"])
+        self.assertEqual(code, 1)
+        self.assertEqual(query.call_args.args[1], {"clade": "Ia"})
+        self.assertEqual(json.loads(out.getvalue())[0]["status"], "unverified")
+
+    def test_pango_source_failure_fails_closed(self):
+        with patch.object(resolve_lineage, "describe_instance", return_value=schema()), \
+             patch.object(resolve_lineage, "data_version", return_value="v1"), \
+             patch.object(resolve_lineage, "lineage_definition", return_value={"XFG": {}}), \
+             patch.object(resolve_lineage, "fetch_pango_aliases", side_effect=lapis_client.LapisError("offline")), \
+             redirect_stderr(io.StringIO()):
+            self.assertEqual(resolve_lineage.main(["XFG", "--no-counts"]), 2)
+
+    def test_lag_offsets_require_followup_and_json_provenance(self):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(reporting_lag, "describe_instance", return_value=schema()), \
+             patch.object(reporting_lag, "data_version", return_value="v1"), \
+             patch.object(reporting_lag, "cohort_curve", return_value=({o: 1.0 for o in reporting_lag.OFFSETS}, 10, 0)), \
+             redirect_stdout(out), redirect_stderr(err):
+            code = reporting_lag.main(["--until", "2026-10-01", "--skip-months", "1", "--cohorts", "2", "--format", "json"])
+        rows = json.loads(out.getvalue())
+        self.assertEqual(code, 0)
+        self.assertLessEqual(max(r["lag_days"] for r in rows), 31)
+        self.assertTrue(all(r["cohorts"] == 1 for r in rows))
+        self.assertIn("data version v1", err.getvalue())
+        self.assertIn("does not establish completeness", err.getvalue())
 
 
 @unittest.skipUnless(LIVE, "set LAPIS_LIVE_TESTS=1 to run live API checks")

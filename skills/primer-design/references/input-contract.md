@@ -77,7 +77,7 @@ Example (JSON, not skill frontmatter):
 
 | Tag | Value and meaning |
 | --- | --- |
-| `SEQUENCE_TARGET` | List of `[start,length]` regions the product should encompass; primers flank the target |
+| `SEQUENCE_TARGET` | List of alternative `[start,length]` regions; a pair must flank at least one, not necessarily all |
 | `SEQUENCE_INCLUDED_REGION` | One `[start,length]` design region within the selected template |
 | `SEQUENCE_EXCLUDED_REGION` | List of `[start,length]` regions where primer binding is disallowed |
 | `SEQUENCE_PRIMER_PAIR_OK_REGION_LIST` | List of `[left_start,left_length,right_start,right_length]`; `[-1,-1]` makes that side unconstrained |
@@ -117,6 +117,10 @@ binding interval, not just the command's exit status.
   `PRIMER_QUALITY_RANGE_MIN`, `PRIMER_QUALITY_RANGE_MAX`, `PRIMER_WT_SEQ_QUAL`,
   `PRIMER_WT_END_QUAL`; supply `SEQUENCE_QUALITY` and meaningful assay-specific values.
 - `PRIMER_MAX_NS_ACCEPTED` must remain zero.
+
+To cover multiple intervals with one product, provide their enclosing interval as
+one `SEQUENCE_TARGET`, then verify both binding sites lie outside that interval.
+Several separate targets do not request one primer pair per target.
 
 All numeric inputs must be finite. For an unimplemented native tag or another task,
 use the official Primer3 interface explicitly and retain the same coordinate,
@@ -161,6 +165,8 @@ and SHA-256/version provenance. Empty results return `no_candidates`, not fake p
 directional results. `--multiplex` enumerates all unordered oligo pairs, not just
 F/R. A requested panel exceeding `--max-interactions` errors before partial output.
 Long full oligos return `unsupported_length`; no full-oligo assessment is implied.
+Core Tm at/below absolute zero or nonfinite Tm is an error, even if Primer3 returned
+a numeric value. Check chemistry units and model suitability before rerunning.
 
 `screen_specificity.py` emits hits and products for each pair, expected/missing
 products, status, limitations, settings, reference/pair/expected hashes, and executable

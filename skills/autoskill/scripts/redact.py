@@ -8,7 +8,7 @@ _PATTERNS = [
     # Known-env-var secret assignments: NAME=value  (catches long values only)
     (re.compile(
         r"\b(?:AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|GITHUB_TOKEN|HF_TOKEN"
-        r"|ANTHROPIC_API_KEY|OPENAI_API_KEY|FOUNDRY_API_KEY|SCREENPIPE_TOKEN"
+        r"|ANTHROPIC_API_KEY|OPENAI_API_KEY|FOUNDRY_API_KEY|SCREENPIPE_TOKEN|LM_API_TOKEN"
         r"|GOOGLE_API_KEY|SLACK_TOKEN|DEEPGRAM_API_KEY)"
         r"\s*=\s*[^\s\"']+"
     ), "[REDACTED:kv_secret]"),

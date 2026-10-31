@@ -2,19 +2,19 @@
 
 The core `qiskit` distribution provides circuits, operators, primitives, synthesis, transpilation, and quantum-information tools. High-level algorithms and domain applications live in separate packages.
 
-## Verified Package Matrix
+## Reviewed Package Matrix
 
-Checked on **2026-07-23**:
+Release metadata and official API documentation checked on **2026-10-01**. The VQE example was executed against a dense exact reference, and the two-variable Optimization/QAOA example returned the known optimum. Nature, Machine Learning, and addon workflows are illustrative and were not rerun in this refresh:
 
 | Package | Version | Primary role |
 |---|---:|---|
 | `qiskit-algorithms` | 0.4.0 | VQE, QAOA, Grover, phase estimation, eigensolvers, optimizers |
 | `qiskit-nature` | 0.8.0 | Electronic structure, second quantization, mappers |
 | `qiskit-nature-pyscf` | 0.4.0 | PySCF electronic-structure driver integration |
-| `qiskit-machine-learning` | 0.9.0 | Kernels, QNNs, classifiers/regressors, Torch connector |
+| `qiskit-machine-learning` | 0.9.1 | Kernels, QNNs, classifiers/regressors, Torch connector |
 | `qiskit-optimization` | 0.7.0 | Quadratic programs, converters, quantum optimization wrappers |
 | `qiskit-addon-cutting` | 0.10.0 | Circuit and operator cutting |
-| `qiskit-addon-sqd` | 0.12.1 | Sample-based quantum diagonalization |
+| `qiskit-addon-sqd` | 0.13.1 | Sample-based quantum diagonalization |
 | `qiskit-addon-obp` | 0.3.0 | Operator backpropagation |
 | `qiskit-addon-mpf` | 0.3.0 | Multi-product formulas |
 | `qiskit-addon-aqc-tensor` | 0.3.1 | Approximate quantum compilation with tensor networks |
@@ -23,7 +23,7 @@ Install exact pins together in a fresh environment:
 
 ```bash
 uv pip install \
-  "qiskit==2.5.0" \
+  "qiskit==2.5.2" \
   "qiskit-algorithms==0.4.0" \
   "qiskit-optimization==0.7.0"
 ```
@@ -32,10 +32,9 @@ For chemistry:
 
 ```bash
 uv pip install \
-  "qiskit==2.5.0" \
+  "qiskit==2.5.2" \
   "qiskit-algorithms==0.4.0" \
-  "qiskit-nature==0.8.0" \
-  "qiskit-nature-pyscf==0.4.0"
+  "qiskit-nature[pyscf]==0.8.0"
 ```
 
 Resolve application packages together; their Qiskit compatibility windows can differ.
@@ -89,12 +88,17 @@ vqe = VQE(
     initial_point=[0.0] * ansatz.num_parameters,
 )
 result = vqe.compute_minimum_eigenvalue(hamiltonian)
-print(float(result.eigenvalue.real))
+energy = float(result.eigenvalue.real)
+# Tiny diagnostic only: dense diagonalization is exponential.
+import numpy as np
+exact_energy = float(np.linalg.eigvalsh(hamiltonian.to_matrix())[0])
+assert abs(energy - exact_energy) < 1e-5
+print(energy, exact_energy)
 ```
 
 For hardware:
 
-1. Use a Runtime `EstimatorV2`.
+1. Use the Runtime client-side `Estimator`.
 2. Provide a transpiler adapter or manage the parameterized ISA circuit explicitly.
 3. Bound optimizer iterations and requested precision.
 4. Store each job ID and convergence record.
@@ -107,8 +111,9 @@ Model a binary problem with `QuadraticProgram`:
 
 ```python
 from qiskit.primitives import StatevectorSampler
-from qiskit_algorithms import QAOA
-from qiskit_algorithms.optimizers import COBYLA
+from qiskit_optimization.minimum_eigensolvers import QAOA
+from qiskit_optimization.optimizers import COBYLA
+from qiskit_optimization.utils import algorithm_globals
 from qiskit_optimization import QuadraticProgram
 from qiskit_optimization.algorithms import MinimumEigenOptimizer
 
@@ -120,6 +125,7 @@ problem.maximize(
     quadratic={("x", "y"): -2},
 )
 
+algorithm_globals.random_seed = 5  # optimizer initialization is separate from sampler seed
 qaoa = QAOA(
     sampler=StatevectorSampler(seed=5),
     optimizer=COBYLA(maxiter=100),
@@ -131,7 +137,7 @@ result = solver.solve(problem)
 print(result.x, result.fval, result.status)
 ```
 
-Use optimizer objects such as `COBYLA(...)`, not old string-valued optimizer arguments.
+Qiskit Optimization 0.7 ships its own `minimum_eigensolvers`, optimizers, and utilities; use those types with `MinimumEigenOptimizer` instead of mixing `qiskit_algorithms.QAOA` results. Use optimizer objects such as `COBYLA(...)`, not old string-valued optimizer arguments.
 
 Before claiming a quantum result:
 
@@ -177,11 +183,13 @@ The `QFT` blueprint class is deprecated and scheduled for removal in Qiskit 3.0.
 Qiskit Nature converts domain problems into second-quantized operators and qubit operators.
 
 ```python
+from qiskit_nature.units import DistanceUnit
 from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 
 driver = PySCFDriver(
     atom="H 0 0 0; H 0 0 0.735",
+    unit=DistanceUnit.ANGSTROM,
     basis="sto3g",
     charge=0,
     spin=0,
@@ -197,7 +205,7 @@ print(problem.num_particles)
 print(qubit_hamiltonian.num_qubits)
 ```
 
-The PySCF calculation is classical preprocessing. Record:
+`qiskit-nature[pyscf]` installs the PySCF dependency for this driver. The separate `qiskit-nature-pyscf` plugin provides reverse integration and is not required by this snippet. The PySCF calculation is classical preprocessing. Record:
 
 - geometry and units,
 - basis set,
@@ -207,7 +215,7 @@ The PySCF calculation is classical preprocessing. Record:
 - nuclear repulsion energy,
 - package versions.
 
-Do not add the nuclear repulsion term twice. Prefer Qiskit Nature's result interpreters for complete energy reporting.
+Preserve the physical particle-number/spin sector when solving the mapped operator; unrestricted minimization over the full qubit Hilbert space can select the wrong sector. Do not add the nuclear repulsion term twice. Prefer Qiskit Nature's result interpreters for complete energy reporting.
 
 `QubitConverter` is obsolete; use mapper classes directly.
 
@@ -215,7 +223,7 @@ Do not add the nuclear repulsion term twice. Prefer Qiskit Nature's result inter
 
 Qiskit Machine Learning includes quantum kernels, quantum neural networks, trainable models, and PyTorch integration.
 
-This verified kernel example uses APIs moved into the Machine Learning package:
+This documentation-checked illustrative kernel example uses APIs moved into the Machine Learning package:
 
 ```python
 import numpy as np
@@ -266,7 +274,7 @@ Example installation:
 
 ```bash
 uv pip install "qiskit-addon-cutting==0.10.0"
-uv pip install "qiskit-addon-sqd==0.12.1"
+uv pip install "qiskit-addon-sqd==0.13.1"
 uv pip install "qiskit-addon-obp==0.3.0"
 uv pip install "qiskit-addon-mpf==0.3.0"
 uv pip install "qiskit-addon-aqc-tensor==0.3.1"

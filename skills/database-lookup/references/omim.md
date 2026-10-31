@@ -26,7 +26,7 @@ Example:
 ```
 GET https://api.omim.org/api/entry?mimNumber=141900&apiKey=YOUR_KEY&format=json
 ```
-Returns entry with title, text, gene map, allelic variants, references.
+Returns entry metadata; request text, gene maps, allelic variants and references with the corresponding `include` options.
 
 ### 2. Entry with Specific Includes
 ```
@@ -43,11 +43,9 @@ Example — search for "Marfan syndrome":
 GET https://api.omim.org/api/entry/search?search=marfan+syndrome&apiKey=YOUR_KEY&format=json&start=0&limit=10
 ```
 
-### 4. Search with Filters
-```
-GET https://api.omim.org/api/entry/search?search={query}&filter=gene&apiKey={key}&format=json
-```
-Filter options: `gene`, `phenotype`, `clinical_synopsis`, etc.
+### 4. Search filters
+
+`/entry/search` accepts a `filter` search expression, `fields`, `operator=AND|OR`, and `sort`. `filter` is not an enum of `gene`, `phenotype`, and `clinical_synopsis`. Use fielded OMIM search syntax from [OMIM search help](https://omim.org/help/search), or construct the query with the [official API form](https://api.omim.org/api/html/index.html). Do not invent unsupported filter values.
 
 ### 5. Gene Map Lookup
 ```
@@ -68,7 +66,7 @@ GET https://api.omim.org/api/geneMap/search?search={query}&apiKey={key}&format=j
 GET https://api.omim.org/api/clinicalSynopsis/search?search={query}&apiKey={key}&format=json
 ```
 
-## Response Structure
+## Response Structure (illustrative; fields depend on requested includes)
 ```json
 {
   "omim": {
@@ -79,8 +77,7 @@ GET https://api.omim.org/api/clinicalSynopsis/search?search={query}&apiKey={key}
           "mimNumber": 141900,
           "status": "live",
           "titles": {
-            "preferredTitle": "HEMOGLOBIN S; HBS",
-            "alternativeTitles": "SICKLE CELL ANEMIA"
+            "preferredTitle": "HEMOGLOBIN--BETA LOCUS; HBB"
           },
           "textSectionList": [...],
           "geneMap": {

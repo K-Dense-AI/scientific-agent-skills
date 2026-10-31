@@ -10,25 +10,27 @@ import argparse
 from pathlib import Path
 
 import spikeinterface.full as si
+from _common import load_saved, validate_recording
 
 
 # Default parameters for each sorter
 SORTER_DEFAULTS = {
     'kilosort4': {
-        'batch_size': 30000,
+        'do_CAR': False,
+        'batch_size': 60000,
         'nblocks': 1,
         'Th_learned': 8,
         'Th_universal': 9,
     },
     'kilosort3': {
-        'do_CAR': False,  # Already done in preprocessing
+        'car': False,  # Kilosort3 parameter; filtering/whitening stay sorter-specific
     },
     'spykingcircus2': {
         'apply_preprocessing': False,
     },
     'mountainsort5': {
         'filter': False,
-        'whiten': False,
+        'whiten': True,
     },
 }
 
@@ -43,7 +45,9 @@ def run_sorting(
     """Run spike sorting."""
 
     print(f"Loading preprocessed recording from: {input_path}")
-    recording = si.load_extractor(Path(input_path) / 'preprocessed')
+    recording = load_saved(input_path, 'preprocessed')
+    validate_recording(recording)
+    si.set_global_job_kwargs(n_jobs=n_jobs, chunk_duration='1s')
 
     print(f"Recording: {recording.get_num_channels()} channels, {recording.get_total_duration():.1f}s")
 
@@ -67,7 +71,7 @@ def run_sorting(
 
     print(f"\nSorting complete!")
     print(f"  Units found: {len(sorting.unit_ids)}")
-    print(f"  Total spikes: {sum(len(sorting.get_unit_spike_train(uid)) for uid in sorting.unit_ids)}")
+    print(f"  Total spikes: {sorting.count_total_num_spikes()}")
 
     # Save sorting
     sorting.save(folder=output_path / 'sorting')

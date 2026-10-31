@@ -37,21 +37,21 @@ Endpoint paths change when datasets are restructured. Always confirm the current
 Authoritative sources (in order):
 
 1. Dataset detail page at `https://fiscaldata.treasury.gov/datasets/{slug}/`
-2. Gatsby page data: `https://fiscaldata.treasury.gov/page-data/datasets/{slug}/page-data.json` (look for `"endpoint"` fields)
+2. Site implementation fallback (not a stable API contract): Gatsby page data: `https://fiscaldata.treasury.gov/page-data/datasets/{slug}/page-data.json` (look for `"endpoint"` fields)
 3. [API endpoint table](https://fiscaldata.treasury.gov/api-documentation/#list-of-endpoints-table)
 
 ## Data Types
 
-All field values in responses are **strings** (quoted), regardless of their logical type.
+All data-row values in responses are **strings** (quoted), regardless of their logical type.
 
 | Logical Type | dataTypes value | Example value | How to convert |
 |---|---|---|---|
 | String | `STRING` | `"Canada-Dollar"` | No conversion needed |
-| Number | `NUMBER` | `"36123456789012.34"` | `float(value)` |
+| Number | `NUMBER` | `"36123456789012.34"` | `Decimal(value)` for exact amounts; `float(value)` for plots |
 | Date | `DATE` | `"2024-03-31"` | `pd.to_datetime(value)` |
-| Currency | `CURRENCY` | `"1234567.89"` | `float(value)` |
+| Currency | `CURRENCY` or precision variants (`CURRENCY0`, `CURRENCY3`, etc.) | `"1234567.89"` | `Decimal(value)` for exact amounts; `float(value)` for plots |
 | Integer | `INTEGER` | `"42"` | `int(value)` |
-| Percentage | `PERCENTAGE` | `"4.25"` | `float(value)` |
+| Percentage | `PERCENTAGE` | `"4.25"` | `Decimal(value)` for exact amounts; `float(value)` for plots |
 
 **Null values** appear as the string `"null"` (not Python `None` or JSON `null`).
 
@@ -64,32 +64,15 @@ def safe_float(val):
 ## HTTP Methods
 
 - **Only GET is supported**
-- POST, PUT, DELETE return HTTP 405
+- The documented data interface is read-only GET; do not assume a particular error code for unsupported methods.
 
-## Rate Limiting
+## Reliability and caching
 
-- HTTP 429 is returned when rate limited
-- No documented fixed rate limit; implement retry with backoff for bulk requests
-
-```python
-import time
-import requests
-
-def get_with_retry(url, params, retries=3):
-    for attempt in range(retries):
-        resp = requests.get(url, params=params)
-        if resp.status_code == 429:
-            time.sleep(2 ** attempt)
-            continue
-        resp.raise_for_status()
-        return resp.json()
-    raise Exception("Rate limited after retries")
-```
-
-## Caching
-
-- HTTP 304 (Not Modified) can be returned for cached responses
-- Safe to cache responses; most datasets update daily, monthly, or quarterly
+Use an explicit request timeout and check HTTP status before parsing JSON. No fixed
+request quota is published in the reviewed guide. Respect `Retry-After` on HTTP 429
+and use bounded retries for transient 5xx responses; do not retry invalid filters.
+Save the query, retrieval timestamp, metadata and raw response for reproducibility.
+Historical series can be revised, so cached results need an explicit retrieval date.
 
 ## Pagination Headers
 
@@ -98,7 +81,7 @@ Responses include pagination in two places:
 - **`links` object** in the JSON body (`self`, `first`, `prev`, `next`, `last`)
 - **`Link` HTTP header** with RFC 5988 relations (`rel="first"`, `rel="next"`, etc.)
 
-Either can be used to navigate pages programmatically. See [response-format.md](response-format.md) for details.
+JSON links may be `&page...` fragments, not complete URLs. Preserve the original endpoint, filters, fields and sort while changing the page number; do not replace the query with the fragment. See [response-format.md](response-format.md) for details.
 
 ## Data Registry
 

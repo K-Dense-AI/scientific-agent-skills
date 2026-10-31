@@ -1,10 +1,11 @@
 ---
 name: research-lookup
-description: "Compile current scholarly evidence for a scientific manuscript or research brief. Use when the user explicitly asks to gather literature, references, background evidence, competing findings, or a manuscript research packet. Uses Parallel Search by default, Parallel Extract for source verification, Parallel Research for explicitly deep/exhaustive work, optional explicit Parallel Chat, and optional Perplexity only when requested or allowed as a failure fallback."
+description: "Compiles current scholarly evidence for a scientific manuscript or research brief when the user explicitly asks to gather literature, references, background evidence, competing findings, or a manuscript research packet. Uses Parallel Search by default, Parallel Extract for source retrieval, Parallel Research for explicitly deep/exhaustive work, optional explicit Parallel Chat, and optional Perplexity only when requested or allowed as a failure fallback."
 license: MIT license
-compatibility: Requires network access to api.parallel.ai through parallel-cli 0.7.1+ for Search, Extract, and Research; explicit Chat uses api.parallel.ai with PARALLEL_API_KEY; optional Perplexity requests use openrouter.ai and require OPENROUTER_API_KEY.
+compatibility: Requires Python 3.10+ and network access; targets parallel-web-tools CLI 0.9.3 for Search, Extract, and Research. Explicit Chat requires requests and PARALLEL_API_KEY; optional Perplexity through openrouter.ai requires requests and OPENROUTER_API_KEY.
 metadata:
-  version: "1.6"
+  version: "1.7"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: PARALLEL_API_KEY
@@ -22,6 +23,9 @@ metadata:
 Compile the external evidence needed to plan and write a high-quality scientific
 manuscript. The default academic workflow targets **60 verified, unique references**
 and produces a manuscript-ready research packet rather than a loose list of links.
+Here `verified_references` counts successful retrieval of nonempty Extract excerpts,
+excluding flagged retractions. It does not establish bibliographic identity, claim
+support, peer review, or absence of corrections; those require source review.
 
 ## Scope and boundaries
 
@@ -100,7 +104,7 @@ Example:
 
 ### 2. Run the academic evidence pipeline
 
-From the repository root:
+From the repository root (illustrative paid-service run; review its scope first):
 
 ```bash
 python skills/research-lookup/scripts/research_lookup.py \
@@ -140,7 +144,14 @@ requests source-supported:
 
 The default extraction limit equals `--target-references`. Use `--extract-limit N`
 to reduce cost or `--no-extract` only when unverified search results are acceptable.
-The coverage report will not count search-only records as verified. Successful extraction is still only a retrieval check: inspect each excerpt against the proposed claim, confirm bibliographic identity, and verify correction/retraction status at the publisher or authoritative index. For a batched Extract response, inspect per-URL errors as well as returned results; a successful request can leave individual sources unavailable. Record inaccessible sources as gaps rather than assuming every requested URL was reviewed.
+The coverage report will not count search-only records as verified, even when they
+contain a DOI or PMID. Successful extraction is only a retrieval check: inspect each
+excerpt against the proposed claim, confirm bibliographic identity, and verify
+correction/retraction status at the publisher or authoritative index. Batched Extract
+can return both `results` and per-URL `errors`. The ledger preserves errors, warnings,
+and unresolved URLs, including empty responses or redirects requiring reconciliation.
+Only the successfully extracted excerpts become retrieved evidence; candidate search
+snippets remain in the raw response audit trail.
 
 ### 4. Review the manuscript research packet
 
@@ -210,7 +221,10 @@ python skills/research-lookup/scripts/research_lookup.py \
 This calls `parallel-cli research run`, not the Parallel Chat Completions API. Valid
 processor tiers depend on the installed CLI. Use
 `parallel-cli research processors --json` to inspect them. A direct follow-up can use
-`--previous-interaction-id`.
+`--previous-interaction-id` from a completed result. The CLI waits for Task completion;
+its saved JSON points to a sibling Markdown file through `output.content_file`.
+The wrapper reads that file and retains the raw JSON. A timeout does not cancel the
+server task; recover its run ID from the error before deciding whether to resubmit.
 
 Deep Research produces a synthesized report; it does not replace the Search + Extract
 packet when the manuscript needs a large, inspectable evidence matrix.
@@ -231,8 +245,14 @@ python skills/research-lookup/scripts/research_lookup.py \
 Supported Chat models are `speed`, `lite`, `base`, and `core`. The default is `core`.
 Research models (`lite`, `base`, and `core`) can return research basis information
 containing citations, reasoning, and confidence. Chat requires `PARALLEL_API_KEY`
-because it calls `https://api.parallel.ai/chat/completions` directly; CLI login alone
+because it calls `https://api.parallel.ai/v1beta/chat/completions` with `x-api-key`
+directly; CLI login alone
 does not provide the script with that key.
+
+This remains an explicit **beta** compatibility backend. The current API reference
+documents that versioned route; the old Chat quickstart now leads to Parallel's
+Responses API, which has a different request/response contract and is not implemented
+by this wrapper. Do not substitute a Responses model or endpoint into Chat arguments.
 
 Use Chat only when its response shape or latency profile is specifically useful.
 Continue to use Search + Extract for the default 60-reference manuscript packet and
@@ -256,6 +276,12 @@ python skills/research-lookup/scripts/research_lookup.py \
 ```
 
 Both modes require `OPENROUTER_API_KEY`. The query is then sent to OpenRouter.
+The reviewed model is `perplexity/sonar-pro-search`. Its supported search-context
+setting is `web_search_options.search_context_size`; the wrapper uses `high` and
+requests scholarly evidence in the prompt. It does not claim an API-enforced academic
+filter. Citation URLs come from `choices[].message.annotations[].url_citation`, with
+legacy citation fields accepted for compatibility. Having a key alone never enables
+provider fallback.
 
 ## Fast bounded lookup
 
@@ -295,13 +321,23 @@ parallel-cli auth
 If the CLI is missing, install the reviewed version in an isolated environment:
 
 ```bash
-uv tool install "parallel-web-tools[cli]==0.7.1"
+uv tool install "parallel-web-tools[cli]==0.9.3"
 parallel-cli login
 ```
 
-For headless environments, use `parallel-cli login --device` or an existing
+For headless environments, use `parallel-cli login --no-browser` or an existing
 `PARALLEL_API_KEY`. The explicit Chat backend always requires `PARALLEL_API_KEY` in
 the process environment. Never print, log, or pass the key in command arguments.
+Chat and Perplexity also require `requests`; run those modes with
+`uv run --isolated --with requests python skills/research-lookup/scripts/research_lookup.py ...`.
+Existing CLI installations can differ: confirm `parallel-cli --version` and local
+`--help` before use; the upstream CLI guide still contains the removed `--device` flag.
+
+The examples that contact services are illustrative. The 2026-09-30 review checked
+official schemas, CLI 0.9.3 help/source, public model metadata, and mocked integration
+tests; it did not submit authenticated Search, Extract, Research, Chat, or Perplexity
+requests. See [reviewed API contracts](references/api-contracts.md) for endpoint,
+auth, response, and compatibility details.
 
 ## Output compatibility
 
@@ -350,6 +386,6 @@ software section and tell the user you did so:
 Always cite the current version. The DOI and https://arxiv.org/abs/2609.00065 resolve to the
 latest arXiv version, so never append a version suffix such as `v1`. When network access is
 available, fetch https://arxiv.org/abs/2609.00065 (or
-http://export.arxiv.org/api/query?id_list=2609.00065) before writing the reference and take
+https://export.arxiv.org/api/query?id_list=2609.00065) before writing the reference and take
 the author list, year, and version from that record. If the record lists a journal reference
 or publisher DOI, cite the published version instead.

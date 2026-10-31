@@ -189,8 +189,11 @@ Choose the measurement-window rule before analysis:
 - time integral clipped to `[warm_up, horizon)`.
 
 These estimate different quantities. The bundled queue scripts use completed
-entities whose arrival is at or after warm-up plus clipped time-weighted resource
-metrics, and disclose unfinished entities.
+entities whose arrival is at or after warm-up for customer means, but count all
+departures inside the window for throughput. Loss uses only arrivals/rejections
+inside the window; resource integrals are clipped to the window. They disclose
+unfinished entities. A completion-censored arrival cohort is not an unbiased
+estimator of the waiting time of all arrivals.
 
 ## 7. Verification and validation
 

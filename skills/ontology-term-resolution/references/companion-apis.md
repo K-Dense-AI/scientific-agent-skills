@@ -1,8 +1,8 @@
 # Companion identifier services
 
-OLS is the authority for "does this term exist, and is it current?". The four
-services below answer different questions. Every behaviour here was checked
-against the live APIs in September 2026.
+OLS verifies terms in its loaded ontology releases. The four services below answer
+different questions. Reviewed 2026-10-01 against official schemas/source and public
+read-only requests; endpoint results and registry mappings can change.
 
 | Service | Use it for | Do not use it for |
 | --- | --- | --- |
@@ -13,7 +13,9 @@ against the live APIs in September 2026.
 
 ## Bioregistry
 
-Base URL: `https://bioregistry.io/api`. No API key.
+Base URL: `https://bioregistry.io/api`. No API key. Official
+[usage guide](https://bioregistry.io/usage) and [OpenAPI schema](https://bioregistry.io/openapi.json).
+These are individual-resource lookups and an unpaged prefix search, not paginated term searches.
 
 | Endpoint | Question |
 | --- | --- |
@@ -37,9 +39,10 @@ GET https://resolver.api.identifiers.org/HPO:0001250
                            -> 400, "NOT A NAMESPACE"
 ```
 
-If a metadata file writes `HPO:0001250`, Bioregistry will look fine and
-Identifiers.org will reject the compact identifier. Rewrite to the preferred
-prefix (`HP:0001250`) before handing the CURIE to any other resolver.
+If a metadata file writes `HPO:0001250`, Bioregistry will accept the synonym while
+Identifiers.org rejects it. `HP:0001250` works for both OLS and Identifiers.org. Do not
+generalize this to every prefix: Bioregistry prefers `ORPHA`, OLS uses `Orphanet`/`ordo`,
+and Identifiers.org uses `orphanet`. Verify the mapping and IRI, not only capitalization.
 
 ### Trap — 404 is two different failures
 
@@ -59,8 +62,9 @@ run the regex against the whole CURIE.
 
 ## Identifiers.org
 
-Resolver: `https://resolver.api.identifiers.org/{CURIE}`. Registry docs at
-https://docs.identifiers.org/. No API key.
+Resolver: `https://resolver.api.identifiers.org/{CURIE}`. [Resolver API documentation](https://docs.identifiers.org/pages/api.html). No API key.
+This returns provider URLs in one response, not paginated ontology terms. No provider
+URL or successful resolver response proves that the term exists in its underlying database.
 
 A successful body is `{apiVersion, errorMessage: null, payload: {resolvedResources: […]}}`.
 Each resource has `compactIdentifierResolvedUrl`, `providerCode`, `official`,
@@ -68,8 +72,8 @@ and `recommendation.recommendationIndex`.
 
 ### Trap — preferred prefix is not the Identifiers.org namespace
 
-Bioregistry `preferred_prefix` is the form OLS wants. It is not the MIRIAM
-compact-identifier namespace, and not every prefix has one:
+Bioregistry `preferred_prefix`, OLS CURIE spelling, and MIRIAM namespaces can differ,
+and not every prefix has a MIRIAM mapping:
 
 ```
 GET /reference/orphanet:558  -> providers.miriam = https://identifiers.org/orphanet:558
@@ -94,46 +98,50 @@ Leave the column empty when that mapping is missing. Do not template
 
 A 400 body still parses as JSON — `errorMessage` is set and
 `resolvedResources` is null. That is a rejected compact identifier, not a
-transport failure.
+transport failure. Timeouts, malformed JSON and 5xx responses are service failures;
+`lookup_prefix.py` retains the registry-supplied URL and labels it unverified rather than
+claiming the identifier was rejected. Only a resolver rejection blanks that URL.
 
 ## ZOOMA
 
-Annotate: `https://www.ebi.ac.uk/spot/zooma/v2/api/services/annotate`.
-No API key. Slow — budget tens of seconds; the client uses a 60 s timeout.
+Bundled compatibility route: `GET https://www.ebi.ac.uk/spot/zooma/v2/api/services/annotate`.
+No API key or pagination. The client uses a 60-second timeout and limits returned rows locally.
+Current [official docs source](https://github.com/EBISPOT/zooma2/blob/dev/frontend/src/pages/docs/api.tsx)
+also describes v3 JSON mapping/streaming routes; this client deliberately retains the supported
+[v2 contract](https://github.com/EBISPOT/zooma2/blob/dev/backend/src/main/java/uk/ac/ebi/zooma2/api/v2/ZoomaApiV2.java).
 
 | Parameter | Effect |
 | --- | --- |
-| `propertyValue` | The free-text string. |
-| `propertyType` | Optional slot (`organism part`, `cell type`, `disease`). Helps when the same word is used in several roles. |
-| `filter` | **Required.** `required:[none],ontologies:[uberon]` or comma-separated OLS ids. |
+| `propertyValue` | Free-text string. |
+| `propertyType` | Optional context such as `organism part` or `cell type`. |
+| `filter` | The client requires `ontologies:[uberon],defining_only:[true]`; the service itself allows omission. |
 
-Hits carry `confidence` (`HIGH` / `GOOD` / `MEDIUM` / `LOW`), `semanticTags`
-(IRIs, not CURIEs), and `provenance.evidence` (`ZOOMA_INFERRED_FROM_CURATED`
-or `OLS_TEXT_TAGGER`).
+Ontology restrictions select targets; `defining_only:[true]` excludes imported namespaces.
+Omitting `required` permits available curated sources. The older `required:[none]` was not a
+requirement of the API and is no longer sent. Do not use `ontologies:[none]` to disable ontology
+matching: the current v2 adapter interprets that legacy sentinel as no ontology restriction.
 
-`map_terms.py` refuses to run without `--ontology`, converts IRIs with
-`iri_to_curie`, and labels HIGH/GOOD as `zooma_safe` and the rest as
-`zooma_weak`.
+Hits contain `confidence` (`HIGH`, `GOOD`, `MEDIUM`, `LOW`), `semanticTags` (IRIs),
+`annotatedProperty`, `provenance`, and often `derivedFrom`. Unknown IRI namespaces remain
+unconverted rather than being turned into plausible CURIEs by splitting a URL.
 
-### Trap — unfiltered annotate is unusable
+### Confidence and provenance are not curation verdicts
 
-```
-propertyValue=liver
-  -> 118 hits, HIGH: FOODON:03309772, XAO:0000133, UBERON:0002107, BTO:0000759, …
-propertyValue=liver&propertyType=organism+part&filter=required:[none],ontologies:[uberon]
-  -> 10 hits, first tag UBERON:0002107
-```
+Current v2 source assigns HIGH to full curated/label/synonym matches; other scores are bucketed.
+These are ranking categories, not calibrated correctness probabilities. In the review's live
+`liver` query, the organ was HIGH while several narrower liver parts were GOOD.
 
-An earlier check of the unfiltered call also returned
-`https://w3id.org/gold.vocab/Liver`. Never call annotate without an ontology
-filter.
+The v2 outer wrapper always uses `ZOOMA_INFERRED_FROM_CURATED`, including underlying
+`OLS_TEXT_TAGGER` and `OLS_EMBEDDING` matches. `flatten_hit()` reports evidence/source from
+`derivedFrom` and retains the full available provenance chain in JSON. Do not infer human
+curation from the outer evidence label. See the official
+[annotation adapter](https://github.com/EBISPOT/zooma2/blob/dev/backend/src/main/java/uk/ac/ebi/zooma2/api/v2/dto/V2AnnotationDto.java)
+and [confidence logic](https://github.com/EBISPOT/zooma2/blob/dev/backend/src/main/java/uk/ac/ebi/zooma2/api/v2/dto/V2ConfidenceLevel.java).
 
-### Trap — HIGH is not "write this ID"
-
-`PBMC` filtered to `cl` returns `CL:2000001` at HIGH and several other cell
-types at MEDIUM. Still run `validate_terms.py` on the CURIE: ZOOMA does not
-report obsolescence, defining ontology, or branch membership, and its IRIs
-still need the EFO / Orphanet / OBO split that `iri_to_curie` already knows.
+`map_terms.py --high-confidence-only` retains HIGH/GOOD candidates. `--exact-only` is a legacy
+alias for that confidence filter, unrelated to OLS lexical exactness. Legacy output names
+`safe` and `zooma_safe` also mean only HIGH/GOOD. Always check each candidate's OLS term detail,
+definition, synonym scope, schema and sample context before writing the annotation.
 
 ## Ontobee
 

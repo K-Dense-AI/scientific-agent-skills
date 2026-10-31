@@ -28,6 +28,7 @@ from setup_config import (
     ENV_API_URL,
     ENV_INVENTORY_LAB_ID,
     ENV_USER_ID,
+    INVENTORY_API_BASE_URL,
     ConfigError,
     normalize_eln_api_url,
 )
@@ -119,26 +120,30 @@ def build_inventory_headers(
     access_key_id: str,
     access_password: str,
     user_id: str,
-    lab_id: str,
+    lab_id: str | None,
     relative_path: str,
     expires_ms: int | None = None,
 ) -> dict[str, str]:
     """Return documented Inventory v1 authentication headers.
 
     The relative path includes resolved route parameters and excludes any query
-    string. Keep the returned mapping out of logs.
+    string. The users/me bootstrap route does not require a Lab ID; pass None
+    or an empty string there to omit that header. Other routes require a Lab ID.
+    Keep the returned mapping out of logs.
     """
 
     path = validate_inventory_path(relative_path)
     expires = _expires_ms(expires_ms)
     signature = create_signature(access_key_id, path, expires, access_password)
-    return {
+    headers = {
         "X-LabArchives-UId": _require_text(user_id, "Inventory user ID"),
         "X-LabArchives-AKId": _require_text(access_key_id, "Access Key ID"),
-        "X-LabArchives-LabId": _require_text(lab_id, "Inventory Lab ID"),
         "X-LabArchives-Signature": signature,
         "X-LabArchives-Expires": str(expires),
     }
+    if path != "/public/v1/users/me" or (lab_id and lab_id.strip()):
+        headers["X-LabArchives-LabId"] = _require_text(lab_id or "", "Inventory Lab ID")
+    return headers
 
 
 def validate_eln_component(value: str, label: str) -> str:
@@ -281,7 +286,7 @@ def command_inventory_plan(
         "remote_request_performed": False,
         "api_surface": "Inventory API v1",
         "relative_path": validate_inventory_path(args.path),
-        "absolute_base_url": None,
+        "absolute_base_url": INVENTORY_API_BASE_URL,
         "expires_ms": int(headers["X-LabArchives-Expires"]),
         "authentication_header_names": sorted(headers),
         "access_key_id_fingerprint": _secret_fingerprint(access_key_id),
@@ -290,8 +295,8 @@ def command_inventory_plan(
         ),
         "reusable_authentication_material_printed": False,
         "warning": (
-            "Use the absolute Inventory API base URL supplied by LabArchives; "
-            "do not infer it from a browser host."
+            "The Inventory overview documents this base URL. Confirm the account "
+            "deployment before a live request; do not infer regional variants."
         ),
     }
     _dump(payload, compact=args.compact, stream=sys.stdout)

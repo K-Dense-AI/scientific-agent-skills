@@ -5,6 +5,7 @@ Analyze multiple sequences: BLAST, alignment, and structure prediction
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 import gget
@@ -35,7 +36,7 @@ def read_fasta(fasta_file):
 
 def analyze_sequences(
     fasta_file,
-    blast_db="nr",
+    blast_db="default",
     align=True,
     predict_structure=False,
     output_dir="output",
@@ -45,13 +46,13 @@ def analyze_sequences(
 
     Args:
         fasta_file: Path to FASTA file with sequences
-        blast_db: BLAST database to search (default: nr)
+        blast_db: BLAST database to search (default: infer nt/nr from sequence)
         align: Whether to perform multiple sequence alignment
-        predict_structure: Whether to predict structures with AlphaFold
+        predict_structure: Show the legacy placeholder; no prediction is executed
         output_dir: Output directory for results
     """
     output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     print(f"Batch Sequence Analysis")
     print("=" * 60)
@@ -67,6 +68,7 @@ def analyze_sequences(
     # Step 1: BLAST each sequence
     print("Step 1: Running BLAST searches...")
     print("-" * 60)
+    used_names = set()
     for i, seq_data in enumerate(sequences):
         print(f"\n{i+1}. BLASTing {seq_data['id']}...")
         try:
@@ -74,7 +76,16 @@ def analyze_sequences(
                 seq_data["seq"], database=blast_db, limit=10, save=False
             )
 
-            output_file = output_path / f"{seq_data['id']}_blast.csv"
+            # FASTA headers are data, not file paths. Keep outputs contained and
+            # avoid overwriting repeated or similarly sanitized identifiers.
+            stem = re.sub(r"[^A-Za-z0-9_.-]", "_", seq_data["id"]).strip(".")[:100] or "sequence"
+            name = stem
+            suffix = 2
+            while name in used_names:
+                name = f"{stem}_{suffix}"
+                suffix += 1
+            used_names.add(name)
+            output_file = output_path / f"{name}_blast.csv"
             blast_results.to_csv(output_file, index=False)
             print(f"   Results saved to: {output_file}")
 
@@ -105,10 +116,10 @@ def analyze_sequences(
 
     # Step 3: Structure prediction (optional)
     if predict_structure:
-        print("\n\nStep 3: Predicting structures with AlphaFold...")
+        print("\n\nStep 3: Structure prediction placeholder (not executed)")
         print("-" * 60)
         print(
-            "Note: This requires 'gget setup alphafold' and is computationally intensive"
+            "The upstream gget AlphaFold wrapper is deprecated and no longer maintained."
         )
 
         for i, seq_data in enumerate(sequences):
@@ -134,7 +145,7 @@ def analyze_sequences(
     if align and len(sequences) > 1:
         print(f"  - Alignment: alignment.afa")
     if predict_structure:
-        print(f"  - Structures: structure_*/")
+        print("  - Structure prediction was not run; no structure files created")
 
     return True
 
@@ -147,8 +158,8 @@ def main():
     parser.add_argument(
         "-db",
         "--database",
-        default="nr",
-        help="BLAST database (default: nr for proteins, nt for nucleotides)",
+        default="default",
+        help="BLAST database (default: infer nr for proteins, nt for nucleotides)",
     )
     parser.add_argument(
         "--no-align", action="store_true", help="Skip multiple sequence alignment"
@@ -156,7 +167,7 @@ def main():
     parser.add_argument(
         "--predict-structure",
         action="store_true",
-        help="Predict structures with AlphaFold (requires setup)",
+        help="Show the legacy structure-prediction placeholder; no prediction is executed",
     )
     parser.add_argument(
         "-o", "--output", default="output", help="Output directory (default: output)"

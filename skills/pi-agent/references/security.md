@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/security
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi is a local coding agent. It runs with the permissions of the user account that starts it and treats files writable by that user as inside the same local trust boundary.
 
 ## Project Trust
@@ -10,7 +12,7 @@ Project trust controls whether Pi loads project-local settings, resources, packa
 
 Pi considers a project to require trust when it finds any of these from the current working directory:
 
-- `.pi/settings.json`
+- `.pi/settings.json` or `.pi/mcp.json`
 - `.pi/extensions`, `.pi/skills`, `.pi/prompts`, or `.pi/themes`
 - `.pi/SYSTEM.md` or `.pi/APPEND_SYSTEM.md`
 - project `.agents/skills` in the current directory or an ancestor

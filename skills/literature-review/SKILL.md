@@ -1,10 +1,12 @@
 ---
 name: literature-review
-description: Conduct comprehensive, systematic literature reviews using multiple academic databases (PubMed, arXiv, bioRxiv, Semantic Scholar, etc.). This skill should be used when conducting systematic literature reviews, meta-analyses, research synthesis, or comprehensive literature searches across biomedical, scientific, and technical domains. Creates professionally formatted markdown documents and PDFs with verified citations in multiple citation styles (APA, Nature, Vancouver, etc.).
+description: Conducts systematic, scoping, and narrative literature reviews using PubMed, arXiv, bioRxiv, Semantic Scholar, and other appropriate sources. Use for research synthesis, reproducible literature searches, screening, citation checking, or preparing Markdown and PDF reviews. Tracks search coverage, records versus studies, and evidence limitations; supports meta-analysis planning but does not supply a meta-analysis engine.
 allowed-tools: Read Write Edit Bash
 license: MIT license
+compatibility: Python 3.10+ with requests; network for DOI checks and searches. Optional parallel-cli requires Parallel authentication. PDF export needs Pandoc and XeLaTeX; AI schematics need OPENROUTER_API_KEY.
 metadata:
-  version: "1.10"
+  version: "1.11"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -20,7 +22,7 @@ metadata:
 
 Conduct systematic, comprehensive literature reviews following rigorous academic methodology. Search multiple literature databases, synthesize findings thematically, verify all citations for accuracy, and generate professional output documents in markdown and PDF formats.
 
-This skill uses the **parallel-web skill** (`parallel-cli search`) as the primary web search tool for broad academic literature discovery, supplemented by specialized database access skills (gget, bioservices, datacommons-client). It provides specialized tools for citation verification, result aggregation, and document generation.
+Use discipline-appropriate bibliographic databases for the reproducible search, with **parallel-web** (`parallel-cli search`) for scoping and supplementary discovery. Ranked web results and extracted excerpts cannot establish exhaustive coverage or substitute for full-text assessment. Bundled scripts process normalized records, check DOI registration, and render documents; they do not run a complete systematic review automatically.
 
 ## When to Use This Skill
 
@@ -33,42 +35,25 @@ Use this skill when:
 - Identifying research gaps and future directions
 - Requiring verified citations and professional formatting
 
-## Visual Enhancement with Scientific Schematics
+## Figures and PRISMA reporting
 
-**⚠️ MANDATORY: Every literature review MUST include at least 1-2 AI-generated figures using the scientific-schematics skill.**
+For systematic reviews, use the appropriate [PRISMA 2020 flow template](https://www.prisma-statement.org/prisma-2020-flow-diagram) and reconciled screening counts. Distinguish records, reports, and studies, including reports not retrieved and reasons for full-text exclusions. Use tables or deterministic plotting for exact numbers, effect estimates, and risk-of-bias results.
 
-This is not optional. Literature reviews without visual elements are incomplete. Before finalizing any document:
-1. Generate at minimum ONE schematic or diagram (e.g., PRISMA flow diagram for systematic reviews)
-2. Prefer 2-3 figures for comprehensive reviews (search strategy flowchart, thematic synthesis diagram, conceptual framework)
+Conceptual schematics are optional. The bundled generator needs `OPENROUTER_API_KEY` and creates a PNG draft with up to two generation/review iterations:
 
-**How to generate figures:**
-- Use the **scientific-schematics** skill to generate AI-powered publication-quality diagrams
-- Simply describe your desired diagram in natural language
-- Nano Banana Pro will automatically generate, review, and refine the schematic
-
-**How to generate schematics:**
 ```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python scripts/generate_schematic.py "Conceptual evidence map; labels from the reviewed extraction table" \
+  -o figures/evidence_map.png --doc-type journal --iterations 2
 ```
 
-The AI will automatically:
-- Create publication-quality images with proper formatting
-- Review and refine through multiple iterations
-- Ensure accessibility (colorblind-friendly, high contrast)
-- Save outputs in the figures/ directory
-
-**When to add schematics:**
-- PRISMA flow diagrams for systematic reviews
-- Literature search strategy flowcharts
-- Thematic synthesis diagrams
-- Research gap visualization maps
-- Citation network diagrams
-- Conceptual framework illustrations
-- Any complex concept that benefits from visualization
-
-For detailed guidance on creating schematics, refer to the scientific-schematics skill documentation.
-
----
+Generation uses OpenRouter's `POST /api/v1/images` with
+`google/gemini-3.1-flash-image`; review uses `POST /api/v1/chat/completions` with
+`google/gemini-3.7-flash`. The output path must end in `.png`. Inspect labels,
+counts, arrows, and accessibility yourself: `success` means an image was saved,
+whereas `quality_met`, `final_reviewed`, and `termination_reason` in the review
+log describe the automated review. Neither proves scientific accuracy. A failed
+refinement preserves the previous draft. Check current model availability before
+running paid generation; do not fabricate study counts in an image prompt.
 
 ## Core Workflow
 
@@ -93,13 +78,13 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 ## Best Practices
 
 ### Search Strategy
-1. **Start with parallel-web**: Use `parallel-cli search` with academic domains for initial broad coverage before querying specialized databases
-2. **Use multiple databases** (minimum 3): Ensures comprehensive coverage — parallel-web counts as one source
+1. **Pilot the question**: Optionally use `parallel-cli search` for scoping, then test database queries against known eligible reports
+2. **Choose complementary sources**: Justify database and registry coverage for the question; no fixed number of databases guarantees completeness
 3. **Include preprint servers**: Captures latest unpublished findings
 4. **Document everything**: Search strings, dates, result counts for reproducibility — save all parallel-cli output to `sources/`
 5. **Test and refine**: Run pilot searches, review results, adjust search terms
-6. **Sort by citations**: When available, sort search results by citation count to surface influential work first
-7. **Use parallel-cli extract**: Fetch full content from promising URLs found during search to verify relevance before full-text screening
+6. **Preserve all eligible records**: Citation counts can order exploratory reading but must not determine eligibility or replace risk-of-bias assessment
+7. **Verify retrieved content**: Extraction can be incomplete; obtain the actual full report, or record it as not retrieved
 
 ### Records, Reports, and Studies
 1. **Deduplicate records, then link reports**: DOI/title deduplication removes repeated search hits; it does not identify every paper from the same study. Link preprints, journal articles, protocols, and follow-up reports using trial IDs, cohort descriptions, sites, and recruitment dates.
@@ -110,7 +95,7 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 1. **Use clear criteria**: Document inclusion/exclusion criteria before screening
 2. **Screen systematically**: Title → Abstract → Full text
 3. **Document exclusions**: Record reasons for excluding studies
-4. **Consider dual screening**: For systematic reviews, have two reviewers screen independently
+4. **Use independent eligibility decisions**: For systematic reviews, use two reviewers for final full-text eligibility and document disagreement resolution; disclose any single-reviewer limitation
 
 ### Synthesis
 1. **Organize thematically**: Group by themes, NOT by individual studies
@@ -120,7 +105,7 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 
 ### Quality and Reproducibility
 1. **Assess study quality**: Use appropriate quality assessment tools
-2. **Verify all citations**: Run verify_citations.py script
+2. **Verify citations and claims**: Run verify_citations.py for DOI registration/metadata, then compare the reference and the cited claim with the actual source
 3. **Document methodology**: Provide enough detail for others to reproduce
 4. **Follow guidelines**: Use PRISMA for systematic reviews
 
@@ -135,7 +120,7 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 1. **Single database search**: Misses relevant papers; always search multiple databases
 2. **No search documentation**: Makes review irreproducible; document all searches
 3. **Study-by-study summary**: Lacks synthesis; organize thematically instead
-4. **Unverified citations**: Leads to errors; always run verify_citations.py
+4. **Treating DOI existence as support**: A registered DOI can still identify the wrong work; check identity, claim support, corrections, and retractions
 5. **Too broad search**: Yields thousands of irrelevant results; refine with specific terms
 6. **Too narrow search**: Misses relevant papers; include synonyms and related terms
 7. **Ignoring preprints**: Misses latest findings; include bioRxiv, medRxiv, arXiv
@@ -145,49 +130,20 @@ review is in [references/example_workflow.md](references/example_workflow.md).
 
 ## Integration with Other Skills
 
-This skill works seamlessly with other scientific skills:
+- **parallel-web**: Supplementary discovery, citation chaining, and URL extraction.
+- **citation-management**: Metadata normalization, BibTeX/CSL export, and citation formatting.
+- **pubmed-database / paper-lookup**: Domain-specific retrieval and lawful full-text discovery.
+- **matplotlib / seaborn**: Reproducible evidence plots and quantitative figures.
+- **venue-templates**: Target-journal structure, reference style, and submission requirements.
 
-### Web Search & Extraction (parallel-web skill — PRIMARY)
-- **parallel-cli search**: Broad academic and general web search with domain filtering — use for initial scoping, finding papers, citation chaining, and supplementary searches
-- **parallel-cli extract**: Fetch full content from paper URLs, journal websites, and preprint servers — use for reading abstracts, extracting reference lists, and verifying paper details
-- **parallel-cli search --include-domains**: Academic-focused search across scholarly domains (arxiv.org, pubmed, nature.com, etc.)
-
-### Database Access Skills
-- **gget**: PubMed, bioRxiv, COSMIC, AlphaFold, Ensembl, UniProt
-- **bioservices**: ChEMBL, KEGG, Reactome, UniProt, PubChem
-- **datacommons-client**: Demographics, economics, health statistics
-
-### Analysis Skills
-- **pydeseq2**: RNA-seq differential expression (for methods sections)
-- **scanpy**: Single-cell analysis (for methods sections)
-- **anndata**: Single-cell data (for methods sections)
-- **biopython**: Sequence analysis (for background sections)
-
-### Visualization Skills
-- **matplotlib**: Generate figures and plots for review
-- **seaborn**: Statistical visualizations
-
-### Writing Skills
-- **brand-guidelines**: Apply institutional branding to PDF
-- **internal-comms**: Adapt review for different audiences
-- **venue-templates**: Access venue-specific writing style guides when preparing reviews for publication
-
-### Venue-Specific Writing Styles
-
-When preparing a literature review for a specific journal, consult the **venue-templates** skill for writing style guidance:
-- `venue_writing_styles.md`: Master style comparison across venues
-- `nature_science_style.md`: Nature/Science flowing abstract style, story-driven structure
-- `cell_press_style.md`: Cell Press graphical abstracts, Highlights format
-- `medical_journal_styles.md`: NEJM/Lancet/JAMA structured abstracts, PRISMA compliance
-
-These guides help adapt your review's tone, abstract format, and structure to match the target venue's expectations.
+`gget search` queries Ensembl identifiers; it is not a PubMed or bioRxiv search command. Biological entity databases can inform background sections but do not replace bibliographic searching.
 
 ## Resources
 
 ### Bundled Resources
 
 **Scripts:**
-- `scripts/verify_citations.py`: Verify DOIs and generate formatted citations
+- `scripts/verify_citations.py`: Check DOI registration and retrieve Crossref metadata for manual review
 - `scripts/generate_pdf.py`: Convert markdown to professional PDF
 - `scripts/search_databases.py`: Process, deduplicate, and format search results
 
@@ -201,7 +157,7 @@ These guides help adapt your review's tone, abstract format, and structure to ma
 ### External Resources
 
 **Guidelines:**
-- PRISMA (Systematic Reviews): http://www.prisma-statement.org/
+- PRISMA (Systematic Reviews): https://www.prisma-statement.org/
 - Cochrane Handbook: https://training.cochrane.org/handbook
 - AMSTAR 2 (Review Quality): https://amstar.ca/
 
@@ -217,17 +173,16 @@ These guides help adapt your review's tone, abstract format, and structure to ma
 
 ## Dependencies
 
-### Required CLI Tools
+### Optional search CLI
 ```bash
-# parallel-cli (PRIMARY — for web search and URL extraction)
-curl -fsSL https://parallel.ai/install.sh | bash
-# Or: uv tool install "parallel-web-tools[cli]"
-# Authenticate: parallel-cli auth
+# CLI syntax checked with parallel-cli 0.9.3
+uv tool install "parallel-web-tools[cli]==0.9.3"
+# Authenticate: parallel-cli auth (or set PARALLEL_API_KEY)
 ```
 
-### Required Python Packages
+### Python tooling
 ```bash
-uv pip install requests  # For citation verification
+uv run --isolated --with requests==2.34.2 python scripts/verify_citations.py review.md
 ```
 
 ### Required System Tools
@@ -246,20 +201,15 @@ Check dependencies:
 python scripts/generate_pdf.py --check-deps
 ```
 
-## Summary
+## Verification scope
 
-This literature-review skill provides:
-
-1. **Systematic methodology** following academic best practices
-2. **Parallel-web powered search** using `parallel-cli search` for fast, broad academic literature discovery with scholarly domain filtering
-3. **Multi-database integration** via existing scientific skills (gget, bioservices, datacommons-client)
-4. **Citation verification** ensuring accuracy and credibility
-5. **Professional output** in markdown and PDF formats
-6. **Comprehensive guidance** covering the entire review process
-7. **Quality assurance** with verification and validation tools
-8. **Reproducibility** through detailed documentation requirements
-
-Conduct thorough, rigorous literature reviews that meet academic standards and provide comprehensive synthesis of current knowledge in any domain.
+The 2026-09-30 refresh checks the documented service contracts and runs the
+bundled offline tests plus small public read-only probes. Search examples with
+placeholder topics, credentials, or local bibliography files are illustrative;
+they are not evidence that a particular review search is complete. See
+[references/database_strategies.md](references/database_strategies.md) for exact
+request/response limits and [references/example_workflow.md](references/example_workflow.md)
+for an explicitly illustrative end-to-end recipe.
 
 ## Citing Scientific Agent Skills
 

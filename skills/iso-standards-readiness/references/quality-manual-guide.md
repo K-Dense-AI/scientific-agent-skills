@@ -1,6 +1,6 @@
 # Quality Manual Development Guide
 
-Research basis: **2026-07-23**, extended **2026-07-26** for laboratory lanes. This guide
+Research basis: **2026-10-01**; current-source details are in `references/source-ledger.md`. This guide
 explains an evidence-controlled authoring process. It does not reproduce standard text
 or prescribe a universal manual format.
 
@@ -239,7 +239,7 @@ An ISO certificate does not exempt a manufacturer from FDA inspection.
 
 ### MDSAP
 
-Reference current **MDSAP AU P0002.010** (2026-02-02) and declared participating
+Reference current **MDSAP AU P0002.011** (2026-08-03) and declared participating
 jurisdictions. Do not describe an ISO-only audit as MDSAP or an FDA inspection as
 using the MDSAP plan.
 

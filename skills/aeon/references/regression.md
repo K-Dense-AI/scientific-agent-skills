@@ -1,6 +1,6 @@
 # Time Series Regression
 
-Aeon provides time series regressors across 9 categories for predicting continuous values from temporal sequences.
+Selected aeon 1.6 regressors predict one continuous target per series. This is distinct from forecasting future timepoints.
 
 ## Convolution-Based Regressors
 
@@ -9,7 +9,7 @@ Apply convolutional kernels for feature extraction:
 - `HydraRegressor` - Multi-resolution dilated convolutions
 - `RocketRegressor` - Random convolutional kernels
 - `MiniRocketRegressor` - Simplified ROCKET for speed
-- `MultiRocketRegressor` - Combined ROCKET variants
+- `MultiRocketRegressor` - Convolutional features from raw and differenced series with multiple pooling operators
 - `MultiRocketHydraRegressor` - Merges ROCKET and Hydra approaches
 
 **Use when**: Need fast regression with strong baseline performance.
@@ -24,8 +24,8 @@ Neural architectures for end-to-end temporal regression:
 - `TimeCNNRegressor` - Standard CNN architecture
 - `RecurrentRegressor` - RNN/LSTM/GRU variants
 - `MLPRegressor` - Multi-layer perceptron
-- `EncoderRegressor` - Generic encoder wrapper
-- `LITERegressor` - Lightweight inception time ensemble
+- `EncoderRegressor` - Convolutional encoder architecture
+- `LITETimeRegressor` - Lightweight inception time ensemble
 - `DisjointCNNRegressor` - Specialized CNN architecture
 
 **Use when**: Large datasets, complex patterns, or need feature learning.
@@ -43,7 +43,7 @@ k-nearest neighbors with temporal distance metrics:
 Extract statistical features before regression:
 
 - `Catch22Regressor` - 22 canonical time-series characteristics
-- `FreshPRINCERegressor` - Pipeline combining multiple feature extractors
+- `FreshPRINCERegressor` - TSFresh features followed by rotation forest
 - `SummaryRegressor` - Summary statistics features
 - `TSFreshRegressor` - Automated tsfresh feature extraction
 

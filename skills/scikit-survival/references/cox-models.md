@@ -1,6 +1,6 @@
 # Cox, Coxnet, and IPC ridge models
 
-Verified for scikit-survival 0.28.0 on 2026-07-23.
+Verified for scikit-survival 0.28.0 on 2026-10-01.
 
 ## Cox proportional hazards model
 
@@ -98,7 +98,9 @@ Current details:
 - `predict(X, alpha=...)` uses the selected path point (or interpolation).
 - `predict_survival_function()` and
   `predict_cumulative_hazard_function()` require
-  `fit_baseline_model=True`.
+  `fit_baseline_model=True`. An explicit `alpha` for either probability method must
+  match a fitted `alphas_` value; risk-score interpolation does not provide an
+  interpolated baseline survival model.
 
 ### Leakage-safe alpha selection
 
@@ -155,6 +157,10 @@ search = GridSearchCV(
 )
 ```
 
+IPCRidge `.score()` handles its time direction, but metric scorer wrappers call raw
+`.predict()` and do not automatically negate time-oriented predictions. Use an
+explicit risk adapter if applying a discrimination wrapper to an AFT estimator.
+
 The wrapper is the estimator passed to `GridSearchCV`; it is not a zero-argument
 `scoring` callable. Its fit fold supplies the censoring distribution. Time support
 still has to be valid in every score fold.
@@ -181,10 +187,11 @@ from sksurv.linear_model import IPCRidge
 
 model = IPCRidge(alpha=1.0)
 model.fit(X_train_scaled, y_train)
-predicted_log_time = model.predict(X_test_scaled)
+predicted_time = model.predict(X_test_scaled)
 ```
 
-This output is time-oriented: larger predicted values imply longer predicted
+The fitted linear predictor models log time, but `predict()` exponentiates it and
+returns original-time values; do not exponentiate it again. This output is time-oriented: larger predicted values imply longer predicted
 survival time, unlike higher-is-riskier Cox scores. Do not pass it unchanged to
 metrics expecting higher event risk. If a discrimination analysis requires a
 risk direction, use the negative prediction and state that transformation.
@@ -243,7 +250,7 @@ and an enclosing meta-estimator is expected to route that metadata. Ordinary
 
 ## Sources
 
-Official sources checked 2026-07-23:
+Official sources checked 2026-10-01:
 
 - [CoxPHSurvivalAnalysis API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.linear_model.CoxPHSurvivalAnalysis.html)
 - [CoxnetSurvivalAnalysis API](https://scikit-survival.readthedocs.io/en/stable/api/generated/sksurv.linear_model.CoxnetSurvivalAnalysis.html)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,19 @@ BREP_FORMATS = {".step", ".stp"}
 
 class LabCadError(RuntimeError):
     """A user-facing error: printed without a traceback."""
+
+
+def finite_number(value: Any, label: str) -> float:
+    """Reject non-finite values instead of letting them bypass a numerical check."""
+    if isinstance(value, bool):
+        raise LabCadError(f"{label} must be a finite number, not a boolean")
+    try:
+        result = float(value)
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise LabCadError(f"{label} must be a finite number") from exc
+    if not math.isfinite(result):
+        raise LabCadError(f"{label} must be a finite number")
+    return result
 
 
 def eprint(message: str) -> None:
@@ -66,7 +80,7 @@ def require_build123d():
         raise LabCadError(
             "build123d is not installed in this interpreter.\n"
             "  uv venv --python 3.12 .venv-labcad\n"
-            '  uv pip install --python .venv-labcad/bin/python "build123d==0.11.1" "matplotlib>=3.8"'
+            '  uv pip install --python .venv-labcad/bin/python "build123d==0.13.0" "matplotlib>=3.8"'
         ) from exc
     return build123d
 
@@ -210,12 +224,10 @@ def normalise_interfaces(declared: Any) -> list[dict]:
                 f"INTERFACES[{index}] is missing {', '.join(missing)}. Every entry needs "
                 "standard, dimension, and value."
             )
-        try:
-            value = float(raw["value"])
-        except (TypeError, ValueError) as exc:
-            raise LabCadError(
-                f"INTERFACES[{index}] value {raw['value']!r} is not a number"
-            ) from exc
+        value = finite_number(raw["value"], f"INTERFACES[{index}] value")
+        clearance = finite_number(raw.get("clearance", 0.0), f"INTERFACES[{index}] clearance")
+        if clearance < 0:
+            raise LabCadError(f"INTERFACES[{index}] clearance must be >= 0")
         intent = str(raw.get("intent", "match"))
         if intent not in {"match", "envelope"}:
             raise LabCadError(
@@ -227,7 +239,7 @@ def normalise_interfaces(declared: Any) -> list[dict]:
             "dimension": str(raw["dimension"]),
             "value": value,
             "intent": intent,
-            "clearance": float(raw.get("clearance", 0.0)),
+            "clearance": clearance,
         })
     return entries
 
@@ -262,11 +274,12 @@ _MEASURE_NAMES = ("bbox_x", "bbox_y", "bbox_z", "bbox_min", "bbox_mid", "bbox_ma
 
 def _normalise_region(raw: dict, index: int) -> dict:
     """Validate one region spec: {"cylinder": dia, ...} or {"box": (dx,dy,dz), ...}."""
+    if sum(key in raw for key in ("box", "cylinder")) != 1:
+        raise LabCadError(f"CHECKS[{index}]: specify exactly one box or cylinder")
+    if "at" in raw and (not isinstance(raw["at"], (list, tuple)) or not raw["at"]):
+        raise LabCadError(f"CHECKS[{index}]: 'at' must contain at least one position")
     if "cylinder" in raw:
-        try:
-            dia = float(raw["cylinder"])
-        except (TypeError, ValueError) as exc:
-            raise LabCadError(f"CHECKS[{index}]: cylinder diameter must be a number") from exc
+        dia = finite_number(raw["cylinder"], f"CHECKS[{index}] cylinder diameter")
         if dia <= 0:
             raise LabCadError(f"CHECKS[{index}]: cylinder diameter must be > 0")
         axis = str(raw.get("axis", "z")).lower()
@@ -275,8 +288,10 @@ def _normalise_region(raw: dict, index: int) -> dict:
         at = raw.get("at", [(0.0, 0.0)])
         positions = []
         for pos in at:
+            if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+                raise LabCadError(f"CHECKS[{index}]: cylinder position needs exactly 2 coordinates")
             try:
-                a, b = (float(pos[0]), float(pos[1]))
+                a, b = (finite_number(pos[0], "position"), finite_number(pos[1], "position"))
             except (TypeError, ValueError, IndexError) as exc:
                 raise LabCadError(
                     f"CHECKS[{index}]: cylinder 'at' entries are 2D positions in the "
@@ -286,15 +301,21 @@ def _normalise_region(raw: dict, index: int) -> dict:
             positions.append([a, b])
         span = raw.get("span")
         if span is not None:
+            if not isinstance(span, (list, tuple)) or len(span) != 2:
+                raise LabCadError(f"CHECKS[{index}]: span needs exactly 2 coordinates")
             try:
-                span = [float(span[0]), float(span[1])]
+                span = [finite_number(span[0], "span"), finite_number(span[1], "span")]
             except (TypeError, ValueError, IndexError) as exc:
                 raise LabCadError(f"CHECKS[{index}]: span must be (start, end) along the axis") from exc
+            if span[0] == span[1]:
+                raise LabCadError(f"CHECKS[{index}]: span must have nonzero length")
         return {"shape": "cylinder", "dia": dia, "axis": axis, "at": positions, "span": span}
     if "box" in raw:
         size = raw["box"]
+        if not isinstance(size, (list, tuple)) or len(size) != 3:
+            raise LabCadError(f"CHECKS[{index}]: box needs exactly 3 dimensions")
         try:
-            size = [float(size[0]), float(size[1]), float(size[2])]
+            size = [finite_number(v, "box dimension") for v in size]
         except (TypeError, ValueError, IndexError) as exc:
             raise LabCadError(f"CHECKS[{index}]: box must be (dx, dy, dz)") from exc
         if min(size) <= 0:
@@ -302,8 +323,10 @@ def _normalise_region(raw: dict, index: int) -> dict:
         at = raw.get("at", [(0.0, 0.0, 0.0)])
         positions = []
         for pos in at:
+            if not isinstance(pos, (list, tuple)) or len(pos) != 3:
+                raise LabCadError(f"CHECKS[{index}]: box position needs exactly 3 coordinates")
             try:
-                positions.append([float(pos[0]), float(pos[1]), float(pos[2])])
+                positions.append([finite_number(v, "position") for v in pos])
             except (TypeError, ValueError, IndexError) as exc:
                 raise LabCadError(
                     f"CHECKS[{index}]: box 'at' entries are 3D centres (x, y, z), got {pos!r}"
@@ -321,7 +344,7 @@ def normalise_checks(declared: Any) -> list[dict]:
 
         {"feature": "M6 screws pass", "clear": {"cylinder": 6.6, "axis": "z",
          "at": [(37.5, 37.5), (-37.5, 37.5), (37.5, -37.5), (-37.5, -37.5)]}}
-        {"feature": "plate at MMC drops in", "clear": {"box": (128.01, 85.73, 6.0),
+        {"feature": "plate at MMC drops in", "clear": {"box": (128.26, 85.98, 6.0),
          "at": [(0.0, 0.0, 7.0)]}}
         {"feature": "ridge stands proud", "material": {"box": (40.0, 0.8, 0.28),
          "at": [(0.0, 0.0, 4.15)]}, "min_mm3": 5.0}
@@ -353,8 +376,10 @@ def normalise_checks(declared: Any) -> list[dict]:
                 raise LabCadError(f"CHECKS[{index}]: {kind!r} must be a region dict")
             entry["kind"] = kind
             entry["region"] = _normalise_region(region, index)
-            entry["tol_mm3"] = float(raw.get("tol_mm3", 0.01))
-            entry["min_mm3"] = float(raw.get("min_mm3", 0.01))
+            entry["tol_mm3"] = finite_number(raw.get("tol_mm3", 0.01), "tol_mm3")
+            entry["min_mm3"] = finite_number(raw.get("min_mm3", 0.01), "min_mm3")
+            if entry["tol_mm3"] < 0 or entry["min_mm3"] <= 0:
+                raise LabCadError("tol_mm3 must be >= 0 and min_mm3 must be > 0")
         else:
             bounds = raw[kind]
             if not isinstance(bounds, dict) or not (
@@ -365,8 +390,12 @@ def normalise_checks(declared: Any) -> list[dict]:
                 )
             entry["kind"] = "measure"
             entry["measure"] = kind
-            entry["min"] = None if bounds.get("min") is None else float(bounds["min"])
-            entry["max"] = None if bounds.get("max") is None else float(bounds["max"])
+            entry["min"] = None if bounds.get("min") is None else finite_number(bounds["min"], "min")
+            entry["max"] = None if bounds.get("max") is None else finite_number(bounds["max"], "max")
+            if entry["min"] is None and entry["max"] is None:
+                raise LabCadError("a bounding-box check needs a finite bound")
+            if entry["min"] is not None and entry["max"] is not None and entry["min"] > entry["max"]:
+                raise LabCadError("bounding-box min must be <= max")
         entries.append(entry)
     return entries
 
@@ -428,21 +457,25 @@ def evaluate_checks(part, declared: list[dict]) -> list[dict]:
     """Evaluate normalised geometry checks against a built solid."""
     build123d = require_build123d()
     facts = shape_facts(part)
+    if not facts["is_valid"] or not facts["solid_count"] or float(part.volume) <= 0:
+        raise LabCadError("geometry gauges require a valid positive-volume solid; use STEP, not an STL face")
     bbox = part.bounding_box()
     results = []
     for entry in declared:
         result = dict(entry)
         if entry["kind"] == "measure":
-            actual = measure(facts, entry["measure"])
+            actual = measure({"bounding_box_mm": {
+                "x": float(bbox.size.X), "y": float(bbox.size.Y), "z": float(bbox.size.Z)
+            }}, entry["measure"])
             ok = True
             if entry["min"] is not None and actual < entry["min"] - 1e-9:
                 ok = False
             if entry["max"] is not None and actual > entry["max"] + 1e-9:
                 ok = False
-            result.update({"actual_mm": round(actual, 4), "pass": ok})
+            result.update({"actual_mm": round(actual, 8), "pass": ok})
         else:
             volumes = [
-                round(intersection_volume(part, solid), 4)
+                intersection_volume(part, solid)
                 for solid in _region_solids(build123d, entry["region"], bbox)
             ]
             total = round(sum(volumes), 4)
@@ -450,7 +483,8 @@ def evaluate_checks(part, declared: list[dict]) -> list[dict]:
                 ok = all(v <= entry["tol_mm3"] for v in volumes)
             else:
                 ok = all(v >= entry["min_mm3"] for v in volumes)
-            result.update({"volumes_mm3": volumes, "total_mm3": total, "pass": ok})
+            result.update({"volumes_mm3": [round(v, 8) for v in volumes],
+                           "total_mm3": total, "pass": ok})
         results.append(result)
     return results
 
@@ -499,7 +533,8 @@ def cylinder_census(part) -> list[dict]:
     for face in part.faces():
         if face.geom_type != build123d.GeomType.CYLINDER:
             continue
-        cyl = BRepAdaptor_Surface(face.wrapped).Cylinder()
+        surface = BRepAdaptor_Surface(face.wrapped)
+        cyl = surface.Cylinder()
         ax = cyl.Axis()
         loc, direction = ax.Location(), ax.Direction()
         d = (direction.X(), direction.Y(), direction.Z())
@@ -514,19 +549,16 @@ def cylinder_census(part) -> list[dict]:
         if axis_name is not None:
             d = {"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}[axis_name]
 
-        bb = face.bounding_box()
-        corners = [
-            (x, y, z)
-            for x in (bb.min.X, bb.max.X)
-            for y in (bb.min.Y, bb.max.Y)
-            for z in (bb.min.Z, bb.max.Z)
-        ]
-        proj = [x * d[0] + y * d[1] + z * d[2] for x, y, z in corners]
+        # Cylindrical U is angle (radians), V is axial distance. Projecting a
+        # world-axis bounding box exaggerates the span of an oblique cylinder.
+        # UV bounds describe the trimmed face's enclosing parameter rectangle;
+        # an irregularly trimmed face need not fill that rectangle.
+        points = [surface.Value(surface.FirstUParameter(), v)
+                  for v in (surface.FirstVParameter(), surface.LastVParameter())]
+        proj = [p.X() * d[0] + p.Y() * d[1] + p.Z() * d[2] for p in points]
         extent = max(proj) - min(proj)
         radius = float(cyl.Radius())
-        sweep = (
-            math.degrees(float(face.area) / (radius * extent)) if radius * extent > 1e-12 else 0.0
-        )
+        sweep = math.degrees(surface.LastUParameter() - surface.FirstUParameter())
         # In-plane position, ordered like probe positions: axis z -> (x, y),
         # axis x -> (y, z), axis y -> (x, z). The axis point's own component
         # along the axis is arbitrary, so it is not reported for aligned axes.
@@ -547,6 +579,7 @@ def cylinder_census(part) -> list[dict]:
             "span_min_mm": round(min(proj), 4),
             "span_max_mm": round(max(proj), 4),
             "sweep_deg": round(sweep, 1),
+            "span_basis": "cylindrical UV bounds; irregular trims may not fill the span",
             "full": sweep >= 355.0,
         })
     rows.sort(key=lambda r: (str(r["axis"]), r["at_mm"], r["radius_mm"]))
@@ -569,7 +602,7 @@ def load_shape(path: Path):
         return build123d.import_step(str(path))
     if suffix in MESH_FORMATS:
         eprint(
-            f"warning: {path.name} is a mesh. Volume and validity are approximate, "
+            f"warning: {path.name} imports as a triangulated Face, not a BREP solid. "
             "and STEP is the authoritative format. Prefer inspecting the STEP."
         )
         return build123d.import_stl(str(path))
@@ -579,7 +612,7 @@ def load_shape(path: Path):
 
 
 def _is_valid(shape) -> bool:
-    """``Shape.is_valid`` is a property in build123d 0.11.x; older builds expose a method."""
+    """``Shape.is_valid`` is a property in build123d 0.13.0; older builds expose a method."""
     value = shape.is_valid
     return bool(value() if callable(value) else value)
 

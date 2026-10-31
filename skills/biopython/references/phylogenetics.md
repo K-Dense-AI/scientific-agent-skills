@@ -169,9 +169,9 @@ ancestor = tree.common_ancestor(*clades)
 ### Tree Comparison
 
 ```python
-# Compare tree topologies
+# Compare pairwise path lengths (not a topology test)
 def compare_trees(tree1, tree2):
-    """Compare two trees."""
+    """Compare branch-length distances for the same uniquely named taxa."""
     # Get terminal names
     taxa1 = set(t.name for t in tree1.get_terminals())
     taxa2 = set(t.name for t in tree2.get_terminals())
@@ -199,7 +199,8 @@ def compare_trees(tree1, tree2):
 
 ```python
 # Prune (remove) specific taxa
-tree_copy = tree.copy()
+import copy
+tree_copy = copy.deepcopy(tree)
 tree_copy.prune("Species_A")
 
 # Keep only specific taxa
@@ -216,9 +217,8 @@ for terminal in terminals:
 # Collapse branches shorter than threshold
 def collapse_short_branches(tree, threshold=0.01):
     """Collapse branches shorter than threshold."""
-    for clade in tree.find_clades():
-        if clade.branch_length and clade.branch_length < threshold:
-            clade.branch_length = 0
+    tree.collapse_all(lambda clade: clade.branch_length is not None
+                      and clade.branch_length < threshold)
     return tree
 ```
 
@@ -281,7 +281,7 @@ plt.savefig("tree.png", dpi=300)
 ### Advanced Visualization Options
 
 ```python
-# Radial (circular) tree
+# Rectangular tree with branch-length labels (draw is not a radial renderer)
 Phylo.draw(tree, branch_labels=lambda c: c.branch_length)
 
 # Show branch support values
@@ -296,7 +296,9 @@ def color_by_length(clade):
             return "orange"
     return "black"
 
-# Note: Direct branch coloring requires custom matplotlib code
+for clade in tree.find_clades():
+    clade.color = color_by_length(clade)
+Phylo.draw(tree)
 ```
 
 ## Building Trees
@@ -310,10 +312,10 @@ from Bio.Phylo.TreeConstruction import DistanceTreeConstructor, DistanceMatrix
 dm = DistanceMatrix(
     names=["Alpha", "Beta", "Gamma", "Delta"],
     matrix=[
-        [],
-        [0.23],
-        [0.45, 0.34],
-        [0.67, 0.58, 0.29]
+        [0],
+        [0.23, 0],
+        [0.45, 0.34, 0],
+        [0.67, 0.58, 0.29, 0]
     ]
 )
 
@@ -349,10 +351,13 @@ Phylo.write(tree, "output_tree.nwk", "newick")
 
 ### Distance Models
 
+These are scoring-matrix distances, not general substitution-model likelihoods.
+UPGMA assumes clock-like distances; NJ is unrooted and rooting needs justification.
+
 Available distance calculation models:
 - **identity** - Simple identity
-- **blastn** - BLASTN identity
-- **trans** - Transition/transversion ratio
+- **blastn** - Distances derived from the BLASTN scoring matrix
+- **trans** - Distances derived from the TRANS scoring matrix
 - **blosum62** - BLOSUM62 matrix
 - **pam250** - PAM250 matrix
 
@@ -409,15 +414,19 @@ clade.taxonomies.append(taxonomy)
 ```python
 # Add bootstrap support values to tree
 def add_bootstrap_support(tree, support_values):
-    """Add bootstrap support to internal nodes."""
+    """Attach already computed support in a verified matching node order.
+
+    This does not compute bootstrap support. Match bipartitions if tree order differs.
+    """
     internal_nodes = tree.get_nonterminals()
+    if len(internal_nodes) != len(support_values):
+        raise ValueError("Support count does not match the internal nodes")
     for node, support in zip(internal_nodes, support_values):
         node.confidence = support
     return tree
 
-# Example
-support_values = [95, 87, 76, 92]
-tree_with_support = add_bootstrap_support(tree, support_values)
+# Illustrative input only: use support estimates mapped to this exact tree.
+# tree_with_support = add_bootstrap_support(tree, support_values)
 ```
 
 ## Best Practices
@@ -427,7 +436,7 @@ tree_with_support = add_bootstrap_support(tree, support_values)
 3. **Root trees appropriately** - Use midpoint or outgroup rooting
 4. **Handle bootstrap values** - Store as clade confidence
 5. **Consider tree size** - Large trees may need special handling
-6. **Use tree copies** - Call `.copy()` before modifications
+6. **Use tree copies** - Use `copy.deepcopy(tree)` before modifications
 7. **Export publication-ready figures** - Use matplotlib for high-quality output
 8. **Document tree construction** - Record alignment and parameters used
 9. **Compare multiple trees** - Use consensus methods for bootstrap trees
@@ -470,8 +479,12 @@ plt.show()
 ```python
 def extract_subtree(tree, taxa_list):
     """Extract subtree containing specific taxa."""
+    available = [t.name for t in tree.get_terminals()]
+    if not taxa_list or not set(taxa_list) <= set(available):
+        raise ValueError("Choose a nonempty subset of existing tips")
     # Create a copy
-    subtree = tree.copy()
+    import copy
+    subtree = copy.deepcopy(tree)
 
     # Get all terminals
     all_terminals = subtree.get_terminals()
@@ -488,12 +501,15 @@ subtree = extract_subtree(tree, ["Species_A", "Species_B", "Species_C"])
 Phylo.write(subtree, "subtree.nwk", "newick")
 ```
 
-### Calculate Phylogenetic Diversity
+### Sum Branch Lengths in a Pruned Tree
 
 ```python
 def phylogenetic_diversity(tree, taxa_subset=None):
-    """Calculate phylogenetic diversity (sum of branch lengths)."""
-    if taxa_subset:
+    """Sum retained branch lengths under this pruning/root convention.
+
+    State the root/stem convention before interpreting this as diversity.
+    """
+    if taxa_subset is not None:
         # Prune to subset
         tree = extract_subtree(tree, taxa_subset)
 
@@ -542,25 +558,28 @@ def annotate_tree_from_csv(tree, csv_file):
 
 ```python
 def robinson_foulds_distance(tree1, tree2):
-    """Calculate Robinson-Foulds distance between two trees."""
-    # Get bipartitions for each tree
-    def get_bipartitions(tree):
-        bipartitions = set()
-        for clade in tree.get_nonterminals():
-            terminals = frozenset(t.name for t in clade.get_terminals())
-            bipartitions.add(terminals)
-        return bipartitions
+    """Unnormalized rooted RF distance for identical, uniquely named tip sets."""
+    def taxa(tree):
+        names = [t.name for t in tree.get_terminals()]
+        if any(n is None for n in names) or len(set(names)) != len(names):
+            raise ValueError("Tips must have unique nonempty names")
+        return frozenset(names)
 
-    bp1 = get_bipartitions(tree1)
-    bp2 = get_bipartitions(tree2)
+    tips = taxa(tree1)
+    if not tree1.rooted or not tree2.rooted or taxa(tree2) != tips:
+        raise ValueError("Requires explicitly rooted trees on the same tip set")
 
-    # Symmetric difference
-    diff = len(bp1.symmetric_difference(bp2))
-    return diff
+    def clusters(tree):
+        return {frozenset(t.name for t in c.get_terminals())
+                for c in tree.get_nonterminals()
+                if 1 < len(c.get_terminals()) < len(tips)}
+
+    return len(clusters(tree1) ^ clusters(tree2))
 
 # Use it
-tree1 = Phylo.read("tree1.nwk", "newick")
-tree2 = Phylo.read("tree2.nwk", "newick")
+tree1 = Phylo.read("tree1.nwk", "newick", rooted=True)
+tree2 = Phylo.read("tree2.nwk", "newick", rooted=True)
+# rooted=True asserts an input convention; it does not infer a biological root.
 rf_dist = robinson_foulds_distance(tree1, tree2)
 print(f"Robinson-Foulds distance: {rf_dist}")
 ```

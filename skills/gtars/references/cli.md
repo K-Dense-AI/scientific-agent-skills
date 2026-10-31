@@ -1,6 +1,7 @@
-# Command-line interface (`gtars-cli==0.9.0`)
+# Command-line interface (`gtars-cli==0.10.0`)
 
-Verified from the published crate and `v0.9.0` tagged source on **2026-07-23**.
+Source-reviewed from the published 0.10.0 crate (commit `90141b6`) on **2026-10-01**.
+Commands below are illustrative templates; this audit did not compile the CLI.
 The package is `gtars-cli`; the installed binary is `gtars`.
 
 ## Trust, installation, and features
@@ -10,14 +11,13 @@ Review the official crate/source, lock resolution, license, and build environmen
 before:
 
 ```bash
-cargo install gtars-cli --version 0.9.0 --locked
+cargo install gtars-cli --version 0.10.0 --locked
 gtars --version
 gtars --help
 ```
 
-The v0.9.0 GitHub release also publishes platform archives plus `.sha256`
-sidecars. Verify the archive checksum before extraction and do not execute an
-untrusted binary. The bundled `artifact_inspector.py` hashes/classifies an
+If using a precompiled binary, verify that its version and checksum match the
+reviewed release before extraction or execution. The bundled `artifact_inspector.py` hashes/classifies an
 artifact without extracting or executing it.
 
 Default CLI features are:
@@ -29,11 +29,11 @@ scoring uniwig bbcache igd fragsplit overlaprs genomicdist refget
 To build a reduced binary:
 
 ```bash
-cargo install gtars-cli --version 0.9.0 --locked \
+cargo install gtars-cli --version 0.10.0 --locked \
   --no-default-features --features "overlaprs,genomicdist"
 ```
 
-Feature availability controls subcommand availability. There is no 0.9.0 CLI
+Feature availability controls subcommand availability. There is no 0.10.0 CLI
 `tokenizers` feature/subcommand. Do not copy an old `--all-features` binary's
 command assumptions into a reduced binary.
 
@@ -50,7 +50,7 @@ Tagged source defines no global `--threads`, `--memory-limit`, `--buffer-size`,
 options. Concurrency is command-specific.
 
 Before every real command, run the exact installed `--help`. This reference is
-pinned to 0.9.0; unversioned web documentation can drift.
+pinned to 0.10.0; unversioned web documentation can drift.
 
 ## `overlaprs`
 
@@ -66,7 +66,7 @@ Options:
 - `-q/--query PATH` (required);
 - `-u/--universe PATH` (required);
 - `-e/--backend bits|ailist` (handler default: `bits`);
-- `--streaming` is parsed but ignored by the v0.9.0 handler.
+- `--streaming` is parsed but ignored by the v0.10.0 handler.
 
 Output is BED3 universe-hit coordinates to stdout, one row per overlap. It is not
 a count table and does not retain query IDs. See `overlap.md`.
@@ -86,13 +86,16 @@ Search with a BED/BED.GZ query:
 
 ```bash
 gtars igd search \
-  --database index-directory \
+  --database index-directory/reference_index.igd \
   --query query.bed
 ```
 
 Current subcommands are `create` and `search`, not `build`, `query`, or `count`.
-The `--filelist` help text calls the input a path to a list but specifies a
-folder; validate installed behavior on a synthetic directory before scaling.
+The handler accepts a directory, a `.txt` file of paths, or `-`/`stdin`.
+Directory discovery includes every `.bed` or `.gz` file, so use a reviewed list
+when that would include unrelated gzip files. Create the output directory first.
+`search --database` needs the `.igd` **file**, not its parent directory. Output
+is per-database-file overlap counts plus a total, not row-aligned query matches.
 
 ## `uniwig`
 
@@ -170,7 +173,7 @@ File-by-peak matrix:
 
 ```bash
 gtars fscoring "fragments/sample01.fragments.tsv.gz" consensus.bed \
-  --mode atac \
+  --mode chip \
   --output counts.csv.gz
 ```
 
@@ -185,7 +188,15 @@ gtars fscoring <fragments> <consensus> [--mode atac|chip] [--output PATH]
   expanded by the library.
 - default mode is `atac`;
 - default output is `fscoring.csv.gz`;
-- `atac` uses cut-site scoring semantics; `chip` uses fragment overlap semantics.
+- the shown `chip` mode uses fragment-body overlap semantics, one increment per
+  row/peak overlap; it ignores the fifth fragment-support count;
+- **do not use the default `atac` mode for scientific results in this pin.**
+  The CLI's locked `gtars-scoring 0.5.2` constructs its right-cut query as
+  `[fragment.end - 5, fragment.end - 6)`, an invalid reversed interval; small
+  coordinates can also underflow unsigned arithmetic. This is a source-confirmed
+  correctness issue, not a validated ATAC count implementation. The planner
+  refuses to approve this mode. Use a separately validated cut-site workflow if
+  ATAC insertion counts are required; selecting `chip` changes the measurement.
 
 Sparse barcode mode:
 
@@ -202,6 +213,14 @@ output/sample01_matrix.mtx.gz
 output/sample01_barcodes.tsv.gz
 output/sample01_features.tsv.gz
 ```
+
+Barcode mode ignores `--mode`: it counts whole-fragment overlaps, increments
+once per row, and ignores the fifth support count. It keeps only barcodes having
+an overlap. The matrix is **cells by peaks**, with lexicographically sorted
+barcodes and 1-based Matrix Market coordinates. Feature labels are synthetic
+`peak_0`, `peak_1`, etc.; retain a separate coordinate table in the constructor's
+sorted consensus order, and reject duplicate consensus intervals. Do not feed it
+into a reader assuming the common peaks-by-cells orientation without transposing.
 
 The fragment file must carry valid coordinates and barcodes. Do not expose raw
 barcodes in logs or reports; cap cells, peaks, nonzeros, memory, and output.
@@ -256,7 +275,7 @@ gtars prep --fasta reference.fa [--output reference.fab]
 ```
 
 `prep` serializes local inputs into Gtars-specific binary formats. Treat these
-artifacts as versioned native data: hash inputs/outputs, record 0.9.0, reject
+artifacts as versioned native data: hash inputs/outputs, record 0.10.0, reject
 untrusted serialized files, and bound expansion/memory.
 
 ## `refget`
@@ -267,9 +286,24 @@ gtars refget build reference.fa reference-alt.fa.gz \
   --jobs 1
 ```
 
-Other options are `--file-list/-f`, `--raw`, and `--force`; `--jobs 0` means
-automatic concurrency. There are no current CLI `digest`, `verify`, or remote
-query subcommands. See `refget.md`.
+Other options include `--file-list/-f`, `--raw`, `--force`,
+`--collection-alias NAMESPACE:ALIAS` (one FASTA only), and
+`--lock-timeout SECONDS` (default 1800; 0 waits indefinitely).
+`--jobs 0` means automatic concurrency. Version 0.10.0 also provides:
+
+```bash
+gtars refget lock-status refget-store
+gtars refget export --store refget-store --collection local:reference \
+  --names chr1 --output chr1.fa.gz --line-width 80
+```
+
+Export accepts a digest or collection alias; without `--collection` the store
+must contain exactly one collection. It loads the selected sequence bytes into
+RAM and overwrites the output path; bound selection and check output collisions.
+`.gz` enables gzip and line width 0 disables wrapping. `--force-alias` overwrites
+conflicting aliases; `--force-unlock` bypasses a writer lock and must never be
+used to solve normal contention from a live process. There are no `digest`,
+`verify`, or remote-query subcommands. See `refget.md`.
 
 ## `bbcache`
 
@@ -324,11 +358,12 @@ gtars refget digest/verify
 gtars --threads/--memory-limit/--verbose
 ```
 
-## Official sources (accessed 2026-07-23)
+## Official sources (accessed 2026-10-01)
 
-- [gtars-cli 0.9.0 crate](https://crates.io/crates/gtars-cli)
-- [Gtars v0.9.0 release](https://github.com/databio/gtars/releases/tag/v0.9.0)
-- [CLI main parser at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/src/main.rs)
-- [CLI feature manifest at v0.9.0](https://github.com/databio/gtars/blob/v0.9.0/gtars-cli/Cargo.toml)
+- [gtars-cli 0.10.0 crate](https://crates.io/crates/gtars-cli)
+- [Gtars v0.10.0 release](https://github.com/databio/gtars/releases/tag/gtars-v0.10.0)
+- [CLI main parser at v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/src/main.rs)
+- [Locked scoring implementation](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-scoring/src/fragment_scoring.rs)
+- [CLI feature manifest at v0.10.0](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-cli/Cargo.toml)
 - [Official CLI guide](https://docs.bedbase.org/gtars/cli/)
 - [Official versioning policy](https://docs.bedbase.org/gtars/versioning/)

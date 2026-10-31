@@ -1,5 +1,7 @@
 # NetworkX Graph Generators
 
+API patterns assume `import networkx as nx`. A generated model is a hypothesis about a graph, not evidence that observed data follow that model. Preserve direction, loops, multiplicity, size, degree constraints and seed/version provenance when constructing null ensembles. See [review.md](review.md).
+
 ## Classic Graphs
 
 ### Complete Graphs
@@ -91,13 +93,13 @@ G = nx.fast_gnp_random_graph(n=10000, p=0.0001, seed=42)
 # n nodes, k nearest neighbors, rewiring probability p
 G = nx.watts_strogatz_graph(n=100, k=6, p=0.1, seed=42)
 
-# Connected version (guarantees connectivity)
+# Returns a connected sample or raises after tries attempts
 G = nx.connected_watts_strogatz_graph(n=100, k=6, p=0.1, tries=100, seed=42)
 ```
 
 ### Barabási-Albert Preferential Attachment
 ```python
-# Scale-free network (power-law degree distribution)
+# Preferential-attachment model; finite samples do not establish a power law
 # n nodes, m edges to attach from new node
 G = nx.barabasi_albert_graph(n=100, m=3, seed=42)
 
@@ -117,13 +119,16 @@ G = nx.random_powerlaw_tree(n=100, gamma=3, seed=42, tries=1000)
 ### Configuration Model
 ```python
 # Graph with specified degree sequence
-degree_sequence = [3, 3, 3, 3, 2, 2, 2, 1, 1, 1]
+degree_sequence = [3, 3, 2, 2, 2, 2]  # Even sum required
 G = nx.configuration_model(degree_sequence, seed=42)
+assert [G.degree(i) for i in range(len(degree_sequence))] == degree_sequence
 
-# Remove self-loops and parallel edges
-G = nx.Graph(G)
-G.remove_edges_from(nx.selfloop_edges(G))
+# Optional simplification changes the degree sequence and null model
+H = nx.Graph(G)
+H.remove_edges_from(list(nx.selfloop_edges(H)))
 ```
+
+The configuration model is a stub-matching **multigraph** with possible self-loops. Removing loops/parallel edges does not preserve the specified degrees. `havel_hakimi_graph` gives one simple realization of a graphical sequence, not a uniform random sample. Degree-preserving swaps need adequate mixing and convergence checks; neither a single sample nor a fixed seed establishes null-model validity.
 
 ### Random Geometric Graphs
 ```python
@@ -184,7 +189,7 @@ G = nx.random_labeled_tree(100, seed=42)
 # Sample uniformly over isomorphism classes instead
 G = nx.random_unlabeled_tree(100, seed=42)
 
-# Rooted variants
+# Rooted variant is still an undirected Graph, with G.graph["root"]
 G = nx.random_labeled_rooted_tree(100, seed=42)
 
 # Prefix tree (tries)
@@ -225,7 +230,7 @@ G = nx.davis_southern_women_graph()
 
 ### Florentine Families
 ```python
-# Historical marriage and business networks
+# Historical marriage network (this generator does not add business ties)
 G = nx.florentine_families_graph()
 ```
 
@@ -242,15 +247,18 @@ G = nx.les_miserables_graph()
 # Directed Erdős-Rényi
 G = nx.gnp_random_graph(n=100, p=0.1, directed=True, seed=42)
 
-# Scale-free directed
+# Directed MultiDiGraph; parallel edges and self-loops can occur
 G = nx.scale_free_graph(n=100, seed=42)
 ```
 
 ### DAG (Directed Acyclic Graph)
 ```python
-# Random DAG
-G = nx.gnp_random_graph(n=20, p=0.2, directed=True, seed=42)
-G = nx.DiGraph([(u, v) for (u, v) in G.edges() if u < v])  # Remove backward edges
+# Ordered random DAG; this is not uniform over all DAGs
+R = nx.gnp_random_graph(n=20, p=0.2, directed=True, seed=42)
+G = nx.DiGraph()
+G.add_nodes_from(R)  # Preserve isolates
+G.add_edges_from((u, v) for u, v in R.edges() if u < v)
+assert len(G) == 20 and nx.is_directed_acyclic_graph(G)
 ```
 
 ### Tournament Graphs
@@ -272,7 +280,7 @@ G = nx.duplication_divergence_graph(n=100, p=0.5, seed=42)
 ### Valid Degree Sequences
 ```python
 # Check if degree sequence is valid (graphical)
-sequence = [3, 3, 3, 3, 2, 2, 2, 1, 1, 1]
+sequence = [3, 3, 2, 2, 2, 2]
 is_valid = nx.is_graphical(sequence)
 
 # For directed graphs
@@ -287,10 +295,10 @@ is_valid = nx.is_digraphical(in_sequence, out_sequence)
 G = nx.havel_hakimi_graph(degree_sequence)
 
 # Configuration model (allows multi-edges/self-loops)
-G = nx.configuration_model(degree_sequence)
+G = nx.configuration_model(degree_sequence, seed=42)
 
-# Directed configuration model
-G = nx.directed_configuration_model(in_degree_sequence, out_degree_sequence)
+# Directed configuration model: sums must match
+G = nx.directed_configuration_model(in_sequence, out_sequence, seed=42)
 ```
 
 ## Bipartite Graphs
@@ -301,7 +309,7 @@ G = nx.directed_configuration_model(in_degree_sequence, out_degree_sequence)
 G = nx.bipartite.random_graph(n=50, m=30, p=0.1, seed=42)
 
 # Configuration model for bipartite
-G = nx.bipartite.configuration_model(deg1=[3, 3, 2], deg2=[2, 2, 2, 2], seed=42)
+G = nx.bipartite.configuration_model(aseq=[3, 3, 2], bseq=[2, 2, 2, 2], seed=42)
 ```
 
 ### Bipartite Generators
@@ -317,7 +325,7 @@ G = nx.bipartite.gnmk_random_graph(n=10, m=8, k=20, seed=42)
 
 ### Graph Operations
 ```python
-# Union
+# Union requires disjoint node labels (or supply rename prefixes)
 G = nx.union(G1, G2)
 
 # Disjoint union
@@ -342,7 +350,7 @@ G = nx.strong_product(G1, G2)
 ## Customization and Seeding
 
 ### Setting Random Seed
-Always set seed for reproducible graphs:
+Set a seed and record NetworkX/Python versions and generation parameters. A seed does not promise identical graphs across releases/backends:
 ```python
 G = nx.erdos_renyi_graph(n=100, p=0.1, seed=42)
 ```
@@ -378,7 +386,11 @@ Some generators create graphs incrementally to save memory. For very large graph
 print(f"Nodes: {G.number_of_nodes()}")
 print(f"Edges: {G.number_of_edges()}")
 print(f"Density: {nx.density(G)}")
-print(f"Connected: {nx.is_connected(G)}")
+if len(G):
+    connected = nx.is_weakly_connected(G) if G.is_directed() else nx.is_connected(G)
+    print(f"Connected (weak if directed): {connected}")
+else:
+    print("Connectivity undefined for the null graph")
 
 # Degree distribution
 degree_sequence = sorted([d for n, d in G.degree()], reverse=True)

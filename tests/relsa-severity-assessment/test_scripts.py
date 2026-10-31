@@ -568,7 +568,7 @@ class EndToEndCliTests(unittest.TestCase):
             scores = pd.read_csv(work / "relsa_scores.csv")
             self.assertEqual(len(scores), 54)
             self.assertIn("relsa", scores.columns)
-            # The reference cohort defines the maximum, so it must reach RELSA = 1.
+            # This synthetic fixture co-locates all extrema, so its maximum is 1.
             self.assertAlmostEqual(float(scores["relsa"].max()), 1.0, places=2)
             reference = json.loads((work / "reference.json").read_text())
             self.assertEqual(sorted(reference["turned"]), ["il6", "score"])
@@ -611,6 +611,158 @@ class EndToEndCliTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("no finite values", result.stderr + result.stdout)
+
+class RefreshRegressionTests(unittest.TestCase):
+    def test_reference_extrema_need_not_cooccur(self):
+        frame = pd.DataFrame({"id": "A", "time": [0, 1],
+                              "x": [80., 100.], "y": [100., 80.]})
+        ref = relsa_score.build_reference(frame, ["x", "y"])
+        values = relsa_score.relsa_scores(frame, ref, round_digits=None).relsa
+        np.testing.assert_allclose(values, np.sqrt(0.5))
+
+    def test_common_affine_score_scaling_cancels_before_rounding(self):
+        scores = []
+        for maximum in (8, 16):
+            frame = pd.DataFrame({"id": "A", "time": [0, 1, 2],
+                                  "s": _common.score_to_percent([0, 2, 4], maximum)})
+            ref = relsa_score.build_reference(frame, ["s"], turned=["s"])
+            scores.append(relsa_score.relsa_scores(frame, ref, round_digits=None).relsa)
+        np.testing.assert_allclose(*scores)
+
+    def test_integer_measurements_normalize_and_earliest_time_is_baseline(self):
+        frame = pd.DataFrame({"id": "A", "time": [2, 0, 1], "x": [17, 23, 19]})
+        got = relsa_score.prepare(frame, ["x"])
+        np.testing.assert_allclose(got.x, np.array([17, 23, 19]) / 23 * 100)
+
+    def test_id_csv_roundtrip_preserves_leading_zeros_and_na(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "input.csv"
+            path.write_text("id,time,x\n001,0,100\nNA,0,90\n")
+            self.assertEqual(_common.read_relsa_table(path).id.tolist(), ["001", "NA"])
+
+    def test_invalid_identity_time_and_measurements_fail(self):
+        for replacement in ({"id": [None, "A"]}, {"time": [0, np.inf]},
+                            {"x": [100, np.inf]}, {"x": ["bad", "90"]}):
+            frame = pd.DataFrame({"id": ["A", "A"], "time": [0, 1], "x": [100, 90]})
+            for key, value in replacement.items():
+                frame[key] = value
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError):
+                _common.validate(frame, ["x"])
+
+    def test_unknown_turn_and_invalid_reference_fail(self):
+        frame = pd.DataFrame({"id": "A", "time": [0, 1], "x": [100., 80.]})
+        with self.assertRaises(ValueError):
+            relsa_score.build_reference(frame, ["x"], turned=["typo"])
+        with self.assertRaises(ValueError):
+            relsa_score.ReferenceModel(("x",), (), {"x": 80}, {"x": 0}, 1, 2)
+
+    def test_score_mapping_rejects_outside_declared_scale(self):
+        for values, maximum in (([0, 9], 8), ([0, np.inf], 8), ([0, 1], np.nan)):
+            with self.assertRaises(ValueError):
+                _common.score_to_percent(values, maximum)
+
+    def test_metric_interval_validation_and_common_evaluation_set(self):
+        for lo, hi in (([0], [1, 2]), ([2, 0], [1, 2]), (None, [1, 2])):
+            with self.assertRaises(ValueError):
+                _common.forecast_metrics([1, 1], [1, 1], lo, hi)
+        got = _common.forecast_metrics([1, 1], [1, np.nan], [0, 0], [2, 100])
+        self.assertEqual(got.mpiw, 2)
+        self.assertEqual(got.picp, 100)
+
+    def test_constant_kde_has_no_threshold_and_validates_options(self):
+        from kde_thresholds import find_thresholds
+        got = find_thresholds([0., 0., 0.])
+        self.assertEqual(got.thresholds, [])
+        self.assertTrue(np.isfinite(got.density).all())
+        for options in ({"bandwidth": -1}, {"bandwidth": 0}, {"grid_size": 2},
+                        {"n_thresholds": -1}, {"min_zone_fraction": 2}):
+            with self.assertRaises(ValueError):
+                find_thresholds([0., 1., 2.], **options)
+
+    def test_forecast_rejects_off_grid_and_irregular_time(self):
+        from forecast_relsa import forecast_animal, interpolate_series
+        with self.assertRaisesRegex(ValueError, "align"):
+            forecast_animal([0, 1, 2], [.1, .2, .4], target_times=[2.05])
+        with self.assertRaisesRegex(ValueError, "uneven"):
+            forecast_animal([0, 1, 3, 4], [.1, .2, .4, .5], target_times=[5], interpolate_step=None)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            forecast_animal([0, 0, 1], [.1, .2, .4], target_times=[2])
+        with self.assertRaisesRegex(ValueError, "align"):
+            interpolate_series([0, .25], [.1, .2], step=.1)
+
+    def test_rolling_sorts_before_splitting_and_never_uses_future(self):
+        from unittest.mock import patch
+        import forecast_relsa as fr
+        calls = []
+        def fake(times, values, target_times, **kwargs):
+            calls.append((list(times), target_times))
+            fit = fr.ArimaFit((0, 0, 0), False, 0, 0, len(times))
+            return fr.Forecast("A", fit, np.array(target_times), np.array([.5]), np.array([.1]), np.array([.9]))
+        with patch.object(fr, "forecast_animal", side_effect=fake):
+            fr.rolling_forecast([3, 0, 2, 1], [.4, .1, .3, .2], min_train=2)
+        self.assertEqual(calls, [([0., 1.], [2.]), ([0., 1., 2.], [3.])])
+
+    def test_cli_external_reference_maps_scores_and_reuses_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            data = work / "tiny.csv"
+            data.write_text("id,time,weight,score\n001,0,23,0\n001,1,19,2\n001,2,17,4\n")
+            def run(*args):
+                result = subprocess.run([sys.executable, str(SCRIPTS / "relsa_score.py"),
+                                         str(data), *args], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            options = ["--variables", "weight,score", "--normalize", "weight",
+                       "--score-scale", "score=8", "--baseline-time", "0"]
+            run(*options, "--out", str(work / "internal.csv"))
+            run(*options, "--reference-data", str(data), "--out", str(work / "external.csv"),
+                "--save-reference", str(work / "ref.json"))
+            run("--load-reference", str(work / "ref.json"), "--out", str(work / "loaded.csv"))
+            for file in ("external.csv", "loaded.csv"):
+                pd.testing.assert_frame_equal(pd.read_csv(work / "internal.csv"), pd.read_csv(work / file))
+            conflict = subprocess.run([sys.executable, str(SCRIPTS / "relsa_score.py"), str(data),
+                                       "--load-reference", str(work / "ref.json"), "--normalize", "score"],
+                                      capture_output=True, text=True)
+            self.assertNotEqual(conflict.returncode, 0)
+            self.assertIn("conflicts", conflict.stderr)
+
+
+class ArimaSelectionRegressionTests(unittest.TestCase):
+    def test_nonconverged_candidate_is_rejected_and_native_aicc_is_used(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from forecast_relsa import _fit_one
+        for converged in (False, True):
+            result = SimpleNamespace(aic=8., aicc=19., nobs=12,
+                                     mle_retvals={"converged": converged})
+            with patch("statsmodels.tsa.statespace.sarimax.SARIMAX") as model:
+                model.return_value.fit.return_value = result
+                fit = _fit_one(np.arange(12.), (1, 1, 0), False)
+            if converged:
+                self.assertEqual(fit.aicc, 19.)
+            else:
+                self.assertIsNone(fit)
+
+    def test_second_differences_never_include_a_constant(self):
+        from unittest.mock import patch
+        import forecast_relsa as fr
+        attempted = []
+        def fit(series, order, drift):
+            attempted.append(drift)
+            return fr.ArimaFit(order, drift, sum(order), 0., len(series))
+        with patch.object(fr, "_fit_one", side_effect=fit):
+            fr.auto_arima(np.arange(12.), d=2)
+        self.assertTrue(attempted)
+        self.assertFalse(any(attempted))
+
+    def test_interval_denominator_and_json_threshold_precision(self):
+        from kde_thresholds import ThresholdResult
+        metrics = _common.forecast_metrics([1., 2.], [1., 2.], [0., np.nan], [2., np.nan])
+        self.assertEqual(metrics.n, 2)
+        self.assertEqual(metrics.n_interval, 1)
+        boundary = .123456789
+        result = ThresholdResult([boundary], [], .1, 2, np.array([0., 1.]), np.ones(2))
+        self.assertEqual(result.as_dict()["thresholds"], [boundary])
+        self.assertEqual(result.as_dict()["zones"]["normal"]["high"], boundary)
 
 
 if __name__ == "__main__":

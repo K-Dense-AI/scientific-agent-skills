@@ -11,7 +11,7 @@ Do not assume every Console workflow has a Python import.
 
 ## Current `latch.verified` Exports
 
-In `latch==2.76.8`, `latch.verified` exports:
+In `latch==2.77.1`, `latch.verified` exports:
 
 ```python
 from latch.verified import (
@@ -45,14 +45,14 @@ workflow name and version. From the skill root, inspect exports and parameter
 types:
 
 ```bash
-uv run --no-project --python 3.12 --with "latch==2.76.8" \
+uv run --no-project --python 3.12 --with "latch==2.77.1" \
   python scripts/inspect_latch_sdk.py
 ```
 
 Or from the repository root:
 
 ```bash
-uv run --no-project --python 3.12 --with "latch==2.76.8" \
+uv run --no-project --python 3.12 --with "latch==2.77.1" \
   python skills/latchbio-integration/scripts/inspect_latch_sdk.py
 ```
 
@@ -221,6 +221,6 @@ small module.
 
 - Workflow catalog overview: https://wiki.latch.bio/workflows/overview
 - Ready-to-use workflow guides: https://wiki.latch.bio/llms.txt
-- Verified exports in the 2.76.8 release commit: https://github.com/latchbio/latch/tree/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch/verified
+- Verified exports in the 2.77.1 release commit: https://github.com/latchbio/latch/tree/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch/verified
 - Latch MCP: https://wiki.latch.bio/agent/latch-mcp
 - Latch Verified repositories: https://github.com/latch-verified

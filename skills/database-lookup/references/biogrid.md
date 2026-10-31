@@ -28,21 +28,20 @@ GET https://webservice.thebiogrid.org/interactions?accesskey=YOUR_KEY&format=jso
 
 ### 2. Multiple Genes
 ```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&geneList=BRCA1|BRCA2&taxId=9606&max=100
+GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&searchNames=true&geneList=BRCA1|BRCA2&taxId=9606&max=100
 ```
 Separate gene names with `|` (pipe).
 
-### 3. Filter by Evidence Type
+### 3. Filter by experimental evidence
 ```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&geneList=TP53&taxId=9606&evidenceList=physical&max=50
+GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&searchNames=true&geneList=TP53&taxId=9606&evidenceList=Two-hybrid&includeEvidence=true&max=50
 ```
-Evidence types: `physical`, `genetic`.
-
-### 4. Filter by Experimental System
-```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&geneList=TP53&taxId=9606&experimentalSystemList=Two-hybrid&max=50
-```
-Systems include: `Two-hybrid`, `Affinity Capture-MS`, `Co-fractionation`, `Reconstituted Complex`, `Synthetic Lethality`, `Dosage Rescue`, etc.
+`evidenceList` is a pipe-separated list of experimental systems, not the words
+`physical` or `genetic`. Without `includeEvidence=true`, listed systems are
+**excluded**. Discover names through `/evidence?accesskey={key}&format=json`.
+To select the broad physical/genetic class, filter returned
+`EXPERIMENTAL_SYSTEM_TYPE` locally. There is no documented
+`experimentalSystemList` query parameter.
 
 ### 5. Search by BioGRID Interaction ID
 ```
@@ -56,12 +55,12 @@ GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&p
 
 ### 7. Inter-species Interactions
 ```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&geneList=TP53&taxId=9606&interSpeciesExcluded=false
+GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&searchNames=true&geneList=TP53&taxId=9606&interSpeciesExcluded=false
 ```
 
 ### 8. Include Interactor Annotations
 ```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&geneList=TP53&taxId=9606&includeInteractors=true&max=50
+GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&searchNames=true&geneList=TP53&taxId=9606&includeInteractors=true&max=50
 ```
 
 ## Common Query Parameters
@@ -74,7 +73,7 @@ GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&g
 | `format` | `json`, `tab2`, `extendedTab2`, `count` |
 | `searchNames` | `true` to match official symbols |
 | `selfInteractionsExcluded` | `true` to exclude self-interactions |
-| `evidenceList` | `physical` or `genetic` |
+| `evidenceList` | Experimental-system names; set `includeEvidence=true` to include |
 | `throughputTag` | `low` or `high` |
 
 ## JSON Response Structure
@@ -99,7 +98,7 @@ GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=json&g
 
 ## Count-Only Query
 ```
-GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=count&geneList=TP53&taxId=9606
+GET https://webservice.thebiogrid.org/interactions?accesskey={key}&format=count&searchNames=true&geneList=TP53&taxId=9606
 ```
 Returns just the integer count.
 
@@ -108,3 +107,5 @@ Returns just the integer count.
 - Covers physical (protein-protein) and genetic interactions.
 - For bulk data, use BioGRID downloads (tab-delimited files) at https://downloads.thebiogrid.org/.
 - Cross-reference with STRING for combined interaction evidence.
+
+Official contract: https://wiki.thebiogrid.org/doku.php/biogridrest

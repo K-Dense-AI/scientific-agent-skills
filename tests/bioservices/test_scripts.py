@@ -13,7 +13,7 @@ follow the PATHWAY block for pathways.
 The rest of the coverage is the batch machinery: chunking a large identifier
 list into requests of the requested size, retrying a failed chunk one identifier
 at a time, marking everything that never came back as failed, and writing a CSV
-whose "Failed" rows really are the unmapped ones. Alias normalisation is tested
+whose Unmapped and Failed rows distinguish absent mappings from service errors. Alias normalisation is tested
 in both directions -- an alias must resolve and an already-official code must
 survive untouched.
 """
@@ -28,6 +28,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 
@@ -145,7 +146,12 @@ class RecordingUniProt:
 
     def mapping(self, fr: str, to: str, query: str):
         self.requests.append({"fr": fr, "to": to, "query": query})
-        return RecordingUniProt.responder(query)
+        result = RecordingUniProt.responder(query)
+        if isinstance(result, dict) and not ({"results", "failedIds"} & result.keys()):
+            return {"results": [{"from": source, "to": target}
+                    for source, targets in result.items() for target in targets],
+                    "failedIds": [identifier for identifier in query.split(",") if identifier not in result]}
+        return result
 
 
 class BatchConversionTests(unittest.TestCase):
@@ -210,14 +216,14 @@ class BatchConversionTests(unittest.TestCase):
         self.assertEqual(mapping["P43403"], ["hsa:7535"])
         # Absent from the response, so present in the result with no target --
         # a silently dropped identifier would inflate the mapping rate.
-        self.assertIsNone(mapping["P99999"])
+        self.assertEqual(mapping["P99999"], [])
         self.assertEqual(len(mapping), 2)
 
     def test_an_empty_response_marks_the_whole_chunk_failed(self) -> None:
         RecordingUniProt.responder = lambda query: {}
         mapping, failed = self.convert(["P43403", "P04637"], delay=0)
         self.assertEqual(sorted(failed), ["P04637", "P43403"])
-        self.assertTrue(all(value is None for value in mapping.values()))
+        self.assertTrue(all(value == [] for value in mapping.values()))
 
     def test_a_failed_chunk_is_retried_one_identifier_at_a_time(self) -> None:
         # UniProt rejects a whole batch when one identifier in it is malformed,
@@ -314,9 +320,14 @@ class FakeKegg:
     """Records KEGG requests and replays canned flat-file responses."""
 
     def __init__(self, find_result: str = "", entries: dict | None = None) -> None:
+        self.services = SimpleNamespace(http_get=self.http_get)
         self.find_result = find_result
         self.entries = entries or {}
         self.requests: list[tuple[str, tuple]] = []
+
+    def http_get(self, endpoint, frmt="txt"):
+        self.requests.append(("http_get", (endpoint, frmt)))
+        return self.find_result
 
     def find(self, database: str, query: str):
         self.requests.append(("find", (database, query)))
@@ -336,12 +347,12 @@ class KeggCompoundSearchTests(unittest.TestCase):
 
     def test_the_compound_database_is_searched_by_name(self) -> None:
         fake, _ = self.search("cpd:C00002\tATP; Adenosine 5'-triphosphate\n")
-        self.assertEqual(fake.requests[0], ("find", ("compound", "ATP")))
+        self.assertEqual(fake.requests[0], ("http_get", ("find/compound/ATP", "txt")))
 
     def test_the_cpd_prefix_is_stripped_from_the_first_hit(self) -> None:
         # Downstream calls rebuild "cpd:<id>", so keeping the prefix here would
         # produce "cpd:cpd:C00002".
-        _, identifier = self.search("cpd:C00002\tATP\ncpd:C00008\tADP\n")
+        _, identifier = self.search("cpd:C00002\tATP\n")
         self.assertEqual(identifier, "C00002")
 
     def test_no_results_returns_no_identifier(self) -> None:
@@ -352,6 +363,7 @@ class KeggCompoundSearchTests(unittest.TestCase):
 
     def test_a_service_error_returns_no_identifier_rather_than_raising(self) -> None:
         class Broken:
+            services = SimpleNamespace()
             def find(self, *args):
                 raise RuntimeError("KEGG is down")
 
@@ -463,7 +475,7 @@ class ChebiAndChemblTests(unittest.TestCase):
                     {
                         "chebiId": "CHEBI:15422",
                         "chebiAsciiName": "ATP",
-                        "Formulae": "C10H16N5O13P3",
+                        "formula": "C10H16N5O13P3",
                         "mass": "507.18100",
                     },
                 )()
@@ -473,6 +485,7 @@ class ChebiAndChemblTests(unittest.TestCase):
         self.assertEqual(requested, ["CHEBI:15422"])
         self.assertEqual(info["chebi_id"], "CHEBI:15422")
         self.assertEqual(info["name"], "ATP")
+        self.assertEqual(info["formula"], "C10H16N5O13P3")
 
     def test_an_already_prefixed_identifier_is_not_prefixed_twice(self) -> None:
         requested: list[str] = []
@@ -660,7 +673,7 @@ class PathwayAnalysisTests(unittest.TestCase):
             header, row = list(csv.reader(handle))
         self.assertEqual(
             header,
-            ["Pathway_ID", "Pathway_Name", "Num_Genes", "Num_Interactions",
+            ["Pathway_ID", "Pathway_Name", "Num_Entries", "Num_Relation_Records",
              "Activation", "Inhibition", "Phosphorylation", "Binding", "Other"],
         )
         columns = dict(zip(header, row))
@@ -674,7 +687,7 @@ class PathwayAnalysisTests(unittest.TestCase):
         self.assertEqual(
             sum(int(columns[name]) for name in
                 ("Activation", "Inhibition", "Phosphorylation", "Binding", "Other")),
-            int(columns["Num_Interactions"]),
+            int(columns["Num_Relation_Records"]),
         )
 
     def test_interactions_are_written_as_three_column_sif(self) -> None:
@@ -684,7 +697,7 @@ class PathwayAnalysisTests(unittest.TestCase):
         lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 5)
         # SIF is source<TAB>interaction<TAB>target; Cytoscape reads nothing else.
-        self.assertEqual(lines[0].split("\t"), ["1", "activation", "2"])
+        self.assertEqual(lines[0].split("\t"), ["hsa04115#1", "activation", "hsa04115#2"])
         for line in lines:
             self.assertEqual(len(line.split("\t")), 3)
 
@@ -695,15 +708,12 @@ class PathwayAnalysisTests(unittest.TestCase):
         written = [p.name for p in (self.root / "pathways").iterdir()]
         self.assertEqual(written, ["path_hsa04115_interactions.csv"])
 
-    def test_the_organism_is_set_on_the_client_before_listing_pathways(self) -> None:
-        class FakeKeggOrganism:
-            organism = None
-            pathwayIds = ["path:hsa00010", "path:hsa04115"]
-
-        kegg = FakeKeggOrganism()
-        ids = quietly(pathways.get_all_pathways, kegg, "hsa")
-        self.assertEqual(kegg.organism, "hsa")
-        self.assertEqual(ids, ["path:hsa00010", "path:hsa04115"])
+    def test_listing_uses_scoped_endpoint_without_global_organism_catalogue(self):
+        with patch.object(pathways, "KEGG") as kegg:
+            kegg.services.http_get.return_value = "hsa00010\tGlycolysis\nhsa04115\tp53\n"
+            ids = quietly(pathways.get_all_pathways, kegg, "hsa")
+            kegg.services.http_get.assert_called_once_with("list/pathway/hsa", frmt="txt")
+            self.assertEqual(ids, ["hsa00010", "hsa04115"])
 
 
 class NcbiEmailTests(unittest.TestCase):
@@ -766,7 +776,7 @@ class ProteinSearchTests(unittest.TestCase):
     def test_an_accession_shaped_query_is_retrieved_directly(self) -> None:
         # P43403 is six characters starting with P, so it is fetched rather
         # than searched -- one request instead of a full-text query.
-        fake, identifier = self.run_search("P43403", retrieve="Entry\tP43403\n")
+        fake, identifier = self.run_search("P43403", retrieve={"primaryAccession": "P43403"})
         self.assertEqual(identifier, "P43403")
         self.assertEqual([call[0] for call in fake.calls], ["retrieve"])
 
@@ -840,15 +850,16 @@ class BlastGuardTests(unittest.TestCase):
         class FakeBlast:
             def __init__(self, verbose: bool = True) -> None:
                 self.submitted: dict = {}
+                self.services = SimpleNamespace()
 
             def run(self, **kwargs):
                 self.submitted = kwargs
                 return "ncbiblast-1"
 
-            def getStatus(self, jobid):
+            def get_status(self, jobid):
                 return "FINISHED"
 
-            def getResult(self, jobid, kind):
+            def get_result(self, jobid, kind):
                 return "BLAST report\nhit 1\n"
 
         fake = FakeBlast()
@@ -862,13 +873,14 @@ class BlastGuardTests(unittest.TestCase):
 
     def test_a_failed_job_returns_nothing_rather_than_polling_forever(self) -> None:
         class FailingBlast:
+            services = SimpleNamespace()
             def __init__(self, verbose: bool = True) -> None:
                 pass
 
             def run(self, **kwargs):
                 return "ncbiblast-2"
 
-            def getStatus(self, jobid):
+            def get_status(self, jobid):
                 return "ERROR"
 
         with patch.object(workflow, "NCBIblast", lambda **k: FailingBlast()):
@@ -877,102 +889,137 @@ class BlastGuardTests(unittest.TestCase):
 
 
 class InteractionTests(unittest.TestCase):
-    #: A PSI-MI TAB record: the first 12 columns are what the parser reads.
-    LINE = "\t".join(
-        [
-            "uniprotkb:P43403", "uniprotkb:P07948",
-            "intact:EBI-1", "intact:EBI-2",
-            "uniprotkb:ZAP70", "uniprotkb:LYN",
-            "psi-mi:\"MI:0018\"(two hybrid)", "Smith et al.",
-            "pubmed:12345", "taxid:9606", "taxid:9606",
-            "psi-mi:\"MI:0407\"(direct interaction)",
-        ]
-    )
+    def test_associations_preserve_stable_identifiers_and_scores(self):
+        rows = [{"stringId_A": "9606.A", "stringId_B": "9606.B", "score": 0.95}]
+        with patch.object(workflow, "STRING") as client:
+            client.return_value.get_interaction_partners.return_value = rows
+            self.assertEqual(quietly(workflow.find_interactions, "P43403", 9606), rows)
+            kwargs = client.return_value.get_interaction_partners.call_args.kwargs
+            self.assertEqual(kwargs["species"], 9606)
+            self.assertEqual(kwargs["required_score"], 700)
 
-    def test_the_query_is_scoped_to_human_and_parsed_by_column(self) -> None:
-        recorded: list[tuple] = []
-        payload = self.LINE
-
-        class FakePsicquic:
-            def query(self, database, query):
-                recorded.append((database, query))
-                return payload
-
-        with patch.object(workflow, "PSICQUIC", lambda *a, **k: FakePsicquic()):
-            interactions = quietly(workflow.find_interactions, "ZAP70")
-        self.assertEqual(recorded, [("mint", "ZAP70 AND species:9606")])
-        # Columns 5 and 6 hold the aliases; column 12 the interaction type.
-        self.assertEqual(interactions[0][0], "ZAP70")
-        self.assertEqual(interactions[0][1], "LYN")
-        self.assertIn("direct interaction", interactions[0][2])
-
-    def test_a_truncated_record_is_ignored_rather_than_indexed(self) -> None:
-        class FakePsicquic:
-            def query(self, database, query):
-                return "uniprotkb:P43403\tuniprotkb:P07948\n"
-
-        with patch.object(workflow, "PSICQUIC", lambda *a, **k: FakePsicquic()):
-            self.assertEqual(quietly(workflow.find_interactions, "ZAP70"), [])
-
-    def test_no_interactions_returns_an_empty_list(self) -> None:
-        class FakePsicquic:
-            def query(self, database, query):
-                return ""
-
-        with patch.object(workflow, "PSICQUIC", lambda *a, **k: FakePsicquic()):
-            self.assertEqual(quietly(workflow.find_interactions, "ZAP70"), [])
-
-    def test_a_release_without_psicquic_skips_the_step(self) -> None:
-        # bioservices 1.16.0 does not ship PSICQUIC; the workflow must degrade
-        # rather than fail, and must not try to construct it.
-        with patch.object(workflow, "PSICQUIC", None):
-            self.assertEqual(quietly(workflow.find_interactions, "ZAP70"), [])
+    def test_unknown_taxon_does_not_default_to_human(self):
+        with patch.object(workflow, "STRING") as client:
+            self.assertEqual(quietly(workflow.find_interactions, "P43403"), [])
+        client.assert_not_called()
 
 
 class GoAnnotationTests(unittest.TestCase):
-    ANNOTATIONS = (
-        "DB\tID\tSymbol\tQualifier\tRef\tEvidence\tGO_ID\tGO_NAME\tASPECT\n"
-        "UniProtKB\tP43403\tZAP70\t\tPMID:1\tIDA\tGO:0004713\tprotein tyrosine kinase activity\tF\n"
-        "UniProtKB\tP43403\tZAP70\t\tPMID:2\tIDA\tGO:0002250\tadaptive immune response\tP\n"
-        "UniProtKB\tP43403\tZAP70\t\tPMID:3\tIDA\tGO:0005886\tplasma membrane\tC\n"
-        "UniProtKB\tP43403\tZAP70\t\tPMID:4\tIDA\tGO:0046777\tprotein autophosphorylation\tP\n"
-    )
-
-    def annotations(self, payload: str):
-        recorded: list[dict] = []
-
-        class FakeQuickGo:
-            def Annotation(self, **kwargs):
-                recorded.append(kwargs)
-                return payload
-
-        with patch.object(workflow, "QuickGO", lambda *a, **k: FakeQuickGo()):
+    def test_json_pages_are_combined_deduplicated_and_not_assertions_excluded(self):
+        kinase = {"goId": "GO:0004713", "goName": "kinase", "goAspect": "molecular_function"}
+        process = {"goId": "GO:0002250", "goName": "immune", "goAspect": "biological_process"}
+        negative = {"goId": "GO:0005886", "goName": "membrane", "goAspect": "cellular_component", "qualifier": "NOT|located_in"}
+        with patch.object(workflow, "QuickGO") as client:
+            client.return_value.Annotation.side_effect = [
+                {"results": [kinase, negative], "pageInfo": {"current": 1, "total": 2}},
+                {"results": [kinase, process], "pageInfo": {"current": 2, "total": 2}},
+            ]
             result = quietly(workflow.get_go_annotations, "P43403")
-        return recorded, result
+            calls = client.return_value.Annotation.call_args_list
+            self.assertEqual([c.kwargs["page"] for c in calls], [1, 2])
+            self.assertEqual(calls[0].kwargs["geneProductId"], "UniProtKB:P43403")
+        self.assertEqual(result, {"F": [("GO:0004713", "kinase")], "P": [("GO:0002250", "immune")], "C": []})
 
-    def test_terms_are_grouped_by_the_three_go_aspects(self) -> None:
-        recorded, aspects = self.annotations(self.ANNOTATIONS)
-        self.assertEqual(recorded, [{"protein": "P43403", "format": "tsv"}])
-        self.assertEqual(len(aspects["P"]), 2)  # two biological processes
-        self.assertEqual(len(aspects["F"]), 1)
-        self.assertEqual(len(aspects["C"]), 1)
-        self.assertEqual(aspects["F"][0], ("GO:0004713", "protein tyrosine kinase activity"))
+    def test_service_failure_does_not_report_no_annotations(self):
+        with patch.object(workflow, "QuickGO") as client:
+            client.return_value.Annotation.return_value = 503
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                quietly(workflow.get_go_annotations, "P43403")
 
-    def test_an_unknown_aspect_letter_is_discarded(self) -> None:
-        payload = self.ANNOTATIONS + (
-            "UniProtKB\tP43403\tZAP70\t\tPMID:5\tIDA\tGO:0000001\tmystery\tX\n"
-        )
-        _, aspects = self.annotations(payload)
-        self.assertEqual(set(aspects), {"P", "F", "C"})
-        self.assertEqual(sum(len(terms) for terms in aspects.values()), 4)
+    def test_zero_hits_is_an_empty_aspect_mapping(self):
+        with patch.object(workflow, "QuickGO") as client:
+            client.return_value.Annotation.return_value = {"results": [], "pageInfo": {"total": 0}}
+            self.assertEqual(quietly(workflow.get_go_annotations, "P43403"), {"P": [], "F": [], "C": []})
 
-    def test_no_annotations_yields_an_empty_list(self) -> None:
-        _, result = self.annotations("")
-        self.assertEqual(result, [])
+    def test_invalid_or_excessive_page_total_fails_before_followup_requests(self):
+        for total in [None, "2", True, -1, float("inf"), float("nan"), 1001]:
+            with self.subTest(total=total), patch.object(workflow, "QuickGO") as client:
+                client.return_value.Annotation.return_value = {"results": [], "pageInfo": {"total": total}}
+                with self.assertRaisesRegex(ValueError, "page total"):
+                    quietly(workflow.get_go_annotations, "P43403")
+                self.assertEqual(client.return_value.Annotation.call_count, 1)
 
-    def test_a_header_only_response_yields_empty_aspects(self) -> None:
-        _, aspects = self.annotations("DB\tID\tSymbol\n")
-        self.assertEqual(aspects, {"P": [], "F": [], "C": []})
+    def test_repeated_page_and_changing_catalogue_fail(self):
+        for second in [{"current": 1, "total": 2}, {"current": 2, "total": 3}]:
+            with self.subTest(second=second), patch.object(workflow, "QuickGO") as client:
+                client.return_value.Annotation.side_effect = [
+                    {"results": [], "pageInfo": {"current": 1, "total": 2}},
+                    {"results": [], "pageInfo": second},
+                ]
+                with self.assertRaisesRegex(ValueError, "wrong page|total changed"):
+                    quietly(workflow.get_go_annotations, "P43403")
+                self.assertEqual(client.return_value.Annotation.call_count, 2)
+
+    def test_invalid_page_cap_fails_before_network_access(self):
+        for cap in [0, -1, True, 1.5]:
+            with self.subTest(cap=cap), patch.object(workflow, "QuickGO") as client:
+                with self.assertRaisesRegex(ValueError, "max_pages"):
+                    quietly(workflow.get_go_annotations, "P43403", max_pages=cap)
+                client.assert_not_called()
+
+
+class CurrentMappingContractTests(unittest.TestCase):
+    def test_nested_uniprot_targets_and_multiple_targets(self):
+        payload = {"results": [{"from": "hsa:7535", "to": {"primaryAccession": "P43403"}},
+                               {"from": "hsa:7535", "to": {"primaryAccession": "Q12345"}}],
+                   "failedIds": ["bad"]}
+        self.assertEqual(converter.mapping_to_lists(payload), {"hsa:7535": ["P43403", "Q12345"], "bad": []})
+
+    def test_timeout_and_unknown_record_shape_are_not_empty_success(self):
+        for payload in [None, 503, {}, {"results": [{"from": "P43403", "to": {"unknown": "X"}}]}]:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                converter.mapping_to_lists(payload)
+
+    def test_target_alias_uses_the_target_code(self):
+        self.assertEqual(converter.normalize_database_code("uniprot", target=True), "UniProtKB")
+
+    def test_missing_ids_are_in_failed_list(self):
+        with patch.object(converter, "UniProt") as client:
+            client.return_value.mapping.return_value = {"results": [{"from": "P43403", "to": "hsa:7535"}]}
+            mapping, failed = quietly(converter.batch_convert, ["P43403", "MISSING"], "UniProtKB_AC-ID", "KEGG", delay=0)
+        self.assertEqual(failed, ["MISSING"])
+        self.assertIsNone(mapping["MISSING"])
+
+    def test_all_kegg_mappings_contribute_pathways(self):
+        with patch.object(workflow, "UniProt") as client, patch.object(workflow, "KEGG") as kegg:
+            client.mapping.return_value = {"results": [{"from": "P43403", "to": "hsa:1"}, {"from": "P43403", "to": "hsa:2"}]}
+            kegg.get_pathway_by_gene.side_effect = [{"hsa00001": "first"}, {"hsa00002": "second"}]
+            found = quietly(workflow.discover_pathways, client, kegg, "P43403")
+        self.assertEqual(found, [("hsa00001", "first"), ("hsa00002", "second")])
+
+
+class ScientificExportTests(unittest.TestCase):
+    def test_sif_does_not_merge_local_ids_across_pathways(self):
+        relation = {"entry1": "1", "entry2": "2", "name": None}
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "network.sif"
+            quietly(pathways.save_interactions_sif,
+                    [{"pathway_id": "A", "relations": [relation]}, {"pathway_id": "B", "relations": [relation]}], target)
+            self.assertEqual(target.read_text().splitlines(), ["A#1\tinteraction\tA#2", "B#1\tinteraction\tB#2"])
+
+    def test_exact_compound_name_beats_substring_hits(self):
+        fake = FakeKegg("C15823\tProgeldanamycin\nC11222\tGeldanamycin\n")
+        with patch.object(compound, "KEGG", lambda: fake):
+            self.assertEqual(quietly(compound.search_kegg_compound, "Geldanamycin")[1], "C11222")
+
+    def test_unmapped_csv_is_distinct_from_request_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "mapping.csv"
+            quietly(converter.save_mapping_csv, {"missing": [], "error": None}, target, "KEGG", "UniProtKB")
+            with target.open() as handle:
+                rows = {row["Source_ID"]: row for row in csv.DictReader(handle)}
+            self.assertEqual(rows["missing"]["Mapping_Status"], "Unmapped")
+            self.assertEqual(rows["error"]["Mapping_Status"], "Failed")
+
+    def test_ambiguous_compound_name_does_not_choose_first(self):
+        with patch.object(compound, "KEGG", lambda: FakeKegg("cpd:C00002\tATP\ncpd:C00008\tADP\n")):
+            self.assertIsNone(quietly(compound.search_kegg_compound, "adenosine")[1])
+
+    def test_chembl_null_properties_do_not_discard_valid_record(self):
+        with patch.object(compound, "ChEMBL") as client:
+            payload = {"pref_name": "X", "molecule_properties": None, "molecule_structures": None}
+            client.return_value.get_molecule.return_value = payload
+            self.assertEqual(quietly(compound.get_chembl_info, "CHEMBL1"), payload)
 
 
 if __name__ == "__main__":

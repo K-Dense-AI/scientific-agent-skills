@@ -1,7 +1,8 @@
 # Image loading, formats, levels, and coordinates
 
-This reference targets the **PyPI-stable PathML 3.0.5 API**. All sources were
-checked on 2026-07-23 against the v3.0.5 tag and stable ReadTheDocs build.
+This reference targets the **PyPI-stable PathML 3.0.8 API**. All sources were
+checked on 2026-10-01 against the v3.0.8 wheel/tag. PathML examples are
+illustrative: native readers were not executed in this review.
 
 ## Start with a local, de-identified file
 
@@ -110,6 +111,15 @@ Bio-Formats returns five-dimensional arrays in PathML order:
 Even singleton `z` and `time` dimensions are retained until a transform such as
 `CollapseRunsCODEX` or `CollapseRunsVectra` changes the layout.
 
+`extract_region(..., normalize=True)` is the default. It divides by
+`2**(8 * source_dtype.itemsize)`, multiplies by 256, then casts to `uint8`.
+This loses high-bit-depth intensity precision and is not a valid generic
+normalization for signed/floating-point acquisitions. For quantification use
+`normalize=False` in `extract_region`, `generate_tiles`, or `SlideData.run`
+(forwarded through `**kwargs`), and verify dtype/range with known pixels.
+This preserves the read values in memory; h5path storage has a separate float16
+conversion described in `data_management.md`.
+
 ### DICOM
 
 Use `backend="dicom"` for `.dcm` or `.dicom`. Stable PathML treats DICOM frames as
@@ -175,8 +185,11 @@ Use the bounded planner first:
 python scripts/plan_pipeline.py \
   --width 100000 --height 80000 \
   --tile-size 512 --stride 256 \
-  --level-downsample 4
+  --level-downsample 4 \
+  --level-width 25000 --level-height 20000
 ```
+
+The level dimensions above are illustrative; supply values read from your file.
 
 `SlideData.run()` uses different parameter names: `tile_size`, `tile_stride`,
 `tile_pad`, and `level`.
@@ -190,8 +203,19 @@ PathML's `Tile.coords` is the top-left `(i, j)`:
 - origin: top-left pixel `(0, 0)`
 - units: pixels at the **selected pyramid level**
 
-For OpenSlide, stable PathML multiplies `(i, j)` by that level's downsample and
-swaps the order before calling OpenSlide's level-0 `(x, y)` API. Therefore:
+For OpenSlide, 3.0.8 uses `int(level_downsamples[level])`, then swaps `(i, j)`
+before calling OpenSlide's level-0 `(x, y)` API. A true downsample of 3.99 becomes
+3 for the region origin, although the requested image still uses that pyramid
+level. This shifts tiles and breaks a naive coordinate join. Prefer level 0;
+otherwise reject nonintegral downsamples before extraction:
+
+```python
+downsample_level = float(slide.slide.slide.level_downsamples[level])
+if not downsample_level.is_integer():
+    raise ValueError("PathML 3.0.8 truncates fractional OpenSlide downsamples; use level 0")
+```
+
+For the supported integral-downsample case:
 
 ```text
 row_level0 = i_level * downsample_level
@@ -209,7 +233,9 @@ objective power. Record:
 - tile height/width, stride, and padding
 
 `QuantifyMIF` later writes `obsm["spatial"]` in `(x, y)` order, so a conversion is
-required when joining it to `Tile.coords`.
+required when joining it to `Tile.coords`. For a previously processed fractional
+level, recover actual sampled origins plus within-tile coordinates; multiplying
+the combined coordinate by the true downsample cannot repair the origin error.
 
 ## Pyramid levels
 
@@ -245,13 +271,17 @@ identical to a generic `ceil(D / S)` rule for every overlapping configuration.
 Use the bundled planner and verify a small synthetic case. Padded pixels are zero,
 which can bias tissue/stain/QC transforms.
 
+At nonzero levels supply the exact backend width/height to the planner using
+`--level-width` and `--level-height`. The default `ceil(level0/downsample)` is an
+estimate; vendor pyramid dimensions can differ and change the tile count.
+
 Important stable limitation: `SlideData.generate_tiles()` does not slice
 slide-level masks into padded tiles. Do not combine a slide-level mask with
 `pad=True` without an explicit, tested padding policy.
 
 ## Technical metadata without PHI leakage
 
-PathML 3.0.5 has no backend-neutral `slide.metadata` mapping. Technical metadata
+PathML 3.0.8 has no backend-neutral `slide.metadata` mapping. Technical metadata
 is backend-specific:
 
 - OpenSlide properties are under the wrapped OpenSlide object.
@@ -284,18 +314,20 @@ Before large-scale processing:
 6. Confirm tile coordinates by overlaying a few sampled tiles on a thumbnail.
 7. Record failures instead of silently dropping slides.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable loading guide:
   https://pathml.readthedocs.io/en/stable/loading_slides.html
 - Stable core API:
   https://pathml.readthedocs.io/en/stable/api_core_reference.html
 - Stable source (`slide_data.py`):
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/core/slide_data.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/core/slide_data.py
 - Stable source (`slide_backends.py`):
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/core/slide_backends.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/core/slide_backends.py
 - Stable source (`tile.py`):
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/core/tile.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/core/tile.py
 - OpenSlide formats: https://openslide.org/formats/
 - Bio-Formats supported formats:
   https://docs.openmicroscopy.org/bio-formats/latest/supported-formats.html

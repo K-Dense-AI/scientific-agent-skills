@@ -1,7 +1,9 @@
 # Pichia Protein Expression Validation (LabChip)
 
 **URL:** https://cloud.ginkgo.bio/protocols/pichia-protein-expression-labchip
-**Status:** Ginkgo Certified (Newly launched)
+**Service terms:** https://cloud.ginkgo.bio/terms/pichia-protein-expression-validation
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
+**Status:** Ginkgo Certified
 **Price:** $89/sample
 **Turnaround:** up to 4 weeks
 **Throughput:** Up to 96 constructs per run
@@ -12,14 +14,14 @@ End-to-end automated workflow using Ginkgo's proprietary *Pichia pastoris* strai
 
 ## Input
 
-- **DNA Input:** Linear DNA sequence (`.xlsx` template)
+- **Sequence input:** AA or DNA in CSV per service terms, with known expression constraints. The page labels its template `.xlsx`, but its download URL ends in `.csv`; inspect the downloaded format rather than renaming the extension.
 
 ## Output
 
 - **Expression Confirmation:** Verification of the target protein at the expected molecular weight
-- **Baseline Titer:** Initial quantitative yield measurement (mg/L)
+- **Yield estimate:** Reference-standard estimate (ug/mL) above the detection limit; absolute yield is not guaranteed
 - **Initial Purity:** Percentage of target protein vs. impurities, delivered with virtual gel images
-- Results reported as protein size (kDa), purity (%), and relative concentration
+- Results reported as protein size (kDa), purity (%), and relative concentration, with growth/QC context; use these for comparative expression ranking
 
 ## Automated Workflow
 

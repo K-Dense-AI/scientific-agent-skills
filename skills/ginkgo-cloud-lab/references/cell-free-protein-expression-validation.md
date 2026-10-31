@@ -1,6 +1,8 @@
 # Cell Free Protein Expression Validation
 
 **URL:** https://cloud.ginkgo.bio/protocols/cell-free-protein-expression-validation
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-validation
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $39/sample
 **Turnaround:** up to 10 days
@@ -11,8 +13,9 @@ Fastest path from a protein sequence to a quantitative go/no-go readout on expre
 
 ## Input
 
-- **DNA sequence** in `.fasta` format
+- **Sequence:** The protocol page currently links a CFPS `.xlsx` template for linear DNA; service terms request protein or DNA in FASTA. Download the current template and resolve the format with Ginkgo before submission.
 - Sequences up to 1800 bp supported
+- Specify replicates, linear DNA versus clonal plasmid synthesis, and known expression constraints.
 
 ## Output
 
@@ -55,13 +58,6 @@ Fastest path from a protein sequence to a quantitative go/no-go readout on expre
 - **Number of Replicates:** configurable
 - **File Upload:** CSV, Excel, FASTA, TXT, PDF, ZIP
 - **Additional Details:** free-text field for special requirements
-
-## Certification Milestones
-
-- Dry Run Complete
-- Wet Run Complete
-- Biovalidation Complete
-- App Note Complete
 
 ## Use Cases
 

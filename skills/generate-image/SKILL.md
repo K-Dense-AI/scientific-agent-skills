@@ -1,13 +1,13 @@
 ---
 name: generate-image
-description: Generate or edit images with AI models through the OpenRouter Image API (Gemini, Seedream, Recraft, GPT-Image, Riverflow). Use for photos, illustrations, artwork, concept art, visual assets, logos, and image editing or compositing from reference images. For flowcharts, circuits, pathways, and other technical diagrams, use the scientific-schematics skill instead.
+description: Generates or edits images with AI models through the OpenRouter Image API (Gemini, Seedream, Recraft, GPT-Image, Riverflow). Use for photos, illustrations, artwork, concept art, visual assets, logos, and image editing or compositing from reference images. For flowcharts, circuits, pathways, and other technical diagrams, use the scientific-schematics skill instead.
 license: MIT
-compatibility: Requires Python 3.9+ and network access to openrouter.ai. The bundled script uses only the standard library. Image generation requires the OPENROUTER_API_KEY credential and bills per request; listing models, inspecting a model, and --dry-run do not. Targets the OpenRouter Image API (POST /api/v1/images) as verified on 2026-07-31.
+compatibility: Requires Python 3.9+ and network access to openrouter.ai. The bundled script uses only the standard library. Image generation requires the OPENROUTER_API_KEY credential and bills per request; listing models, inspecting a model, and --dry-run do not. Targets the OpenRouter Image API (POST /api/v1/images) documentation and public discovery reviewed on 2026-09-30.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "3.2"
+  version: "3.3"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-07-31"
+  last-reviewed: "2026-09-30"
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
     envVars:
@@ -19,7 +19,7 @@ metadata:
 # Generate Image
 
 Generate and edit images through OpenRouter's Image API, which reaches Gemini, Seedream, Recraft,
-GPT-Image, Riverflow, and roughly thirty other models behind one request shape.
+GPT-Image, Riverflow, and other models behind one request shape.
 
 ## When to use
 
@@ -53,8 +53,10 @@ python scripts/generate_image.py "A beautiful sunset over mountains"
 python scripts/generate_image.py "Make the sky purple" -i photo.jpg -o edited.png
 ```
 
-Paths are relative to this skill's directory. Output defaults to `generated_image.<ext>`, where the
-extension follows the media type the model returned. The per-request cost is printed after the run.
+Run these commands from the skill directory; input and output paths resolve from the working
+directory. Output defaults to `generated_image.<ext>`, using each image's returned media type
+(or `.bin` when unknown). An explicit output suffix is kept, with a warning on mismatch; the
+script does not transcode. OpenRouter and upstream costs are printed separately when supplied.
 
 **Then look at the image.** Read the file back and check it before using it anywhere: composition,
 aspect ratio, and any text are all things models get wrong silently.
@@ -68,14 +70,13 @@ Default: `google/gemini-3.1-flash-image`.
 | General quality, prompt adherence | `google/gemini-3.1-flash-image` |
 | Highest Gemini tier | `google/gemini-3-pro-image` |
 | Cheap iteration | `google/gemini-3.1-flash-lite-image` (1K only), `openai/gpt-image-1-mini` |
-| Photoreal control, reproducible seeds | `bytedance-seed/seedream-4.5` |
+| Photoreal control, seeded generation | `bytedance-seed/seedream-4.5` |
 | Several images per request | `bytedance-seed/seedream-4.5`, `openai/gpt-image-2` (up to 10) |
 | Vector / SVG output | `recraft/recraft-v4.1-vector` |
 | Transparent background | `openai/gpt-image-1` with `--background transparent` |
 | Legible text inside the image | `recraft/recraft-v4.1`, `sourceful/riverflow-v2.5-pro` — see the caveat below |
 
-`references/models.md` carries the full catalogue with per-model parameters, allowed values, and
-prices. The live listing is authoritative and free:
+[references/models.md](references/models.md) carries the reviewed capability and pricing snapshot. The live listing is authoritative and free:
 
 ```bash
 python scripts/generate_image.py --list-models            # every model and its allowed values
@@ -86,10 +87,12 @@ python scripts/generate_image.py --model-info openai/gpt-image-1   # one model, 
 ## Parameter support varies by model
 
 This is the main thing to get right. Models advertise different parameter sets **and different
-allowed values**, and sending something a model does not support is rejected, not ignored.
+allowed values**. The CLI conservatively rejects unadvertised options; individual providers may
+ignore or normalize some fields. The generic guide can lag the discovery records.
 
-The script checks the request against the live catalogue before spending anything, so a bad
-parameter fails locally in under a second with the legal values printed:
+The script checks the model catalogue and requires at least one provider endpoint to accept the
+complete combination before generation. Model capabilities are a union across endpoints, not a
+promise that every provider supports them. Unsupported requests fail locally with legal values:
 
 ```console
 $ python scripts/generate_image.py "abstract pattern" -m openai/gpt-image-2 --background transparent
@@ -97,24 +100,27 @@ Error: Request rejected before billing (1 problem):
   - background=transparent is not allowed; this model accepts: auto, opaque
 ```
 
-Rough guide — but let the check be the authority, since the catalogue moves:
+Current examples of capability differences (reviewed 2026-09-30):
 
-- `--resolution` — Gemini, Seedream, Riverflow, Krea, Grok. The tiers differ: `512` only on Gemini
-  3.1 Flash, `4K` on Gemini 3 Pro / Seedream / Riverflow, and **`1K` only** on
-  `gemini-3.1-flash-lite-image` and the Krea models.
-- `--output-format` — Riverflow 2.5 only (`png`, `jpeg`, `webp`; the `fast` variant takes `jpeg`
-  alone). Gemini, OpenAI, Seedream, and Recraft all choose their own container.
-- `--quality`, `--background`, `--output-compression` — the OpenAI family, plus `--background` on
-  Riverflow 2.5. **`--background transparent` is not available on `gpt-image-2` or
-  `gpt-5.4-image-2`** — use `gpt-image-1`, `gpt-image-1-mini`, `gpt-5-image`, or `gpt-5-image-mini`.
-- `--seed` — Seedream and Krea. Not Gemini, not OpenAI.
-- `--aspect-ratio` — nearly all models, but the enum differs sharply: `gpt-image-1` accepts only
-  `1:1`, `3:2`, `2:3`, `auto`, and `gpt-5-image*` does not accept it at all.
-- `--n` — capped per model: 1 for Gemini, Riverflow, MAI and Grok, 6 for Recraft, 10 for Seedream
-  and OpenAI. The Krea models reject it outright.
+- `--resolution`: Gemini 3.1 Flash accepts `512`, `1K`, `2K`, `4K`; Flash Lite and Krea
+  accept only `1K`. Seedream 5.0 Lite accepts `2K`/`4K`, while 5.0 Pro accepts `1K`/`2K`.
+- `--output-format`: Riverflow 2.5 Pro accepts `png`/`jpeg`/`webp`; its Fast variant accepts
+  only `jpeg`. Recraft vector models accept `svg`. OpenAI models do not advertise this flag.
+- `--quality`: GPT Image 2.5 Flare/Sunburst also accept `xhigh`/`max`; Grok 2.0 accepts
+  only `low`/`medium`. Inspect the specific model before selecting a quality value.
+- `--background transparent` is **not available** on `gpt-image-2` or `gpt-5.4-image-2`.
+  It is advertised on GPT Image 1 and 2.5. Do not combine transparency with JPEG; when no
+  output format is selectable, inspect the returned file for an actual alpha channel.
+- `--aspect-ratio`: GPT-5 Image and Mini now accept `1:1`, `3:2`, `2:3`, `auto`;
+  GPT-5.4 Image 2 also accepts wider ratios. None accept a resolution flag in this snapshot.
+- `--n` is an upper bound, not a guarantee: providers may return fewer images. Seedream 4.5
+  caps at 10, Seedream 5.0 Lite at 4, and 5.0 Pro at 1. Krea does not advertise `n`.
+- `--seed` is available on Seedream, Krea, Qwen and FLUX, but not Gemini or OpenAI.
+  Keep the model/provider, prompt and parameters fixed; a seed is not a cross-version guarantee.
 
-Pass `--dry-run` to validate and print the exact request body without generating or billing.
-`--no-preflight` skips the check when you want the API itself to arbitrate.
+`--dry-run` performs free discovery and prints the request without generating. If discovery
+fails, the command stops; `--no-preflight` explicitly bypasses it. Combining both flags is an
+offline payload inspection, **not** validation of provider support.
 
 ## Writing the prompt
 
@@ -149,13 +155,19 @@ python scripts/generate_image.py "Blend these two styles" -i style_a.png -i styl
 python scripts/generate_image.py "Restyle as a watercolor" -i https://example.com/photo.jpg
 ```
 
-Reference limits differ: 16 for OpenAI, 14 for Gemini and Seedream, 10 for `riverflow-v2*-pro`,
-3 for `gemini-2.5-flash-image` and Grok, 1 for Recraft, MAI, and Krea. Accepted local formats: PNG,
-JPEG, GIF, WebP. Riverflow v2 bills $0.20 per reference image on top of the output.
+Reference ranges include both a minimum and a maximum: OpenAI accepts up to 16, Gemini 3 and
+Seedream up to 14, Riverflow Pro up to 10, and MAI 2.6 up to 5. Recraft v4 Styles requires
+1–10 references; its regular v4/v4.1 models accept 0–1. Ming Design Layer requires exactly one,
+while Ming Design and Recraft Flash are text-only. The CLI checks required and zero-reference
+limits too. Local formats supported by the helper: PNG, JPEG, GIF, WebP; provider decoding rules
+still apply. Local files and data URLs send their bytes; URL references are fetched by the service.
+Do not use private or credential-bearing URLs. Riverflow v2 bills $0.20 per reference image.
 
 ## Worked examples
 
-The `-o` paths are destinations the script creates, not files bundled with the skill.
+The `-o` paths are destinations the script creates, not bundled files. These are generation
+examples, not authenticated end-to-end results from this review. Their request parameters were
+checked against public discovery, and local encoding/response handling was tested with mocks.
 
 ```bash
 # Wide hero image for a poster, with space reserved for the title
@@ -173,7 +185,7 @@ python scripts/generate_image.py \
 # Vector logo
 python scripts/generate_image.py \
   "Minimal geometric fox logo, two colors" \
-  -m recraft/recraft-v4.1-vector -o assets/logo.svg
+  -m recraft/recraft-v4.1-vector --output-format svg -o assets/logo.svg
 
 # Slide background with a transparent alpha channel
 python scripts/generate_image.py \
@@ -184,9 +196,9 @@ python scripts/generate_image.py \
 python scripts/generate_image.py \
   "Stylized neuron network illustration" \
   -m bytedance-seed/seedream-4.5 --n 4 -o variations.png
-# -> variations_1.png ... variations_4.png
+# -> up to variations_1.png ... variations_4.png
 
-# Reproducible output
+# Seeded generation (repeatability depends on the provider/model version)
 python scripts/generate_image.py "A cat astronaut" \
   -m bytedance-seed/seedream-4.5 --seed 42
 
@@ -202,14 +214,14 @@ python scripts/generate_image.py "A cat astronaut" --resolution 4K --dry-run
 | `-m`, `--model` | Model slug (default `google/gemini-3.1-flash-image`) |
 | `-o`, `--output` | Output path; extension defaults to the returned media type |
 | `-i`, `--input` | Reference image — path, URL, or data URL. Repeatable |
-| `--n` | Images per request, model-capped |
+| `--n` | Upper bound on returned images, 1–10 and model-capped |
 | `--aspect-ratio` | `1:1`, `16:9`, `9:16`, `4:3`, `3:2`, `21:9`, … — enum differs per model |
 | `--resolution` | `512`, `1K`, `2K`, `4K` — tiers differ per model |
-| `--quality` | `auto`, `low`, `medium`, `high` (OpenAI) |
-| `--output-format` | `png`, `jpeg`, `webp` (Riverflow 2.5) |
+| `--quality` | Model-specific quality; checked against live values |
+| `--output-format` | `png`, `jpeg`, `webp`, `svg`; model-dependent |
 | `--background` | `auto`, `transparent`, `opaque` |
 | `--output-compression` | 0–100, OpenAI models |
-| `--seed` | Deterministic output where supported |
+| `--seed` | Seed for repeatability where supported |
 | `--api-key` | Overrides the environment and `.env` |
 | `--timeout` | Request timeout, seconds (default 300) |
 | `--retries` | Retries for rate limits and 5xx responses (default 2) |
@@ -238,7 +250,7 @@ curl -s https://openrouter.ai/api/v1/images \
   }'
 ```
 
-Response:
+Illustrative response (token counts and cost are not a quote):
 
 ```json
 {
@@ -254,29 +266,33 @@ Response:
 }
 ```
 
-`b64_json` is raw base64, **not** a data URL. `media_type` reflects the real format, so honour it
-when naming files — vector models return `image/svg+xml`, and `gemini-3.1-flash-lite-image` returns
-JPEG rather than PNG.
+`b64_json` is raw base64, **not** a data URL. `media_type` describes the actual format when
+identifiable; it may be absent. Vector outputs use `image/svg+xml`. Never infer a file's format
+from the requested filename or assume every model returns PNG. The helper rejects invalid base64
+and chooses an extension per returned image.
 
 Streaming (`"stream": true`) emits `image_generation.partial_image`, `image_generation.completed`,
-and `error` events, terminating with `data: [DONE]`. Only the OpenAI models support it, and the
-bundled script does not use it.
+and `error` events, terminating with `data: [DONE]`. Use it only when the selected endpoint advertises `supports_streaming: true`;
+the bundled script uses buffered responses and does not implement SSE.
 
 Billing is all-or-nothing: a generation is either completed and billed in full, or it fails and is
 not billed — so a rejected parameter costs nothing but time. Streaming preview frames are not
-charged separately. On a bring-your-own-key account `usage.cost` reads `0` and the real amount is
-in `cost_details.upstream_inference_cost`; the script reports that figure rather than claiming the
-run was free.
+charged separately. For BYOK, `usage.cost` may include an OpenRouter fee while
+`usage.cost_details.upstream_inference_cost` reports upstream inference. The helper prints both;
+it does not assume that BYOK always has zero OpenRouter cost or sum potentially overlapping fields.
 
 ## Cost
 
-Per-image models are predictable: Seedream $0.04, Recraft v4.1 $0.035 (vector $0.08, pro $0.21),
-Riverflow 2.5 fast $0.019 and pro $0.13–0.17, Grok $0.05–0.07.
+Inspect `--model-info` for per-endpoint billable units, input charges and resolution variants.
+A per-output-image rate is not necessarily the whole request cost. The reviewed snapshot includes
+Seedream 4.5 at $0.04/output image and Recraft v4.1 Vector at $0.08/output image; see
+[the model reference](references/models.md) for the dated rates and caveats.
 
-Gemini, OpenAI, and MAI bill per output token, which scales with resolution — a 4K image costs
-roughly sixteen times a 1K one. Measured: one 1K `gemini-3.1-flash-lite-image` render is 1120
-output tokens, $0.034. At the same size `gemini-3.1-flash-image` is double that and
-`gemini-3-pro-image` four times. Draft at low resolution on a cheap model; pay for size once.
+Do not estimate token-billed image cost from pixel area alone: the relation between resolution,
+quality and token count depends on the model. Krea currently publishes no endpoint price; the
+Ming entries report zero rates, which is discovery metadata, not a guarantee of free generation.
+[BYOK fees](https://openrouter.ai/docs/guides/overview/auth/byok) can apply in addition to upstream
+billing. Inspect actual usage for completed calls. No paid generation was run during this review.
 
 ## Notes and caveats
 
@@ -285,19 +301,19 @@ output tokens, $0.034. At the same size `gemini-3.1-flash-image` is double that 
   use `scientific-schematics` when labels are the point.
 - **A generated image is an illustration, never evidence.** It shows nothing that was measured.
   Never present one as microscopy, imaging, gel, or instrument output, never let it stand in for a
-  figure that reports results, and label it as an illustration in captions. Nature and Science both
-  require disclosure of generative-AI imagery, and several journals prohibit it outside
-  clearly-marked concept art — check the target venue before submitting.
+  figure that reports results, and label it as an illustration in captions. Check the target venue's current generative-AI imagery and disclosure policy before submitting.
 - Generation is a paid API call. Prefer a cheap model and low resolution while iterating on wording.
-- Generation takes roughly 5–60 seconds depending on model and resolution.
+- Generation can take minutes; the CLI defaults to a 300-second request timeout.
 - Reference images are uploaded to OpenRouter. Do not send unpublished or sensitive data, patient
   images, or anything under embargo.
 - Never hardcode the API key. Keep it in the environment or an ignored `.env`.
 - Prompt specifically when editing: "change the sky to sunset colours" beats "edit the sky".
-- A refusal arrives as an HTTP 400 or 403 mentioning content policy, not as a bad image. Rephrase —
-  clinical and anatomical subjects trip moderation more often than the request warrants.
-- Rate limits and 5xx responses are retried automatically; a 4xx is final, because the request
-  itself is what needs changing.
+- Inspect the returned error: 401 concerns credentials, 402 credits or spending limits, and 403
+  may concern permissions, guardrails or moderation. Refusals need not all share one HTTP code.
+- The helper retries HTTP 429 and selected 5xx responses, but not other HTTP errors. A temporary
+  402 in-flight budget limit may include `Retry-After`; inspect it before manually retrying.
+- Transport failures during generation are not automatically replayed: their outcome may be
+  unknown. Check OpenRouter activity before resubmitting. GET discovery failures can be retried.
 
 ## Related skills
 

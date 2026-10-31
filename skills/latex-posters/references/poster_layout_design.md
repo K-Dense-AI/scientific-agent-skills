@@ -1,5 +1,10 @@
 # Poster Layout and Design Guide
 
+Reviewed 2026-09-30. Design numbers are starting points, not measured guarantees.
+Code fragments are illustrative; use the bundled tested templates as the executable
+starting point. Replace example names, statistics, citations, URLs, and assets with
+verified project content.
+
 ## Overview
 
 Effective poster layout organizes content for maximum impact and comprehension. This guide covers grid systems, spatial organization, visual flow, and layout patterns for research posters.
@@ -222,7 +227,7 @@ Effective poster layout organizes content for maximum impact and comprehension. 
   }
 \end{columns}
 
-\block[width=1.0\linewidth]{Results}{
+\block{Results}{
   % Full-width results section
 }
 ```
@@ -259,6 +264,7 @@ Effective poster layout organizes content for maximum impact and comprehension. 
 ```latex
 % Debug grid overlay (remove for final version)
 \usepackage{tikz}
+\usepackage{eso-pic}
 \AddToShipoutPictureBG{
   \begin{tikzpicture}[remember picture, overlay]
     \draw[help lines, step=5cm, very thin, gray!30] 
@@ -271,7 +277,7 @@ Effective poster layout organizes content for maximum impact and comprehension. 
 
 ### Z-Pattern (Landscape Posters)
 
-Viewers' eyes naturally follow a Z-shape on landscape layouts:
+A Z-shaped reading path is one possible layout convention; verify it with readers:
 
 ```
 START → → → → → → → → → → → → → → TOP RIGHT
@@ -296,7 +302,7 @@ BOTTOM LEFT → → → → → → → → → → → → END
 
 ### F-Pattern (Portrait Posters)
 
-Portrait posters follow F-shaped eye movement:
+An F-shaped scan path can be a useful planning heuristic, not a universal viewer behavior:
 
 ```
 TITLE → → → → → → → → → → → →
@@ -348,15 +354,16 @@ Guide viewers explicitly through content:
 
 **Numerical Ordering**:
 ```latex
-\block{❶ Introduction}{...}
-\block{❷ Methods}{...}
-\block{❸ Results}{...}
-\block{❹ Conclusions}{...}
+\block{1. Introduction}{...}
+\block{2. Methods}{...}
+\block{3. Results}{...}
+\block{4. Conclusions}{...}
 ```
 
 **Arrows and Lines**:
 ```latex
-\begin{tikzpicture}
+% Preamble: \usetikzlibrary{positioning}
+\begin{tikzpicture}[block/.style={draw,rounded corners,align=center}]
   \node[block] (intro) {Introduction};
   \node[block, right=of intro] (methods) {Methods};
   \node[block, right=of methods] (results) {Results};
@@ -617,15 +624,12 @@ Discussion/Conclusions
 
 **Shadow and Depth**:
 ```latex
-% tikzposter shadow
-\tikzset{
-  block/.append style={
-    drop shadow={shadow xshift=2mm, shadow yshift=-2mm}
-  }
-}
+% For individual TikZ nodes, load \usetikzlibrary{shadows} and set
+% drop shadow on that node. tikzposter blocks require a custom block style;
+% appending a TikZ style named "block" does not restyle tikzposter blocks.
 
 % tcolorbox drop shadow
-\usepackage{tcolorbox}
+\usepackage[most]{tcolorbox}
 \begin{tcolorbox}[enhanced, drop shadow]
   Content with shadow
 \end{tcolorbox}

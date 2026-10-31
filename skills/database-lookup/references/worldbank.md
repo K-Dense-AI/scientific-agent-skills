@@ -141,7 +141,7 @@ https://api.worldbank.org/v2/source?format=json
 | SP.DYN.TFRT.IN        | Fertility rate (births per woman)               |
 | SL.UEM.TOTL.ZS        | Unemployment (% of total labor force)           |
 | FP.CPI.TOTL.ZG        | Inflation, consumer prices (annual %)           |
-| SI.POV.DDAY           | Poverty headcount at $2.15/day (% of pop)       |
+| SI.POV.DDAY           | Poverty headcount at $3.00/day (2021 PPP; % of pop)       |
 | SI.POV.GINI           | Gini index                                      |
 | BX.KLT.DINV.CD.WD     | Foreign direct investment, net inflows (BoP, US$)|
 | NE.EXP.GNFS.ZS        | Exports of goods and services (% of GDP)        |
@@ -208,7 +208,7 @@ Note: `value` is `null` when data is unavailable for that year.
   { "page": 1, "pages": 1, "per_page": 50, "total": 1 },
   [
     {
-      "id": "US",
+      "id": "USA",
       "iso2Code": "US",
       "name": "United States",
       "region": { "id": "NAC", "iso2code": "XU", "value": "North America" },

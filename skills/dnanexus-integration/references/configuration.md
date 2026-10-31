@@ -78,6 +78,9 @@ This is valid JSON; comments are intentionally omitted.
 ```
 
 The `dxapi` field is optional; it is not a required manifest field.
+App names cannot start with `app-`. App versions are nonempty strings using
+letters, digits, `.`, `_`, `+`, and `-`; semantic versioning is recommended,
+but the API also accepts versions such as `release_2026`.
 
 ## Production App Skeleton
 
@@ -153,9 +156,11 @@ Common classes:
 
 - Primitives: `string`, `int`, `float`, `boolean`, `hash`
 - Data objects: `file`, `record`, `applet`
-- Arrays: `array:string`, `array:int`, `array:file`, and so on
+- Arrays: `array:int`, `array:float`, `array:string`, `array:boolean`,
+  `array:file`, `array:record`, and `array:applet`. `array:hash` is not supported.
 
-Every parameter needs a unique `name` and a `class`. Useful optional fields
+Every parameter needs a unique `name` and a `class`. Required array inputs are
+nonempty; mark an array input optional if an empty value is valid. Useful optional fields
 include:
 
 - `label`
@@ -172,6 +177,7 @@ validation boundary. Validate actual content in app code.
 
 Defaults must match the declared class. File and record defaults use DNAnexus
 links, not raw local paths.
+`default`, `choices`, and `suggestions` apply only to inputs, not outputs.
 
 ## `runSpec`
 
@@ -216,7 +222,7 @@ They remain accepted for some single-region compatibility cases but should not
 be used in new apps.
 
 If one region declares `systemRequirements`, declare it for every region
-listed in `regionalOptions`. Region-bound asset and resource IDs must also be
+listed in `regionalOptions` and omit it from `runSpec`. Region-bound asset and resource IDs must also be
 available in the corresponding region.
 
 ### Fixed instance type
@@ -271,6 +277,8 @@ description records attempts in `instanceTypeTransitions`.
 ### Clusters
 
 Cluster requests use `clusterSpec` in an entry point's system requirements.
+They may also specify a fixed `instanceType`; only `instanceTypeSelector`
+conflicts with either of those fields.
 Current cluster types are `dxspark`, `apachespark`, and `generic`. Spark
 versions and instance availability change; consult the live I/O and Run
 Specifications instead of hardcoding an old value.
@@ -418,6 +426,10 @@ Request only what the app needs:
 - `project`: launch-project level
 - `allProjects`: access to other user projects
 - `developer`: ability to create/modify or use unpublished apps
+
+Project access fields accept `VIEW`, `UPLOAD`, `CONTRIBUTE`, or `ADMINISTER`.
+Omit a field when no extra permission is required; `"NONE"` is not a supported
+value.
 
 Effective project access never exceeds the launching user's access. Broad
 `allProjects`, `ADMINISTER`, `developer`, and unrestricted network permissions

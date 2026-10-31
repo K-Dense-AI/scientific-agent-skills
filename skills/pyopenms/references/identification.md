@@ -1,431 +1,102 @@
-# Peptide and Protein Identification
+# Identification and confidence (pyOpenMS 3.6.0)
 
-## Overview
+## Search engines and provenance
 
-PyOpenMS supports peptide/protein identification through integration with search engines and provides tools for post-processing identification results including FDR control, protein inference, and annotation.
+OpenMS TOPP adapters and their engine executables are separate from the Python
+wheel. Use a supported installed adapter's `--help` and versioned parameter file;
+do not invent `ms.CometAdapter` or assume a search engine is bundled. This skill
+postprocesses precomputed idXML. Comet, Mascot, MSGF+, X! Tandem and MSFragger
+searches, rescoring, protein inference accuracy and proprietary engines were not
+executed in this audit.
 
-The skill ships ready-to-use CLI scripts: `scripts/process_identifications.py` performs FDR filtering and export on idXML files, and `scripts/inspect_ms_data.py` summarizes idXML (and other MS) files.
+Record raw data/conversion, target+decoy FASTA checksum and decoy strategy,
+enzyme/specificity/missed cleavages, fixed versus variable modifications,
+precursor/fragment tolerance values **and units**, charge/isotope hypotheses,
+search-engine version and rescoring. `SearchParameters` records settings; merely
+setting it does not run a database search. Use `digestion_enzyme`,
+`fixed_modifications`, `variable_modifications`, `precursor_mass_tolerance`,
+`precursor_mass_tolerance_ppm`, `fragment_mass_tolerance` and
+`fragment_mass_tolerance_ppm`, not invented `enzyme`/`modifications` attributes.
 
-> **pyOpenMS 3.5+ API note:** `IdXMLFile().load()`/`store()` require the peptide-IDs argument to be a `ms.PeptideIdentificationList()`, not a plain Python list. Passing a plain list raises `Exception: can not handle type of (...)`. The protein-IDs argument is still a plain Python list.
-
-## Supported Search Engines
-
-PyOpenMS integrates with these search engines:
-
-- **Comet**: Fast tandem MS search
-- **Mascot**: Commercial search engine
-- **MSGFPlus**: Spectral probability-based search
-- **XTandem**: Open-source search tool
-- **OMSSA**: NCBI search engine
-- **Myrimatch**: High-throughput search
-- **MSFragger**: Ultra-fast search
-
-## Reading Identification Data
-
-### idXML Format
+## Local idXML processing
 
 ```python
 import pyopenms as ms
-
-# Load identification results
-protein_ids = []                              # protein IDs: plain list
-# pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
-peptide_ids = ms.PeptideIdentificationList()
-
-ms.IdXMLFile().load("identifications.idXML", protein_ids, peptide_ids)
-
-print(f"Protein identifications: {len(protein_ids)}")
-print(f"Peptide identifications: {len(peptide_ids)}")
+proteins, peptides = ms.IdXMLFile().load("search.idXML")
+for pid in peptides:
+    print(pid.getIdentifier(), pid.getScoreType(), pid.isHigherScoreBetter())
+    for hit in pid.getHits():
+        print(hit.getSequence().toString(), hit.getCharge(), hit.getScore())
+        if hit.metaValueExists("target_decoy"):
+            print(hit.getMetaValue("target_decoy"))
+ms.IdXMLFile().store("copy.idXML", proteins, peptides)
 ```
 
-### Access Peptide Identifications
+`PeptideIdentificationList` is the mutable ID container; protein runs remain a
+Python list. In 3.6, string accessors return `str`; do not blindly `.decode()`.
+`getIdentifier()` links peptide IDs to a protein/search run; it is not the engine
+name. Read `getScoreType()` and `isHigherScoreBetter()` rather than inferring
+score meaning from filenames or a substring such as Comet.
+
+```bash
+python scripts/process_identifications.py search.idXML --fasta target_decoy.fasta --decoy-prefix DECOY_ --fdr 0.01 --out filtered.idXML --csv hits.csv
+```
+
+This file-dependent recipe was exercised on a tiny constructed target/decoy
+FASTA and idXML, not a real search. Re-index using exactly the database used for
+searching. The prefix is configurable; the CLI uses prefix matching, not suffix
+matching. `PeptideIndexing.run` returns status plus updated output containers;
+non-success status is an error. Missing decoys are an error, not a warning.
+
+## FDR assumptions
+
+`filter_psm_qvalues` checks finite original scores, valid target/decoy annotations,
+one search run/score type/direction, and both target and decoy **top** hits. This
+prevents the native no-decoy behavior from producing misleading zero q-values.
+`FalseDiscoveryRate` sorts and retains the first hit by default, estimates q-values,
+removes decoys by default, sets score type `q-value` and lower-is-better, and puts
+the q-value in **`hit.getScore()`**. It is not generally a `q-value` meta-value.
+The helper explicitly sets `no_qvalues=false`, `use_all_hits=false`, and
+`add_decoy_peptides=false`; record all other defaults with the result.
+
+A 1% PSM threshold is neither a per-hit probability nor 1% protein FDR. Unique
+peptide, protein and protein-group error control are separate. Tiny fixtures test
+API behavior and safeguards only; they cannot establish statistical calibration.
+Do not repeatedly estimate FDR from already transformed scores. Post-FDR length
+filters change the reported population and do not establish an independently
+controlled subgroup FDR. Mixed runs require an explicit pooling/stratification
+plan rather than silently accepting incomparable scores.
+
+## Feature annotation and protein inference
+
+`IDMapper.annotate(feature_map, peptides, proteins)` maps IDs onto features using
+m/z/RT tolerances, charge and hull assumptions; it does not infer proteins.
+`BasicProteinInferenceAlgorithm.run(peptides, proteins)` aggregates evidence and
+returns updated protein runs in 3.6. Protein hits are not a protein group simply
+because multiple hits occur in one run. Inspect `getProteinGroups()` and
+`getIndistinguishableProteins()` where appropriate and perform separately
+validated protein/group-level confidence estimation. This workflow is
+illustrative here, not a validated protein-inference pipeline.
+
+## Chemistry
+
+The bundled digestion, mass and theoretical-spectrum scripts have synthetic
+native regression tests. The spectrum generator requires an `MSSpectrum`, not a
+Python list:
 
 ```python
-# Iterate through peptide IDs
-for peptide_id in peptide_ids:
-    # Spectrum metadata
-    print(f"RT: {peptide_id.getRT():.2f}")
-    print(f"m/z: {peptide_id.getMZ():.4f}")
-
-    # Get peptide hits (ranked by score)
-    hits = peptide_id.getHits()
-    print(f"Number of hits: {len(hits)}")
-
-    for hit in hits:
-        sequence = hit.getSequence()
-        print(f"  Sequence: {sequence.toString()}")
-        print(f"  Score: {hit.getScore()}")
-        print(f"  Charge: {hit.getCharge()}")
-        print(f"  Mass error (ppm): {hit.getMetaValue('mass_error_ppm')}")
-
-        # Get modifications
-        if sequence.isModified():
-            for i in range(sequence.size()):
-                residue = sequence.getResidue(i)
-                if residue.isModified():
-                    print(f"    Modification at position {i}: {residue.getModificationName()}")
+seq = ms.AASequence.fromString("PEPTIDEM(Oxidation)K")
+fragments = ms.MSSpectrum()
+ms.TheoreticalSpectrumGenerator().getSpectrum(fragments, seq, 1, 2)
 ```
 
-### Access Protein Identifications
-
-```python
-# Access protein-level information
-for protein_id in protein_ids:
-    # Search parameters
-    search_params = protein_id.getSearchParameters()
-    print(f"Search engine: {protein_id.getSearchEngine()}")
-    print(f"Database: {search_params.db}")
-
-    # Protein hits
-    hits = protein_id.getHits()
-    for hit in hits:
-        print(f"  Accession: {hit.getAccession()}")
-        print(f"  Score: {hit.getScore()}")
-        print(f"  Coverage: {hit.getCoverage()}")
-        print(f"  Sequence: {hit.getSequence()}")
-```
-
-## False Discovery Rate (FDR)
-
-### FDR Filtering
-
-Apply FDR filtering to control false positives:
-
-```python
-# Create FDR object
-fdr = ms.FalseDiscoveryRate()
-
-# Apply FDR at PSM level
-fdr.apply(peptide_ids)
-
-# Filter by FDR threshold
-fdr_threshold = 0.01  # 1% FDR
-filtered_peptide_ids = ms.PeptideIdentificationList()  # use push_back to add IDs
-
-for peptide_id in peptide_ids:
-    # Keep hits below FDR threshold
-    filtered_hits = []
-    for hit in peptide_id.getHits():
-        if hit.getScore() <= fdr_threshold:  # Lower score = better
-            filtered_hits.append(hit)
-
-    if filtered_hits:
-        peptide_id.setHits(filtered_hits)
-        filtered_peptide_ids.push_back(peptide_id)
-
-print(f"Peptides passing FDR: {len(filtered_peptide_ids)}")
-```
-
-### Score Transformation
-
-Convert scores to q-values:
-
-```python
-# Apply score transformation
-fdr.apply(peptide_ids)
-
-# Access q-values
-for peptide_id in peptide_ids:
-    for hit in peptide_id.getHits():
-        q_value = hit.getMetaValue("q-value")
-        print(f"Sequence: {hit.getSequence().toString()}, q-value: {q_value}")
-```
-
-## Protein Inference
-
-### ID Mapper
-
-Map peptide identifications to proteins:
-
-```python
-# Create mapper
-mapper = ms.IDMapper()
-
-# Map to features
-feature_map = ms.FeatureMap()
-ms.FeatureXMLFile().load("features.featureXML", feature_map)
-
-# Annotate features with IDs
-mapper.annotate(feature_map, peptide_ids, protein_ids)
-
-# Check annotated features
-for feature in feature_map:
-    pep_ids = feature.getPeptideIdentifications()
-    if pep_ids:
-        for pep_id in pep_ids:
-            for hit in pep_id.getHits():
-                print(f"Feature {feature.getMZ():.4f}: {hit.getSequence().toString()}")
-```
-
-### Protein Grouping
-
-Group proteins by shared peptides:
-
-```python
-# Create protein inference algorithm
-inference = ms.BasicProteinInferenceAlgorithm()
-
-# Run inference
-inference.run(peptide_ids, protein_ids)
-
-# Access protein groups
-for protein_id in protein_ids:
-    hits = protein_id.getHits()
-    if len(hits) > 1:
-        print("Protein group:")
-        for hit in hits:
-            print(f"  {hit.getAccession()}")
-```
-
-## Peptide Sequence Handling
-
-### AASequence Object
-
-Work with peptide sequences:
-
-```python
-# Create peptide sequence
-seq = ms.AASequence.fromString("PEPTIDE")
-
-print(f"Sequence: {seq.toString()}")
-print(f"Monoisotopic mass: {seq.getMonoWeight():.4f}")
-print(f"Average mass: {seq.getAverageWeight():.4f}")
-print(f"Length: {seq.size()}")
-
-# Access individual amino acids
-for i in range(seq.size()):
-    residue = seq.getResidue(i)
-    print(f"Position {i}: {residue.getOneLetterCode()}, mass: {residue.getMonoWeight():.4f}")
-```
-
-### Modified Sequences
-
-Handle post-translational modifications:
-
-```python
-# Sequence with modifications
-mod_seq = ms.AASequence.fromString("PEPTIDEM(Oxidation)K")
-
-print(f"Modified sequence: {mod_seq.toString()}")
-print(f"Mass with mods: {mod_seq.getMonoWeight():.4f}")
-
-# Check if modified
-print(f"Is modified: {mod_seq.isModified()}")
-
-# Get modification info
-for i in range(mod_seq.size()):
-    residue = mod_seq.getResidue(i)
-    if residue.isModified():
-        print(f"Residue {residue.getOneLetterCode()} at position {i}")
-        print(f"  Modification: {residue.getModificationName()}")
-```
-
-### Peptide Digestion
-
-Simulate enzymatic digestion:
-
-```python
-# Create digestion enzyme
-enzyme = ms.ProteaseDigestion()
-enzyme.setEnzyme("Trypsin")
-
-# Set missed cleavages
-enzyme.setMissedCleavages(2)
-
-# Digest protein sequence
-protein_seq = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKRQTLGQHDFSAGEGLYTHMKALRPDEDRLSPLHSVYVDQWDWERVMGDGERQFSTLKSTVEAIWAGIKATEAAVSEEFGLAPFLPDQIHFVHSQELLSRYPDLDAKGRERAIAKDLGAVFLVGIGGKLSDGHRHDVRAPDYDDWSTPSELGHAGLNGDILVWNPVLEDAFELSSMGIRVDADTLKHQLALTGDEDRLELEWHQALLRGEMPQTIGGGIGQSRLTMLLLQLPHIGQVQAGVWPAAVRESVPSLL"
-
-# Get peptides
-peptides = []
-enzyme.digest(ms.AASequence.fromString(protein_seq), peptides)
-
-print(f"Generated {len(peptides)} peptides")
-for peptide in peptides[:5]:  # Show first 5
-    print(f"  {peptide.toString()}, mass: {peptide.getMonoWeight():.2f}")
-```
-
-## Theoretical Spectrum Generation
-
-### Fragment Ion Calculation
-
-Generate theoretical fragment ions:
-
-```python
-# Create peptide
-peptide = ms.AASequence.fromString("PEPTIDE")
-
-# Generate b and y ions
-fragments = []
-ms.TheoreticalSpectrumGenerator().getSpectrum(fragments, peptide, 1, 1)
-
-print(f"Generated {fragments.size()} fragment ions")
-
-# Access fragments
-mz, intensity = fragments.get_peaks()
-for m, i in zip(mz[:10], intensity[:10]):  # Show first 10
-    print(f"m/z: {m:.4f}, intensity: {i}")
-```
-
-## Complete Identification Workflow
-
-### End-to-End Example
-
-```python
-import pyopenms as ms
-
-def identification_workflow(spectrum_file, fasta_file, output_file):
-    """
-    Complete identification workflow with FDR control.
-
-    Args:
-        spectrum_file: Input mzML file
-        fasta_file: Protein database (FASTA)
-        output_file: Output idXML file
-    """
-
-    # Step 1: Load spectra
-    exp = ms.MSExperiment()
-    ms.MzMLFile().load(spectrum_file, exp)
-    print(f"Loaded {exp.getNrSpectra()} spectra")
-
-    # Step 2: Configure search parameters
-    search_params = ms.SearchParameters()
-    search_params.db = fasta_file
-    search_params.precursor_mass_tolerance = 10.0  # ppm
-    search_params.fragment_mass_tolerance = 0.5  # Da
-    search_params.enzyme = "Trypsin"
-    search_params.missed_cleavages = 2
-    search_params.modifications = ["Oxidation (M)", "Carbamidomethyl (C)"]
-
-    # Step 3: Run the database search.
-    # NOTE: OpenMS search engines (Comet, MSGFPlus, XTandem, ...) are exposed as
-    # command-line TOPP tools, NOT pyOpenMS Python classes (there is no
-    # ms.CometAdapter). Run them as a subprocess and read the idXML they emit, e.g.:
-    #   subprocess.run(["CometAdapter", "-in", "spectra.mzML",
-    #                   "-database", fasta_file, "-out", "raw_identifications.idXML"])
-    # These adapter executables ship with an OpenMS (not pyOpenMS) installation.
-
-    # Here we load the pre-computed search results
-    protein_ids = []                              # protein IDs: plain list
-    # pyOpenMS 3.5+: peptide IDs must be a PeptideIdentificationList, not a plain list
-    peptide_ids = ms.PeptideIdentificationList()
-    ms.IdXMLFile().load("raw_identifications.idXML", protein_ids, peptide_ids)
-
-    print(f"Initial peptide IDs: {len(peptide_ids)}")
-
-    # Step 4: Apply FDR filtering
-    fdr = ms.FalseDiscoveryRate()
-    fdr.apply(peptide_ids)
-
-    # Filter by 1% FDR
-    filtered_peptide_ids = ms.PeptideIdentificationList()  # use push_back to add IDs
-    for peptide_id in peptide_ids:
-        filtered_hits = []
-        for hit in peptide_id.getHits():
-            q_value = hit.getMetaValue("q-value")
-            if q_value <= 0.01:
-                filtered_hits.append(hit)
-
-        if filtered_hits:
-            peptide_id.setHits(filtered_hits)
-            filtered_peptide_ids.push_back(peptide_id)
-
-    print(f"Peptides after FDR (1%): {len(filtered_peptide_ids)}")
-
-    # Step 5: Protein inference
-    inference = ms.BasicProteinInferenceAlgorithm()
-    inference.run(filtered_peptide_ids, protein_ids)
-
-    print(f"Identified proteins: {len(protein_ids)}")
-
-    # Step 6: Save results
-    ms.IdXMLFile().store(output_file, protein_ids, filtered_peptide_ids)
-    print(f"Results saved to {output_file}")
-
-    return protein_ids, filtered_peptide_ids
-
-# Run workflow
-protein_ids, peptide_ids = identification_workflow(
-    "spectra.mzML",
-    "database.fasta",
-    "identifications_fdr.idXML"
-)
-```
-
-## Spectral Library Search
-
-### Library Matching
-
-```python
-# Load spectral library
-library = ms.MSPFile()
-library_spectra = []
-library.load("spectral_library.msp", library_spectra)
-
-# Load experimental spectra
-exp = ms.MSExperiment()
-ms.MzMLFile().load("data.mzML", exp)
-
-# Compare spectra
-spectra_compare = ms.SpectraSTSimilarityScore()
-
-for exp_spec in exp:
-    if exp_spec.getMSLevel() == 2:
-        best_match_score = 0
-        best_match_lib = None
-
-        for lib_spec in library_spectra:
-            score = spectra_compare.operator()(exp_spec, lib_spec)
-            if score > best_match_score:
-                best_match_score = score
-                best_match_lib = lib_spec
-
-        if best_match_score > 0.7:  # Threshold
-            print(f"Match found: score {best_match_score:.3f}")
-```
-
-## Best Practices
-
-### Decoy Database
-
-Use target-decoy approach for FDR calculation:
-
-```python
-# Generate decoy database
-decoy_generator = ms.DecoyGenerator()
-
-# Load target database
-fasta_entries = []
-ms.FASTAFile().load("target.fasta", fasta_entries)
-
-# Generate decoys
-decoy_entries = []
-for entry in fasta_entries:
-    decoy_entry = decoy_generator.reverseProtein(entry)
-    decoy_entries.append(decoy_entry)
-
-# Save combined database
-all_entries = fasta_entries + decoy_entries
-ms.FASTAFile().store("target_decoy.fasta", all_entries)
-```
-
-### Score Interpretation
-
-Understand score types from different engines:
-
-```python
-# Interpret scores based on search engine
-for peptide_id in peptide_ids:
-    search_engine = peptide_id.getIdentifier()
-
-    for hit in peptide_id.getHits():
-        score = hit.getScore()
-
-        # Score interpretation varies by engine
-        if "Comet" in search_engine:
-            # Comet: higher E-value = worse
-            print(f"E-value: {score}")
-        elif "Mascot" in search_engine:
-            # Mascot: higher score = better
-            print(f"Ion score: {score}")
-```
+Fragment charge bounds are positive magnitudes; sequence modifications alter
+mass. Theoretical intensities do not predict instrument spectra. An arbitrary
+similarity cutoff such as 0.7 is not validated spectral-library identification.
+Decoy construction also needs deliberate enzyme/modification/duplicate handling;
+`DecoyGenerator.reverseProtein` accepts an `AASequence`, not a `FASTAEntry`.
+
+Sources: [FDR release implementation](https://github.com/OpenMS/OpenMS/blob/5d5cbff4053b281763a1a79bf69e81c27967cfdf/src/openms/source/ANALYSIS/ID/FalseDiscoveryRate.cpp),
+[OpenMS FDR API](https://openms.de/documentation/classOpenMS_1_1FalseDiscoveryRate.html)
+and installed 3.6.0 binding signatures. Use the implementation to resolve stale or
+internally inconsistent formula descriptions in generated API documentation.

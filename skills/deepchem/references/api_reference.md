@@ -1,305 +1,134 @@
-# DeepChem API Reference
-
-This document provides a comprehensive reference for DeepChem's core APIs, organized by functionality.
-
-## Data Handling
-
-### Data Loaders
-
-#### File Format Loaders
-- **CSVLoader**: Load tabular data from CSV files with customizable feature handling
-- **UserCSVLoader**: User-defined CSV loading with flexible column specifications
-- **SDFLoader**: Process molecular structure files (SDF format)
-- **JsonLoader**: Import JSON-structured datasets
-- **ImageLoader**: Load image data for computer vision tasks
-
-#### Biological Data Loaders
-- **FASTALoader**: Handle protein/DNA sequences in FASTA format
-- **FASTQLoader**: Process FASTQ sequencing data with quality scores
-- **SAMLoader/BAMLoader/CRAMLoader**: Support sequence alignment formats
-
-#### Specialized Loaders
-- **DFTYamlLoader**: Process density functional theory computational data
-- **InMemoryLoader**: Load data directly from Python objects
-
-### Dataset Classes
-
-- **NumpyDataset**: Wrap NumPy arrays for in-memory data manipulation
-- **DiskDataset**: Manage larger datasets stored on disk, reducing memory overhead
-- **ImageDataset**: Specialized container for image-based ML tasks
-
-### Data Splitters
-
-#### General Splitters
-- **RandomSplitter**: Random dataset partitioning
-- **IndexSplitter**: Split by specified indices
-- **SpecifiedSplitter**: Use pre-defined splits
-- **RandomStratifiedSplitter**: Stratified random splitting
-- **SingletaskStratifiedSplitter**: Stratified splitting for single tasks
-- **TaskSplitter**: Split for multitask scenarios
-
-#### Molecule-Specific Splitters
-- **ScaffoldSplitter**: Divide molecules by structural scaffolds (prevents data leakage)
-- **ButinaSplitter**: Clustering-based molecular splitting
-- **FingerprintSplitter**: Split based on molecular fingerprint similarity
-- **MaxMinSplitter**: Maximize diversity between training/test sets
-- **MolecularWeightSplitter**: Split by molecular weight properties
-
-**Best Practice**: For drug discovery tasks, use ScaffoldSplitter to prevent overfitting on similar molecular structures.
-
-### Transformers
-
-#### Normalization
-- **NormalizationTransformer**: Standard normalization (mean=0, std=1)
-- **MinMaxTransformer**: Scale features to [0,1] range
-- **LogTransformer**: Apply log transformation
-- **PowerTransformer**: Box-Cox and Yeo-Johnson transformations
-- **CDFTransformer**: Cumulative distribution function normalization
-
-#### Task-Specific
-- **BalancingTransformer**: Address class imbalance
-- **FeaturizationTransformer**: Apply dynamic feature engineering
-- **CoulombFitTransformer**: Quantum chemistry specific
-- **DAGTransformer**: Directed acyclic graph transformations
-- **RxnSplitTransformer**: Chemical reaction preprocessing
-
-## Molecular Featurizers
-
-### Graph-Based Featurizers
-Use these with graph neural networks (GCNs, MPNNs, etc.):
-
-- **ConvMolFeaturizer**: Graph representations for graph convolutional networks
-- **WeaveFeaturizer**: "Weave" graph embeddings
-- **MolGraphConvFeaturizer**: Graph convolution-ready representations
-- **EquivariantGraphFeaturizer**: Maintains geometric invariance
-- **DMPNNFeaturizer**: Directed message-passing neural network inputs
-- **GroverFeaturizer**: Pre-trained molecular embeddings
-
-### Fingerprint-Based Featurizers
-Use these with traditional ML (Random Forest, SVM, XGBoost):
-
-- **MACCSKeysFingerprint**: 167-bit structural keys
-- **CircularFingerprint**: Extended connectivity fingerprints (Morgan fingerprints)
-  - Parameters: `radius` (default 2), `size` (default 2048), `useChirality` (default False)
-- **PubChemFingerprint**: 881-bit structural descriptors
-- **Mol2VecFingerprint**: Learned molecular vector representations
-
-### Descriptor Featurizers
-Calculate molecular properties directly:
-
-- **RDKitDescriptors**: ~200 molecular descriptors (MW, LogP, H-donors, H-acceptors, TPSA, etc.)
-- **MordredDescriptors**: Comprehensive structural and physicochemical descriptors
-- **CoulombMatrix**: Interatomic distance matrices for 3D structures
-
-### Sequence-Based Featurizers
-For recurrent networks and transformers:
-
-- **SmilesToSeq**: Convert SMILES strings to sequences
-- **SmilesToImage**: Generate 2D image representations from SMILES
-- **RawFeaturizer**: Pass through raw molecular data unchanged
-
-### Selection Guide
-
-| Use Case | Recommended Featurizer | Model Type |
-|----------|----------------------|------------|
-| Graph neural networks | ConvMolFeaturizer, MolGraphConvFeaturizer | GCN, MPNN, GAT |
-| Traditional ML | CircularFingerprint, RDKitDescriptors | Random Forest, XGBoost, SVM |
-| Deep learning (non-graph) | CircularFingerprint, Mol2VecFingerprint | Dense networks, CNN |
-| Sequence models | SmilesToSeq | LSTM, GRU, Transformer |
-| 3D molecular structures | CoulombMatrix | Specialized 3D models |
-| Quick baseline | RDKitDescriptors | Linear, Ridge, Lasso |
-
-## Models
-
-**Install note (2.8.0):** PyPI extras are `torch`, `tensorflow`, `jax`, and `dqc` — there is no `[all]` extra. Install PyTorch/TensorFlow/JAX before the matching `uv pip install 'deepchem[torch]'` (quote brackets in zsh).
-
-### Scikit-Learn Integration
-- **SklearnModel**: Wrapper for any scikit-learn algorithm
-  - Usage: `SklearnModel(model=RandomForestRegressor())`
-
-### Gradient Boosting
-- **GBDTModel**: Gradient boosting decision trees (XGBoost, LightGBM)
-
-### PyTorch Models
-
-#### Molecular Property Prediction
-- **MultitaskRegressor**: Multi-task regression with shared representations
-- **MultitaskClassifier**: Multi-task classification
-- **MultitaskFitTransformRegressor**: Regression with learned transformations
-- **GCNModel**: Graph convolutional networks
-- **GATModel**: Graph attention networks
-- **AttentiveFPModel**: Attentive fingerprint networks
-- **DMPNNModel**: Directed message passing neural networks
-- **GroverModel**: GROVER pre-trained transformer
-- **MATModel**: Molecule attention transformer
-
-#### Materials Science
-- **CGCNNModel**: Crystal graph convolutional networks
-- **MEGNetModel**: Materials graph networks
-- **LCNNModel**: Lattice CNN for materials
-
-#### Generative Models
-- **GANModel**: Generative adversarial networks
-- **WGANModel**: Wasserstein GAN
-- **BasicMolGANModel**: Molecular GAN
-- **LSTMGenerator**: LSTM-based molecule generation
-- **SeqToSeqModel**: Sequence-to-sequence models
-
-#### Physics-Informed Models
-- **PINNModel**: Physics-informed neural networks
-- **HNNModel**: Hamiltonian neural networks
-- **LNN**: Lagrangian neural networks
-- **FNOModel**: Fourier neural operators
-
-#### Computer Vision
-- **CNN**: Convolutional neural networks
-- **UNetModel**: U-Net architecture for segmentation
-- **InceptionV3Model**: Pre-trained Inception v3
-- **MobileNetV2Model**: Lightweight mobile networks
-
-### Hugging Face Models
-
-- **HuggingFaceModel**: General wrapper for HF transformers
-- **Chemberta**: Chemical BERT for molecular property prediction
-- **MoLFormer**: Molecular transformer architecture
-- **ProtBERT**: Protein sequence BERT
-- **DeepAbLLM**: Antibody large language models
-
-### Model Selection Guide
-
-| Task | Recommended Model | Featurizer |
-|------|------------------|------------|
-| Small dataset (<1000 samples) | SklearnModel (Random Forest) | CircularFingerprint |
-| Medium dataset (1K-100K) | GBDTModel or MultitaskRegressor | CircularFingerprint or ConvMolFeaturizer |
-| Large dataset (>100K) | GCNModel, AttentiveFPModel, or DMPNN | MolGraphConvFeaturizer |
-| Transfer learning | GroverModel, Chemberta, MoLFormer | Model-specific |
-| Materials properties | CGCNNModel, MEGNetModel | Structure-based |
-| Molecule generation | BasicMolGANModel, LSTMGenerator | SmilesToSeq |
-| Protein sequences | ProtBERT | Sequence-based |
-
-## MoleculeNet Datasets
-
-Quick access to 30+ benchmark datasets via `dc.molnet.load_*()` functions.
-
-### Classification Datasets
-- **load_bace()**: BACE-1 inhibitors (binary classification)
-- **load_bbbp()**: Blood-brain barrier penetration
-- **load_clintox()**: Clinical toxicity
-- **load_hiv()**: HIV inhibition activity
-- **load_muv()**: PubChem BioAssay (challenging, sparse)
-- **load_pcba()**: PubChem screening data
-- **load_sider()**: Adverse drug reactions (multi-label)
-- **load_tox21()**: 12 toxicity assays (multi-task)
-- **load_toxcast()**: EPA ToxCast screening
-
-### Regression Datasets
-- **load_delaney()**: Aqueous solubility (ESOL)
-- **load_freesolv()**: Solvation free energy
-- **load_lipo()**: Lipophilicity (octanol-water partition)
-- **load_qm7/qm8/qm9()**: Quantum mechanical properties
-- **load_hopv()**: Organic photovoltaic properties
-
-### Protein-Ligand Binding
-- **load_pdbbind()**: Binding affinity data
-
-### Materials Science
-- **load_perovskite()**: Perovskite stability
-- **load_mp_formation_energy()**: Materials Project formation energy
-- **load_mp_metallicity()**: Metal vs. non-metal classification
-- **load_bandgap()**: Electronic bandgap prediction
-
-### Chemical Reactions
-- **load_uspto()**: USPTO reaction dataset
-
-### Usage Pattern
-```python
-tasks, datasets, transformers = dc.molnet.load_bbbp(
-    featurizer='GraphConv',  # or 'ECFP', 'GraphConv', 'Weave', etc.
-    splitter='scaffold',      # or 'random', 'stratified', etc.
-    reload=False              # set True to skip caching
-)
-train, valid, test = datasets
-```
-
-## Metrics
-
-Common evaluation metrics available in `dc.metrics`:
-
-### Classification Metrics
-- **roc_auc_score**: Area under ROC curve (binary/multi-class)
-- **prc_auc_score**: Area under precision-recall curve
-- **accuracy_score**: Classification accuracy
-- **balanced_accuracy_score**: Balanced accuracy for imbalanced datasets
-- **recall_score**: Sensitivity/recall
-- **precision_score**: Precision
-- **f1_score**: F1 score
-
-### Regression Metrics
-- **mean_absolute_error**: MAE
-- **mean_squared_error**: MSE
-- **root_mean_squared_error**: RMSE
-- **r2_score**: R² coefficient of determination
-- **pearson_r2_score**: Pearson correlation
-- **spearman_correlation**: Spearman rank correlation
-
-### Multi-Task Metrics
-Most metrics support multi-task evaluation by averaging over tasks.
-
-## Training Pattern
-
-Standard DeepChem workflow:
-
-```python
-# 1. Load data
-loader = dc.data.CSVLoader(tasks=['task1'], feature_field='smiles',
-                           featurizer=dc.feat.CircularFingerprint())
-dataset = loader.create_dataset('data.csv')
-
-# 2. Split data
-splitter = dc.splits.ScaffoldSplitter()
-train, valid, test = splitter.train_valid_test_split(dataset)
-
-# 3. Transform data (optional)
-transformers = [dc.trans.NormalizationTransformer(dataset=train)]
-for transformer in transformers:
-    train = transformer.transform(train)
-    valid = transformer.transform(valid)
-    test = transformer.transform(test)
-
-# 4. Create and train model
-model = dc.models.MultitaskRegressor(n_tasks=1, n_features=2048, layer_sizes=[1000])
-model.fit(train, nb_epoch=50)
-
-# 5. Evaluate
-metric = dc.metrics.Metric(dc.metrics.r2_score)
-train_score = model.evaluate(train, [metric])
-test_score = model.evaluate(test, [metric])
-```
-
-## Common Patterns
-
-### Pattern 1: Quick Baseline with MoleculeNet
-```python
-tasks, datasets, transformers = dc.molnet.load_tox21(featurizer='ECFP')
-train, valid, test = datasets
-model = dc.models.MultitaskClassifier(n_tasks=len(tasks), n_features=1024)
-model.fit(train)
-```
-
-### Pattern 2: Custom Data with Graph Networks
-```python
-featurizer = dc.feat.MolGraphConvFeaturizer()
-loader = dc.data.CSVLoader(tasks=['activity'], feature_field='smiles',
-                           featurizer=featurizer)
-dataset = loader.create_dataset('my_data.csv')
-train, test = dc.splits.RandomSplitter().train_test_split(dataset)
-model = dc.models.GCNModel(mode='classification', n_tasks=1)
-model.fit(train)
-```
-
-### Pattern 3: Transfer Learning with Pretrained Models
-```python
-model = dc.models.GroverModel(task='classification', n_tasks=1)
-model.fit(train_dataset)
-predictions = model.predict(test_dataset)
-```
+# DeepChem 2.8.0 API contracts
+
+Reviewed 2026-09-30 against the released wheel/source and current official docs.
+`latest` documentation describes development builds; it is not the stable API.
+This is a selected contract reference, not a complete package catalogue.
+
+## Data and representations
+
+`CSVLoader(tasks=[...], feature_field='smiles', featurizer=...)` produces a
+`DiskDataset`. `NumpyDataset(X, y, w, ids)` wraps arrays. Keep all four aligned.
+Empty CSV labels are stored as placeholder zeros with zero weights; they are
+unmeasured, not negative assay results. Failed features can cause row removal.
+The bundled `load_csv` checks raw headers, numeric labels, SMILES and row counts.
+
+`SDFLoader`, `JsonLoader`, `ImageLoader`, `FASTALoader`, `FASTQLoader`, and alignment
+loaders have separate format contracts and optional dependencies. FASTA does not
+supply supervised property labels. `FASTALoader`'s legacy default is nucleotide
+encoding, not a ready-made protein-transformer input pipeline. There is no stable
+`dc.data.CIFLoader`: parse CIF with pymatgen and use a materials featurizer.
+
+| Model | Matching representation | Additional backend |
+|---|---|---|
+| `SklearnModel`, `MultitaskRegressor/Classifier` | `CircularFingerprint(size=2048)` or numeric descriptors | scikit-learn; Torch for multitask networks |
+| `GraphConvModel` | `ConvMolFeaturizer` (`'GraphConv'` MoleculeNet alias) | TensorFlow |
+| `GCNModel`, `GATModel` | `MolGraphConvFeaturizer()` (`GraphData`, 30 atom features) | Torch, DGL, DGL-LifeSci |
+| `AttentiveFPModel`, Torch `MPNNModel` | `MolGraphConvFeaturizer(use_edges=True)` (11 bond features) | Torch, DGL, DGL-LifeSci |
+| `DMPNNModel` | `DMPNNFeaturizer()` (133 atom, 14 bond features) | Torch, torch-geometric in 2.8.0 |
+| `GroverModel` | `GroverFeaturizer(features_generator=...)` | Torch |
+| `HuggingFaceModel` | Strings via `DummyFeaturizer`; tokenizer supplied separately | Torch, Transformers |
+| `BasicMolGANModel` | `MolGanFeaturizer`, adjacency/node tensors | Explicit Torch or TensorFlow implementation |
+| `CGCNNModel` | `CGCNNFeaturizer` on pymatgen `Structure` objects | pymatgen, Torch, DGL |
+
+Import Torch `MPNNModel`, `GroverModel`, and `BasicMolGANModel` from
+`deepchem.models.torch_models`; top-level aliases can be absent or select TensorFlow.
+Graph features are not interchangeable merely because their classes all represent molecules.
+`GroverFeaturizer` computes graph descriptors; it does not itself load learned embeddings.
+
+MoleculeNet `'ECFP'` means **1024** bits; the `CircularFingerprint` class defaults to
+**2048**. Pass an explicit object to keep training and prediction consistent.
+`'Raw'` constructs `RawFeaturizer()` whose default output is an RDKit Mol, not a
+SMILES string. Use `DummyFeaturizer()` for HF inputs or explicit
+`RawFeaturizer(smiles=True)` when canonicalized strings are intended.
+
+`RDKitDescriptors` feature inventory depends on the installed RDKit version;
+record feature names/order. `CoulombMatrix` needs conformer coordinates, units,
+and a consistent maximum atom count. `PowerTransformer` raises values to specified
+powers; it is not scikit-learn's Box-Cox/Yeo-Johnson transformer.
+
+## Splitting and transforms
+
+`ScaffoldSplitter` reads SMILES from **dataset.ids**. It keeps equal Bemis-Murcko
+scaffolds together; acyclic molecules can share an empty scaffold, causing very
+unequal or empty partitions. It does not remove duplicate measurements or prevent
+all chemical, temporal, assay, or patient leakage. Choose temporal/group/scaffold
+splits for the deployment question, check overlap and per-task class support, and
+save the actual IDs. `RandomStratifiedSplitter` balances nonzero task labels; it
+is not a general-purpose stratifier for arbitrary continuous outcomes.
+
+Fit `NormalizationTransformer(transform_y=True, dataset=train)` on training data
+only for continuous targets, then transform each split. Pass the same transformers
+to `model.predict(..., transformers=...)` and `model.evaluate(..., transformers=...)`
+for original-unit outputs. Do not normalize binary class labels. For missing-label
+regression, verify how your selected transformer estimates statistics; the bundled
+solubility custom-data path requires complete targets.
+
+## MoleculeNet loader contract
+
+`load_*(featurizer=..., splitter=..., transformers=..., reload=True)` normally
+returns `(tasks, (train, valid, test), fitted_transformers)`. `reload=True` reuses
+cached processed data; **False** rebuilds processing. It does not guarantee a new
+raw download. Record raw-source identity, local cache path, split IDs and package
+versions; a requested splitter is not proof of a paper's published split.
+
+Verified loader names used by the scripts:
+
+| Name | Loader | Task |
+|---|---|---|
+| Tox21 | `load_tox21` | 12 binary assays with missing labels |
+| BBBP | `load_bbbp` | binary |
+| BACE | `load_bace_classification` | binary; `load_bace_regression` is separate |
+| HIV | `load_hiv` | binary |
+| ESOL | `load_delaney` | log10 aqueous solubility in mol/L |
+| FreeSolv | `load_freesolv` | hydration free energy |
+| Lipophilicity | `load_lipo` | experimental logD |
+
+There is no `load_bace` alias. Other families include QM7/8/9, PDBbind,
+perovskite, `load_mp_formation_energy`, `load_mp_metallicity`, and USPTO; check the
+individual release-specific loader's source, featurizer, units, licensing and
+split options before use. No direct hosted inference API is called by these scripts.
+MoleculeNet loaders download public dataset files; HF `from_pretrained` resolves
+Hub repository assets, not an inference endpoint.
+
+## Models, metrics and search
+
+`MultitaskRegressor` is a Torch model in this release. `SklearnModel` wraps numeric
+estimators; sparse multitask labels require one properly masked estimator per task
+or a model with verified masked-loss support. Do not feed binary and continuous
+outputs into the same plain regressor and call both scientifically equivalent tasks.
+
+Set `DMPNNModel(n_classes=2, mode='classification', ...)` for binary tasks; its
+released default is three classes. HF `HuggingFaceModel(model=network,
+tokenizer=tokenizer, task=...)` takes **objects**, not a Hub ID. The stable wrapper
+returns logits and uses the HF model's loss without applying `dataset.w`; the
+bundled HF path therefore rejects multiple tasks, missing labels and nonunit weights.
+GROVER uses `task='finetuning', mode='classification'/'regression'` and requires
+explicit feature dimensions and architecture. `model_dir` is an output/checkpoint
+location, not evidence that any pretrained weights were loaded.
+
+Use continuous probabilities for ROC-AUC/PR metrics and thresholded labels for
+accuracy/F1. Report the threshold and observed examples per task. AUC is undefined
+with one observed class; don't silently score it as zero. The bundled scorer reports
+per-task metrics and the number of valid tasks in each macro average. It reports
+average precision (scikit-learn), not a renamed trapezoidal PR AUC.
+`pearson_r2_score` is squared correlation, not R-squared; high correlation need not
+mean calibrated predictions. RMSE/MAE need original target units.
+
+`GridHyperparamOpt(model_builder)` invokes `model_builder(**model_params)`.
+`hyperparam_search(..., output_transformers=transformers, use_max=False)` minimizes
+an error metric. It returns `(best_model, best_params, all_scores)` where
+`all_scores` maps parameter combinations to validation scores; there is no
+`'best_validation_score'` special key. Keep the test set outside model selection.
+For custom Torch networks, use `dc.models.losses.L2Loss()` or a callable with the
+DeepChem `(outputs, labels, weights)` contract; `nn.MSELoss()` is not that callable.
+
+## Official sources
+
+- [Release metadata](https://pypi.org/project/deepchem/2.8.0/)
+- [Featurizers](https://deepchem.readthedocs.io/en/2.8.0/api_reference/featurizers.html)
+- [Models](https://deepchem.readthedocs.io/en/2.8.0/api_reference/models.html)
+- [Splitters](https://deepchem.readthedocs.io/en/2.8.0/api_reference/splitters.html)
+- [MoleculeNet](https://deepchem.readthedocs.io/en/2.8.0/api_reference/moleculenet.html)
+- [Released alias registry](https://github.com/deepchem/deepchem/blob/2.8.0/deepchem/molnet/load_function/molnet_loader.py)
+- [Released HF wrapper](https://github.com/deepchem/deepchem/blob/2.8.0/deepchem/models/torch_models/hf_models.py)
+- [Released hyperparameter search](https://github.com/deepchem/deepchem/blob/2.8.0/deepchem/hyper/grid_search.py)

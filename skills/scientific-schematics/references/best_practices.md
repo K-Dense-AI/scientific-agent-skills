@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides publication standards, accessibility guidelines, and best practices for creating high-quality scientific diagrams that meet journal requirements and communicate effectively to all readers.
+This guide supports prompt writing and manual figure review. Numeric design suggestions below are starting points; the target journal and article type determine submission requirements. AI-generated artwork also needs the venue's current permissions/disclosure policy checked before use.
 
 ### How this relates to the generator
 
@@ -23,7 +23,7 @@ Read this file for two purposes:
 ### 1. File Format Requirements
 
 **Vector Formats (Preferred)**
-- **PDF**: Universal acceptance, preserves quality, works with LaTeX
+- **PDF**: Common for vector artwork and LaTeX; acceptance is venue-specific
   - Use for: Line drawings, flowcharts, block diagrams, circuit diagrams
   - Advantages: Scalable, small file size, embeds fonts
   - Standard for LaTeX workflows
@@ -49,8 +49,8 @@ Read this file for two purposes:
   - Minimum 300 DPI for print
   - Supports transparency
 
-**Never Use**
-- **JPEG**: Lossy compression creates artifacts in diagrams
+**Avoid for new diagram masters**
+- **JPEG**: Lossy compression can damage text and lines; some venues accept high-quality JPEG for photographs
 - **GIF**: Limited colors, inappropriate for scientific figures
 - **BMP**: Uncompressed, unnecessarily large files
 
@@ -60,11 +60,11 @@ Read this file for two purposes:
 - Infinite resolution (scalable)
 - **Recommended**: Always use vector when possible
 
-**Raster Graphics (when vector not possible)**
-- **Publication quality**: 300-600 DPI
-- **Line art**: 600-1200 DPI
-- **Web/screen**: 150 DPI acceptable
-- **Never**: Below 300 DPI for print
+**Raster graphics**
+- Calculate effective pixels per inch at the final physical size.
+- Photographic submission targets commonly start at 300 ppi; line art may require more.
+- Screen quality depends on pixel dimensions and display size, not DPI metadata.
+- Check the venue-specific requirement before exporting; changing DPI metadata or upsampling cannot recover missing detail.
 
 **Calculating DPI**
 ```
@@ -78,12 +78,10 @@ DPI = 2400 / 8 = 300 ✓ (acceptable)
 
 ### 3. Size and Dimensions
 
-**Journal-Specific Column Widths**
-- **Nature**: Single column 89 mm (3.5 in), Double 183 mm (7.2 in)
-- **Science**: Single column 55 mm (2.17 in), Double 120 mm (4.72 in)
-- **Cell**: Single column 85 mm (3.35 in), Double 178 mm (7 in)
-- **PLOS**: Single column 83 mm (3.27 in), Double 173 mm (6.83 in)
-- **IEEE**: Single column 3.5 in, Double 7.16 in
+**Choose the venue and article type first**
+- Nature's main-figure guide lists 89 mm and 183 mm widths; Extended Data has separate rules.
+- Other publishers have different width ranges and file requirements. Do not reuse Nature dimensions for Science, Cell, PLOS, or IEEE without checking that venue's current instructions.
+- See the source links under Journal-Specific Guidelines below.
 
 **Best Practices**
 - Design at final print size (avoid scaling)
@@ -130,7 +128,7 @@ DPI = 2400 / 8 = 300 ✓ (acceptable)
 ### 1. Colorblind-Safe Palettes
 
 **Okabe-Ito Palette (Recommended)**
-Most distinguishable by all types of colorblindness:
+A useful starting palette from [Color Universal Design](https://jfly.uni-koeln.de/color/); no palette guarantees accessibility for every viewer, background, or adjacent pair:
 
 ```latex
 % RGB values
@@ -145,12 +143,12 @@ Black:      #000000 (  0,   0,   0)
 ```
 
 **Alternative: ColorBrewer Palettes**
-- **Qualitative**: Set2, Paired, Dark2
+- **Qualitative**: consider Set2, Paired, Dark2 after enabling ColorBrewer's colorblind-safe filter for the chosen number of categories
 - **Sequential**: Blues, Greens, Oranges (avoid Reds/Greens together)
 - **Diverging**: RdBu (Red-Blue), PuOr (Purple-Orange)
 
 **Colors to Avoid Together**
-- Red-Green combinations (8% of males cannot distinguish)
+- Red-Green combinations without redundant labels or shapes
 - Blue-Purple combinations
 - Yellow-Light green combinations
 
@@ -193,15 +191,17 @@ Cross-hatch + Green = Group C
 **Grayscale Test**
 ```bash
 # Convert to grayscale to test
-convert diagram.pdf -colorspace gray diagram_gray.pdf
+magick diagram.png -colorspace Gray diagram_gray.png
 ```
 
 ### 4. Contrast Requirements
 
-**Minimum Contrast Ratios (WCAG Guidelines)**
+**WCAG 2.2 web accessibility targets** (useful checks, not a blanket journal certification)
 - **Normal text**: 4.5:1
-- **Large text** (≥18pt): 3:1
-- **Graphical elements**: 3:1
+- **Large text** (at least 18 pt regular or 14 pt bold): 3:1
+- **Necessary graphical objects**: 3:1 against adjacent colors, subject to the criterion's exceptions
+
+See [text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) and [non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html). Raster labels still need to be legible at their final displayed size.
 
 **High Contrast Practices**
 - Dark text on light background (or vice versa)
@@ -220,7 +220,7 @@ convert diagram.pdf -colorspace gray diagram_gray.pdf
 - Reference to detailed methods if applicable
 
 **Example Caption**
-"Participant flow diagram following CONSORT guidelines. Rectangles represent study stages, with participant numbers (n) shown. Exclusion criteria are listed beside each screening stage. Final analysis included n=350 participants across two groups."
+"Participant flow diagram following CONSORT guidelines. Rectangles represent study stages, with participant numbers (n) shown. Exclusion criteria are listed beside each screening stage. In this illustrative complete-case example, primary-outcome analysis included n=325 participants (160 and 165); 25 lacked primary-outcome measurements. Reconcile this with the statistical analysis plan rather than equating every follow-up loss with exclusion from intention-to-treat analysis."
 
 ## Design Principles
 
@@ -366,63 +366,16 @@ convert diagram.pdf -colorspace gray diagram_gray.pdf
 
 ## Journal-Specific Guidelines
 
-### Nature
+Consult the current instructions for the exact journal and figure category. Avoid treating a local reviewer score or a single resolution value as a publication standard.
 
-**Figure Requirements**
-- **Size**: 89 mm (single) or 183 mm (double column)
-- **Format**: PDF, EPS, or high-res TIFF
-- **Fonts**: Sans-serif preferred
-- **File size**: <10 MB per file
-- **Resolution**: 300 DPI minimum for raster
+- [Nature final submission](https://www.nature.com/nature/for-authors/final-submission): main figures use 89/183 mm widths and editable vector artwork for line drawings where possible. Photographs need at least 300 dpi at use size. Extended Data has separate format/size rules. The [figure guide](https://research-figure-guide.nature.com/figures/preparing-figures-our-specifications/) recommends RGB and stresses that upsampling cannot improve detail.
+- [PLOS ONE figures](https://journals.plos.org/plosone/s/figures): TIFF/EPS, 300–600 dpi, and explicit width/height limits; inspect the current table rather than assuming generic single/double column widths.
+- [IEEE graphics](https://journals.ieeeauthorcenter.ieee.org/create-your-ieee-journal-article/create-graphics-for-your-article/): use the current graphics guide for dimensions, format, resolution, fonts, and color handling. Do not assume all print editions are grayscale.
+- [Science instructions](https://www.science.org/content/page/instructions-preparing-initial-manuscript) and [Cell author resources](https://www.cell.com/cell/authors): exact dimensions and submission-stage rules must be checked for the manuscript. Science's and Cell's pages blocked automated access during this review; no numeric requirements are asserted here.
 
-**Style Notes**
-- Panel labels: lowercase bold (a, b, c)
-- Simple, clean design
-- Minimal colors
-- Clear captions
+## Scientific integrity before styling
 
-### Science
-
-**Figure Requirements**
-- **Size**: 55 mm (single) or 120 mm (double column)
-- **Format**: PDF, EPS, TIFF, or JPEG (high quality)
-- **Resolution**: 300 DPI for photos, 600 DPI for line art
-- **File size**: <10 MB
-- **Fonts**: 6-7 pt minimum
-
-**Style Notes**
-- Panel labels: capital bold (A, B, C)
-- High contrast
-- Readable at small size
-
-### Cell
-
-**Figure Requirements**
-- **Size**: 85 mm (single) or 178 mm (double column)
-- **Format**: PDF preferred, TIFF, EPS acceptable
-- **Resolution**: 300 DPI minimum
-- **Fonts**: 8-10 pt for labels
-- **Line weight**: 0.5 pt minimum
-
-**Style Notes**
-- Clean, professional
-- Color or grayscale
-- Panel labels capital (A, B, C)
-
-### IEEE
-
-**Figure Requirements**
-- **Size**: 3.5 in (single) or 7.16 in (double column)
-- **Format**: PDF, EPS (vector preferred)
-- **Resolution**: 600 DPI for line art, 300 DPI for halftone
-- **Fonts**: 8-10 pt minimum
-- **Color**: Grayscale in print, color in digital
-
-**Style Notes**
-- Follow IEEE Graphics Manual
-- Standard symbols for circuits
-- Technical precision
-- Clear axis labels
+Use source material for every entity, count, and relationship. For [CONSORT 2025](https://www.consort-spirit.org/item-22a-randomized), distinguish allocation, receipt of intervention, discontinuation, follow-up, and the primary-outcome analysis set. For [PRISMA 2020](https://www.prisma-statement.org/prisma-2020-flow-diagram), reconcile records, reports, and studies using the appropriate template. A diagram should not invent omitted numbers or turn a missing outcome into an automatic analysis exclusion.
 
 ## Software-Specific Export Settings
 
@@ -436,28 +389,46 @@ AI-generated diagrams are exported as PNG images and can be included in LaTeX do
 
 ### Python (Matplotlib) Export
 
+Runnable local example, checked with Matplotlib 3.11.2. Install in a separate environment (`uv run --no-project --isolated --with matplotlib==3.11.2 python example.py`). This produces a schematic from explicit code; it does not vectorize a generated PNG.
+
 ```python
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # Set publication quality
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['font.size'] = 8
 plt.rcParams['pdf.fonttype'] = 42  # TrueType fonts in PDF
+
+fig, ax = plt.subplots(figsize=(3.5, 2.0))
+ax.annotate('Input', (0.2, 0.5), ha='center', bbox={'boxstyle': 'round', 'fc': 'white'})
+ax.annotate('Output', (0.8, 0.5), ha='center', bbox={'boxstyle': 'round', 'fc': 'white'})
+ax.annotate('', (0.65, 0.5), (0.35, 0.5), arrowprops={'arrowstyle': '->'})
+ax.set_axis_off()
 
 # Save with proper DPI and cropping
 fig.savefig('diagram.pdf', dpi=300, bbox_inches='tight', 
             pad_inches=0.1, transparent=False)
 fig.savefig('diagram.png', dpi=300, bbox_inches='tight')
+plt.close(fig)
 ```
 
 ### Schemdraw Export
 
-```python
-import schemdraw
+Checked with Schemdraw 0.23 and Matplotlib 3.11.2. Install `schemdraw[matplotlib]` in an isolated environment. The SVG backend alone cannot save PDF/PNG; choose the Matplotlib backend for this example. See [the drawing API](https://schemdraw.readthedocs.io/en/latest/classes/drawing.html).
 
-d = schemdraw.Drawing()
-# ... build circuit ...
+```python
+import matplotlib
+matplotlib.use('Agg')
+import schemdraw
+import schemdraw.elements as elm
+
+d = schemdraw.Drawing(canvas='matplotlib', show=False)
+d += elm.Resistor().label('1 kΩ')
+d += elm.Capacitor().down().label('10 µF')
+d += elm.Ground()
 
 # Export
 d.save('circuit.svg')  # Vector
@@ -467,12 +438,14 @@ d.save('circuit.png', dpi=300)  # Raster
 
 ### Inkscape Command Line
 
-```bash
-# PDF to high-res PNG
-inkscape diagram.pdf --export-png=diagram.png --export-dpi=300
+Current flags follow the [Inkscape manual](https://inkscape.org/doc/inkscape-man.html); the old `--export-png` and `--export-pdf` forms should not be used. These optional commands require Inkscape and were documentation-checked only.
 
-# SVG to PDF
-inkscape diagram.svg --export-pdf=diagram.pdf
+```bash
+# SVG to PNG (illustrative: Inkscape is not installed in the validation environment)
+inkscape diagram.svg --export-type=png --export-filename=diagram.png --export-dpi=300
+
+# SVG to PDF (preserves vector elements from the SVG)
+inkscape diagram.svg --export-type=pdf --export-filename=diagram.pdf
 ```
 
 ## Version Control Best Practices
@@ -534,6 +507,8 @@ figures/
 - Photoshop/GIMP colorblind preview modes
 
 **PDF Inspection**
+
+Requires Poppler (`pdfinfo`, `pdffonts`, `pdfimages`) and ImageMagick 7 (`magick`). Embedded-image ppi from `pdfimages -list` differs from a PNG's density metadata; it reflects placement in that PDF.
 ```bash
 # Check PDF properties
 pdfinfo diagram.pdf
@@ -541,8 +516,11 @@ pdfinfo diagram.pdf
 # Check fonts
 pdffonts diagram.pdf
 
-# Check image resolution
-identify -verbose diagram.pdf
+# Inspect embedded raster resolution in a PDF (Poppler)
+pdfimages -list diagram.pdf
+
+# Inspect pixel dimensions and density metadata of the generated PNG (ImageMagick 7)
+magick identify -verbose diagram.png
 ```
 
 **Contrast Checking**
@@ -566,9 +544,9 @@ identify -verbose diagram.pdf
 
 - **Nature Figure Preparation**: https://www.nature.com/nature/for-authors/final-submission
 - **Science Figure Guidelines**: https://www.science.org/content/page/instructions-preparing-initial-manuscript
-- **WCAG Accessibility Standards**: https://www.w3.org/WAI/WCAG21/quickref/
+- **WCAG Accessibility Standards**: https://www.w3.org/WAI/WCAG22/quickref/
 - **Color Universal Design (CUD)**: https://jfly.uni-koeln.de/color/
 - **ColorBrewer**: https://colorbrewer2.org/
 
-Following these best practices ensures your diagrams meet publication standards and effectively communicate to all readers, regardless of colorblindness or viewing conditions.
+Check the final artifact in its real manuscript layout; these checks support review but do not guarantee scientific correctness, accessibility, or publisher acceptance.
 

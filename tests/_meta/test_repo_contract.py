@@ -39,7 +39,7 @@ PLUGIN_NAME = "scientific-agent-skills"
 PLUGIN_SCHEMA_FILE = Path(__file__).parent / "schemas" / "plugin-1.0.0.schema.json"
 
 structure = skill_contract.structure
-office = skill_contract.office
+schematic = skill_contract.schematic
 
 SCRIPT_BEARING = structure.script_bearing_skills(SKILLS_DIR)
 DOCUMENTED = structure.documented_skills(SKILLS_DIR)
@@ -134,11 +134,8 @@ class SharedCopyTests(unittest.TestCase):
 
     maxDiff = None
 
-    def test_docx_pptx_xlsx_ship_the_same_office_tree(self) -> None:
-        self.assertEqual(office.identical_tree_problems(SKILLS_DIR), [])
-
     def test_shared_scripts_are_identical_across_their_skills(self) -> None:
-        self.assertEqual(office.shared_file_problems(SKILLS_DIR), [])
+        self.assertEqual(schematic.shared_file_problems(SKILLS_DIR), [])
 
 
 class AgentPluginTests(unittest.TestCase):

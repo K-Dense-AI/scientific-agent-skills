@@ -224,6 +224,16 @@ def _protocol_uri(value: str | None) -> str:
     return value
 
 
+def _mutation_identifier(value: str | None) -> str:
+    """V4 mutations document an unversioned ID, URI, or GUID, not a DOI."""
+    identifier = validate_protocol_identifier(value or "")
+    if "/" in identifier or identifier.startswith("protocols.io."):
+        raise SafetyError(
+            "mutation target must be an unversioned protocol ID, URI, or GUID"
+        )
+    return identifier
+
+
 def _int_id(value: Any, *, name: str) -> int:
     if isinstance(value, bool):
         raise SafetyError(f"{name} must be an integer")
@@ -318,7 +328,7 @@ def _validate_steps(payload: Mapping[str, Any], *, deleting: bool) -> None:
         _exact_fields(
             step,
             required={"guid", "previous_guid", "step"},
-            optional={"section"},
+            optional={"section", "section_color", "is_substep"},
             operation=f"steps[{index}]",
         )
         if not isinstance(step["guid"], str):
@@ -336,6 +346,17 @@ def _validate_steps(payload: Mapping[str, Any], *, deleting: bool) -> None:
         section = step.get("section")
         if section is not None and not isinstance(section, str):
             raise SafetyError(f"steps[{index}].section must be text or null")
+        color = step.get("section_color")
+        if color is not None and (
+            not isinstance(color, str)
+            or re.fullmatch(r"#?[A-Fa-f0-9]{6}", color) is None
+        ):
+            raise SafetyError(
+                f"steps[{index}].section_color must be a six-digit HEX color or null"
+            )
+        substep = step.get("is_substep")
+        if substep is not None and not isinstance(substep, bool):
+            raise SafetyError(f"steps[{index}].is_substep must be a boolean or null")
 
 
 def _validate_publish(payload: Mapping[str, Any]) -> None:
@@ -422,19 +443,23 @@ def _upload_plan(
             "method": "POST",
             "url": build_url(origin, "/api/v3/files"),
             "payload": payload,
+            "body_encoding": "application/x-www-form-urlencoded",
         },
         {
             "phase": "transfer",
-            "method": "POST",
-            "url": "[REDACTED_SIGNED_DESTINATION_FROM_PREPARE_RESPONSE]",
+            "method": "UNVERIFIED_STORAGE_TRANSFER",
+            "url": "[REDACTED_DESTINATION_REQUIRING_SEPARATE_VERIFICATION]",
             "payload": "[REDACTED_EPHEMERAL_FORM_FIELDS]",
             "requires_separate_destination_validation": True,
+            "body_encoding": None,
+            "requires_transfer_contract_verification": True,
         },
         {
             "phase": "verify",
             "method": "PUT",
             "url": build_url(origin, "/api/v3/files/<file_id>"),
             "payload": {},
+            "body_encoding": None,
         },
     ]
     metadata = {
@@ -497,7 +522,7 @@ def build_plan(
         protocol_id = (
             _protocol_uri(target)
             if operation in {"publish-protocol", "add-comment"}
-            else validate_protocol_identifier(target or "")
+            else _mutation_identifier(target)
         )
         if operation == "update-protocol":
             _validate_update(payload)
@@ -581,6 +606,30 @@ def build_plan(
     if not confirmed:
         problems.append("fresh exact confirmation has not been recorded")
 
+    # Legacy curl -d examples use form bodies; maintained v4 JSON operations
+    # explicitly declare application/json. Publishing has conflicting parameter
+    # labels, so a nonempty publish body needs separate contract verification.
+    if operation in {
+        "update-protocol",
+        "upsert-steps",
+        "delete-steps",
+        "organization-export",
+    }:
+        body_encoding = "application/json"
+    elif operation in {"create-protocol", "add-comment", "trash-files"}:
+        body_encoding = "application/x-www-form-urlencoded"
+    else:
+        body_encoding = None
+    if operation == "publish-protocol" and payload:
+        problems.append(
+            "publish parameter placement/encoding needs upstream verification"
+        )
+    headers = {
+        "Authorization": f"[INJECT AT EXECUTION FROM {credential_env_name()}; NEVER RENDER]"
+    }
+    if body_encoding:
+        headers["Content-Type"] = body_encoding
+
     return {
         "ok": True,
         "plan_kind": "dry_run_only",
@@ -590,16 +639,8 @@ def build_plan(
         "execution_supported": False,
         "method": method,
         "url": url,
-        "headers": {
-            "Authorization": (
-                f"[INJECT AT EXECUTION FROM {credential_env_name()}; NEVER RENDER]"
-            ),
-            "Content-Type": (
-                "application/json"
-                if method not in {"MULTIPHASE"}
-                else "operation-specific"
-            ),
-        },
+        "headers": headers,
+        "body_encoding": body_encoding,
         "payload": sanitized_payload,
         "redacted_sensitive_paths": sensitive,
         "upload": upload_metadata,

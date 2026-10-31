@@ -1,432 +1,112 @@
-# LaminDB Data Management
+# Queries, collections, and streaming
 
-This document covers querying, searching, filtering, and streaming data in LaminDB, as well as best practices for organizing and accessing datasets.
+Targets LaminDB 2.10.0. Examples assume a configured instance and existing records.
 
-## Registry Overview
-
-View available registries and their contents:
+## Retrieve and explore
 
 ```python
 import lamindb as ln
 
-# View all registries across modules
-ln.view()
-
-# View latest 100 artifacts
-ln.Artifact.to_dataframe()
-
-# View other registries
-ln.Transform.to_dataframe()
-ln.Run.to_dataframe()
-ln.User.to_dataframe()
+ln.Artifact.to_dataframe(limit=20)
+artifact = ln.Artifact.get(key="experiments/qc.parquet")
+exact = ln.Artifact.get(artifact.uid)
+maybe = ln.Artifact.filter(key="optional/file.parquet", is_latest=True).one_or_none()
 ```
 
-## Lookup for Quick Access
-
-For registries with fewer than 100k records, `Lookup` objects enable convenient auto-complete:
-
-```python
-# Create lookup
-records = ln.Record.lookup()
-
-# Access by name (auto-complete enabled in IDEs)
-experiment_1 = records.experiment_1
-sample_a = records.sample_a
-
-# Works with biological ontologies too
-import bionty as bt
-cell_types = bt.CellType.lookup()
-t_cell = cell_types.t_cell
-```
-
-## Retrieving Single Records
-
-### Using get()
-
-Retrieve exactly one record (errors if zero or multiple matches):
+`get()` and `one()` fail for ambiguity; `one_or_none()` tolerates no match, not
+multiple matches. For versioned records, `get()` preferentially resolves latest
+revisions; do not assume that `.filter(...).one()` applies the same rule.
+`to_dataframe()` defaults to 20 rows in this release. Use an explicit limit or
+`limit=None` for a deliberate full metadata export; do not mistake a preview for
+all matching data.
 
 ```python
-# By UID
-artifact = ln.Artifact.get("aRt1Fact0uid000")
-
-# By field
-artifact = ln.Artifact.get(key="data/experiment.h5ad")
-user = ln.User.get(handle="researcher123")
-
-# By ontology ID (for bionty)
-cell_type = bt.CellType.get(ontology_id="CL:0000084")
-```
-
-### Using one() and one_or_none()
-
-```python
-# Get exactly one from QuerySet (errors if 0 or >1)
-artifact = ln.Artifact.filter(key="data.csv").one()
-
-# Get one or None (errors if >1)
-artifact = ln.Artifact.filter(key="maybe_data.csv").one_or_none()
-
-# Get first match
-artifact = ln.Artifact.filter(suffix=".h5ad").first()
-```
-
-## Filtering Data
-
-The `filter()` method returns a QuerySet for flexible retrieval:
-
-```python
-# Basic filtering
-artifacts = ln.Artifact.filter(suffix=".h5ad")
-artifacts.to_dataframe()
-
-# Multiple conditions (AND logic)
-artifacts = ln.Artifact.filter(
-    suffix=".h5ad",
-    created_by=user
-)
-
-# Comparison operators
-ln.Artifact.filter(size__gt=1e6).to_dataframe()           # Greater than
-ln.Artifact.filter(size__gte=1e6).to_dataframe()          # Greater than or equal
-ln.Artifact.filter(size__lt=1e9).to_dataframe()           # Less than
-ln.Artifact.filter(size__lte=1e9).to_dataframe()          # Less than or equal
-
-# Range queries
-ln.Artifact.filter(size__gte=1e6, size__lte=1e9).to_dataframe()
-```
-
-## Text and String Queries
-
-```python
-# Exact match
-ln.Artifact.filter(description="Experiment 1").to_dataframe()
-
-# Contains (case-sensitive)
-ln.Artifact.filter(description__contains="RNA").to_dataframe()
-
-# Case-insensitive contains
-ln.Artifact.filter(description__icontains="rna").to_dataframe()
-
-# Starts with
-ln.Artifact.filter(key__startswith="experiments/").to_dataframe()
-
-# Ends with
-ln.Artifact.filter(key__endswith=".csv").to_dataframe()
-
-# IN list
-ln.Artifact.filter(suffix__in=[".h5ad", ".csv", ".parquet"]).to_dataframe()
-```
-
-## Feature-Based Queries
-
-Query artifacts by their annotated features:
-
-```python
-# Filter by feature value
-ln.Artifact.filter(cell_type="T cell").to_dataframe()
-ln.Artifact.filter(treatment="DMSO").to_dataframe()
-
-# Include features in output
-ln.Artifact.filter(treatment="DMSO").to_dataframe(include="features")
-
-# Nested dictionary access
-ln.Artifact.filter(study_metadata__assay="RNA-seq").to_dataframe()
-ln.Artifact.filter(study_metadata__detail1="123").to_dataframe()
-
-# Check annotation status
-ln.Artifact.filter(cell_type__isnull=False).to_dataframe()  # Has annotation
-ln.Artifact.filter(treatment__isnull=True).to_dataframe()    # Missing annotation
-```
-
-## Traversing Related Registries
-
-Django's double-underscore syntax enables queries across related tables:
-
-```python
-# Find artifacts by creator handle
-ln.Artifact.filter(created_by__handle="researcher123").to_dataframe()
-ln.Artifact.filter(created_by__handle__startswith="test").to_dataframe()
-
-# Find artifacts by transform name
-ln.Artifact.filter(transform__name="preprocess.py").to_dataframe()
-
-# Find artifacts measuring specific genes through schemas
-cd8a = bt.Gene.get(symbol="CD8A")
-schemas_with_cd8a = ln.Schema.filter(genes=cd8a)
-ln.Artifact.filter(schemas__in=schemas_with_cd8a).to_dataframe()
-
-# Find runs with specific parameters
-ln.Run.filter(params__learning_rate=0.01).to_dataframe()
-ln.Run.filter(params__downsample=True).to_dataframe()
-
-# Find artifacts from specific project
-project = ln.Project.get(name="Cancer Study")
-ln.Artifact.filter(projects=project).to_dataframe()
-```
-
-## Ordering Results
-
-```python
-# Order by field (ascending)
-ln.Artifact.filter(suffix=".h5ad").order_by("created_at").to_dataframe()
-
-# Order descending
-ln.Artifact.filter(suffix=".h5ad").order_by("-created_at").to_dataframe()
-
-# Multiple order fields
-ln.Artifact.order_by("-created_at", "size").to_dataframe()
-```
-
-## Advanced Logical Queries
-
-### OR Logic
-
-```python
-# OR condition
-artifacts = ln.Artifact.filter(
-    ln.Q(suffix=".jpg") | ln.Q(suffix=".png")
-).to_dataframe()
-
-# Complex OR with multiple conditions
-artifacts = ln.Artifact.filter(
-    ln.Q(suffix=".h5ad", size__gt=1e6) | ln.Q(suffix=".csv", size__lt=1e3)
-).to_dataframe()
-```
-
-### NOT Logic
-
-```python
-# Exclude condition
-artifacts = ln.Artifact.filter(
-    ~ln.Q(suffix=".tmp")
-).to_dataframe()
-
-# Complex exclusion
-artifacts = ln.Artifact.filter(
-    ~ln.Q(created_by__handle="testuser")
-).to_dataframe()
-```
-
-### Combining AND, OR, NOT
-
-```python
-# Complex query
-artifacts = ln.Artifact.filter(
-    (ln.Q(suffix=".h5ad") | ln.Q(suffix=".csv")) &
-    ln.Q(size__gt=1e6) &
-    ~ln.Q(created_by__handle__startswith="test")
-).to_dataframe()
-```
-
-## Search Functionality
-
-Full-text search across registry fields:
-
-```python
-# Basic search
-ln.Artifact.search("iris").to_dataframe()
-ln.User.search("smith").to_dataframe()
-
-# Search in specific registry
-bt.CellType.search("T cell").to_dataframe()
-bt.Gene.search("CD8").to_dataframe()
-```
-
-## Working with QuerySets
-
-QuerySets are lazy - they don't hit the database until evaluated:
-
-```python
-# Create query (no database hit)
-qs = ln.Artifact.filter(suffix=".h5ad")
-
-# Evaluate in different ways
-df = qs.to_dataframe()        # As pandas DataFrame
-list_records = list(qs)       # As Python list
-count = qs.count()            # Count only
-exists = qs.exists()          # Boolean check
-
-# Iteration
+qs = ln.Artifact.filter(
+    suffix=".parquet", key__startswith="experiments/", is_latest=True
+).order_by("-created_at", "uid")
+preview = qs.to_dataframe(limit=50)
 for artifact in qs:
-    print(artifact.key, artifact.size)
-
-# Slicing
-first_10 = qs[:10]
-next_10 = qs[10:20]
+    print(artifact.uid, artifact.key)
 ```
 
-## Chaining Filters
+Iterating a metadata DataFrame yields column names, not artifact objects.
+Use the QuerySet to retrieve files; limit and paginate deliberately for large
+registries. Slices (`qs[:50]`, `qs[50:100]`) are database offsets, not a REST cursor;
+concurrent edits can change offset membership. Record a stable set of UIDs when
+reproducing an analysis.
+
+## Filters and feature queries
 
 ```python
-# Build query incrementally
-qs = ln.Artifact.filter(suffix=".h5ad")
-qs = qs.filter(size__gt=1e6)
-qs = qs.filter(created_at__year=2025)
-qs = qs.order_by("-created_at")
+ln.Artifact.filter(size__gt=1_000_000, suffix__in=[".h5ad", ".parquet"])
+ln.Artifact.filter(description__icontains="rna")
+ln.Artifact.filter(created_by__handle="researcher")
+ln.Artifact.filter(ln.Q(suffix=".csv") | ln.Q(suffix=".parquet"))
+ln.Artifact.filter(~ln.Q(key__startswith="scratch/"))
 
-# Execute
-results = qs.to_dataframe()
+# Requires saved Feature definitions and corresponding artifact annotations:
+ln.Artifact.filter(batch=1).to_dataframe(include="features")
+batch = ln.Feature.get(name="batch")
+ln.Artifact.filter(batch == 1).to_dataframe(include="features")
 ```
 
-## Streaming Large Datasets
+Use `__in`, `__gt`, `__gte`, `__lt`, `__lte`, `__isnull`, and related-field
+traversal where supported by the underlying field type. Nested dictionaries
+require a dictionary-typed feature; an arbitrary name is not automatically a
+JSON field. Database backend collation affects text matching; do not assume
+SQLite `contains` has universal case-sensitive behavior.
 
-For datasets too large to fit in memory, use streaming access:
+`search("...")` is text discovery with ranking/limits, not ontology synonym
+standardization or a guarantee of complete fuzzy matching. Use exact IDs/filters
+for final selection. `lookup()` is useful for modest registries but materializes
+lookup data; there is no universal safe 100,000-record threshold.
 
-### Streaming Files
+## Collections and aggregates
 
 ```python
-# Open file stream
-artifact = ln.Artifact.get(key="large_file.csv")
+members = list(ln.Artifact.filter(key__startswith="experiments/", is_latest=True))
+collection = ln.Collection(members, key="study/qc").save()
+for member in collection.artifacts.all():
+    path = member.cache()
 
-with artifact.open() as f:
-    # Read in chunks
-    chunk = f.read(10000)  # Read 10KB
-    # Process chunk
+from django.db.models import Sum
+summary = ln.Artifact.filter(is_latest=True).aggregate(total_bytes=Sum("size"))
 ```
 
-### Array Slicing
+A collection groups artifact revisions; it does not align matrix features or
+harmonize batch labels. Inspect member schemas before concatenating datasets.
+For schema-linked data query `ln.Artifact.filter(schema=schema)`; there is no
+`is_valid` field. A schema association does not prove current biological fitness.
 
-For array-based formats (Zarr, HDF5, AnnData):
+## Format-aware access
+
+`cache()` obtains a complete local file/folder (and can download it). `load()`
+materializes a supported Python object. `open()` is format-specific:
 
 ```python
-# Get backing file without loading
-artifact = ln.Artifact.get(key="large_data.h5ad")
-adata = artifact.backed()  # Returns backed AnnData
+# Parquet/CSV: PyArrow Dataset, not a bytes file or context manager.
+artifact = ln.Artifact.get(key="experiments/qc.parquet")
+dataset = artifact.open()
+for batch in dataset.to_batches(columns=["gene_count"], batch_size=1024):
+    chunk = batch.to_pandas()
 
-# Slice specific portions
-subset = adata[:1000, :]  # First 1000 cells
-genes_of_interest = adata[:, ["CD4", "CD8A", "CD8B"]]
-
-# Stream batches
-for i in range(0, adata.n_obs, 1000):
-    batch = adata[i:i+1000, :]
-    # Process batch
+# AnnData: context-managed backed accessor.
+artifact = ln.Artifact.get(key="scrna/validated.h5ad")
+with artifact.open() as accessor:
+    subset = accessor[:1000, :].to_memory()
 ```
 
-### Iterator Access
+For byte-oriented formats such as FASTA/FASTQ use `artifact.cache()` followed by
+an appropriate local file reader (`gzip.open` for gzip), or consult the storage
+API for the protocol in use. `Artifact.open()` is not a universal `read(n)` stream.
+For Polars-backed tables, `with artifact.open(engine="polars") as lazy_frame:`
+yields a LazyFrame and needs Polars installed. Optional backend execution was
+not tested in this refresh.
 
-```python
-# Process large collections incrementally
-artifacts = ln.Artifact.filter(suffix=".fastq.gz")
+`Artifact.backed()`, `delete_cache()`, and `is_cached()` do not exist in this
+release. Configure cache through `lamin settings cache-dir get/set`; do not
+recursively remove a shared cache as routine troubleshooting.
 
-for artifact in artifacts.iterator(chunk_size=10):
-    # Process 10 at a time
-    path = artifact.cache()
-    # Analyze file
-```
-
-## Aggregation and Statistics
-
-```python
-# Count records
-ln.Artifact.filter(suffix=".h5ad").count()
-
-# Distinct values
-ln.Artifact.values_list("suffix", flat=True).distinct()
-
-# Aggregation (requires Django ORM knowledge)
-from django.db.models import Sum, Avg, Max, Min
-
-# Total size of all artifacts
-ln.Artifact.aggregate(Sum("size"))
-
-# Average artifact size by suffix
-ln.Artifact.values("suffix").annotate(avg_size=Avg("size"))
-```
-
-## Caching and Performance
-
-```python
-# Check cache location
-ln.settings.cache_dir
-
-# Configure cache
-lamin cache set /path/to/cache
-
-# Clear cache for specific artifact
-artifact.delete_cache()
-
-# Get cached path (downloads if needed)
-path = artifact.cache()
-
-# Check if cached
-if artifact.is_cached():
-    path = artifact.cache()
-```
-
-## Organizing Data with Keys
-
-Best practices for structuring keys:
-
-```python
-# Hierarchical organization
-ln.Artifact("data.h5ad", key="project/experiment/batch1/data.h5ad").save()
-ln.Artifact("data.h5ad", key="scrna/2025/oct/sample_001.h5ad").save()
-
-# Browse by prefix
-ln.Artifact.filter(key__startswith="scrna/2025/oct/").to_dataframe()
-
-# Version in key (alternative to built-in versioning)
-ln.Artifact("data.h5ad", key="data/processed/v1/final.h5ad").save()
-ln.Artifact("data.h5ad", key="data/processed/v2/final.h5ad").save()
-```
-
-## Collections
-
-Group related artifacts into collections:
-
-```python
-# Create collection
-collection = ln.Collection(
-    [artifact1, artifact2, artifact3],
-    key="scrna/batch_1_3",
-    description="Complete dataset across three batches"
-).save()
-
-# Access collection members
-for artifact in collection.artifacts:
-    print(artifact.key)
-
-# Query collections
-ln.Collection.filter(key__contains="batch").to_dataframe()
-```
-
-## Best Practices
-
-1. **Use filters before loading**: Query metadata before accessing file contents
-2. **Leverage QuerySets**: Build queries incrementally for complex conditions
-3. **Stream large files**: Don't load entire datasets into memory unnecessarily
-4. **Structure keys hierarchically**: Makes browsing and filtering easier
-5. **Use search for discovery**: When you don't know exact field values
-6. **Cache strategically**: Configure cache location based on storage capacity
-7. **Index features**: Define features upfront for efficient feature-based queries
-8. **Use collections**: Group related artifacts for dataset-level operations
-9. **Order results**: Sort by creation date or other fields for consistent retrieval
-10. **Check existence**: Use `exists()` or `one_or_none()` to avoid errors
-
-## Common Query Patterns
-
-```python
-# Recent artifacts
-ln.Artifact.order_by("-created_at")[:10].to_dataframe()
-
-# My artifacts
-me = ln.setup.settings.user
-ln.Artifact.filter(created_by=me).to_dataframe()
-
-# Large files
-ln.Artifact.filter(size__gt=1e9).order_by("-size").to_dataframe()
-
-# This month's data
-from datetime import datetime
-ln.Artifact.filter(
-    created_at__year=2025,
-    created_at__month=10
-).to_dataframe()
-
-# Validated datasets with specific features
-ln.Artifact.filter(
-    is_valid=True,
-    cell_type__isnull=False
-).to_dataframe(include="features")
-```
+Sources: [query guide](https://docs.lamin.ai/query-search),
+[array access](https://docs.lamin.ai/arrays),
+[2.10.0 QuerySet source](https://github.com/laminlabs/lamindb/blob/2.10.0/lamindb/models/query_set.py).

@@ -39,6 +39,10 @@ class CustomEnv(gym.Env):
         """
         super().__init__()
 
+        if not isinstance(grid_size, (int, np.integer)) or isinstance(grid_size, bool) or grid_size < 2:
+            raise ValueError("grid_size must be an integer >= 2")
+        if render_mode not in (None, *self.metadata["render_modes"]):
+            raise ValueError("unsupported render_mode")
         self.grid_size = grid_size
         self.render_mode = render_mode
 
@@ -47,12 +51,13 @@ class CustomEnv(gym.Env):
         self.action_space = spaces.Discrete(4)
 
         # Define observation space
-        # Example: 2D position [x, y] in continuous space
+        # Agent and goal: [agent_row, agent_col, goal_row, goal_col].
+        # The random goal must be observable for this Markov task.
         # Note: Use np.float32 for observations (SB3 recommendation)
         self.observation_space = spaces.Box(
             low=0,
             high=grid_size - 1,
-            shape=(2,),
+            shape=(4,),
             dtype=np.float32,
         )
 
@@ -117,13 +122,18 @@ class CustomEnv(gym.Env):
             truncated: Whether episode was truncated (time limit, etc.)
             info: Additional information dictionary
         """
+        if self._agent_position is None:
+            raise RuntimeError("reset() must be called before step()")
+        action = np.asarray(action)
+        if action.shape != () or not self.action_space.contains(action):
+            raise ValueError("action must be one discrete value in [0, 3]")
         # Map action to direction (0: up, 1: down, 2: left, 3: right)
         direction = np.array([
             [-1, 0],  # up
             [1, 0],   # down
             [0, -1],  # left
             [0, 1],   # right
-        ])[action]
+        ])[int(action)]
 
         # Update agent position (clip to stay within grid)
         self._agent_position = np.clip(
@@ -158,8 +168,8 @@ class CustomEnv(gym.Env):
         Returns:
             observation: Current state as defined by observation_space
         """
-        # Return agent position as observation
-        return self._agent_position.astype(np.float32)
+        # Return a fresh array including the observable goal.
+        return np.concatenate((self._agent_position, self._goal_position)).astype(np.float32)
 
         # For dict observations:
         # return {
@@ -175,8 +185,8 @@ class CustomEnv(gym.Env):
             info: Dictionary with additional information
         """
         return {
-            "agent_position": self._agent_position,
-            "goal_position": self._goal_position,
+            "agent_position": self._agent_position.copy(),
+            "goal_position": self._goal_position.copy(),
             "distance_to_goal": np.linalg.norm(
                 self._agent_position - self._goal_position
             ),
@@ -203,14 +213,15 @@ class CustomEnv(gym.Env):
 
         elif self.render_mode == "rgb_array":
             # Return RGB array for video recording
-            # This is a placeholder - implement proper rendering as needed
             canvas = np.zeros((
                 self.grid_size * 50,
                 self.grid_size * 50,
                 3
             ), dtype=np.uint8)
-            # Draw agent and goal on canvas
-            # ... (implement visual rendering)
+            for position, color in ((self._goal_position, (0, 200, 0)),
+                                    (self._agent_position, (40, 100, 255))):
+                row, col = position * 50
+                canvas[row:row + 50, col:col + 50] = color
             return canvas
 
     def close(self):
@@ -281,7 +292,7 @@ def train_on_custom_env():
     print("Training PPO agent on custom environment...")
 
     # Create environment
-    env = CustomEnv()
+    env = gym.make("CustomEnv-v0")
 
     # Validate first
     from stable_baselines3.common.env_checker import check_env
@@ -297,7 +308,7 @@ def train_on_custom_env():
         action, _states = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
-            print(f"Goal reached! Final reward: {reward}")
+            print(f"Episode ended: goal={terminated}, timeout={truncated}, reward={reward}")
             break
 
     env.close()

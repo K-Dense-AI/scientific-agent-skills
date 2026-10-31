@@ -1,5 +1,7 @@
 # NetworkX Graph Basics
 
+API patterns below assume `import networkx as nx` and suitable existing nodes. See [review.md](review.md) for tested contracts.
+
 ## Graph Types
 
 NetworkX supports four main graph classes:
@@ -35,13 +37,24 @@ G = nx.MultiDiGraph()
 - Directed graph with multiple edges between nodes
 - Combines features of DiGraph and MultiGraph
 
+All four classes allow self-loops. A repeated edge in `Graph`/`DiGraph` updates its attributes; it does not accumulate a count. In a multigraph, retain `(u, v, key)` identities and define an aggregation rule before using algorithms that require simple graphs.
+
+```python
+M = nx.MultiDiGraph()
+M.add_edge("A", "B", key="replicate-1", strength=2)
+M.add_edge("A", "B", key="replicate-2", strength=3)
+assert M.number_of_edges() == 2
+for u, v, key, attrs in M.edges(keys=True, data=True):
+    print(u, v, key, attrs["strength"])
+```
+
 ## Creating and Adding Nodes
 
 ### Single Node Addition
 ```python
 G.add_node(1)
 G.add_node("protein_A")
-G.add_node((x, y))  # Nodes can be any hashable type
+G.add_node((0, 1))  # Tuples are hashable node IDs
 ```
 
 ### Bulk Node Addition
@@ -60,7 +73,7 @@ G.add_nodes_from([
 ```
 
 ### Important Node Properties
-- Nodes can be any hashable Python object: strings, tuples, numbers, custom objects
+- Nodes can be any hashable Python object except `None`: strings, tuples, numbers, custom objects
 - Node attributes stored as key-value pairs
 - Use meaningful node identifiers for clarity
 
@@ -131,7 +144,7 @@ G.has_edge(1, 2)
 list(G.neighbors(1))
 list(G[1])          # Dictionary-like access
 
-# For directed graphs
+# For a DiGraph/MultiDiGraph only
 list(G.predecessors(1))  # Incoming edges
 list(G.successors(1))    # Outgoing edges
 ```
@@ -142,7 +155,7 @@ list(G.successors(1))    # Outgoing edges
 for node in G.nodes:
     print(node, G.nodes[node])  # Access node attributes
 
-# Iterate over edges
+# Iterate over simple-graph edges (multigraphs need keys)
 for u, v in G.edges:
     print(u, v, G[u][v])  # Access edge attributes
 
@@ -158,15 +171,11 @@ for u, v, attrs in G.edges(data=True):
 
 ### Removing Elements
 ```python
-# Remove single node (also removes incident edges)
-G.remove_node(1)
-
-# Remove multiple nodes
-G.remove_nodes_from([1, 2, 3])
-
-# Remove edges
+# Remove an existing edge before deleting its endpoints
 G.remove_edge(1, 2)
-G.remove_edges_from([(1, 2), (2, 3)])
+G.remove_edges_from([(1, 2), (2, 3)])  # Missing edges ignored
+G.remove_node(1)  # Also removes incident edges
+G.remove_nodes_from([1, 2, 3])  # Missing nodes ignored
 ```
 
 ### Clearing Graph
@@ -223,7 +232,7 @@ nx.get_edge_attributes(G, 'weight')
 nodes_subset = [1, 2, 3, 4]
 H = G.subgraph(nodes_subset)  # Returns view (references original)
 
-# Create independent copy
+# Independent structure and attribute dicts; nested mutable values remain shared
 H = G.subgraph(nodes_subset).copy()
 
 # Edge-induced subgraph
@@ -234,12 +243,14 @@ H = G.edge_subgraph(edge_subset)
 ### Graph Views
 ```python
 # Reverse view (for directed graphs)
-G_reversed = G.reverse()
+G_reversed = G.reverse(copy=False)
 
 # Convert between directed/undirected
 G_undirected = G.to_undirected()
 G_directed = G.to_directed()
 ```
+
+Subgraph/reverse views share attributes with the original graph. `.copy()` is shallow for nested attribute values; use `copy.deepcopy` when those values must be independent. `to_undirected()` merges reciprocal directed edges and can discard differing attributes; define the merge rule first. Do not mutate graph size while iterating a live view.
 
 ## Graph Information and Diagnostics
 
@@ -260,14 +271,16 @@ G.is_multigraph()
 
 ### Connectivity Checks
 ```python
-# For undirected graphs
+# For nonempty undirected graphs
 nx.is_connected(G)
 nx.number_connected_components(G)
 
-# For directed graphs
+# For nonempty directed graphs
 nx.is_strongly_connected(G)
 nx.is_weakly_connected(G)
 ```
+
+Undirected self-loops contribute twice to degree; directed degree counts in- plus out-degree. Density and degree centrality can exceed one with self-loops/parallel edges (or total directed degree). Weighted degree is an edge-weight sum, not normalized degree centrality.
 
 ## Important Considerations
 

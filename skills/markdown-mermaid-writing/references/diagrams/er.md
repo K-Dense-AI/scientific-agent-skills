@@ -17,12 +17,12 @@ erDiagram
     accTitle: Project Management Data Model
     accDescr: Entity relationships for a project management system showing teams, projects, tasks, members, and comments with cardinality
 
-    TEAM ||--o{ PROJECT : "owns"
-    PROJECT ||--o{ TASK : "contains"
-    TASK ||--o{ COMMENT : "has"
-    TEAM ||--o{ MEMBER : "includes"
-    MEMBER ||--o{ TASK : "assigned to"
-    MEMBER ||--o{ COMMENT : "writes"
+    TEAM ||..o{ PROJECT : "owns"
+    PROJECT ||..o{ TASK : "contains"
+    TASK ||..o{ COMMENT : "has"
+    TEAM ||..o{ MEMBER : "includes"
+    MEMBER ||..o{ TASK : "assigned to"
+    MEMBER ||..o{ COMMENT : "writes"
 
     TEAM {
         uuid id PK "🔑 Primary key"
@@ -71,10 +71,12 @@ erDiagram
 - Include data types, `PK`/`FK` annotations, and **comment strings** with emoji for context
 - Use clear verb-phrase relationship labels: `"owns"`, `"contains"`, `"assigned to"`
 - Cardinality notation:
-  - `||--o{` one-to-many
-  - `||--||` one-to-one
-  - `}o--o{` many-to-many
-  - `o` = zero or more, `|` = exactly one
+  - `||--o{` exactly one to zero-or-more
+  - `||--|{` exactly one to one-or-more
+  - `||--||` exactly one at each end
+  - `}o--o{` zero-or-more at both ends
+  - Read the pair of endpoint markers together: `o|`/`|o` is zero-or-one; `||` is exactly one.
+  - Solid `--` means identifying, dashed `..` non-identifying. Choose from the actual key constraint; Mermaid does not enforce a database schema.
 - Limit to **5–7 entities** per diagram — split large schemas by domain
 - Entity names: `UPPER_CASE` (SQL convention)
 
@@ -87,8 +89,8 @@ erDiagram
     accTitle: Your Title Here
     accDescr: Describe the data model and key relationships between entities
 
-    ENTITY_A ||--o{ ENTITY_B : "has many"
-    ENTITY_B ||--|| ENTITY_C : "belongs to"
+    ENTITY_A ||..o{ ENTITY_B : "has many"
+    ENTITY_B ||..|| ENTITY_C : "belongs to"
 
     ENTITY_A {
         uuid id PK "🔑 Primary key"
@@ -113,16 +115,16 @@ erDiagram
     accTitle: SaaS Multi-Tenant Platform Schema
     accDescr: Ten-entity data model for a multi-tenant SaaS platform covering identity management, role-based access, subscription billing, and audit logging with full cardinality relationships
 
-    TENANT ||--o{ ORGANIZATION : "contains"
-    ORGANIZATION ||--o{ USER : "employs"
-    ORGANIZATION ||--|| SUBSCRIPTION : "holds"
-    USER }o--o{ ROLE : "assigned"
-    ROLE ||--o{ PERMISSION : "grants"
-    SUBSCRIPTION ||--|| PLAN : "subscribes to"
-    SUBSCRIPTION ||--o{ INVOICE : "generates"
-    USER ||--o{ AUDIT_LOG : "produces"
-    TENANT ||--o{ AUDIT_LOG : "scoped to"
-    USER ||--o{ API_KEY : "owns"
+    TENANT ||..o{ ORGANIZATION : "contains"
+    ORGANIZATION ||..o{ USER : "employs"
+    ORGANIZATION ||..|| SUBSCRIPTION : "holds"
+    USER }o..o{ ROLE : "assigned"
+    ROLE ||..o{ PERMISSION : "grants"
+    SUBSCRIPTION }o..|| PLAN : "subscribes to"
+    SUBSCRIPTION ||..o{ INVOICE : "generates"
+    USER ||..o{ AUDIT_LOG : "produces"
+    TENANT ||..o{ AUDIT_LOG : "scoped to"
+    USER ||..o{ API_KEY : "owns"
 
     TENANT {
         uuid id PK "🔑 Primary key"
@@ -218,5 +220,10 @@ erDiagram
 ### Why this works
 
 - **10 entities organized by domain** — identity (Tenant, Organization, User, Role, Permission), billing (Plan, Subscription, Invoice), and security (Audit Log, API Key). The relationship lines naturally cluster related entities together.
-- **Full cardinality tells the business rules** — `||--||` (one-to-one) for Organization-Subscription means one subscription per org. `}o--o{` (many-to-many) for User-Role means flexible RBAC. Each relationship symbol encodes a constraint.
-- **Every field has type, annotation, and purpose** — PK/FK for schema generation, emoji comments for human scanning. A developer can read this diagram and write the migration script directly.
+- **Full cardinality tells the business rules** — `||..||` (one-to-one, non-identifying) for Organization-Subscription means one subscription per org. `}o..o{` (many-to-many) for User-Role means flexible RBAC. Each relationship symbol encodes a constraint.
+- **Every field has type, annotation, and purpose** — PK/FK as documented key roles, emoji comments for human scanning. Confirm uniqueness, nullability, join tables, and identifying relationships before implementing a migration.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/entityRelationshipDiagram.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

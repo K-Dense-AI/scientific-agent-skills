@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--charges", type=int, nargs="+", default=[1, 2], help="m/z charge states")
     parser.add_argument("--out", help="Output CSV of peptides")
     args = parser.parse_args()
+    if any(z <= 0 for z in args.charges):
+        parser.error("--charges must contain positive charge magnitudes")
 
     proteins = []
     if args.fasta:

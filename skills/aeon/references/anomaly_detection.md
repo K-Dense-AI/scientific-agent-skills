@@ -1,14 +1,14 @@
 # Anomaly Detection
 
-Aeon provides anomaly detection methods for identifying unusual patterns in time series at both series and collection levels.
+Aeon 1.6 provides series and collection detectors. Import collection adapters from `aeon.anomaly_detection.collection`; series methods live under `.series.distance_based`, `.series.distribution_based`, `.series.outlier_detection`, or `.series.adapters`.
 
 ## Collection Anomaly Detectors
 
 Detect anomalous time series within a collection:
 
 - `ClassificationAdapter` - Adapts classifiers for anomaly detection
-  - Train on normal data, flag outliers during prediction
-  - **Use when**: Have labeled normal data, want classification-based approach
+  - Supervised classification of labeled normal and anomalous series
+  - **Use when**: Have labels for both normal and anomalous cases
 
 - `OutlierDetectionAdapter` - Wraps sklearn outlier detectors
   - Works with IsolationForest, LOF, OneClassSVM
@@ -48,7 +48,7 @@ Use similarity metrics to identify anomalies:
 
 - `ROCKAD` - ROCKET-based semi-supervised detection
   - Uses ROCKET features for anomaly identification
-  - **Use when**: Have some labeled data, want feature-based approach
+  - **Use when**: Have clean normal training data for novelty detection
 
 ### Distribution-Based Methods
 
@@ -87,7 +87,7 @@ Use isolation principles:
 ## Quick Start
 
 ```python
-from aeon.anomaly_detection import STOMP
+from aeon.anomaly_detection.series.distance_based import STOMP
 import numpy as np
 
 # Create time series with anomaly
@@ -106,6 +106,8 @@ threshold = np.percentile(anomaly_scores, 95)
 anomalies = anomaly_scores > threshold
 ```
 
+STOMP requires `stumpy` and supports univariate input. Its output contains one score per timepoint after aggregating overlapping windows, unlike the shorter raw matrix profile. A percentile threshold on the evaluated series is exploratory and forces a chosen alert fraction; calibrate on independent normal/validation data for deployment. These scores are not anomaly probabilities.
+
 ## Point vs Subsequence Anomalies
 
 - **Point anomalies**: Single unusual values
@@ -122,18 +124,13 @@ anomalies = anomaly_scores > threshold
 Specialized metrics for anomaly detection:
 
 ```python
-from aeon.benchmarking.metrics.anomaly_detection import (
-    range_precision,
-    range_recall,
-    range_f_score,
-    roc_auc_score
-)
+from aeon.benchmarking.metrics.anomaly_detection import range_roc_auc_score
 
-# Range-based metrics account for window detection
-precision = range_precision(y_true, y_pred, alpha=0.5)
-recall = range_recall(y_true, y_pred, alpha=0.5)
-f1 = range_f_score(y_true, y_pred, alpha=0.5)
+# Binary true labels and continuous anomaly scores.
+auc = range_roc_auc_score(y_true, anomaly_scores)
 ```
+
+`range_precision`, `range_recall`, and `range_f_score` need `prts`; its published NumPy<2 requirement conflicts with aeon 1.6's NumPy>=2 requirement. Treat these as dependency-blocked API references, not runnable examples in the core environment. If a separately validated compatible environment is available, precision/recall take `alpha`; F-score takes separate `p_alpha` and `r_alpha` (not `alpha`). Their inputs are binary labels. Do not bypass dependency constraints without validating the upstream combination.
 
 ## Algorithm Selection
 

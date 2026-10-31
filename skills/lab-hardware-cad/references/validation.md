@@ -52,12 +52,12 @@ python scripts/check.py geometry out/part.step --model part_model.py
       `check.py interfaces`.
       *Catches: an interface nobody checked because the outer bounding box could not see it.*
 - [ ] Features that receive a standardised component use `intent: "envelope"`.
-      *Catches: a pocket sized to nominal, which fits only the smaller half of conforming parts.*
+      *Catches: a pocket sized to nominal, which does not guarantee clearance for conforming parts.*
 - [ ] Any standard entry marked `verified: false` was confirmed against the primary document, or
       the user was told it is unconfirmed.
       *Catches: propagating a derived number as if it were read from the standard.*
 - [ ] Metric vs imperial is confirmed where both exist, and no expression mixes them.
-      *Catches: the 25.0 vs 25.4 mm grid error, which accumulates to 1.6 mm over four holes.*
+      *Catches: the 25.0 vs 25.4 mm grid error, which accumulates to 1.6 mm over four pitches (five hole centres).*
 - [ ] Interfaces not covered by any bundled standard — a vendor drawing, a measurement — were
       reported to the user as unchecked, with the number and its source.
       *Catches: a silent gap where the automatic check simply had nothing to say.*
@@ -104,7 +104,7 @@ python scripts/check.py clearance out/a.step out/b.step --min 0.3
 ## 7. Visual review — mandatory
 
 - [ ] A snapshot was rendered **and read** after the most recent generation.
-- [ ] Confirmed in the image: features on the intended faces; correct mold/chip polarity; every
+- [ ] Confirmed in the image: features on the intended faces; mold/chip polarity where resolvable; every
       port, bore, and boss present, inside the body, and passing through; nothing consumed by a
       fillet; clear apertures unobstructed.
 
@@ -113,8 +113,8 @@ python scripts/snapshot.py out/part.step --out out/part.png
 ```
 
 **This step is never waived by the numeric checks passing.** `is_valid: true` with a correct
-bounding box is fully consistent with a pocket cut on the wrong face or an inverted mold. Those
-errors are obvious in the picture and invisible in the numbers.
+bounding box is fully consistent with a pocket cut on the wrong face or an inverted mold. Some errors are visible in the picture; small relief and hidden passages need
+measured gauges or sections. Never infer connectivity or fit from an outline alone.
 
 ## 8. Report
 

@@ -10,6 +10,7 @@ import argparse
 import spikeinterface.full as si
 import matplotlib.pyplot as plt
 import numpy as np
+from _common import validate_recording
 
 
 def explore_recording(data_path: str, stream_name: str = 'imec0.ap'):
@@ -17,6 +18,8 @@ def explore_recording(data_path: str, stream_name: str = 'imec0.ap'):
 
     print(f"Loading: {data_path}")
     recording = si.read_spikeglx(data_path, stream_name=stream_name)
+
+    validate_recording(recording)
 
     # Basic info
     print("\n" + "="*50)
@@ -44,7 +47,9 @@ def explore_recording(data_path: str, stream_name: str = 'imec0.ap'):
     bad_ids, labels = si.detect_bad_channels(recording)
     if len(bad_ids) > 0:
         print(f"Bad channels found: {len(bad_ids)}")
-        for ch, label in zip(bad_ids, labels):
+        for ch, label in zip(recording.channel_ids, labels):
+            if ch not in bad_ids:
+                continue
             print(f"  Channel {ch}: {label}")
     else:
         print("No bad channels detected")
@@ -55,7 +60,7 @@ def explore_recording(data_path: str, stream_name: str = 'imec0.ap'):
     print("="*50)
 
     # Get 1 second of data
-    n_samples = int(recording.get_sampling_frequency())
+    n_samples = min(int(recording.get_sampling_frequency()), recording.get_num_samples())
     traces = recording.get_traces(start_frame=0, end_frame=n_samples)
 
     print(f"Sample mean: {np.mean(traces):.2f}")
@@ -81,7 +86,9 @@ def plot_probe(recording, output_path=None):
 
 def plot_traces(recording, duration=1.0, output_path=None):
     """Plot raw traces."""
-    n_samples = int(duration * recording.get_sampling_frequency())
+    n_samples = min(int(duration * recording.get_sampling_frequency()), recording.get_num_samples())
+    if n_samples < 1:
+        raise ValueError("Plot duration must contain at least one sample.")
     traces = recording.get_traces(start_frame=0, end_frame=n_samples)
 
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -97,7 +104,7 @@ def plot_traces(recording, duration=1.0, output_path=None):
         ax.plot(time, traces[:, ch] + offset, 'k', linewidth=0.5)
 
     ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Channel (offset)')
+    ax.set_ylabel('Stored trace units (offset)')
     ax.set_title(f'Raw Traces ({n_channels} channels)')
 
     if output_path:

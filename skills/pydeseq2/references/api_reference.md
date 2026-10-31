@@ -1,256 +1,157 @@
-# PyDESeq2 API Reference
+# PyDESeq2 0.5.4 API and verification notes
 
-This document provides a practical API reference for PyDESeq2 0.5.x classes, methods, and utilities.
+Reviewed 2026-10-01 against the published release, official stable documentation,
+`v0.5.4` source and a local native runtime. This is a focused contract reference,
+not a complete replacement for upstream documentation.
 
-## Core Classes
+## Installation and tested scope
 
-### DeseqDataSet
+The [current release](https://pypi.org/project/pydeseq2/0.5.4/) is 0.5.4 and requires
+Python >=3.11. Its dependency floor includes AnnData >=0.11, NumPy >=2,
+pandas >=2.2, SciPy >=1.12, scikit-learn >=1.4, formulaic >=1.0.2, and
+formulaic-contrasts >=0.2.0. Dependency floors are not a claim that every later
+combination was tested. AnnData 0.13.4 requires Python >=3.12.
 
-The main class for differential expression analysis that handles data processing from normalization through log-fold change fitting.
+The native review used Python 3.13.3, PyDESeq2 0.5.4, AnnData 0.13.4,
+pandas 3.0.6, NumPy 2.5.1, SciPy 1.18.1, scikit-learn 1.9.1,
+formulaic 1.2.2, formulaic-contrasts 1.0.0, and Matplotlib 3.11.2.
+Tests cover synthetic numerical/input/contrast contracts and real H5AD round-trips.
+They do not establish R/Python numerical equivalence, real biological calibration,
+large-data memory performance, or all inference backends/platforms.
 
-**Purpose:** Implements dispersion and log fold-change (LFC) estimation for RNA-seq count data.
-
-**Initialization Parameters:**
-- `counts`: pandas DataFrame of shape (samples × genes) containing non-negative integer read counts
-- `metadata`: pandas DataFrame of shape (samples × variables) with sample annotations
-- `design`: formulaic/Wilkinson formula string or design matrix specifying the statistical model (e.g., `"~condition"`, `"~batch + condition"`)
-- `fit_type`: dispersion trend fit type, `"parametric"` or `"mean"` (default: `"parametric"`)
-- `size_factors_fit_type`: size factor method, `"ratio"`, `"poscounts"`, or `"iterative"` (default: `"ratio"`)
-- `control_genes`: optional genes used for size factor fitting, useful for invariant housekeeping genes
-- `refit_cooks`: bool, whether to refit parameters after removing Cook's distance outliers (default: True)
-- `inference`: optional inference backend, usually `DefaultInference(n_cpus=...)`
-- `quiet`: bool, suppress progress messages (default: False)
-- `low_memory`: bool, remove intermediate structures after use (default: False)
-
-**Deprecated 0.5.x parameters:** avoid `design_factors`, `continuous_factors`, and `ref_level` in new workflows. Continuous variables are detected from the formula; categorical handling should be expressed through formulaic syntax or pandas categorical dtypes.
-
-**Key Methods:**
-
-#### `deseq2()`
-Run the complete DESeq2 pipeline for normalization and dispersion/LFC fitting.
-
-**Steps performed:**
-1. Compute normalization factors (size factors)
-2. Fit genewise dispersions
-3. Fit dispersion trend curve
-4. Calculate dispersion priors
-5. Fit MAP (maximum a posteriori) dispersions
-6. Fit log fold changes
-7. Calculate Cook's distances for outlier detection
-8. Optionally refit if `refit_cooks=True`
-
-**Returns:** None (modifies object in-place)
-
-#### `to_picklable_anndata()`
-Convert the DeseqDataSet to an AnnData object that can be serialized.
-
-**Returns:** AnnData object with:
-- `X`: count data matrix
-- `obs`: sample-level metadata (1D)
-- `var`: gene-level metadata (1D)
-- `varm`: gene-level multi-dimensional data (e.g., LFC estimates)
-
-**Usage:**
-```python
-dds.to_picklable_anndata().write_h5ad("result_adata.h5ad")
-```
-
-Only load pickle files from trusted sources. Prefer `.h5ad` or CSV for exchanging results between tools or collaborators.
-
-**Attributes (after running deseq2()):**
-- `layers`: dict containing various matrices (normalized counts, etc.)
-- `varm`: dict containing gene-level results (log fold changes, dispersions, etc.)
-- `obsm`: dict containing sample-level information
-- `uns`: dict containing global parameters
-
----
-
-### DeseqStats
-
-Class for performing statistical tests and computing p-values for differential expression.
-
-**Purpose:** Facilitates PyDESeq2 statistical tests using Wald tests and optional LFC shrinkage.
-
-**Initialization Parameters:**
-- `dds`: DeseqDataSet object that has been processed with `deseq2()`
-- `contrast`: list or numpy array specifying the contrast for testing
-  - Format: `[variable, test_level, reference_level]`
-  - Example: `["condition", "treated", "control"]` tests treated vs control
-  - Numeric contrast vectors must match the design matrix length
-- `alpha`: float, significance threshold for independent filtering (default: 0.05)
-- `cooks_filter`: bool, whether to filter outliers based on Cook's distance (default: True)
-- `independent_filter`: bool, whether to perform independent filtering (default: True)
-- `lfc_null`: log2 fold-change under the null hypothesis for thresholded tests (default: 0.0)
-- `alt_hypothesis`: optional thresholded-test alternative (`"greaterAbs"`, `"lessAbs"`, `"greater"`, or `"less"`)
-- `inference`: optional inference backend, usually the same `DefaultInference` object used for `DeseqDataSet`
-- `quiet`: bool, suppress progress messages (default: False)
-- `n_cpus`: int, number of CPUs for parallel processing (optional)
-
-PyDESeq2 0.5.x no longer supports default contrasts. Always pass `contrast`.
-
-**Key Methods:**
-
-#### `summary()`
-Run Wald tests and compute p-values and adjusted p-values.
-
-**Steps performed:**
-1. Run Wald statistical tests for specified contrast
-2. Optional Cook's distance filtering
-3. Optional independent filtering to remove low-power tests
-4. Multiple testing correction (Benjamini-Hochberg procedure)
-
-**Returns:** None (results stored in `results_df` attribute)
-
-**Result DataFrame columns:**
-- `baseMean`: mean normalized count across all samples
-- `log2FoldChange`: log2 fold change between conditions
-- `lfcSE`: standard error of the log2 fold change
-- `stat`: Wald test statistic
-- `pvalue`: raw p-value
-- `padj`: adjusted p-value (FDR-corrected)
-
-#### `lfc_shrink(coeff, adapt=True)`
-Apply shrinkage to log fold changes using the apeGLM method.
-
-**Purpose:** Reduces noise in LFC estimates for better visualization and ranking, especially for genes with low counts or high variability.
-
-**Parameters:**
-- `coeff`: coefficient name to shrink, matching a column in `dds.obsm["design_matrix"]` (for example, `"condition[T.treated]"`)
-- `adapt`: whether to adapt the prior scale from MLE estimates (default: True)
-
-**Important:** Shrinkage is applied only for visualization/ranking purposes. The statistical test results (p-values, adjusted p-values) remain unchanged.
-
-**Returns:** None (updates `results_df` with shrunk LFCs)
-
-**Attributes:**
-- `results_df`: pandas DataFrame containing test results (available after `summary()`)
-
----
-
-## Utility Functions
-
-### `pydeseq2.utils.load_example_data(modality, dataset="synthetic", debug=False)`
-
-Load synthetic example datasets for testing and tutorials.
-
-**Parameters:**
-- `modality`: data modality to load, commonly `"raw_counts"` or `"metadata"`
-- `dataset`: example dataset name, commonly `"synthetic"`
-- `debug`: whether to load a smaller debug dataset
-
-**Returns:** tuple of (counts_df, metadata_df)
-- `counts_df`: pandas DataFrame with synthetic count data
-- `metadata_df`: pandas DataFrame with sample annotations
-
----
-
-## Preprocessing Module
-
-The `pydeseq2.preprocessing` module provides normalization utilities used by the core pipeline.
-
-**Common operations:**
-- Gene filtering based on minimum read counts
-- Sample filtering based on metadata criteria
-- Data transformation and normalization
-
----
-
-## Inference Classes
-
-### Inference
-Abstract base class defining the interface for DESeq2-related inference methods.
-
-### DefaultInference
-Default implementation of inference methods using scipy, sklearn, and numpy.
-
-**Purpose:** Provides the mathematical implementations for:
-- GLM (Generalized Linear Model) fitting
-- Dispersion estimation
-- Trend curve fitting
-- Statistical testing
-
----
-
-## Data Structure Requirements
-
-### Count Matrix
-- **Shape:** (samples × genes)
-- **Type:** pandas DataFrame
-- **Values:** Non-negative integers (raw read counts)
-- **Index:** Sample identifiers (must match metadata index)
-- **Columns:** Gene identifiers
-
-### Metadata
-- **Shape:** (samples × variables)
-- **Type:** pandas DataFrame
-- **Index:** Sample identifiers (must match count matrix index)
-- **Columns:** Experimental factors (e.g., "condition", "batch", "group")
-- **Values:** Categorical or continuous variables used in the design formula
-
-### Important Notes
-- Sample order must match between counts and metadata
-- Missing values in metadata should be handled before analysis
-- Gene names should be unique
-- Count files often need transposition: `counts_df = counts_df.T`
-
----
-
-## Common Workflow Pattern
+## `DeseqDataSet`
 
 ```python
 from pydeseq2.dds import DeseqDataSet
 from pydeseq2.default_inference import DefaultInference
-from pydeseq2.ds import DeseqStats
 
-# 1. Initialize dataset
-inference = DefaultInference(n_cpus=4)
 dds = DeseqDataSet(
-    counts=counts_df,
-    metadata=metadata,
-    design="~condition",
-    refit_cooks=True,
-    inference=inference,
+    counts=counts_df, metadata=metadata, design='~condition',
+    fit_type='parametric', size_factors_fit_type='ratio',
+    refit_cooks=True, min_replicates=7,
+    inference=DefaultInference(n_cpus=1), low_memory=False,
 )
-
-# 2. Fit dispersions and LFCs
-dds.deseq2()
-
-# 3. Perform statistical testing
-ds = DeseqStats(
-    dds,
-    contrast=["condition", "treated", "control"],
-    alpha=0.05,
-    inference=inference,
-)
-ds.summary()
-
-# 4. Optional: Shrink LFCs for visualization
-ds.lfc_shrink(coeff="condition[T.treated]")
-
-# 5. Access results
-results = ds.results_df
+dds.deseq2()  # required before constructing DeseqStats
 ```
 
----
+- `counts`: samples × genes nonnegative integer DataFrame; `metadata` has matching
+  sample rows. Alternatively use `adata=` with counts in `.X` and annotations in
+  `.obs`; do not also supply counts/metadata. Sparse input is not a guarantee of a
+  sparse complete fit. Validate/densify a small matrix intentionally.
+- `design`: formula string or explicit design DataFrame. The older `design_factors`,
+  `continuous_factors`, and `ref_level` parameters are deprecated. Formulaic uses
+  numeric variables continuously; set categorical dtype/reference levels explicitly.
+- `fit_type`: `'parametric'` or `'mean'`; the former can fall back with a warning.
+- `size_factors_fit_type`: `'ratio'`, `'poscounts'`, or `'iterative'`.
+  `control_genes` selects gene indexers, with the release-specific caveats in the
+  [workflow guide](workflow_guide.md).
+- `refit_cooks`: eligible count replacement and refitting; not sample deletion.
+  `min_replicates` defaults to seven.
+- `n_cpus` can be set directly or on `DefaultInference`; reuse a bounded inference
+  object for fitting/testing. `quiet=True` reduces routine messages, not all warnings.
 
-## Version Compatibility
+Methods:
 
-PyDESeq2 aims to match the default settings of DESeq2 v1.34.0 for single-factor and multi-factor Wald-test workflows. Some differences may exist because it is a from-scratch reimplementation in Python.
+| Method | Contract |
+| --- | --- |
+| `deseq2(fit_type=None)` | Fit normalization, dispersions, LFCs and Cook diagnostics/refits; updates in place. |
+| `fit_size_factors(fit_type=None, control_genes=None)` | Normalize only; check positive finite factors. |
+| `cond(**kwargs)` | Formula-based condition vector; unspecified factors use defaults/baselines. |
+| `contrast(column, baseline, group_to_compare)` | Formula-based simple pairwise contrast vector. |
+| `plot_dispersions(log=True, save_path=None, **kwargs)` | Plot gene-wise, fitted and final dispersions. |
+| `vst(use_design=False, fit_type=None)` | Fits/applies VST and stores `layers['vst_counts']`. |
+| `vst_fit(use_design=False)` / `vst_transform(counts=None)` | Separate fitted transformation and application; held-out use needs method-specific validation. |
+| `to_picklable_anndata()` | Plain AnnData snapshot; converts formulaic design matrix to DataFrame. |
 
-**Tested with:**
-- PyDESeq2 0.5.4
-- Python 3.11+
-- anndata 0.11.0+
-- formulaic 1.0.2+
-- formulaic-contrasts 0.2.0+
-- numpy 2.0.0+
-- pandas 2.2.0+
-- scikit-learn 1.4.0+
-- scipy 1.12.0+
+## AnnData layout after fitting
 
-**Important 0.5.x changes:**
-- `design` should be a formulaic formula string or an explicit design matrix.
-- `design_factors`, `continuous_factors`, and `ref_level` are deprecated.
-- `DeseqStats` requires an explicit contrast.
-- `lfc_shrink()` requires an explicit `coeff`.
-- Python 3.10 support was dropped in 0.5.3; use Python 3.11 or newer.
+| Field | Meaning |
+| --- | --- |
+| `X` | Input sample × gene counts. |
+| `obs['size_factors']` | One positive normalization factor per sample. |
+| `obsm['design_matrix']` | Sample × coefficient design matrix. |
+| `layers['normed_counts']` | Counts divided by sample factors; not TPM or VST. |
+| `layers['cooks']` | Sample × gene Cook diagnostic matrix, if retained. |
+| `var['genewise_dispersions']`, `['fitted_dispersions']`, `['MAP_dispersions']`, `['dispersions']` | Gene-wise/trend/MAP/final estimates. |
+| `varm['LFC']` | Gene × coefficient estimates in **natural log**, not log2. |
+| `var['_LFC_converged']` and other underscore fields | Useful release-specific diagnostic flags; not a stable cross-version schema. |
+| `uns` | Shared trend/prior parameters; contents depend on method/fallback. |
+
+`DeseqStats.results_df` is stored on the statistics object, not automatically in
+this AnnData. Save the result CSVs separately. An H5AD snapshot cannot recreate
+formulaic contrasts or resume every estimator method simply by reading it back.
+
+## `DeseqStats`
+
+```python
+from pydeseq2.ds import DeseqStats
+
+ds = DeseqStats(dds, contrast=['condition', 'treated', 'control'], alpha=0.05,
+                cooks_filter=True, independent_filter=True, n_cpus=1)
+ds.summary()
+```
+
+`contrast` is mandatory: a three-string list `[factor, numerator, denominator]`
+or a 1D NumPy vector with one entry per design column. Check finite entries,
+nonzero contrast and biological estimability. Numeric vectors should be NumPy
+arrays, not numeric Python lists interpreted as factor contrasts.
+
+`lfc_null=0.0` is in log2 units. `alt_hypothesis=None` gives the usual two-sided
+Wald test. `'greaterAbs'`, `'lessAbs'`, `'greater'`, and `'less'` specify different
+alternatives; choose deliberately. `summary(lfc_null=..., alt_hypothesis=...)`
+can replace the hypothesis and rerun testing, but do so on an unshrunken object.
+`prior_LFC_var` is an optional ridge prior and is distinct from apeGLM shrinkage.
+
+`summary()` updates `results_df` with `baseMean`, `log2FoldChange`, `lfcSE`,
+`stat`, `pvalue`, and `padj`. `baseMean` is the mean normalized count across all
+samples, not either condition's mean. Original LFC and SE are log2 values;
+`stat` is dimensionless. The usual zero-null two-sided statistic is signed.
+Cook/independent filtering can produce missing p-values/adjusted p-values.
+
+`lfc_shrink(coeff, adapt=True)` selects a **single column name** from the LFC
+matrix and uses an apeGLM-style heavy-tailed prior. It mutates `ds.LFC`, `ds.SE`,
+and the table's `log2FoldChange` and `lfcSE`, keeping existing `stat`, `pvalue`,
+and `padj`. The source writes the selected coefficient to the table even when
+it differs from the original contrast. Check that the exact contrast is the
+positive unit vector for that coefficient, or relevel/refit/use unshrunk results.
+NaN/infinite shrinkage estimates can leave individual original estimates in place;
+inspect warnings and `_LFC_shrink_converged` instead of assuming universal success.
+
+## Preprocessing and upstream example data
+
+`pydeseq2.preprocessing` provides `deseq2_norm(counts)` returning
+`(normalized_counts, size_factors)`, plus `deseq2_norm_fit(counts)` and
+`deseq2_norm_transform(counts, logmeans, filtered_genes)`. It does not perform the
+skill's manual sample exclusions or gene prefilter. Its ratio-only utilities do
+not automatically select an alternative method when geometric means are unusable.
+
+```python
+from pydeseq2.utils import load_example_data
+
+example_counts = load_example_data(modality='raw_counts', dataset='synthetic', debug=False)
+example_metadata = load_example_data(modality='metadata', dataset='synthetic', debug=False)
+```
+
+Each call returns **one DataFrame**, not a tuple. With no packaged `datasets/`
+directory, 0.5.4 downloads public CSVs using unauthenticated GET from
+`https://raw.githubusercontent.com/owkin/PyDESeq2/main/datasets/synthetic/`
+(`test_counts.csv` or `test_metadata.csv`; source inserts an extra slash).
+There is no request body, API version, token or pagination. It transposes the
+count CSV. This moving `main` data source is unsuitable as a pinned benchmark;
+retain a versioned fixture/checksum for reproducibility. `debug=True` is unreliable
+for raw counts in this release: the source tries to sample 100 rows after first
+sampling ten. Use `debug=False` and subset both modalities explicitly if needed.
+
+No hosted analysis service or authenticated scientific endpoint is needed for a
+local fit. Network example loading is a tiny public-data check, not a validation
+of a scientific dataset or remote computation.
+
+## Sources
+
+- [Official dataset API](https://pydeseq2.readthedocs.io/en/stable/api/docstrings/pydeseq2.dds.DeseqDataSet.html)
+- [Official statistics API](https://pydeseq2.readthedocs.io/en/stable/api/docstrings/pydeseq2.ds.DeseqStats.html)
+- [Release metadata and requirements](https://pydeseq2.readthedocs.io/en/stable/usage/requirements.html)
+- [Tagged dataset implementation](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/dds.py)
+- [Tagged statistics implementation](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/ds.py)
+- [Tagged utilities and example loader](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/utils.py)
+- [Tagged preprocessing](https://github.com/scverse/PyDESeq2/blob/v0.5.4/pydeseq2/preprocessing.py)

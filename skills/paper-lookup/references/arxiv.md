@@ -25,7 +25,7 @@ GET https://export.arxiv.org/api/query?search_query={query}&start={n}&max_result
 | `search_query` | Yes* | -- | Search using field prefixes + boolean operators |
 | `id_list` | Yes* | -- | Comma-separated arXiv IDs (e.g., `2103.15348,2005.14165`) |
 | `start` | No | 0 | Pagination offset (0-based) |
-| `max_results` | No | 10 | Results per request (max 2000; absolute max 30000) |
+| `max_results` | No | 10 | Use slices of at most 2,000; refine searches exceeding 1,000. The manual describes a 30,000-result query limit |
 | `sortBy` | No | `relevance` | `relevance`, `lastUpdatedDate`, `submittedDate` |
 | `sortOrder` | No | `descending` | `ascending` or `descending` |
 
@@ -197,7 +197,7 @@ If you do parse it yourself: the namespace is `http://www.w3.org/2005/Atom`, wit
   `id_list=1706.03762`: the entry's `<id>` is `http://arxiv.org/abs/1706.03762v7`, while the
   `<link href>` values for the *same* pages are `https://arxiv.org/abs/...` and
   `https://arxiv.org/pdf/...`, and the feed-level `<id>` is `https://arxiv.org/api/...`. Never
-  string-match or normalize on the scheme -- take the last path segment.
+  string-match on the scheme. Take the complete path after `/abs/`; legacy IDs such as `hep-th/9901001v1` contain a slash.
 - **The ID carries a version suffix.** `1706.03762v7`, not `1706.03762`. Strip the trailing `vN`
   before comparing against a DOI, a Semantic Scholar `ARXIV:` lookup, or a user-supplied ID.
 - **`<title>` and `<summary>` arrive hard-wrapped**, with newlines and runs of spaces mid-sentence.
@@ -269,7 +269,12 @@ Full list: https://arxiv.org/category_taxonomy
 
 ## Rate Limits
 
-- **1 request every 3 seconds** (hard limit)
+- **At least 3 seconds between requests**, per the API usage guidance
 - Single connection at a time
 - Search results are cached daily -- same query won't show new results within 24 hours
 - For bulk data, use the OAI-PMH interface instead
+
+## Official sources reviewed 2026-09-30
+
+- https://info.arxiv.org/help/api/user-manual.html
+- https://info.arxiv.org/help/api/tou.html

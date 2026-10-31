@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import stat
@@ -178,9 +179,11 @@ def iter_text_lines(
         else:
             stream = raw_handle
         try:
-            for line_number, raw_line in enumerate(stream, start=1):
+            line_number = 0
+            while raw_line := stream.readline(max_line_bytes + 1):
+                line_number += 1
                 if line_number > max_records:
-                    raise SafetyError(f"record limit exceeded in {path}")
+                    raise SafetyError("record limit exceeded")
                 if len(raw_line) > max_line_bytes:
                     raise SafetyError(f"line {line_number} exceeds line-size limit")
                 expanded_bytes += len(raw_line)
@@ -371,9 +374,14 @@ def simple_yaml_mapping(
         elif raw_value in {"false", "False", "FALSE"}:
             value = False
         elif _INTEGER.fullmatch(raw_value):
-            value = int(raw_value)
+            try:
+                value = int(raw_value)
+            except ValueError as exc:
+                raise SafetyError("YAML integer exceeds the supported size") from exc
         elif _FLOAT.fullmatch(raw_value):
             value = float(raw_value)
+            if not math.isfinite(value):
+                raise SafetyError("YAML numeric metadata must be finite")
         elif (
             len(raw_value) >= 2
             and raw_value[0] == raw_value[-1]

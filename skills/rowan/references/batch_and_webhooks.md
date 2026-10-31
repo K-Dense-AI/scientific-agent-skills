@@ -1,255 +1,181 @@
 # Batch Submission, Webhooks, and Asynchronous Workflows
 
-Webhook secret management, batch submit/poll/retrieve, the non-blocking fire-and-check
-pattern, webhook payloads and signature verification, and webhook best practices.
+Targets `rowan-python` 3.2.0. Hosted calls below are illustrative; this refresh
+verified SDK contracts and local signature checks without submitting paid work.
+See the [workflow reference](https://docs.rowansci.com/api/python/v3/api/workflow/)
+and [webhook reference](https://docs.rowansci.com/api/python/v3/api/webhooks/).
 
-### Webhook secret management
+## Submit and reconnect to a batch
 
-For webhook signature verification, manage secrets through your user account:
+Prefer named submit functions: they construct and validate each workflow's input
+model. Generic `submit_workflow` and `batch_submit_workflow` still exist; they
+require the exact workflow schema and are not universally broken. An HTTP 422
+is a request-validation failure, not evidence that these functions are disabled.
 
 ```python
+import json
+from pathlib import Path
 import rowan
 
-# Get your current webhook secret (returns None if none exists)
+# Work around the Folder annotation defect in SDK 3.2.0.
+from datetime import datetime
+rowan.Folder.model_rebuild(_types_namespace={"datetime": datetime})
+
+# ROWAN_API_KEY is read from the environment. Use the intended active project.
+folder = rowan.get_folder("screening/descriptors")
+compounds = {"ethanol": "CCO", "acetic_acid": "CC(=O)O", "phenol": "c1ccccc1O"}
+# Durable progress: a retry loads existing identifiers instead of re-submitting them.
+manifest = Path("submitted_workflows.json")
+submitted = json.loads(manifest.read_text()) if manifest.exists() else {}
+for name, smiles in compounds.items():
+    if name in submitted:
+        continue
+    wf = rowan.submit_descriptors_workflow(
+        rowan.Molecule.from_smiles(smiles), name=name, folder=folder, max_credits=10,
+    )
+    submitted[name] = {"uuid": wf.uuid, "smiles": smiles}
+    # Save after each acknowledged submission; do not wait until the entire loop finishes.
+    manifest.write_text(json.dumps(submitted, indent=2))
+```
+
+The example's per-job ceiling is an illustrative budget choice, not a runtime
+estimate. Persist the full settings and environment lockfile in a real campaign.
+A lost response or crash between acceptance and recording still leaves an
+ambiguous submission: reconcile the folder before retrying. The SDK does not
+provide an idempotency key in these submission signatures.
+
+```python
+# Run later, after loading the same manifest.
+uuids = [record["uuid"] for record in submitted.values()]
+counts = rowan.batch_poll_status(uuids)
+print(counts)  # Aggregate lower-case status counts, not a UUID-to-status mapping.
+# Do not infer individual success from an invented count-key schema.
+# Check each saved UUID below; returned count keys are server-defined.
+```
+
+Inspect individual workflows to collect results and distinguish failures:
+
+```python
+results = []
+for name, record in submitted.items():
+    wf = rowan.retrieve_workflow(record["uuid"])
+    if not wf.done():
+        print(name, wf.get_status())
+        continue
+    try:
+        result = wf.result(wait=False)
+    except rowan.WorkflowError as exc:
+        # done() also includes FAILED and STOPPED.
+        print(name, str(exc))
+        continue
+    results.append({"name": name, "uuid": wf.uuid, "data": result.data})
+```
+
+## Webhook secrets and submission
+
+Secret management returns a string, or `None` from `get_webhook_secret()` when
+unset. Perform provisioning separately from a web server's import/startup path:
+
+```python
 secret = rowan.get_webhook_secret()
 if secret is None:
-    secret = rowan.create_webhook_secret()
-# These functions return the secret as a plain string.
+    secret = rowan.create_webhook_secret()  # Idempotent if one already exists.
+# Store securely for the receiver; never print or commit this secret.
+# Explicit rotation invalidates the old secret:
+# secret = rowan.rotate_webhook_secret()
+```
 
-# Rotate your secret (invalidates old, creates new)
-# Use this periodically for security.
-secret = rowan.rotate_webhook_secret()
+Named submit functions expose `webhook_url`:
 
-# Verify incoming webhook signatures.
-is_valid = rowan.verify_webhook_secret(
-    raw_body=b"...",                  # Raw request body (bytes)
-    signature_header="sha256=...",    # Value from X-Rowan-Signature
-    secret=secret,
+```python
+wf = rowan.submit_descriptors_workflow(
+    rowan.Molecule.from_smiles("CCO"),
+    name="ethanol callback",
+    webhook_url="https://example.org/rowan_callback",  # Replace with your receiver.
+    max_credits=10,
 )
 ```
 
-## Batch submission and retrieval
-
-For libraries or analogue series, submit in a loop using the specific workflow function. The generic `rowan.batch_submit_workflow()` and `rowan.submit_workflow()` functions currently return 422 errors from the API — use the named functions (`submit_descriptors_workflow`, `submit_pka_workflow`, etc.) instead.
-
-### Submit a batch
-
-```python
-smileses = ["CCO", "CC(=O)O", "c1ccccc1O"]
-names = ["ethanol", "acetic acid", "phenol"]
-
-workflows = [
-    rowan.submit_descriptors_workflow(rowan.Molecule.from_smiles(smi), name=name)
-    for smi, name in zip(smileses, names)
-]
-
-print(f"Submitted {len(workflows)} workflows")
-```
-
-### Poll batch status
-
-```python
-statuses = rowan.batch_poll_status([wf.uuid for wf in workflows])
-# Returns aggregate counts — not per-UUID:
-# {'queued': 0, 'running': 1, 'complete': 2, 'failed': 0, 'total': 3, ...}
-
-if statuses["complete"] == statuses["total"]:
-    print("All workflows done")
-elif statuses["failed"] > 0:
-    print(f"{statuses['failed']} workflows failed")
-```
-
-### Retrieve and collect results
-
-```python
-results = []
-for wf in workflows:
-    try:
-        result = wf.result()
-        results.append(result.data)
-    except rowan.WorkflowError as e:
-        print(f"Workflow {wf.uuid} failed: {e}")
-
-# Optionally aggregate into DataFrame
-import pandas as pd
-df = pd.DataFrame(results)
-```
-
-### Non-blocking / fire-and-check pattern
-
-For long-running workflows where you don't want to hold a process open, submit workflows, save their UUIDs, and check back later in a separate process.
-
-**Session 1 — submit and save UUIDs:**
-
-```python
-import rowan, json
-
-rowan.api_key = "..."
-smileses = ["CCO", "CC(=O)O", "c1ccccc1O"]
-
-workflows = [
-    rowan.submit_descriptors_workflow(
-        rowan.Molecule.from_smiles(smi), name=f"compound_{i}"
-    )
-    for i, smi in enumerate(smileses)
-]
-
-# Save UUIDs to disk (or a database)
-uuids = [wf.uuid for wf in workflows]
-with open("workflow_uuids.json", "w") as f:
-    json.dump(uuids, f)
-
-print("Submitted. Check back later.")
-```
-
-**Session 2 — check status and collect results when ready:**
-
-```python
-import rowan, json
-
-rowan.api_key = "..."
-
-with open("workflow_uuids.json") as f:
-    uuids = json.load(f)
-
-results = []
-for uuid in uuids:
-    wf = rowan.retrieve_workflow(uuid)
-    if wf.done():
-        result = wf.result(wait=False)
-        results.append({"uuid": uuid, "data": result.data})
-    else:
-        print(f"{uuid}: still running ({wf.get_status()})")
-
-print(f"Collected {len(results)} completed results")
-```
-
-## Webhooks and asynchronous workflows
-
-For long-running campaigns or when you don't want to keep a process alive, use webhooks to notify your backend when workflows complete.
-
-### Setting up webhooks
-
-Every workflow submission function accepts a `webhook_url` parameter:
-
-```python
-wf = rowan.submit_docking_workflow(
-    protein=protein,
-    pocket=pocket,
-    initial_molecule=rowan.Molecule.from_smiles("CCO"),
-    webhook_url="https://myserver.com/rowan_callback",
-    name="docking with webhook",
-)
-
-print(f"Workflow submitted. Result will be POSTed to webhook when complete.")
-```
-
-Webhook URLs can be passed to any specific workflow function (`submit_docking_workflow()`, `submit_pka_workflow()`, `submit_descriptors_workflow()`, etc.).
-
-### Webhook authentication with secrets
-
-Rowan supports webhook signature verification to ensure requests are authentic. You'll need to:
-
-1. **Create or retrieve a webhook secret:**
-
-```python
-import rowan
-
-# Create a new webhook secret
-secret = rowan.create_webhook_secret()  # returns a string
-# Store it securely; do not log it.
-
-# Or retrieve an existing secret
-secret = rowan.get_webhook_secret()
-
-# Rotate your secret (invalidates old one, creates new)
-new_secret = rowan.rotate_webhook_secret()
-```
-
-2. **Verify incoming webhook requests:**
-
-```python
-import rowan
-import hmac
-import json
-
-def verify_webhook(request_body: bytes, signature: str, secret: str) -> bool:
-    """Verify the HMAC-SHA256 signature of a webhook request."""
-    return rowan.verify_webhook_secret(request_body, signature, secret)
-```
-
-### Webhook payload and signature
-
-When a workflow completes, Rowan POSTs a JSON payload to your webhook URL with the header:
+The SDK's signature header format is:
 
 ```text
-X-Rowan-Signature: <HMAC-SHA256 signature>
+X-Rowan-Signature: t=<unix_timestamp>,sha256=<hex_digest>
 ```
 
-The request body contains the complete workflow result:
+The HMAC-SHA256 message is `timestamp + b"." + raw_body`, not the JSON body
+alone. `verify_webhook_secret(raw_body, signature_header, secret,
+max_age_seconds=300)` checks the digest and timestamp freshness. Verify the
+original bytes before parsing; re-encoding JSON changes the signature input.
+The current helper can raise `ValueError` for a non-integer timestamp, so a
+receiver must treat that as invalid authentication.
 
-```json
-{
-  "workflow_uuid": "wf_12345abc",
-  "workflow_type": "docking",
-  "workflow_name": "lead docking",
-  "status": "COMPLETED_OK",
-  "created_at": "2025-04-01T12:00:00Z",
-  "completed_at": "2025-04-01T12:15:30Z",
-  "data": {
-    "scores": [-8.2, -8.0, -7.9],
-    "best_pose": {...},
-    "metadata": {...}
-  }
-}
-```
+## Minimal receiver (FastAPI)
 
-### Example webhook handler with signature verification (FastAPI)
+Requires `fastapi` and an ASGI server in the receiver's own environment.
+`ROWAN_WEBHOOK_SECRET` here is receiver configuration populated during the
+provisioning step; it is not an SDK-discovered environment variable.
 
 ```python
+import os
+import json
 from fastapi import FastAPI, Request, HTTPException
 import rowan
-import json
 
 app = FastAPI()
-webhook_secret = rowan.get_webhook_secret() or rowan.create_webhook_secret()
+webhook_secret = os.environ["ROWAN_WEBHOOK_SECRET"]
+if not webhook_secret:
+    raise RuntimeError("Missing webhook receiver secret")
 
 @app.post("/rowan_callback")
 async def handle_rowan_webhook(request: Request):
-    # Get request body and signature
     body = await request.body()
-    signature = request.headers.get("X-Rowan-Signature")
-
-    if not signature:
-        raise HTTPException(status_code=400, detail="Missing X-Rowan-Signature header")
-
-    # Verify signature
-    if not rowan.verify_webhook_secret(body, signature, webhook_secret):
+    signature = request.headers.get("X-Rowan-Signature", "")
+    try:
+        valid = rowan.verify_webhook_secret(body, signature, webhook_secret)
+    except (ValueError, OverflowError):
+        valid = False
+    if not valid:
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-    # Parse and process
-    payload = json.loads(body)
-    wf_uuid = payload["workflow_uuid"]
-    status = payload["status"]
-
-    if status == "COMPLETED_OK":
-        print(f"Workflow {wf_uuid} succeeded!")
-        result_data = payload["data"]
-        # Process result, update database, trigger next workflow, etc.
-    elif status == "FAILED":
-        print(f"Workflow {wf_uuid} failed!")
-        # Handle failure
-
-    # Respond quickly to prevent retries
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Expected JSON object")
+    # Demonstration receiver only: add durable event storage or queueing here.
+    # Reconcile your saved workflow UUIDs through retrieve_workflow().result().
     return {"status": "received"}
 ```
 
-### Webhook best practices
+The official public webhook reference specifies signing but does not publish a
+complete event schema or retry schedule. Do not assume fields such as
+`workflow_uuid`, `status`, or an embedded `data` result based on a fabricated
+sample. Establish the actual event schema in an integration test, then validate
+it and deduplicate events. Persist before acknowledging in production, return
+promptly, and retrieve authoritative workflow results using your saved UUIDs.
 
-- **Always verify signatures** using `rowan.verify_webhook_secret()` to ensure requests are from Rowan
-- **Respond quickly** (< 5 seconds); offload heavy processing to async tasks or background jobs
-- **Implement idempotency**: workflows may retry; handle duplicate payloads gracefully using `workflow_uuid`
-- **Log all events** for debugging and audit trails
-- **Use for long campaigns**: webhooks shine with 50+ workflows; for small jobs, polling with `result()` is simpler
-- **Rotate secrets regularly** using `rowan.rotate_webhook_secret()` for security
-- **Return 2xx status** to confirm receipt; Rowan may retry on 5xx errors
+## SDK transport and pagination contracts
+
+These are verified against the released SDK source, not an authenticated server
+probe. The default base is `https://api.rowansci.com`, with `X-API-Key`
+authentication and no guessed `/v1` prefix. Prefer SDK calls over hand-built requests.
+
+| Operation | Transport and response |
+|---|---|
+| Named workflow submission | `POST /workflow`; JSON includes `workflow_type`, validated `workflow_data`, applicable molecule/SMILES input, `name`, `folder_uuid`, `max_credits`, `webhook_url`, `is_draft`; response parses as `Workflow` |
+| Retrieve/poll | `GET /workflow/{uuid}`; wire keys include `object_status`, `object_type`, `object_data`; SDK exposes `.status`, `.workflow_type`, `.data` |
+| Batch status | `POST /workflow/batch_status` with `{"uuids": [...]}`; aggregate counts |
+| List workflows | `GET /workflow`; `parent_uuid` is a folder; `page=0`, `size=10` by default; wire response has `workflows`; SDK returns a list |
+| Account | `GET /user/me`; returns `User`, including account-specific `enabled_workflows` |
+| Webhook secret | `GET`/`POST /user/me/webhook_secret`; rotation is `POST /user/me/webhook_secret/rotate`; SDK unwraps `webhook_secret` |
+| Projects | `POST /project` with `name`; `GET /project/{uuid}`; listing uses zero-based `page`/`size` and a `projects` envelope |
+| Default project | `GET /user/me/default_project`; returns its root folder UUID for folder/list helpers when no project is active |
+| Folders | `POST /folder` with `name` and a parent folder UUID; `GET /folder` lists one page under a parent (`folders` envelope); `get_folder` resolves/creates each path component |
+| Protein import | `POST /convert/pdb_file_to_protein` or `/convert/mmcif_file_to_protein` with `name`/`text`, then `POST /protein` with `protein_data`; PDB IDs use `/convert/pdb_id_to_protein?pdb_id=...` |
+| Protein retrieve/list | `GET /protein/{uuid}` (optional `workflow_uuid` access context); `GET /protein` with `page=0`, `size=20` defaults and a `proteins` envelope |
+| Lazy structures | Calculation retrieval uses `GET /calculation/{uuid}/stjames`; protein results use `GET /protein/{uuid}`; convenience access can therefore cause more requests |
+| MSA archives | `GET /workflow/{uuid}/get_msa_files?msa_format=colabfold` (or `chai`/`boltz`); binary tar.gz, not JSON |
+
+List functions fetch one page, not the complete collection. Advance `page` until
+empty and traverse subfolders explicitly. Do not convert numeric wire statuses
+to invented strings; use the SDK enum names (`COMPLETED_OK`, `FAILED`, `STOPPED`).

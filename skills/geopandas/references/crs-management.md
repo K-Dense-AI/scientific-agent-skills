@@ -131,12 +131,17 @@ group = TransformerGroup(
     allow_ballpark=False,
 )
 
-if not group.best_available:
+if not group.best_available or not group.transformers:
     raise RuntimeError("Best transformation unavailable; inspect missing grids")
 
 candidate = group.transformers[0]
 print(candidate.description, candidate.accuracy, candidate.area_of_use)
 ```
+
+`AreaOfInterest` always takes geographic longitude/latitude **degrees**, never
+projected metres/feet. The bundled planner accepts `--bbox` only for a source
+CRS with geographic degree axes; omit it for projected sources. Its bounds and
+transform descriptions are planning metadata, not transformed coordinates.
 
 Privacy note: an exact area of interest can reveal a sensitive study location.
 Do not log it; retain only an approved coarse region or protected audit record.
@@ -219,13 +224,15 @@ Record:
 - required/available grids, network policy, PROJ data/database versions;
 - densification, antimeridian splitting, precision, and validation checks.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas projections guide](https://geopandas.org/en/stable/docs/user_guide/projections.html).
 - [GeoDataFrame.to_crs](https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.to_crs.html).
 - [GeoDataFrame.set_crs](https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.set_crs.html).
-- [pyproj Transformer API 3.7.2](https://pyproj4.github.io/pyproj/stable/api/transformer.html) — page updated 2025-07-02.
-- [pyproj CRS API 3.7.2](https://pyproj4.github.io/pyproj/stable/api/crs/crs.html).
+- [pyproj Transformer API](https://pyproj4.github.io/pyproj/stable/api/transformer.html).
+- [pyproj CRS API](https://pyproj4.github.io/pyproj/stable/api/crs/crs.html).
 - [pyproj transformation grids](https://pyproj4.github.io/pyproj/stable/transformation_grids.html).
 - [pyproj Geod API](https://pyproj4.github.io/pyproj/stable/api/geod.html).
 - [GeoParquet 1.1.0 CRS and axis-order rules](https://geoparquet.org/releases/v1.1.0/).
+
+- [pyproj 3.8.0 AreaOfInterest source](https://github.com/pyproj4/pyproj/blob/3.8.0/pyproj/aoi.py).

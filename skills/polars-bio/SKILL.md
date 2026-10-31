@@ -1,384 +1,212 @@
 ---
 name: polars-bio
-description: High-performance genomic interval operations and bioinformatics file I/O on Polars DataFrames. Overlap, nearest, merge, coverage, complement, subtract for BED/VCF/BAM/GFF intervals. Streaming, cloud-native, faster bioframe alternative.
+description: Performs genomic interval overlap, nearest, merge, coverage, complement and subtraction on Polars DataFrames, and reads or writes BED, VCF, BCF, BAM, CRAM, GFF, GTF, FASTA and FASTQ data. Use for coordinate-aware genomic joins, read-depth analysis, lazy bioinformatics I/O, SQL queries or migration from bioframe.
 license: Apache-2.0
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.11–3.14 and polars-bio (uv pip install). Cloud I/O uses standard AWS/GCS/Azure SDK env vars when paths use s3://, gs://, or az:// URIs.
+compatibility: Requires Python 3.11–3.14 and polars-bio 0.36.0. Native wheels are available for major desktop/server platforms. Network access and provider credentials are needed only for remote data. External-reference CRAM needs a local FASTA and .fai.
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
+  upstream-version: "0.36.0"
 ---
 
 # polars-bio
 
-## Overview
-
-polars-bio is a high-performance Python library for genomic interval operations and bioinformatics file I/O, built on Polars, Apache Arrow, and Apache DataFusion. It provides a familiar DataFrame-centric API for interval arithmetic (overlap, nearest, merge, coverage, complement, subtract) and reading/writing common bioinformatics formats (BED, VCF, BAM, CRAM, GFF/GTF, FASTA, FASTQ).
-
-Key value propositions:
-- **6-38x faster** than bioframe on real-world genomic benchmarks
-- **Streaming/out-of-core** support for large genomes via DataFusion
-- **Cloud-native** file I/O (S3, GCS, Azure) with predicate pushdown
-- **Two API styles**: functional (`pb.overlap(df1, df2)`) and method-chaining (`df1.lazy().pb.overlap(df2)`)
-- **SQL interface** for genomic data via DataFusion SQL engine
-
-## When to Use This Skill
-
-Use this skill when:
-- Performing genomic interval operations (overlap, nearest, merge, coverage, complement, subtract)
-- Reading/writing bioinformatics file formats (BED, VCF, BAM, CRAM, GFF/GTF, FASTA, FASTQ)
-- Processing large genomic datasets that don't fit in memory (streaming mode)
-- Running SQL queries on genomic data files
-- Migrating from bioframe to a faster alternative
-- Computing read depth/pileup from BAM/CRAM files
-- Working with Polars DataFrames containing genomic intervals
-
-## Quick Start
-
-### Installation
-
-Requires Python 3.11–3.14 (see [PyPI](https://pypi.org/project/polars-bio/)).
+Use this skill for genomic interval arithmetic and bioinformatics file I/O through
+Polars and DataFusion. It targets **polars-bio 0.36.0**, tested with **Polars 1.44.2**
+on Python 3.13. The upstream package requires Polars >=1.37.1, PyArrow >=23.0.1,<25,
+DataFusion >=53,<54 and polars-config-meta >=0.3.2,<1. Keep this environment separate
+from packages needing incompatible Arrow or DataFusion releases.
 
 ```bash
-uv pip install "polars-bio==0.31.0"
+uv pip install "polars-bio==0.36.0" "polars==1.44.2"
+# Optional pandas interoperability (requires pandas >=3):
+uv pip install "polars-bio[pandas]==0.36.0" "polars==1.44.2"
 ```
 
-For pandas compatibility (pandas ≥3.0):
+Verify new releases against the [official release notes](https://github.com/biodatageeks/polars-bio/releases)
+and [package requirements](https://pypi.org/project/polars-bio/0.36.0/).
+The examples below with named files are **templates**: substitute actual files and
+check their schemas. The synthetic interval example and small local format
+round trips were executed during this review.
 
-```bash
-uv pip install "polars-bio[pandas]==0.31.0"
-```
+## Workflow
 
-### Basic Overlap Example
+1. Record the assembly, contig naming, coordinate convention, strand policy and
+   unit of analysis. Identical contig names do not prove identical assemblies.
+2. Choose readers by format; BCF has its own reader. Inspect schemas and source
+   metadata before selecting attributes or genotypes.
+3. Normalize all inputs to one coordinate system and validate their bounds.
+4. Choose pair output, hit counts, covered bases or read depth deliberately.
+5. Filter and project lazily, then inspect a small result before scaling up.
+6. Validate output counts and boundaries against a hand-computable fixture;
+   preserve IDs, coordinate metadata and provenance when saving results.
+
+## Coordinate contract
+
+The default is **1-based closed**, including converted BED reads. Use
+`use_zero_based=True` on genomic readers for **0-based half-open** output.
+This argument converts positions; it is not only a metadata label. For example,
+BED `[0,10)` becomes `[1,10]` by default and remains `[0,10)` with the override.
+SAM text POS is 1-based, whereas BAM stores its alignment position internally
+as 0-based. Both readers expose the requested output convention.
+
+For manually constructed DataFrames, metadata labels existing numbers and
+**does not convert them**. Converting closed `[s,e]` to half-open means `s-1,e`.
+Set metadata only after conversion. Never convert twice.
 
 ```python
 import polars as pl
 import polars_bio as pb
 
-# Create two interval DataFrames
-df1 = pl.DataFrame({
-    "chrom": ["chr1", "chr1", "chr1"],
-    "start": [1, 5, 22],
-    "end":   [6, 9, 30],
-})
-
-df2 = pl.DataFrame({
-    "chrom": ["chr1", "chr1"],
-    "start": [3, 25],
-    "end":   [8, 28],
-})
-
-# Functional API (returns LazyFrame by default)
-result = pb.overlap(df1, df2)
-result_df = result.collect()
-
-# Get a DataFrame directly
-result_df = pb.overlap(df1, df2, output_type="polars.DataFrame")
-
-# Method-chaining API (via .pb accessor on LazyFrame)
-result = df1.lazy().pb.overlap(df2)
-result_df = result.collect()
-```
-
-### Reading a BED File
-
-```python
-import polars_bio as pb
-
-# Eager read (loads entire file)
-df = pb.read_bed("regions.bed")
-
-# Lazy scan (streaming, for large files)
-lf = pb.scan_bed("regions.bed")
-result = lf.collect()
-```
-
-## Core Capabilities
-
-### 1. Genomic Interval Operations
-
-polars-bio provides 8 core interval operations for genomic range arithmetic. All operations accept Polars DataFrames with `chrom`, `start`, `end` columns (configurable). All operations return a `LazyFrame` by default (use `output_type="polars.DataFrame"` for eager results).
-
-**Interpret overlap rows correctly:** The default `overlap` result contains interval pairs: one query interval may appear multiple times when it hits several targets. Preserve a stable query ID before joining and choose `count_overlaps` when the requested output is a count per query interval. Do not interpret the number of joined rows as the number of unique covered regions. See the [upstream operations overview](https://biodatageeks.org/polars-bio/features/operations/).
-
-**Operations:**
-- `overlap` / `count_overlaps` - Find or count overlapping intervals between two sets (`overlap_output="left"` returns df1-only hits since 0.30.0)
-- `nearest` - Find nearest intervals (with configurable `k`, `overlap`, `distance` params)
-- `merge` - Merge overlapping/bookended intervals within a set
-- `cluster` - Assign cluster IDs to overlapping intervals
-- `coverage` - Compute per-interval coverage counts (two-input operation)
-- `complement` - Find gaps between intervals within a genome
-- `subtract` - Remove portions of intervals that overlap another set
-
-**Example:**
-```python
-import polars_bio as pb
-
-# Find overlapping intervals (returns LazyFrame)
-result = pb.overlap(df1, df2, suffixes=("_1", "_2"))
-
-# Count overlaps per interval
-counts = pb.count_overlaps(df1, df2)
-
-# Merge overlapping intervals
-merged = pb.merge(df1)
-
-# Find nearest intervals
-nearest = pb.nearest(df1, df2)
-
-# Collect any LazyFrame result to DataFrame
-result_df = result.collect()
-```
-
-**Reference:** See `references/interval_operations.md` for detailed documentation on all operations, parameters, output schemas, and performance considerations.
-
-### 2. Bioinformatics File I/O
-
-Read and write common bioinformatics formats with `read_*`, `scan_*`, `write_*`, and `sink_*` functions. Supports cloud storage (S3, GCS, Azure) and compression (GZIP, BGZF).
-
-**Supported formats:**
-- **BED** - Genomic intervals (`read_bed`, `scan_bed`, `write_*` via generic)
-- **VCF** - Genetic variants (`read_vcf`, `scan_vcf`, `write_vcf`, `sink_vcf`)
-- **VCF Zarr** - Analysis-ready Zarr stores (`read_vcf_zarr`, `scan_vcf_zarr`; local directory paths)
-- **BAM** - Aligned reads (`read_bam`, `scan_bam`, `write_bam`, `sink_bam`)
-- **CRAM** - Compressed alignments (`read_cram`, `scan_cram`, `write_cram`, `sink_cram`)
-- **GFF** - Gene annotations (`read_gff`, `scan_gff`)
-- **GTF** - Gene annotations (`read_gtf`, `scan_gtf`)
-- **FASTA** - Reference sequences (`read_fasta`, `scan_fasta`, `write_fasta`, `sink_fasta`)
-- **FASTQ** - Sequencing reads (`read_fastq`, `scan_fastq`, `write_fastq`, `sink_fastq`)
-- **SAM** - Text alignments (`read_sam`, `scan_sam`, `write_sam`, `sink_sam`)
-- **Hi-C pairs** - Chromatin contacts (`read_pairs`, `scan_pairs`)
-
-**Example:**
-```python
-import polars_bio as pb
-
-# Read VCF file
-variants = pb.read_vcf("samples.vcf.gz")
-
-# Lazy scan BAM file (streaming)
-alignments = pb.scan_bam("aligned.bam")
-
-# Read GFF annotations
-genes = pb.read_gff("annotations.gff3")
-
-# Cloud storage (individual params, not a dict)
-df = pb.read_bed("s3://bucket/regions.bed",
-                 allow_anonymous=True)
-```
-
-**Reference:** See `references/file_io.md` for per-format column schemas, parameters, cloud storage options, and compression support.
-
-### 3. SQL Data Processing
-
-Register bioinformatics files as tables and query them using DataFusion SQL. Combines the power of SQL with polars-bio's genomic-aware readers.
-
-```python
-import polars as pl
-import polars_bio as pb
-
-# Register files as SQL tables (path first, name= keyword)
-pb.register_vcf("samples.vcf.gz", name="variants")
-pb.register_bed("target_regions.bed", name="regions")
-
-# Query with SQL (returns LazyFrame)
-result = pb.sql("SELECT chrom, start, end, ref, alt FROM variants WHERE qual > 30")
-result_df = result.collect()
-
-# Register a Polars DataFrame as a SQL table
-pb.from_polars("my_intervals", df)
-result = pb.sql("SELECT * FROM my_intervals WHERE chrom = 'chr1'").collect()
-```
-
-**Reference:** See `references/sql_processing.md` for register functions, SQL syntax, and examples.
-
-### 4. Pileup Operations
-
-Compute per-base read depth from BAM/CRAM files with CIGAR-aware depth calculation.
-
-```python
-import polars_bio as pb
-
-# Compute depth across a BAM file
-depth_lf = pb.depth("aligned.bam")
-depth_df = depth_lf.collect()
-
-# With quality filter
-depth_lf = pb.depth("aligned.bam", min_mapping_quality=20)
-```
-
-**Reference:** See `references/pileup_operations.md` for parameters and integration patterns.
-
-## Key Concepts
-
-### Coordinate Systems
-
-polars-bio defaults to **1-based** coordinates (genomic convention). This can be changed globally:
-
-```python
-import polars_bio as pb
-
-# Switch to 0-based half-open coordinates (default is 1-based / False)
 pb.set_option("datafusion.bio.coordinate_system_zero_based", True)
+pb.set_option("datafusion.bio.coordinate_system_check", True)
 
-# Switch back to 1-based (default)
-pb.set_option("datafusion.bio.coordinate_system_zero_based", False)
+query = pl.DataFrame({
+    "query_id": ["q1", "q2", "q3"],
+    "chrom": ["chr1", "chr1", "chr2"],
+    "start": [0, 10, 0], "end": [10, 20, 10],
+})
+target = pl.DataFrame({
+    "chrom": ["chr1", "chr1"], "start": [5, 8], "end": [12, 15],
+})
+for frame in (query, target):
+    frame.config_meta.set(coordinate_system_zero_based=True)
+
+pairs = pb.overlap(query, target).collect()
+counts = pb.count_overlaps(query, target).collect().sort("query_id")
+covered = pb.coverage(query, target).collect().sort("query_id")
+assert pairs.height == 4
+assert counts["count"].to_list() == [2, 2, 0]
+assert covered["coverage"].to_list() == [5, 5, 0]
 ```
 
-I/O functions also accept `use_zero_based` to set coordinate metadata on the resulting DataFrame:
+Require non-null contigs, integer positions and valid positive-length intervals
+(`0 <= start < end` in half-open form), within the chosen assembly. Do not silently
+turn points/insertions into nonempty intervals: choose the biological convention.
+Mismatched input metadata raises `CoordinateSystemMismatchError`; missing metadata
+warns and uses the global setting by default, or raises `MissingCoordinateSystemError`
+in strict mode. Inspect `pb.get_metadata(frame)` after transformations and SQL.
+See [configuration](references/configuration.md).
+
+## Choose the operation
+
+| Question | Operation | Interpretation |
+|---|---|---|
+| Which interval pairs intersect? | `overlap(a, b)` | Inner pair join; a query can appear repeatedly |
+| Which query rows have any hit? | `overlap(a, b, overlap_output="left", distinct_output=True)` | One hit per original query row; duplicate input rows retain identity |
+| How many target intervals intersect each query? | `count_overlaps(a, b)` | Target-record count, including zero for no hit |
+| How many query bases are covered? | `coverage(a, b)` | Length of the union of target intersections; not read depth |
+| Which targets are closest? | `nearest(a, b, k=1)` | Up to k neighbors, with nullable target/distance for no candidate |
+| Combine overlapping regions | `merge(a)` | Coordinates plus `n_intervals`; other annotations are not aggregated |
+| Label overlapping groups | `cluster(a)` | Adds `cluster`, `cluster_start`, `cluster_end` |
+| Find uncovered regions | `complement(a, view_df=genome)` | Gaps within explicit assembly bounds |
+| Remove target-covered pieces | `subtract(a, b)` | Remaining coordinate fragments; source annotations are not retained |
+
+Important 0.36.0 behavior:
+
+- `on_cols` is exposed in several signatures but **not implemented**; non-None
+  values raise `AssertionError`. For strand/sample-specific analysis, split both
+  inputs by that key, run matching groups separately and restore the group key.
+- `merge(..., min_dist=0)` and `cluster(..., min_dist=0)` keep bookended half-open
+  intervals separate. `min_dist=1` joins bookends for integer coordinates. Test
+  boundary fixtures when porting bioframe code; its threshold conventions differ.
+- `nearest` supports `k`, `overlap=False` and `distance=False`. Distance zero can
+  mean overlap **or adjacency**; it does not prove an intersecting base. Do not
+  infer a unique biological annotation from an arbitrary equidistant candidate.
+- Default COITrees overlap indexing casts coordinates to signed Int32; an Int64
+  DataFrame does not remove the 2,147,483,647 bound. Validate maximum coordinates
+  before execution, especially concatenated genomes or custom coordinate spaces.
+- `complement` without a view uses an effectively unbounded contig extent. Always
+  supply finite genome bounds and ensure their convention matches the intervals.
+
+Functional interval calls return `pl.LazyFrame` by default; `.collect()` or
+`output_type="polars.DataFrame"` gives an eager result. The `.pb` interval accessor
+is on `LazyFrame`: `query.lazy().pb.overlap(target).collect()`. DataFrame `.pb`
+provides write methods. See [interval operations](references/interval_operations.md).
+
+## Read, query and write files
+
+Use `scan_*` for lazy plans and `read_*` for eager reads. They do not guarantee
+that every stage, join index or final result fits in bounded memory.
 
 ```python
-# Read BED with explicit 0-based metadata
-df = pb.read_bed("regions.bed", use_zero_based=True)
+# Template: both files use the same assembly; coordinates become half-open.
+peaks = pb.scan_bed("peaks.bed", use_zero_based=True)
+variants = pb.scan_vcf("cohort.vcf.gz", use_zero_based=True,
+                       info_fields=[], format_fields=[])
+hits = pb.overlap(peaks, variants).collect(engine="streaming")
 ```
 
-**Important:** BED files are always 0-based half-open in the file format. polars-bio handles the conversion automatically when reading BED files. Coordinate metadata is attached to DataFrames by I/O functions and propagated through operations.
+Check these format-specific differences before analysis:
 
-### Two API Styles
+- `read_bed`/`scan_bed` expose BED4 fields. BED3 produces a null name; BED6/12 extra
+  fields are not retained. Use `scan_table(..., schema="bed6")` or Polars CSV with
+  an explicit schema for strand/block fields, then attach coordinate metadata.
+- Text VCF uses `read_vcf`/`scan_vcf`; binary BCF uses `read_bcf`/`scan_bcf`.
+  INFO defaults to header-defined columns, not a raw `info` string. Single-sample
+  FORMAT is flattened; multisample FORMAT is a `genotypes` struct of lists.
+- GFF/GTF `attributes` is structured. Request actual annotation keys using
+  `attr_fields`, then filter named columns. FASTQ calls its quality string
+  `quality_scores`, not `quality`.
+- BAM/CRAM can scan without an index; indexes enable selective/parallel reads.
+  `read_cram`/`scan_cram` accept a **local** `reference_path` with `.fai` when an
+  external reference is needed. `register_cram` and `depth` lack that argument
+  and require a self-contained reference arrangement.
+- Native writers/sinks exist for VCF, BAM, SAM, CRAM, FASTA and FASTQ. Preserve
+  format headers and metadata across transformations; writing only selected
+  coordinate columns is not a valid full-format round trip.
 
-**Functional API** - standalone functions, explicit inputs:
-```python
-result = pb.overlap(df1, df2, suffixes=("_1", "_2"))
-merged = pb.merge(df)
-```
+See [file I/O](references/file_io.md) for current schemas, compression, cloud
+credentials, output fidelity and the local-only VCF Zarr reader.
 
-**Method-chaining API** - via `.pb` accessor on **LazyFrames** (not DataFrames):
-```python
-result = df1.lazy().pb.overlap(df2)
-merged = df.lazy().pb.merge()
-```
+SQL registration uses path first, table name second. `register_fasta` exists in
+0.36.0. `from_polars(name, frame)` registers Polars data; `register_view(name, sql)`
+takes SQL text. `pb.sql(query)` returns a LazyFrame. Explicitly set the session
+coordinate convention before registering genomic files, and reattach confirmed
+coordinate metadata after SQL if it is absent. The 0.36.0 SQL interval-join
+optimizer has dtype and unmatched-row defects; use the tested interval APIs
+instead of assuming SQL LEFT JOIN semantics. See [SQL](references/sql_processing.md).
 
-**Important:** The `.pb` accessor for interval operations is only available on `LazyFrame`. On `DataFrame`, `.pb` provides write operations only (`write_bam`, `write_vcf`, etc.).
+## Read depth is a separate measurement
 
-Method-chaining enables fluent pipelines:
-```python
-# Chain interval operations (note: overlap outputs suffixed columns,
-# so rename before merge which expects chrom/start/end)
-result = (
-    df1.lazy()
-    .pb.overlap(df2)
-    .filter(pl.col("start_2") > 1000)
-    .select(
-        pl.col("chrom_1").alias("chrom"),
-        pl.col("start_1").alias("start"),
-        pl.col("end_1").alias("end"),
-    )
-    .pb.merge()
-    .collect()
-)
-```
+`pb.depth("sample.bam", use_zero_based=True)` returns run-length blocks;
+`per_base=True` emits positions when contig lengths support dense accumulation.
+`M`, `=` and `X` contribute coverage; D and N do not. Default flag mask 1796 excludes
+unmapped, secondary, QC-failed and duplicate reads, but not supplementary reads.
+There is no base-quality threshold or fragment-count option in this API.
 
-### Probe-Build Architecture
+Depth is emitted as **Int16**. In 0.36.0, 32,768 reads covering one base wrap to
+-32,768; casting the result afterward cannot recover it. Do not use this function
+for ultra-deep data without an independent depth implementation. Use length-weighted
+block summaries and include zero-depth target bases in the denominator. See
+[pileup operations](references/pileup_operations.md) for a tested summary pattern.
 
-For two-input operations (overlap, nearest, count_overlaps, coverage), polars-bio uses a probe-build join strategy:
-- The **first** DataFrame is the **probe** (iterated over)
-- The **second** DataFrame is the **build** (indexed for lookup)
+## Scaling and reproducibility
 
-For best performance, pass the larger DataFrame as the first argument (probe) and the smaller one as the second (build).
+Keep query/target order biologically correct: swapping inputs changes counts,
+coverage, nearest and subtraction. The second input is indexed for many joins,
+but default `count_overlaps` internally swaps operands. Benchmark the actual
+operation instead of following a universal larger-first rule.
 
-### Column Conventions
+Lazy scans can push supported filters/projections into readers; BED and FASTA do
+not offer the same pushdown as indexed VCF/BAM. `collect(engine="streaming")`
+still materializes the final DataFrame. Use sinks for large outputs, and budget
+memory for the build index, sorting, aggregation and dense pileup arrays.
+Start with the default single DataFusion partition and tune a small fixed number
+against measured throughput and memory. Record versions, options, assemblies,
+input checksums, filtering rules, row counts and interval coverage totals.
 
-By default, polars-bio expects columns named `chrom`, `start`, `end`. Custom column names can be specified via lists:
+Cloud reads use format-specific OpenDAL options, not a universal Polars
+`storage_options` dictionary. Only request authenticated/provider-specific
+features for the relevant URI; cloud access was documentation-reviewed, while a
+small public HTTPS BED scan was executed. No authenticated S3/GCS/Azure service
+was tested. Report this distinction when troubleshooting.
 
-```python
-result = pb.overlap(
-    df1, df2,
-    cols1=["chromosome", "begin", "finish"],
-    cols2=["chr", "pos_start", "pos_end"],
-)
-```
-
-### Return Types and Collecting Results
-
-All interval operations and `pb.sql()` return a **LazyFrame** by default. Use `.collect()` to materialize results, or pass `output_type="polars.DataFrame"` for eager evaluation:
-
-```python
-# Lazy (default) - collect when needed
-result_lf = pb.overlap(df1, df2)
-result_df = result_lf.collect()
-
-# Eager - get DataFrame directly
-result_df = pb.overlap(df1, df2, output_type="polars.DataFrame")
-```
-
-### Streaming and Out-of-Core Processing
-
-For datasets larger than available RAM, use `scan_*` functions and streaming execution:
-
-```python
-# Scan files lazily
-lf = pb.scan_bed("large_intervals.bed")
-
-# Process with Polars streaming (requires polars ≥1.37, bundled with polars-bio)
-result = lf.collect(engine="streaming")
-```
-
-DataFusion streaming is enabled by default for interval operations, processing data in batches without loading the full dataset into memory.
-
-## Common Pitfalls
-
-1. **`.pb` accessor on DataFrame vs LazyFrame:** Interval operations (overlap, merge, etc.) are only on `LazyFrame.pb`. `DataFrame.pb` only has write methods. Use `.lazy()` to convert before chaining interval ops.
-
-2. **LazyFrame returns:** All interval operations and `pb.sql()` return `LazyFrame` by default. Don't forget `.collect()` or use `output_type="polars.DataFrame"`.
-
-3. **Column name mismatches:** polars-bio expects `chrom`, `start`, `end` by default. Use `cols1`/`cols2` parameters (as lists) if your columns have different names.
-
-4. **Coordinate system metadata:** Interval operations read coordinate metadata from I/O functions or DataFrame `config_meta`. For manually built DataFrames, set `df.config_meta.set(coordinate_system_zero_based=True)` (0-based) or `False` (1-based). If metadata is missing, polars-bio falls back to the global `datafusion.bio.coordinate_system_zero_based` setting (with a warning). Set `pb.set_option("datafusion.bio.coordinate_system_check", True)` to raise `MissingCoordinateSystemError` instead. Mismatched systems between inputs raise `CoordinateSystemMismatchError`.
-
-5. **Probe-build order matters:** For overlap, nearest, and coverage, the first DataFrame is probed against the second. Swapping arguments changes which intervals appear in the left vs right output columns, and can affect performance.
-
-6. **INT32 position limit:** Genomic positions are stored as 32-bit integers, limiting coordinates to ~2.1 billion. This is sufficient for all known genomes but may be an issue with custom coordinate spaces.
-
-7. **BAM index requirements:** `read_bam` and `scan_bam` require a `.bai` index file alongside the BAM. Create one with `samtools index` if missing.
-
-8. **Parallel execution disabled by default:** DataFusion parallelism defaults to 1 partition. Enable for large datasets:
-   ```python
-   pb.set_option("datafusion.execution.target_partitions", 8)
-   ```
-
-9. **CRAM has separate functions:** Use `read_cram`/`scan_cram`/`register_cram` for CRAM files (not `read_bam`). CRAM functions require a `reference_path` parameter.
-
-## Best Practices
-
-1. **Use `scan_*` for large files:** Prefer `scan_bed`, `scan_vcf`, etc. over `read_*` for files larger than available RAM. Scan functions enable streaming and predicate pushdown.
-
-2. **Configure parallelism for large datasets:**
-   ```python
-   import os
-   pb.set_option("datafusion.execution.target_partitions", os.cpu_count())
-   ```
-
-3. **Use BGZF compression:** BGZF-compressed files (`.bed.gz`, `.vcf.gz`) support parallel block decompression, significantly faster than plain GZIP.
-
-4. **Select columns early:** When only specific columns are needed, select them early to reduce memory usage:
-   ```python
-   df = pb.read_vcf("large.vcf.gz").select("chrom", "start", "end", "ref", "alt")
-   ```
-
-5. **Use cloud paths directly:** Pass S3/GCS/Azure URIs directly to read/scan/register functions instead of downloading files first. Authenticated access uses your cloud SDK credentials (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, Azure defaults) only when those cloud paths are accessed:
-   ```python
-   df = pb.read_bed("s3://my-bucket/regions.bed", allow_anonymous=True)
-   ```
-
-6. **Prefer functional API for single operations, method-chaining for pipelines:** Use `pb.overlap()` for one-off operations and `.lazy().pb.overlap()` when building multi-step pipelines.
-
-## Resources
-
-### references/
-
-Detailed documentation for each major capability:
-
-- **interval_operations.md** - All 8 interval operations with parameters, examples, output schemas, and performance tips. Core reference for genomic range arithmetic.
-
-- **file_io.md** - Supported formats table, per-format column schemas, cloud storage configuration, compression support, and common parameters.
-
-- **sql_processing.md** - Register functions, DataFusion SQL syntax, combining SQL with interval operations, and example queries.
-
-- **pileup_operations.md** - Per-base read depth computation from BAM/CRAM files, parameters, and integration with interval operations.
-
-- **configuration.md** - Global settings (parallelism, coordinate systems, streaming modes), logging, and metadata management.
-
-- **bioframe_migration.md** - Operation mapping table, API differences, performance comparison, migration code examples, and pandas compatibility mode.
+See [bioframe migration](references/bioframe_migration.md) for semantic checks;
+polars-bio is not a drop-in replacement. Upstream benchmark speedups are specific
+to datasets, hardware and operations, not a performance promise.
 
 ## Citing Scientific Agent Skills
 

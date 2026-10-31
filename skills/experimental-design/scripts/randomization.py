@@ -9,7 +9,7 @@ can be regenerated and archived.
 
 Functions:
   simple_randomization        independent coin-flip per unit (can yield imbalance)
-  block_randomization         permuted blocks -> balance throughout enrollment
+  block_randomization         permuted blocks -> balance at complete-block boundaries
   stratified_block_randomization   blocks within strata -> balance per subgroup
   cluster_randomization       randomize whole clusters (sites/classes), not units
   assign_factorial_runs       randomize the RUN ORDER of a list of design rows
@@ -19,18 +19,54 @@ Requires: numpy, pandas.
 
 from __future__ import annotations
 
+import operator
+
 import numpy as np
 import pandas as pd
+
+
+def _count(value, name, minimum=0):
+    """Validate counts before allocation; zero-sized blocks would never advance."""
+    try:
+        count = operator.index(value)
+    except TypeError:
+        raise ValueError(f"{name} must be an integer >= {minimum}") from None
+    if isinstance(value, (bool, np.bool_)) or count < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    return count
+
+
+def _labels(values, name, unique=False, minimum=0):
+    values = list(values)
+    try:
+        valid = (len(values) >= minimum
+                 and not pd.Series(values, dtype=object).isna().any()
+                 and all(isinstance(hash(value), int) for value in values))
+        if unique:
+            valid = valid and len(set(values)) == len(values)
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError(f"{name} must contain non-missing, hashable labels"
+                         + (" that are unique" if unique else "")
+                         + f" (at least {minimum})")
+    return values
 
 
 def _normalize_ratio(arms, ratio):
     """Turn arms + integer ratio into a block template list, e.g.
     arms=['A','B'], ratio=(2,1) -> ['A','A','B']."""
+    arms = _labels(arms, "arms", unique=True, minimum=2)
     if ratio is None:
         ratio = [1] * len(arms)
     if len(ratio) != len(arms):
         raise ValueError("ratio must have one entry per arm")
-    if any(r <= 0 or int(r) != r for r in ratio):
+    try:
+        invalid = any(isinstance(r, (bool, np.bool_)) or r <= 0 or int(r) != r
+                      for r in ratio)
+    except (TypeError, ValueError, OverflowError):
+        invalid = True
+    if invalid:
         raise ValueError("ratio entries must be positive integers")
     template = []
     for arm, r in zip(arms, ratio):
@@ -43,32 +79,39 @@ def simple_randomization(n, arms=("treatment", "control"), ratio=None, seed=0):
 
     Simplest method; with small n it can produce noticeable arm-size imbalance
     (like flipping few coins). Fine for large n. Use block_randomization when you
-    need balance, especially for n < ~100 or sequential enrollment.
+    need tighter control of arm counts or have sequential enrollment.
     """
+    n = _count(n, "n")
     rng = np.random.default_rng(seed)
     arms = list(arms)
     template = _normalize_ratio(arms, ratio)
     probs = np.array([template.count(a) for a in arms], dtype=float)
     probs /= probs.sum()
-    assign = rng.choice(arms, size=n, p=probs)
+    # Preserve labels when arms mix numeric and string values.
+    labels = np.empty(len(arms), dtype=object)
+    labels[:] = arms
+    assign = rng.choice(labels, size=n, p=probs)
     return pd.DataFrame({"unit_id": np.arange(1, n + 1), "arm": assign})
 
 
 def block_randomization(n, arms=("treatment", "control"), block_size=None,
                         ratio=None, seed=0):
-    """Permuted-block randomization: balance is maintained throughout enrollment.
+    """Permuted-block randomization: exact ratio at complete-block boundaries.
 
     Within each block every arm appears in the specified ratio; the order inside
     a block is shuffled. block_size must be a multiple of sum(ratio). Leaving it
-    None picks a small valid size. Mild caveat: fixed small blocks are slightly
-    predictable in unblinded trials — vary block size if that matters.
+    None picks a small valid size. Partial blocks need not balance. This helper
+    uses a fixed block size; it does not implement variable block sizes or
+    allocation concealment. Keep the seed/schedule away from enrolling staff.
     """
+    n = _count(n, "n")
     rng = np.random.default_rng(seed)
     arms = list(arms)
     template = _normalize_ratio(arms, ratio)
     unit = len(template)
     if block_size is None:
         block_size = unit * 2  # two of each ratio-unit per block
+    block_size = _count(block_size, "block_size", minimum=1)
     if block_size % unit != 0:
         raise ValueError(f"block_size ({block_size}) must be a multiple of "
                          f"sum(ratio)={unit}")
@@ -92,24 +135,38 @@ def stratified_block_randomization(strata, arms=("treatment", "control"),
 
     Use when a prognostic variable (site, sex, disease stage) must be balanced
     across arms. `strata` is a dict {stratum_label: n_in_that_stratum} or a
-    sequence of stratum labels (one per unit). Each stratum gets its own permuted
-    blocks, guaranteeing balance within every subgroup.
+    sequence of stratum labels (one per unit). Sequence inputs retain their input
+    order: unit_id is the original one-based position. Map real subject IDs to
+    these positions before use. Dict inputs produce grouped planning schedules.
+    Balance is exact only for complete blocks within each stratum.
     """
+    arms = list(arms)
+    _normalize_ratio(arms, ratio)
+    seed = _count(seed, "seed")
     if isinstance(strata, dict):
-        items = list(strata.items())
-    else:  # sequence of labels
-        s = pd.Series(list(strata))
-        items = list(s.value_counts().sort_index().items())
+        _labels(strata, "strata")
+        items = [(label, _count(count, "stratum count"), None)
+                 for label, count in strata.items()]
+    else:  # sequence of labels, with original unit identities retained
+        labels = _labels(strata, "strata")
+        positions = {}
+        for position, label in enumerate(labels, start=1):
+            positions.setdefault(label, []).append(position)
+        items = [(label, len(ids), ids) for label, ids in positions.items()]
 
     frames = []
-    for i, (label, count) in enumerate(items):
+    next_id = 1
+    for i, (label, count, ids) in enumerate(items):
         df = block_randomization(count, arms=arms, block_size=block_size,
                                  ratio=ratio, seed=seed + 1 + i)
-        df.insert(1, "stratum", label)
+        df["unit_id"] = ids if ids is not None else np.arange(next_id, next_id + count)
+        next_id += count
+        df.insert(1, "stratum", pd.Series([label] * count, dtype=object))
         frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=["unit_id", "stratum", "block", "arm"])
     out = pd.concat(frames, ignore_index=True)
-    out["unit_id"] = np.arange(1, len(out) + 1)
-    return out
+    return out.sort_values("unit_id").reset_index(drop=True)
 
 
 def cluster_randomization(clusters, arms=("treatment", "control"), ratio=None,
@@ -122,9 +179,9 @@ def cluster_randomization(clusters, arms=("treatment", "control"), ratio=None,
     clustering (mixed model / GEE); treating members as independent is
     pseudoreplication. Uses blocking across clusters for arm balance.
     """
-    if isinstance(clusters, int):
-        clusters = [f"cluster_{i+1}" for i in range(clusters)]
-    clusters = list(clusters)
+    if isinstance(clusters, (int, np.integer)):
+        clusters = [f"cluster_{i+1}" for i in range(_count(clusters, "clusters"))]
+    clusters = _labels(clusters, "clusters", unique=True)
     df = block_randomization(len(clusters), arms=arms, ratio=ratio,
                              block_size=block_size, seed=seed)
     df = df.drop(columns=["unit_id"])

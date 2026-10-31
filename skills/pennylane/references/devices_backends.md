@@ -1,562 +1,172 @@
-# Devices and Backends in PennyLane
+# Devices and backend boundaries
 
-## Table of Contents
-1. [Built-in Simulators](#built-in-simulators)
-2. [Hardware Plugins](#hardware-plugins)
-3. [Device Selection](#device-selection)
-4. [Device Configuration](#device-configuration)
-5. [Custom Devices](#custom-devices)
-6. [Performance Optimization](#performance-optimization)
+PennyLane 0.45.1 is the tested core. Provider integrations below were checked
+against official docs/released source, **not authenticated hardware jobs**.
+Install each provider/compiler in a separate environment and resolve its declared
+requirements; a plugin version number does not guarantee all current backend APIs.
 
-## Built-in Simulators
-
-### default.qubit
-
-General-purpose state vector simulator:
+## Local simulators and reusable circuits
 
 ```python
 import pennylane as qml
+from pennylane import numpy as np
 
-# Basic initialization
-dev = qml.device('default.qubit', wires=4)
-
-# For sampling mode, set shots on the QNode with qml.set_shots
-dev = qml.device('default.qubit', wires=4)
-
-# Specify wire labels
-dev = qml.device('default.qubit', wires=['a', 'b', 'c', 'd'])
-```
-
-### default.mixed
-
-Mixed-state simulator for noisy quantum systems:
-
-```python
-# Supports density matrix simulation
-dev = qml.device('default.mixed', wires=2)
-
-@qml.qnode(dev)
-def noisy_circuit():
-    qml.Hadamard(wires=0)
-
-    # Apply noise
-    qml.DepolarizingChannel(0.1, wires=0)
-
+def quantum_function(theta):
+    qml.RY(theta, wires=0)
     qml.CNOT(wires=[0, 1])
+    return qml.expval(qml.Z(1))
 
-    # Amplitude damping
-    qml.AmplitudeDamping(0.05, wires=1)
-
-    return qml.expval(qml.PauliZ(0))
+results = {}
+for name in ["default.qubit", "lightning.qubit", "default.mixed"]:
+    dev = qml.device(name, wires=2)
+    circuit = qml.QNode(quantum_function, dev, diff_method="parameter-shift")
+    theta = np.array(0.3, requires_grad=True)
+    results[name] = float(circuit(theta))
+    assert np.allclose(results[name], np.cos(theta))
+    assert np.allclose(qml.grad(circuit)(theta), -np.sin(theta))
 ```
 
-### Machine Learning Interfaces
+`default.mixed` supports explicit channels; changing to it does not automatically
+apply a realistic hardware noise model. Lightning speedups depend on circuit size
+and overhead. `lightning.gpu` requires its separate CUDA/cuQuantum-compatible
+plugin and hardware; no GPU fallback should silently change a reported benchmark.
+`default.clifford` needs Stim and accepts only its supported Clifford operations
+and measurements (some Pauli rotations at Clifford angles may be supported).
+There is no universal fixed qubit limit or provider noise ranking.
 
-Use `default.qubit` with the QNode interface for PyTorch or JAX. The old interface-specific device names are not needed in current PennyLane examples, and TensorFlow support is no longer maintained as of PennyLane v0.44.
+Use `dev.name`, `dev.wires` and `len(dev.wires)` when wires are allocated. New
+Device API objects do not universally expose legacy `num_wires`, `operations`,
+`observables` or `apply`. Some use dynamic wires or optional capabilities objects.
+Inspect each device's documented preprocessing and derivative support; run a tiny
+representative circuit. For custom devices implement the current execution and
+preprocessing protocol, not an obsolete `DefaultQubit.apply` override. A custom
+operator can implement `compute_decomposition`; registering an arbitrary attribute
+on `qml.ops` is not plugin registration.
 
-```python
-# PyTorch
-dev = qml.device('default.qubit', wires=4)
+## Provider installation targets
 
-@qml.qnode(dev, interface="torch")
-def torch_circuit(weights):
-    qml.RX(weights[0], wires=0)
-    return qml.expval(qml.Z(0))
-```
-
-### lightning.qubit
-
-High-performance C++ simulator:
-
-```python
-# Faster than default.qubit
-dev = qml.device('lightning.qubit', wires=20)
-
-# Supports larger systems efficiently
-@qml.qnode(dev)
-def large_circuit():
-    for i in range(20):
-        qml.Hadamard(wires=i)
-
-    for i in range(19):
-        qml.CNOT(wires=[i, i+1])
-
-    return qml.expval(qml.PauliZ(0))
-```
-
-### default.clifford
-
-Efficient simulator for Clifford circuits:
-
-```python
-# Only supports Clifford gates (H, S, CNOT, etc.)
-dev = qml.device('default.clifford', wires=100)
-
-@qml.qnode(dev)
-def clifford_circuit():
-    qml.Hadamard(wires=0)
-    qml.CNOT(wires=[0, 1])
-    qml.S(wires=1)
-    # Cannot use RX, RY, RZ, etc.
-
-    return qml.expval(qml.PauliZ(0))
-```
-
-## Hardware Plugins
-
-### IBM Quantum (Qiskit)
+These released versions were source/metadata checked on 2026-10-01. Commands are
+illustrative dependency setup, not a tested combined environment:
 
 ```bash
-# Install plugin
-uv pip install "pennylane-qiskit==0.45.0"
+# Choose one provider per environment.
+uv pip install "pennylane==0.45.1" "pennylane-qiskit==0.45.0"
+uv pip install "pennylane==0.45.1" "amazon-braket-pennylane-plugin==1.35.2"
+uv pip install "pennylane==0.45.1" "pennylane-cirq==0.44.0"
+uv pip install "pennylane==0.45.1" "pennylane-ionq==0.45.0"
 ```
 
+Rigetti's last published plugin is 0.40.0, with `pyquil<4` and `networkx<3`;
+resolve and validate it in its own legacy stack instead of installing it into the
+current core/ML environment. Current QCS hardware availability requires provider
+verification. Strawberry Fields' plugin documentation targets 0.29.1; an old
+`strawberryfields.remote`/Borealis recipe is not evidence of compatibility or a
+currently accessible backend with PennyLane 0.45.1.
+
+## IBM Quantum: backend object and finite shots
+
+`qiskit.aer` is a local simulator plugin. `qiskit.remote` accepts a Qiskit backend
+object and uses EstimatorV2/SamplerV2. Allocate only the logical wires needed,
+within backend capacity. Its execution is sampled; do not promise analytic results.
+
+Illustrative authenticated setup, not executed:
+
 ```python
+import os
 import pennylane as qml
-
-# Use IBM simulator
-dev = qml.device('qiskit.aer', wires=2)
-
-# Use IBM quantum hardware
 from qiskit_ibm_runtime import QiskitRuntimeService
 
-service = QiskitRuntimeService()
+service = QiskitRuntimeService(
+    channel="ibm_quantum_platform",
+    token=os.environ["IBM_QUANTUM_API_KEY"],
+    instance=os.environ["IBM_QUANTUM_INSTANCE"],
+)
 backend = service.least_busy(operational=True, simulator=False, min_num_qubits=2)
-dev = qml.device(
-    'qiskit.remote',
-    wires=backend.num_qubits,
-    backend=backend,
-)
-
-@qml.qnode(dev)
-def circuit():
-    qml.Hadamard(wires=0)
+dev = qml.device("qiskit.remote", wires=2, backend=backend)
+@qml.set_shots(1024)
+@qml.qnode(dev, diff_method="parameter-shift")
+def hardware_circuit(theta):
+    qml.RY(theta, wires=0)
     qml.CNOT(wires=[0, 1])
-    return qml.expval(qml.PauliZ(0))
-
-sampled_circuit = qml.set_shots(circuit, shots=1024)
+    return qml.expval(qml.Z(1))
+# Calling hardware_circuit submits work; record backend, calibration, shots and job metadata.
 ```
 
-### Amazon Braket
-
-```bash
-# Install plugin
-uv pip install "amazon-braket-pennylane-plugin==1.34.1"
-```
-
-```python
-# Use Braket simulators
-dev = qml.device(
-    'braket.local.qubit',
-    wires=2
-)
-
-# Use AWS simulators
-dev = qml.device(
-    'braket.aws.qubit',
-    device_arn='arn:aws:braket:::device/quantum-simulator/amazon/sv1',
-    wires=4,
-    s3_destination_folder=('amazon-braket-outputs', 'outputs')
-)
-
-# Use quantum hardware (IonQ, Rigetti, etc.)
-dev = qml.device(
-    'braket.aws.qubit',
-    device_arn='arn:aws:braket:us-east-1::device/qpu/ionq/Harmony',
-    wires=11,
-    s3_destination_folder=('amazon-braket-outputs', 'outputs')
-)
-```
-
-### Google Cirq
-
-```bash
-# Install plugin
-uv pip install "pennylane-cirq==0.44.0"
-```
-
-```python
-# Use Cirq simulator
-dev = qml.device('cirq.simulator', wires=2)
-
-# Use Cirq with qsim (faster)
-dev = qml.device('cirq.qsim', wires=20)
-
-# Use Google quantum hardware (if you have access)
-dev = qml.device(
-    'cirq.pasqal',
-    wires=2,
-    device='rainbow',
-)
-```
-
-### Rigetti Forest
-
-```bash
-# Install plugin
-uv pip install "pennylane-rigetti==0.40.0"
-```
-
-```python
-# Use QVM (Quantum Virtual Machine)
-dev = qml.device('rigetti.qvm', device='4q-qvm')
-
-# Use Rigetti QPU
-dev = qml.device('rigetti.qpu', device='Aspen-M-3')
-```
-
-### IonQ
-
-```bash
-# Install plugin
-uv pip install "pennylane-ionq==0.45.0"
-```
-
-```python
-# Use IonQ hardware
-dev = qml.device(
-    'ionq.simulator',  # or 'ionq.qpu'
-    wires=11,
-    api_key='your_api_key'
-)
-```
-
-### Xanadu Hardware (Borealis)
-
-```python
-# Photonic quantum computer
-dev = qml.device(
-    'strawberryfields.remote',
-    backend='borealis',
-)
-```
-
-## Device Selection
-
-### Choosing the Right Device
-
-```python
-def select_device(n_qubits, use_hardware=False, noise_model=None):
-    """Select appropriate device based on requirements."""
-
-    if use_hardware:
-        # Use real quantum hardware
-        if n_qubits <= 11:
-            return qml.device('ionq.qpu', wires=n_qubits)
-        elif n_qubits <= 127:
-            raise ValueError("Pass a qiskit.remote backend object for IBM hardware")
-        else:
-            raise ValueError(f"No hardware available for {n_qubits} qubits")
-
-    elif noise_model:
-        # Use noisy simulator
-        return qml.device('default.mixed', wires=n_qubits)
-
-    else:
-        # Use ideal simulator
-        if n_qubits <= 20:
-            return qml.device('lightning.qubit', wires=n_qubits)
-        else:
-            return qml.device('default.qubit', wires=n_qubits)
-
-# Usage
-dev = select_device(n_qubits=10, use_hardware=False)
-```
-
-### Device Capabilities
-
-```python
-# Check device capabilities
-dev = qml.device('default.qubit', wires=4)
-
-print("Device name:", dev.name)
-print("Number of wires:", dev.num_wires)
-print("Supports shots:", dev.shots is not None)
-
-# Check supported operations
-print("Supported gates:", dev.operations)
-
-# Check supported observables
-print("Supported observables:", dev.observables)
-```
-
-## Device Configuration
-
-### Setting Shots
-
-```python
-# Exact simulation (no shots)
-dev = qml.device('default.qubit', wires=2)
-
-@qml.qnode(dev)
-def exact_circuit():
-    qml.Hadamard(wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-result = exact_circuit()  # Returns exact expectation
-
-# Sampling mode (with shots)
-dev_sampled = qml.device('default.qubit', wires=2)
-
-@qml.set_shots(1000)
-@qml.qnode(dev_sampled)
-def sampled_circuit():
-    qml.Hadamard(wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-result = sampled_circuit()  # Estimated from samples
-```
-
-### Dynamic Shots
-
-```python
-# Change shots per execution
-dev = qml.device('default.qubit', wires=2)
-
-@qml.qnode(dev)
-def circuit():
-    qml.Hadamard(wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-# Different shot numbers
-result_100 = qml.set_shots(circuit, shots=100)()
-result_1000 = qml.set_shots(circuit, shots=1000)()
-result_exact = qml.set_shots(circuit, shots=None)()  # Exact
-```
-
-### Analytic Mode vs Finite Shots
-
-```python
-# Compare analytic vs sampled
-dev_analytic = qml.device('default.qubit', wires=2)
-dev_sampled = qml.device('default.qubit', wires=2)
-
-@qml.qnode(dev_analytic)
-def circuit_analytic(x):
-    qml.RX(x, wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-@qml.qnode(dev_sampled)
-def circuit_sampled(x):
-    qml.RX(x, wires=0)
-    return qml.expval(qml.PauliZ(0))
-
-import numpy as np
-x = np.pi / 4
-
-print(f"Analytic: {circuit_analytic(x)}")
-print(f"Sampled: {qml.set_shots(circuit_sampled, shots=1000)(x)}")
-print(f"Exact value: {np.cos(x)}")
-```
-
-### Seed for Reproducibility
-
-```python
-# Set random seed
-dev = qml.device('default.qubit', wires=2, seed=42)
-
-@qml.set_shots(1000)
-@qml.qnode(dev)
-def circuit():
-    qml.Hadamard(wires=0)
-    return qml.sample(qml.PauliZ(0))
-
-# Reproducible results
-samples1 = circuit()
-samples2 = circuit()  # Same as samples1 if seed is set
-```
-
-## Custom Devices
-
-### Creating a Custom Device
-
-```python
-from pennylane.devices import DefaultQubit
-
-class CustomDevice(DefaultQubit):
-    """Custom quantum device with additional features."""
-
-    name = 'Custom device'
-    short_name = 'custom'
-    pennylane_requires = '>=0.30.0'
-    version = '0.1.0'
-    author = 'Your Name'
-
-    def __init__(self, wires, shots=None, **kwargs):
-        super().__init__(wires=wires, shots=shots)
-        # Custom initialization
-
-    def apply(self, operations, **kwargs):
-        """Apply operations with custom logic."""
-        # Custom operation handling
-        for op in operations:
-            # Log or modify operations
-            print(f"Applying: {op.name}")
-
-        # Call parent implementation
-        super().apply(operations, **kwargs)
-
-# Use custom device
-dev = CustomDevice(wires=4)
-```
-
-### Plugin Development
-
-```python
-# Define custom plugin operations
-class CustomGate(qml.operation.Operation):
-    """Custom quantum gate."""
-
-    num_wires = 1
-    num_params = 1
-    par_domain = 'R'
-
-    def decomposition(self):
-        """Decompose into standard gates."""
-        theta = self.parameters[0]
-        wires = self.wires
-
-        return [
-            qml.RY(theta / 2, wires=wires),
-            qml.RZ(theta, wires=wires),
-            qml.RY(-theta / 2, wires=wires)
-        ]
-
-# Register with device
-qml.ops.CustomGate = CustomGate
-```
-
-## Performance Optimization
-
-### Batch Execution
-
-```python
-# Execute multiple parameter sets efficiently
-dev = qml.device('default.qubit', wires=2)
-
-@qml.qnode(dev)
-def circuit(params):
-    qml.RX(params[0], wires=0)
-    qml.RY(params[1], wires=1)
-    qml.CNOT(wires=[0, 1])
-    return qml.expval(qml.PauliZ(0))
-
-# Batch parameters
-params_batch = np.random.random((100, 2))
-
-# Vectorized execution (faster)
-results = [circuit(p) for p in params_batch]
-```
-
-### Device Caching
-
-```python
-# Cache device for reuse
-_device_cache = {}
-
-def get_device(n_qubits, device_type='default.qubit'):
-    """Get or create cached device."""
-    key = (device_type, n_qubits)
-
-    if key not in _device_cache:
-        _device_cache[key] = qml.device(device_type, wires=n_qubits)
-
-    return _device_cache[key]
-
-# Reuse devices
-dev1 = get_device(4)
-dev2 = get_device(4)  # Returns same device
-```
-
-### JIT Compilation with Catalyst
-
-```python
-# Install Catalyst
-# uv pip install "pennylane-catalyst==0.15.0"
-
-import pennylane as qml
-from catalyst import qjit
-
-dev = qml.device('lightning.qubit', wires=4)
-
-@qjit  # Just-in-time compilation
-@qml.qnode(dev)
-def compiled_circuit(x):
-    qml.RX(x, wires=0)
-    qml.Hadamard(wires=1)
-    qml.CNOT(wires=[0, 1])
-    return qml.expval(qml.PauliZ(0))
-
-# First call compiles, subsequent calls are fast
-result = compiled_circuit(0.5)
-```
-
-### Parallel Execution
-
-```python
-from multiprocessing import Pool
-
-def run_circuit(params):
-    """Run circuit with given parameters."""
-    dev = qml.device('default.qubit', wires=4)
-
-    @qml.qnode(dev)
-    def circuit(p):
-        # Circuit definition
-        return qml.expval(qml.PauliZ(0))
-
-    return circuit(params)
-
-# Parallel execution
-param_list = [np.random.random(10) for _ in range(100)]
-
-with Pool(processes=4) as pool:
-    results = pool.map(run_circuit, param_list)
-```
-
-### GPU Acceleration
-
-```python
-# Use GPU-accelerated devices if available
-try:
-    dev = qml.device('lightning.gpu', wires=20)
-except Exception:
-    dev = qml.device('lightning.qubit', wires=20)
-
-@qml.qnode(dev)
-def gpu_circuit():
-    # Large circuit benefits from GPU
-    for i in range(20):
-        qml.Hadamard(wires=i)
-
-    for i in range(19):
-        qml.CNOT(wires=[i, i+1])
-
-    return [qml.expval(qml.PauliZ(i)) for i in range(20)]
-```
-
-## Best Practices
-
-1. **Start with simulators** - Test on `default.qubit` before hardware
-2. **Use lightning for speed** - Switch to `lightning.qubit` for larger circuits
-3. **Match device to task** - Use `default.mixed` for noise studies
-4. **Cache devices** - Reuse device objects to avoid initialization overhead
-5. **Set appropriate shots** - Balance accuracy vs speed
-6. **Check capabilities** - Verify device supports required operations
-7. **Handle hardware errors** - Implement retries and error mitigation
-8. **Monitor costs** - Track hardware usage and costs
-9. **Use JIT when possible** - Compile circuits with Catalyst for speedup
-10. **Test locally first** - Validate on simulators before submitting to hardware
-
-## Device Comparison
-
-| Device | Type | Max Qubits | Speed | Noise | Use Case |
-|--------|------|-----------|-------|-------|----------|
-| default.qubit | Simulator | ~25 | Medium | No | General purpose |
-| lightning.qubit | Simulator | ~30 | Fast | No | Large circuits |
-| default.mixed | Simulator | ~15 | Slow | Yes | Noise studies |
-| default.clifford | Simulator | 100+ | Very fast | No | Clifford circuits |
-| IBM Quantum | Hardware | 127 | Slow | Yes | Real experiments |
-| IonQ | Hardware | 11 | Slow | Low | High fidelity |
-| Rigetti | Hardware | 80 | Slow | Yes | Research |
-| Borealis | Hardware | 216 | Slow | Yes | Photonic QC |
+The environment variable names here are application-defined inputs, not automatic
+SDK credential discovery. Saved credentials are another option:
+`QiskitRuntimeService.save_account(...)` saves configuration; then construct
+`QiskitRuntimeService()` separately. Do not assign `save_account`'s return value as
+the service. The SDK resolves the IBM platform URL and handles authentication;
+this skill does not implement a parallel REST client. Source docs and released
+plugin source differ on the behavior of unspecified shots, so set an explicit
+finite integer. Shot vectors are not supported by this plugin release.
+
+## Amazon Braket
+
+The plugin provides `braket.local.qubit` for local execution and
+`braket.aws.qubit` for cloud tasks. Cloud construction uses `device_arn`, `wires`
+and optional `s3_destination_folder=(bucket, prefix)`; use a bucket the account
+owns/accesses. AWS SDK credentials and correct region are required for cloud use.
+Discover the currently available device ARN with the Braket console/SDK and check
+status, supported operations, shots and result types before selecting it. Do not
+copy a historical Harmony ARN or an example bucket name into a live request.
+The documented SV1 ARN is `arn:aws:braket:::device/quantum-simulator/amazon/sv1`;
+a cloud simulator can still incur cost. No Braket task was submitted here.
+
+## Cirq, Rigetti and photonics
+
+The Cirq 0.44.0 plugin registers `cirq.simulator`, `cirq.mixedsimulator`,
+`cirq.qsim`, `cirq.qsimh` and `cirq.pasqal`. qsim requires its optional native
+package. **`cirq.pasqal` describes Pasqal neutral-atom devices, not Google's
+Rainbow hardware.** Google Quantum Engine access needs an appropriate current
+provider integration and access; do not infer it from installing the Cirq plugin.
+
+Rigetti's legacy entry points include `rigetti.qvm`, `rigetti.qpu` and wavefunction
+simulators. A QVM needs its runtime/services; a QPU needs current QCS credentials
+and a currently accessible processor. Do not hardcode retired Aspen targets or
+assume a QPU's number of qubits from an old example. Photonic workflows use different
+state spaces/operations; confirm the dedicated plugin/runtime instead of swapping
+a qubit QNode's device string to Borealis.
+
+## IonQ: explicit current backend target
+
+The released `pennylane-ionq==0.45.0` package registers `ionq.simulator` and
+`ionq.qpu`. It reads an explicit `api_key`, then `PENNYLANE_IONQ_API_KEY`, then
+`IONQ_API_KEY`. Its client uses IonQ API v0.4 and `Authorization: apiKey ...`.
+An `ionq.simulator` circuit still uses the remote service and credentials.
+
+For hardware, provide a currently discovered `target` explicitly. The released
+plugin's generic `target="qpu"` fallback still rewrites to `qpu.aria-1`, while
+current v0.4 create-job documentation lists Forte targets. That fallback is not
+verified as usable. Do not interpret plugin defaults as current availability.
+The source creates JSON jobs with `type`, `backend` and `input`; the service returns
+a job ID/status and requires polling/result retrieval. The plugin handles those
+contracts. No authentication or paid execution was attempted in this refresh.
+
+## Shots, reproducibility and operations
+
+Use `qml.set_shots(circuit, shots=1000)` to produce a configured QNode and
+`shots=None` only on devices supporting analytic execution. A seeded simulator
+advances its RNG between calls; recreating the device reproduces the sequence.
+Do not globally cache one stateful device across independent concurrent experiments
+without understanding its state, random stream and backend thread safety.
+
+Before hardware execution, budget parameter shifts, measurement groups, repetitions
+and shots, record the job identifier, and inspect failed/pending jobs before
+retrying. Blind resubmission can duplicate charged work. Provider queue/calibration
+and device topology drift require live checks. A matched local output establishes
+circuit semantics only, not hardware fidelity or access.
+
+## Primary sources
+
+- [Device API](https://docs.pennylane.ai/en/stable/code/api/pennylane.devices.Device.html)
+- [Lightning](https://docs.pennylane.ai/projects/lightning/en/stable/)
+- [Qiskit remote device](https://docs.pennylane.ai/projects/qiskit/en/stable/devices/remote.html)
+- [IBM runtime service](https://quantum.cloud.ibm.com/docs/en/api/qiskit-ibm-runtime/qiskit-runtime-service)
+- [Released Qiskit device source](https://github.com/PennyLaneAI/pennylane-qiskit/blob/v0.45.0/pennylane_qiskit/qiskit_device.py)
+- [Braket plugin](https://amazon-braket-pennylane-plugin-python.readthedocs.io/en/latest/)
+- [Cirq entry points](https://github.com/PennyLaneAI/pennylane-cirq/blob/v0.44.0/setup.py)
+- [Rigetti release](https://pypi.org/project/PennyLane-Rigetti/0.40.0/)
+- [Strawberry Fields plugin](https://docs.pennylane.ai/projects/strawberryfields/en/latest/)
+- [IonQ release](https://pypi.org/project/PennyLane-IonQ/0.45.0/)
+- [IonQ v0.4 create-job contract](https://docs.ionq.com/api-reference/v0.4/jobs/create-job)

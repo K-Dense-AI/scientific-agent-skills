@@ -7,37 +7,42 @@ it compiles or simulates.
 
 The skill pins separate compatibility environments:
 
-- `requirements-flex.txt`: `opentrons==9.1.1`, Flex API 2.29.
+- `requirements-flex.txt`: `opentrons==10.0.0`, tested Flex templates at API 2.29
+  plus an API 2.30 meniscus regression. Documented robot maximum is 2.30.
 - `requirements-ot2.txt`: `opentrons==9.0.0`, OT-2 API 2.28.
 
 One-shot simulation:
 
 ```bash
 # Flex
-uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==10.0.0" opentrons_simulate protocol.py
 
 # OT-2
-uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==9.0.0" opentrons_simulate protocol.py
 ```
 
 Dedicated Flex environment:
 
 ```bash
-uv venv --python 3.10
-uv pip install --python .venv/bin/python -r skills/opentrons-integration/requirements-flex.txt
-.venv/bin/opentrons_simulate protocol.py
+uv venv --python 3.12 .venv-opentrons
+uv pip install --python .venv-opentrons/bin/python -r skills/opentrons-integration/requirements-flex.txt
+.venv-opentrons/bin/opentrons_simulate protocol.py
 ```
 
 Use `requirements-ot2.txt` instead for the OT-2 compatibility environment.
-`opentrons==9.1.1` intentionally rejects OT-2 protocols after the release-line
+`opentrons==10.0.0` intentionally rejects OT-2 protocols after the release-line
 split; the current OT-2 App remains the authoritative OT-2 analyzer.
 
 Check the package and maximum API implemented by the local library:
 
 ```bash
-uv run --with "opentrons==9.1.1" python -c \
+uv run --no-project --isolated --python 3.12 --with "opentrons==10.0.0" python -c \
   "import opentrons; from opentrons import protocol_api; print(opentrons.__version__, protocol_api.MAX_SUPPORTED_VERSION)"
 ```
+
+For released package 10.0.0 this command prints `10.0.0 2.31`, although the
+official robot versioning page documents Flex only through API 2.30. That
+constant describes the library, not permission to target 2.31 on a robot.
 
 The local package does not update robot software. A protocol can simulate
 locally and still request an API level unavailable on the target robot.
@@ -57,10 +62,10 @@ objects or validate deck geometry.
 
 ```bash
 # Flex
-uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==10.0.0" opentrons_simulate protocol.py
 
 # OT-2
-uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==9.0.0" opentrons_simulate protocol.py
 ```
 
 Review:

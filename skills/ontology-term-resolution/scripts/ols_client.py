@@ -12,12 +12,12 @@ is offline and independently testable.
 Design notes that matter for correctness (all verified against the live API):
 
 * ``/search`` with ``exact=true`` is exact *token* matching, not exact label
-  matching. Restricting ``queryFields`` to ``label`` (or ``label,synonym``) is
-  what makes a match exact. See ``references/ols4-api.md``.
+  matching. Restrict ``queryFields`` to ``label`` (or ``label,synonym``) and
+  verify lexical equality and synonym scope locally. See ``references/ols4-api.md``.
 * ``/search`` never returns ``is_obsolete`` or ``term_replaced_by``, even when
   they are named in ``fieldList``. Only the term-detail endpoint carries them.
-* IRIs are never constructed here. ``http://purl.obolibrary.org/obo/{PREFIX}_{id}``
-  is wrong for EFO and Orphanet, so ``iri_for()`` asks the API instead.
+* IRI fallback templates are hypotheses only; a live term response is required.
+  EFO and Orphanet use their own namespaces.
 """
 from __future__ import annotations
 
@@ -30,18 +30,19 @@ import urllib.request
 from typing import Any, Iterable
 
 OLS_BASE = "https://www.ebi.ac.uk/ols4/api"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.4"
 TIMEOUT = 30
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
-# Fields worth asking for on /search. `synonym` is the only synonym field name
-# `fieldList` honours -- `exact_synonym` is silently dropped.
-SEARCH_FIELDS = "obo_id,label,synonym,ontology_name,is_defining_ontology,type,short_form"
+# OLS4 now exposes the plural scoped synonym fields as well as the flat union.
+SEARCH_FIELDS = ("iri,obo_id,label,synonym,exact_synonyms,related_synonyms,"
+                 "broad_synonyms,narrow_synonyms,ontology_name,is_defining_ontology,type,short_form")
 
 # OLS ontology ids that are not simply the lowercased CURIE prefix.
 ONTOLOGY_ID_OVERRIDES = {
     "orphanet": "ordo",
+    "orpha": "ordo",
 }
 
 # IRI templates for prefixes that do not live under the OBO PURL namespace.
@@ -50,6 +51,7 @@ ONTOLOGY_ID_OVERRIDES = {
 IRI_TEMPLATES = {
     "efo": "http://www.ebi.ac.uk/efo/EFO_{local}",
     "orphanet": "http://www.orpha.net/ORDO/Orphanet_{local}",
+    "orpha": "http://www.orpha.net/ORDO/Orphanet_{local}",
 }
 DEFAULT_IRI_TEMPLATE = "http://purl.obolibrary.org/obo/{prefix}_{local}"
 
@@ -64,13 +66,28 @@ def _request(path: str, params: dict[str, Any] | None = None) -> dict:
     if params:
         clean = {k: v for k, v in params.items() if v is not None}
         url = f"{url}?{urllib.parse.urlencode(clean)}"
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    return _request_url(url)
+
+
+def _request_url(url: str) -> dict:
+    """Fetch an OLS HAL link, upgrading the service's HTTP links to HTTPS."""
+    parsed = urllib.parse.urlsplit(urllib.parse.urljoin(OLS_BASE + "/", url))
+    base = urllib.parse.urlsplit(OLS_BASE)
+    if parsed.netloc != base.netloc or not parsed.path.startswith(base.path + "/"):
+        raise OlsError("OLS returned a link outside its API")
+    url = urllib.parse.urlunsplit(parsed._replace(scheme="https"))
+    request = urllib.request.Request(
+        url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+    )
 
     last: Exception | None = None
     for attempt in range(MAX_ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-                return json.load(response)
+                payload = json.load(response)
+            if not isinstance(payload, dict):
+                raise OlsError("OLS returned a non-object JSON response")
+            return payload
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 raise
@@ -96,8 +113,9 @@ def search(
 ) -> list[dict]:
     """Search OLS and return the raw ``response.docs`` list.
 
-    ``query_fields=None`` widens the search to every indexed field, which is how
-    a fuzzy fallback is spelled. Obsolete terms are excluded unless asked for.
+    ``query_fields=None`` widens the search to every indexed field. The current
+    v1 compatibility API's ``obsoletes=true`` selects obsolete terms only, so
+    ``include_obsolete=True`` merges separate current and obsolete queries.
     """
     docs = _request(
         "search",
@@ -108,11 +126,26 @@ def search(
             "exact": "true" if exact else None,
             "allChildrenOf": subtree_iri,
             "rows": rows,
-            "obsoletes": "true" if include_obsolete else None,
+            "obsoletes": "false",
+            "type": "class",
             "fieldList": SEARCH_FIELDS,
         },
     )
-    return docs.get("response", {}).get("docs", [])
+    def search_docs(payload: dict) -> list[dict]:
+        response = payload.get("response")
+        if not isinstance(response, dict) or not isinstance(response.get("docs"), list):
+            raise OlsError("OLS returned an invalid search response")
+        return response["docs"]
+
+    found = list(search_docs(docs))
+    if include_obsolete:
+        obsolete = _request("search", {
+            "q": text, "ontology": ontology, "queryFields": query_fields,
+            "exact": "true" if exact else None, "allChildrenOf": subtree_iri,
+            "rows": rows, "obsoletes": "true", "type": "class", "fieldList": SEARCH_FIELDS,
+        })
+        found += search_docs(obsolete)
+    return found
 
 
 def candidate_iris(curie: str) -> list[str]:
@@ -135,7 +168,30 @@ def _terms_by_iri(iri: str) -> list[dict]:
         if exc.code == 404:
             return []
         raise OlsError(f"OLS returned HTTP {exc.code} for {iri}") from exc
-    return payload.get("_embedded", {}).get("terms", [])
+    return _all_terms(payload)
+
+
+def _all_terms(payload: dict) -> list[dict]:
+    """Consume a HAL term collection without silently truncating later pages."""
+    terms: list[dict] = []
+    seen: set[str] = set()
+    while True:
+        page_terms = (payload.get("_embedded") or {}).get("terms")
+        if page_terms is None and (payload.get("page") or {}).get("totalElements") == 0:
+            page_terms = []
+        if not isinstance(page_terms, list):
+            raise OlsError("OLS returned an invalid term collection")
+        terms.extend(page_terms)
+        href = payload.get("_links", {}).get("next", {}).get("href")
+        if not href:
+            return terms
+        if href in seen:
+            raise OlsError("OLS pagination repeated a next link")
+        seen.add(href)
+        try:
+            payload = _request_url(href)
+        except urllib.error.HTTPError as exc:
+            raise OlsError(f"OLS pagination failed: HTTP {exc.code}") from exc
 
 
 def term_detail(curie: str) -> dict | None:
@@ -144,11 +200,8 @@ def term_detail(curie: str) -> dict | None:
     This is the only endpoint that reports ``is_obsolete`` and
     ``term_replaced_by``, so validation must come through here.
 
-    Two lookups are needed. The ``obo_id`` index is preferred, but it has holes:
-    ``MONDO:0000001`` is defined by MONDO and imported by eleven other
-    ontologies, yet no document indexes its ``obo_id``, so the direct query
-    returns nothing. Falling back to an IRI lookup turns that false ``not_found``
-    into a correct answer. The returned dict carries ``_resolved_via`` and
+    The ``obo_id`` index is preferred. A verified IRI fallback also handles
+    missing index entries and Orphanet/ORPHA aliases. The returned dict carries ``_resolved_via`` and
     ``_home_ontology`` so callers can tell the two paths apart.
     """
     ontology = curie_to_ontology_id(curie)
@@ -157,7 +210,7 @@ def term_detail(curie: str) -> dict | None:
 
     try:
         payload = _request(f"ontologies/{ontology}/terms", {"obo_id": curie})
-        terms = payload.get("_embedded", {}).get("terms", [])
+        terms = _all_terms(payload)
         if terms:
             found = dict(terms[0])
             found["_resolved_via"] = "obo_id"
@@ -193,34 +246,30 @@ def iri_for(curie: str) -> str | None:
     return term.get("iri") if term else None
 
 
-def ancestor_curies(curie: str) -> set[str]:
-    """Return every hierarchical ancestor of a term as a set of CURIEs."""
+def ancestor_curies(curie: str, *, relation: str = "hierarchical") -> set[str]:
+    """Return ancestors; hierarchical also traverses part-of/develops-from.
+
+    ``relation='is-a'`` uses the subclass-only ``ancestors`` relation.
+    """
+    if relation not in {"hierarchical", "is-a"}:
+        raise ValueError("relation must be hierarchical or is-a")
     term = term_detail(curie)
     if not term:
-        return set()
+        raise OlsError(f"cannot check ancestors of unknown term {curie}")
     href = (
         term.get("_links", {})
-        .get("hierarchicalAncestors", {})
+        .get("hierarchicalAncestors" if relation == "hierarchical" else "ancestors", {})
         .get("href")
     )
     if not href:
-        return set()
-    found: set[str] = set()
+        raise OlsError(f"OLS omitted the ancestor link for {curie}")
     url = f"{href}{'&' if '?' in href else '?'}size=500"
-    while url:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-                payload = json.load(response)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                break
-            raise OlsError(f"ancestor lookup failed for {curie}: HTTP {exc.code}") from exc
-        for entry in payload.get("_embedded", {}).get("terms", []):
-            if entry.get("obo_id"):
-                found.add(entry["obo_id"])
-        url = payload.get("_links", {}).get("next", {}).get("href")
-    return found
+    try:
+        terms = _all_terms(_request_url(url))
+    except urllib.error.HTTPError as exc:
+        raise OlsError(f"ancestor lookup failed for {curie}: HTTP {exc.code}") from exc
+    return {entry.get("obo_id") or iri_to_curie(entry.get("iri", ""))
+            for entry in terms} - {None, ""}
 
 
 # --- pure helpers -----------------------------------------------------------
@@ -247,22 +296,26 @@ def curie_to_ontology_id(curie: str) -> str | None:
 
 
 def iri_to_curie(iri: str) -> str | None:
-    """Convert a term IRI to a CURIE by splitting on the final underscore.
+    """Convert a recognized namespace IRI to a CURIE; unknown IRIs stay unknown.
 
     Handles the three IRI shapes in use -- OBO PURLs, EFO's own namespace, and
     Orphanet's -- plus multi-underscore prefixes such as ``APOLLO_SV_00000001``.
     """
-    if not iri:
+    if not isinstance(iri, str) or not iri:
         return None
-    tail = iri.rstrip("/").rsplit("/", 1)[-1]
-    if "#" in tail:
-        tail = tail.rsplit("#", 1)[-1]
+    namespaces = ("http://purl.obolibrary.org/obo/", "http://www.ebi.ac.uk/efo/EFO_",
+                  "http://www.orpha.net/ORDO/Orphanet_")
+    namespace = next((value for value in namespaces if iri.startswith(value)), None)
+    if not namespace or "/" in iri[len(namespace):]:
+        return None
+    tail = iri.rsplit("/", 1)[-1]
     if "_" not in tail:
         return None
     prefix, local = tail.rsplit("_", 1)
     if not prefix or not local:
         return None
-    return f"{prefix}:{local}"
+    candidate = f"{prefix}:{local}"
+    return candidate if is_curie(candidate) else None
 
 
 def normalize_label(text: str) -> str:
@@ -282,7 +335,7 @@ def synonyms_of(doc: dict) -> list[str]:
     uses ``synonyms``.
     """
     collected: list[str] = []
-    for key in ("synonym", "synonyms", "exact_synonyms", "related_synonyms"):
+    for key in ("synonym", "synonyms", "exact_synonyms", "related_synonyms", "broad_synonyms", "narrow_synonyms"):
         value = doc.get(key)
         if isinstance(value, str):
             collected.append(value)
@@ -291,8 +344,22 @@ def synonyms_of(doc: dict) -> list[str]:
     return collected
 
 
+def synonym_scope(query: str, doc: dict) -> str | None:
+    """Retain semantic scope rather than treating every lexical synonym as exact."""
+    wanted = normalize_label(query)
+    for scope in ("exact", "related", "broad", "narrow"):
+        values = doc.get(f"{scope}_synonyms") or []
+        if isinstance(values, str):
+            values = [values]
+        values = list(values) + [entry.get("name", "") for entry in (doc.get("obo_synonym") or [])
+                                 if entry.get("scope") == f"has{scope.title()}Synonym"]
+        if any(normalize_label(value) == wanted for value in values):
+            return scope
+    return "unspecified" if any(normalize_label(s) == wanted for s in synonyms_of(doc)) else None
+
+
 def match_type(query: str, doc: dict) -> str:
-    """Classify how a hit matched: exact_label, exact_synonym, or partial.
+    """Classify a lexical hit and retain its synonym relation scope.
 
     OLS ranks partial hits alongside exact ones, so the caller -- not the
     server -- decides whether a match is exact.
@@ -300,8 +367,9 @@ def match_type(query: str, doc: dict) -> str:
     target = normalize_label(query)
     if normalize_label(doc.get("label") or "") == target:
         return "exact_label"
-    if any(normalize_label(s) == target for s in synonyms_of(doc)):
-        return "exact_synonym"
+    scope = synonym_scope(query, doc)
+    if scope:
+        return "exact_synonym" if scope == "exact" else f"{scope}_synonym"
     return "partial"
 
 
@@ -331,7 +399,8 @@ def rank_candidates(query: str, docs: list[dict]) -> list[dict]:
     Within a match tier the server's relevance order is preserved, and terms
     from their defining ontology outrank imported copies.
     """
-    tier = {"exact_label": 0, "exact_synonym": 1, "partial": 2}
+    tier = {"exact_label": 0, "exact_synonym": 1, "related_synonym": 2,
+            "broad_synonym": 2, "narrow_synonym": 2, "unspecified_synonym": 2, "partial": 3}
     annotated = []
     for position, doc in enumerate(dedupe_candidates(docs)):
         enriched = dict(doc)

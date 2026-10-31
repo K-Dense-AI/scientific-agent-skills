@@ -1,11 +1,12 @@
 ---
 name: paper-lookup
-description: Search 18 scholarly APIs for papers, preprints, citations, open-access full text, repository records, and journal OA status, and return results with reproducible provenance. Covers PubMed, PMC, Europe PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall, OpenCitations, PubTator3, Zenodo, Figshare, ROR, BioStudies, and DOAJ. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, biomedical entity annotations, deposited records (Zenodo, Figshare, BioStudies), institution ROR IDs, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
+description: Searches 18 scholarly APIs for papers, preprints, citations, open-access full text, repository records, and journal OA status, and returns results with reproducible provenance. Covers PubMed, PMC, Europe PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall, OpenCitations, PubTator3, Zenodo, Figshare, ROR, BioStudies, and DOAJ. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, biomedical entity annotations, deposited records (Zenodo, Figshare, BioStudies), institution ROR IDs, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
 allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.3"
+  version: "2.4"
+  last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
 
@@ -15,7 +16,9 @@ This skill gives you 18 scholarly APIs with documented endpoints. Your job is to
 
 A literature lookup is only as trustworthy as it is repeatable. Prefer explicit identifiers and documented endpoints over broad guessing, report what you queried, and say plainly when a result is partial or a database came back empty — a silent gap reads as "nothing exists" when it may just mean "not indexed here."
 
-**These APIs fail with HTTP 200.** That is the recurring hazard, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv accepts an out-of-step pagination cursor and returns the wrong 30 records. Figshare `GET /articles?search_for=` ignores the query and still 200s. OpenCitations answers an unknown DOI with `[{"count": "0"}]`. None of these raise, and every one of them produces a confident, wrong answer. Verify the shape of what you got, not just the status code.
+Endpoint contracts were reviewed against official documentation on 2026-09-30. Response examples are illustrative shapes or explicitly dated historical captures; counts, prices, availability, and status values are not current lookup results. Selected public smoke calls and offline parser tests do not establish authenticated full-text access.
+
+**These APIs can fail with HTTP 200.** That is the recurring hazard, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv treats cursors as absolute offsets, so an incorrect step skips records. Figshare `GET /articles?search_for=` ignores the query and still 200s. OpenCitations answers an unknown DOI with `[{"count": "0"}]`. None of these raise, and every one of them produces a confident, wrong answer. Verify the shape of what you got, not just the status code.
 
 ## Core Workflow
 
@@ -59,8 +62,8 @@ Match the user's intent to the right database(s).
 | Journal/publisher metadata | Crossref | OpenAlex |
 | Funder information | Crossref | OpenAlex |
 | Convert between PMID/PMCID/DOI | PMC (ID Converter) | Crossref, Europe PMC |
-| Is this paper retracted? | PMC OA Web Service (`retracted` attribute) | Crossref (`update-type:retraction`) |
-| Genes/diseases/chemicals in a paper | PubTator3 | Europe PMC `textMinedTerms` |
+| Is this paper retracted? | Crossref (`update-type:retraction`, inspect `update-to`) | PubMed publication types / publisher notices |
+| Genes/diseases/chemicals in a paper | PubTator3 | Europe PMC Annotations API |
 | Institution / affiliation → ROR ID | ROR | OpenAlex (already-linked ROR) |
 | Deposited dataset, software, or poster | Zenodo | Figshare, BioStudies |
 | EBI study package / supplementary archive | BioStudies | Zenodo, ArrayExpress via BioStudies |
@@ -83,7 +86,9 @@ Match the user's intent to the right database(s).
 ```bash
 curl -s --get "https://www.ebi.ac.uk/europepmc/webservices/rest/search" \
   --data-urlencode 'query=(SRC:"PPR" AND PUBLISHER:"bioRxiv" AND "organoid")' \
-  --data-urlencode 'format=json&pageSize=10&resultType=lite'
+  --data-urlencode 'format=json' \
+  --data-urlencode 'pageSize=10' \
+  --data-urlencode 'resultType=lite'
 ```
 
 Take the `10.1101/...` DOIs from those results to the bioRxiv/medRxiv API for preprint-specific metadata such as the published-version link. Semantic Scholar and OpenAlex also index preprints and remain reasonable alternatives.
@@ -99,7 +104,7 @@ Different databases use different identifier systems. When a lookup fails, a wro
 | DOI | `10.xxxx/xxxxx` | `10.1038/nature12373` | All databases |
 | PMID | Integer | `34567890` | PubMed, PMC, Europe PMC, Semantic Scholar |
 | PMCID | `PMC` + digits | `PMC7029759` | PMC, Europe PMC |
-| arXiv ID | `YYMM.NNNNN` | `2103.15348` | arXiv, Semantic Scholar |
+| arXiv ID | `YYMM.NNNNN` or legacy `archive/YYMMNNN` | `2103.15348`, `hep-th/9901001` | arXiv, Semantic Scholar |
 | OpenAlex ID | `W` + digits | `W2741809807` | OpenAlex |
 | Semantic Scholar ID | 40-char hex | `649def34f8be...` | Semantic Scholar |
 | Europe PMC ID | `{source}/{id}` pair | `MED/32117569`, `PPR1283561` | Europe PMC |
@@ -128,7 +133,7 @@ Most of these APIs are fully open. A few benefit from a key for higher rate limi
 | Semantic Scholar | `S2_API_KEY` | No (shared pool without, often 429s) | https://www.semanticscholar.org/product/api#api-key-form |
 | OpenAlex | `OPENALEX_API_KEY` | Recommended | https://openalex.org/settings/api |
 
-**Fully open (no key):** Europe PMC (nothing at all — no key, no email), bioRxiv/medRxiv (no documented limits), arXiv (1 req / 3 s), Crossref (add `mailto` for the 2× "polite pool"), Unpaywall (requires a real `email` parameter — placeholders like `test@example.com` are rejected with HTTP 422), OpenCitations, PubTator3 (3 req/s), Zenodo and Figshare *public* record routes, ROR (2000 req / 5 min), BioStudies, DOAJ search.
+**Fully open (no key):** Europe PMC (nothing at all — no key, no email), bioRxiv/medRxiv (no documented limits), arXiv (1 req / 3 s), Crossref (add `mailto` for the polite pool), Unpaywall (requires a real `email` parameter — placeholders like `test@example.com` are rejected with HTTP 422), OpenCitations (180 req/min/IP), PubTator3 (3 req/s), Zenodo public search (30 req/min), Figshare public records (recommended 1 req/s), ROR (2000 req / 5 min), BioStudies, DOAJ search (2 req/s).
 
 **Loading keys:** Check the environment first (`$NCBI_API_KEY`, etc.). If a key is absent there and a `.env` exists in the working directory, read **only** the four variables named in the table above — do not load the file wholesale into the environment or into your context, since it routinely holds unrelated secrets that have nothing to do with literature search. If a key is missing, proceed at the lower rate limit and tell the user which key would help and where to get it — don't stall.
 
@@ -140,7 +145,7 @@ Never echo a key, and never let one reach your output. Two of these APIs authent
 
 - **Custom headers.** Semantic Scholar authenticates with `x-api-key: $S2_API_KEY`; CORE uses `Authorization: Bearer $CORE_API_KEY`.
 - **POST bodies.** Semantic Scholar's `/paper/batch` and `/recommendations/papers/` endpoints, and CORE's complex search, are POST with a JSON body.
-- **Raw structured payloads.** arXiv returns Atom **XML**; PMC eFetch and Europe PMC `fullTextXML` return JATS **XML**; the PMC OA Web Service returns XML with no JSON option. `curl` returns the exact bytes so the bundled parsers can work on them.
+- **Raw structured payloads.** arXiv returns Atom **XML**; PMC eFetch and Europe PMC `fullTextXML` return JATS **XML**. `curl` returns the exact bytes so the bundled parsers can work on them.
 - **Seeing the real failure.** These APIs signal failure inside a 200 body. `curl` shows you the body and the status; a tool that summarizes prose hides both.
 
 Example with a header and JSON accept:
@@ -152,10 +157,10 @@ curl -s -H "Accept: application/json" -H "x-api-key: $S2_API_KEY" \
 ### Request guidelines
 
 - **URL-encode query parameters — including brackets.** DOIs contain `/` (encode as `%2F`), and titles and queries contain spaces, quotes, and parentheses. With `curl`, `--data-urlencode` combined with `--get` is the safe way to pass a search term. Never interpolate an unescaped user string into a URL or shell command. Square brackets need `%5B`/`%5D`: curl reads a literal `[` as a globbing range and **exits 3 before sending the request**, which is how the arXiv date-range syntax silently fetches nothing.
-- **Serialize requests to rate-limited APIs.** NCBI (PubMed, PMC): 3 req/s without key, 10 with. arXiv: **1 request per 3 seconds** — be patient. Crossref: 5 req/s public, 10 with `mailto`.
+- **Serialize requests to rate-limited APIs.** NCBI (PubMed, PMC): 3 req/s without key, 10 with. arXiv: **1 request per 3 seconds** — be patient. Crossref list queries: 1 req/s public, 3 with `mailto`; single records: 5/10 req/s respectively. The paginator conservatively uses 1 req/s.
 - **Parallelize across *different* open APIs only.** OpenAlex, Crossref, Semantic Scholar, Europe PMC, Unpaywall, OpenCitations, Zenodo, ROR, BioStudies, and DOAJ can run concurrently; keep it to a handful of requests in flight, and never parallelize against the same rate-limited host. Serialize PubTator3 (3 req/s) and NCBI.
 - **Bound total work.** Start with a count or first page. Don't continue past ~1,000 records or ~50 calls without confirming a short plan with the user — the defaults in `scripts/paginate.py` enforce exactly these bounds. For truly bulk needs, point to the database's snapshot/dump (Unpaywall, OpenAlex, CORE all offer one).
-- **On HTTP 429/503**, wait briefly and retry once. Semantic Scholar without a key hits this often — one retry, then tell the user a key would help.
+- **On HTTP 429/503**, honor `Retry-After` or service reset headers and retry once when allowed. A depleted daily budget needs a reset, not a short retry. Semantic Scholar without a key hits this often — one retry, then tell the user a key would help.
 
 ### Error recovery
 
@@ -259,7 +264,7 @@ Read the relevant reference file before making any API call.
 | Database | Reference File | What it covers |
 |---|---|---|
 | PubMed | `references/pubmed.md` | 37M+ biomedical citations, abstracts, MeSH terms (no full text) |
-| PMC | `references/pmc.md` | 10M+ full-text biomedical articles (JATS XML), BioC API, ID conversion, OA availability service |
+| PMC | `references/pmc.md` | 10M+ full-text biomedical articles (JATS XML), BioC API, ID conversion; OA Web Service retired August 2026 |
 | Europe PMC | `references/europepmc.md` | PubMed + PMC + preprints in one index; full-text keyword search, citations, honest 404s |
 
 ### Preprint Servers

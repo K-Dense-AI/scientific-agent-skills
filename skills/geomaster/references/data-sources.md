@@ -1,330 +1,161 @@
-# Geospatial Data Sources
+# Geospatial data sources and API contracts
 
-Comprehensive catalog of satellite imagery, vector data, and APIs for geospatial analysis.
+Reviewed 2026-10-01. Public STAC metadata searches were exercised; authenticated
+pixel downloads, commercial APIs, CDS jobs and Earth Engine exports were not.
 
-## Satellite Data Sources
+## Satellite, elevation and thematic catalogs
 
-### Sentinel Missions (ESA)
+| Data | Official discovery entry point | Selection checks |
+|---|---|---|
+| Sentinel-1/2/3/5P | [Copernicus Data Space](https://dataspace.copernicus.eu/) | Mission, processing level, mode, polarization, baseline and QA |
+| Landsat archive | [USGS EarthExplorer](https://earthexplorer.usgs.gov/) | Collection 2, L1 versus L2, optical versus thermal availability |
+| PlanetScope/SkySat | [Planet](https://docs.planet.com/) | Licensed product and asset type; resolution varies by product |
+| Maxar, Airbus, Capella | Provider catalogs | Confirm current license, acquisition and processing contract before ordering |
+| SRTM, ASTER GDEM, Copernicus DEM | [CDSE DEM](https://documentation.dataspace.copernicus.eu/Data/Additional.html) and producer catalogs | DSM versus bare-earth DEM, void masks, vertical datum and angular pixel spacing |
+| AW3D30 | [JAXA](https://www.eorc.jaxa.jp/ALOS/en/aw3d30/) | Product version, DSM interpretation, masks |
+| ArcticDEM | [Polar Geospatial Center](https://www.pgc.umn.edu/data/arcticdem/) | Strip versus mosaic, reference frame and acquisition dates |
+| WorldCover, MODIS land cover, NLCD | [ESA WorldCover](https://esa-worldcover.org/), [LP DAAC](https://lpdaac.usgs.gov/), [MRLC](https://www.mrlc.gov/) | Legend and year, not a universal class count |
+| ERA5, MERRA-2, JRA | [CDS](https://cds.climate.copernicus.eu/), [NASA GMAO](https://gmao.gsfc.nasa.gov/), [JMA](https://jra.kishou.go.jp/) | Dataset-specific temporal coverage, grid, units and accumulation intervals |
+| Admin/hydrology/population | [Natural Earth](https://www.naturalearthdata.com/), [GADM](https://gadm.org/), [HydroSHEDS](https://www.hydrosheds.org/), [WorldPop](https://www.worldpop.org/), [HDX](https://data.humdata.org/) | Boundary vintage, population counts versus densities, attribution/license |
 
-| Platform | Resolution | Coverage | Access |
-|----------|------------|----------|--------|
-| **Sentinel-2** | 10-60m | Global | https://scihub.copernicus.eu/ |
-| **Sentinel-1** | 5-40m (SAR) | Global | https://scihub.copernicus.eu/ |
-| **Sentinel-3** | 300m-1km | Global | https://scihub.copernicus.eu/ |
-| **Sentinel-5P** | Various | Global | https://scihub.copernicus.eu/ |
+Do not use the retired SciHub DHuS endpoint or `SentinelAPI(...scihub...)` for new
+workflows. CDSE is a different service; STAC metadata discovery does not imply
+unauthenticated access to every linked product. Follow the selected asset's CDSE
+S3/OData access instructions rather than inventing a download URL.
+
+## STAC search
+
+| Catalog root | Contract |
+|---|---|
+| `https://stac.dataspace.copernicus.eu/v1` | CDSE public STAC discovery; inspect collection/queryables and asset access requirements |
+| `https://earth-search.aws.element84.com/v1` | Element 84 Earth Search; Sentinel asset keys use names such as `red`, `nir`, `scl` |
+| `https://planetarycomputer.microsoft.com/api/stac/v1` | Microsoft Planetary Computer; Sentinel keys include `B04`, `B08`, `SCL`; sign protected Azure assets |
+
+Each supports Item Search under `/search` and returns GeoJSON `FeatureCollection`
+with `features` and pagination links. Follow `rel=next` including its method/body;
+do not construct page numbers. GeoJSON bbox is west,south,east,north in degrees.
+Collection IDs and asset keys are provider-specific even for the same mission.
 
 ```python
-# Access via Sentinelsat
-from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+from pystac_client import Client
 
-api = SentinelAPI('user', 'password', 'https://scihub.copernicus.eu/dhus')
-
-# Search
-products = api.query(geojson_to_wkt(aoi_geojson),
-                     date=('20230101', '20231231'),
-                     platformname='Sentinel-2',
-                     cloudcoverpercentage=(0, 20))
-
-# Download
-api.download_all(products)
+catalog = Client.open('https://earth-search.aws.element84.com/v1')
+search = catalog.search(collections=['sentinel-2-l2a'],
+                        bbox=[-122.5, 37.7, -122.3, 37.9],
+                        datetime='2023-06-01/2023-06-30',
+                        query={'eo:cloud_cover': {'lt': 20}},
+                        limit=2, max_items=5)
+items = list(search.items())
+if not items:
+    raise ValueError('No matching items')
+asset_metadata = {k: a.to_dict() for k, a in items[0].assets.items()}
 ```
 
-### Landsat (USGS/NASA)
+`items()` is an iterator that fetches further pages; `item_collection()` materializes
+the bounded result. `limit` is per-page, `max_items` is the client total.
+Scene cloud percentage is only a coarse filter. Record item IDs, acquisition times,
+asset checksums where available, scale/offset and the QA mask rule.
 
-| Platform | Resolution | Coverage | Access |
-|----------|------------|----------|--------|
-| **Landsat 9** | 30m | Global | https://earthexplorer.usgs.gov/ |
-| **Landsat 8** | 30m | Global | https://earthexplorer.usgs.gov/ |
-| **Landsat 7** | 15-60m | Global | https://earthexplorer.usgs.gov/ |
-| **Landsat 5-7** | 30-60m | Global | https://earthexplorer.usgs.gov/ |
+For Planetary Computer pass `modifier=planetary_computer.sign_inplace` to
+`Client.open`. `ItemSearch` itself is not iterable; use `search.items()`.
+The SDK's SAS token service is `GET /api/sas/v1/token/{account}/{container}`;
+it returns `token` and `msft:expiry`. SDK signing appends the expiring SAS query to
+Azure asset URLs. Do not log signed URLs or treat them as permanent identifiers.
+Public metadata access was tested without a subscription key; access policies and
+limits can differ for protected assets.
 
-### Commercial Satellite Data
+Sources: [CDSE STAC](https://documentation.dataspace.copernicus.eu/APIs/STAC.html),
+[Earth Search](https://element84.com/earth-search/),
+[PySTAC Client](https://pystac-client.readthedocs.io/en/latest/api.html),
+[Planetary Computer SDK](https://github.com/microsoft/planetary-computer-sdk-for-python/blob/main/planetary_computer/sas.py).
 
-| Provider | Platform | Resolution | API |
-|----------|----------|------------|-----|
-| **Planet** | PlanetScope, SkySat | 0.5-3m | planet.com |
-| **Maxar** | WorldView, GeoEye | 0.3-1.2m | maxar.com |
-| **Airbus** | Pleiades, SPOT | 0.5-2m | airbus.com |
-| **Capella** | Capella-2 (SAR) | 0.5-1m | capellaspace.com |
+## ERA5 through CDS
 
-## Elevation Data
-
-| Dataset | Resolution | Coverage | Source |
-|---------|------------|----------|--------|
-| **AW3D30** | 30m | Global | https://www.eorc.jaxa.jp/ALOS/en/aw3d30/ |
-| **SRTM** | 30m | 56°S-60°N | https://www.usgs.gov/ |
-| **ASTER GDEM** | 30m | 83°S-83°N | https://asterweb.jpl.nasa.gov/ |
-| **Copernicus DEM** | 30m | Global | https://copernicus.eu/ |
-| **ArcticDEM** | 2-10m | Arctic | https://www.pgc.umn.edu/ |
+Configure CDS using its current personal-access-token setup and accept the chosen
+dataset terms. The URL is `https://cds.climate.copernicus.eu/api`;
+the old UID:key credential format and `/api/v2` configuration are not the current recipe.
+Use the dataset download form's generated request for the exact variables/product.
+This illustrative request creates a remote retrieval job:
 
 ```python
-# Download SRTM via API
-import elevation
-
-# Download SRTM 1 arc-second (30m)
-elevation.clip(bounds=(-122.5, 37.7, -122.3, 37.9), output='srtm.tif')
-
-# Clean and fill gaps
-elevation.clean('srtm.tif', 'srtm_filled.tif')
-```
-
-## Land Cover Data
-
-| Dataset | Resolution | Classes | Source |
-|---------|------------|---------|--------|
-| **ESA WorldCover** | 10m | 11 classes | https://worldcover2021.esa.int/ |
-| **ESRI Land Cover** | 10m | 10 classes | https://www.esri.com/ |
-| **Copernicus Global** | 100m | 23 classes | https://land.copernicus.eu/ |
-| **MODIS MCD12Q1** | 500m | 17 classes | https://lpdaac.usgs.gov/ |
-| **NLCD (US)** | 30m | 20 classes | https://www.mrlc.gov/ |
-
-## Climate & Weather Data
-
-### Reanalysis Data
-
-| Dataset | Resolution | Temporal | Access |
-|---------|------------|----------|--------|
-| **ERA5** | 31km | Hourly (1979+) | https://cds.climate.copernicus.eu/ |
-| **MERRA-2** | 50km | Hourly (1980+) | https://gmao.gsfc.nasa.gov/ |
-| **JRA-55** | 55km | 3-hourly (1958+) | https://jra.kishou.go.jp/ |
-
-```python
-# Download ERA5 via CDS API
 import cdsapi
-
-c = cdsapi.Client()
-
-c.retrieve(
-    'reanalysis-era5-single-levels',
-    {
-        'product_type': 'reanalysis',
-        'variable': '2m_temperature',
-        'year': '2023',
-        'month': '01',
-        'day': '01',
-        'time': '12:00',
-        'area': [37.9, -122.5, 37.7, -122.3],
-        'format': 'netcdf'
-    },
-    'era5_temp.nc'
-)
+client = cdsapi.Client()
+client.retrieve('reanalysis-era5-single-levels', {
+    'product_type': ['reanalysis'], 'variable': ['2m_temperature'],
+    'year': ['2023'], 'month': ['01'], 'day': ['01'], 'time': ['12:00'],
+    'area': [37.9, -122.5, 37.7, -122.3],  # north, west, south, east
+    'data_format': 'netcdf', 'download_format': 'unarchived',
+}, 'era5_temp.nc')
 ```
 
-## OpenStreetMap Data
+`retrieve` handles asynchronous processing and download, not pagination. Inspect
+actual NetCDF dimensions (`valid_time` versus `time`) and units before aggregation.
+[CDS setup](https://cds.climate.copernicus.eu/how-to-api) recommends current cdsapi;
+credentialed retrieval was not run.
 
-### Access Methods
+## OpenStreetMap, Overpass and Nominatim
 
-```python
-# Via OSMnx
-import osmnx as ox
-
-# Download place boundary
-gdf = ox.geocode_to_gdf('San Francisco, CA')
-
-# Download street network
-G = ox.graph_from_place('San Francisco, CA', network_type='drive')
-
-# Download building footprints
-buildings = ox.geometries_from_place('San Francisco, CA', tags={'building': True})
-
-# Via Overpass API
-import requests
-
-overpass_url = "http://overpass-api.de/api/interpreter"
-query = """
-    [out:json];
-    way["highway"](37.7,-122.5,37.9,-122.3);
-    out geom;
-"""
-
-response = requests.get(overpass_url, params={'data': query})
-data = response.json()
-```
-
-## Vector Data Sources
-
-### Natural Earth
-
-```python
-import geopandas as gpd
-
-# Admin boundaries (scale: 10m, 50m, 110m)
-countries = gpd.read_file('https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_0_countries.zip')
-urban_areas = gpd.read_file('https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_urban_areas.zip')
-ports = gpd.read_file('https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_ports.zip')
-```
-
-### Other Sources
-
-| Dataset | Type | Access |
-|---------|------|--------|
-| **GADM** | Admin boundaries | https://gadm.org/ |
-| **HydroSHEDS** | Rivers, basins | https://www.hydrosheds.org/ |
-| **Global Power Plant** | Power plants | https://datasets.wri.org/ |
-| **WorldPop** | Population | https://www.worldpop.org/ |
-| **GPW** | Population | https://sedac.ciesin.columbia.edu/ |
-| **HDX** | Humanitarian data | https://data.humdata.org/ |
-
-## APIs
-
-### Google Maps Platform
+OSMnx 2.1.1 uses `ox.features_from_place(place, tags={'building': True})`,
+`ox.graph_from_place(place, network_type='drive')` and `ox.geocode_to_gdf(place)`.
+These call external services. Cache permitted results, bound areas and obey service
+policies. The public Nominatim service requires a meaningful identifying user-agent
+and at most one request per second; it is not a bulk or autocomplete endpoint.
 
 ```python
 import requests
-
-# Geocoding
-url = "https://maps.googleapis.com/maps/api/geocode/json"
-params = {
-    'address': 'Golden Gate Bridge',
-    'key': YOUR_API_KEY
-}
-
-response = requests.get(url, params=params)
+query = '[out:json][timeout:25];way["highway"](37.700,-122.401,37.701,-122.400);out geom;'
+response = requests.post('https://overpass-api.de/api/interpreter',
+                         data={'data': query}, timeout=40)
+response.raise_for_status()
 data = response.json()
-location = data['results'][0]['geometry']['location']
+if data.get('remark'):
+    raise RuntimeError(data['remark'])  # A timeout/error can accompany HTTP 200.
+elements = data['elements']
 ```
 
-### Mapbox
+Overpass bbox is south,west,north,east. It has no generic page parameter; subdivide
+large AOIs and reconcile OSM type/ID duplicates. This query is an illustrative public
+request, not executed in this refresh. See [OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html),
+[Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API),
+[Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/).
+
+## Geocoding and current weather
+
+These are credentialed illustrative request contracts, not live test results.
+Read tokens from an environment variable or credential store; never embed them in a
+notebook, output URL or exception log. Use request timeouts and HTTP checks, then
+validate the provider's response status before selecting a location.
+
+| API | Method/path and required parameters | Response/limits |
+|---|---|---|
+| Google Geocoding v3 | GET `https://maps.googleapis.com/maps/api/geocode/json`; `address`, `key` | JSON `status` must be `OK`, nonempty `results`; `geometry.location` is `{lat,lng}`. `ZERO_RESULTS` is distinct from denial/quota errors. No pagination. |
+| Mapbox Geocoding v6 | GET `https://api.mapbox.com/search/geocode/v6/forward`; `q`, `access_token`; use `autocomplete=false` for a completed query | GeoJSON `features`, coordinates lon/lat. `limit` is 1..10; no page traversal. v6 does not return POIs; use an address/place, not an assumed landmark lookup. Temporary results cannot be stored; request permitted permanent usage explicitly. |
+| OpenWeather current | GET `https://api.openweathermap.org/data/2.5/weather`; `lat`, `lon`, `appid`, optionally `units=metric` | `main.temp`, `dt` (Unix seconds), `timezone` (seconds), `weather`; standard temperature defaults to Kelvin. A current snapshot is not a historical time series. No pagination. |
+
+Sources: [Google request/response](https://developers.google.com/maps/documentation/geocoding/guides-v3/requests-geocoding),
+[Mapbox v6](https://docs.mapbox.com/api/search/geocoding/),
+[OpenWeather](https://openweathermap.org/api/current).
+
+## Raster quality and elevation downloads
+
+The `elevation` package wraps SRTM acquisition and native GDAL/Make tooling.
+`elevation.clip(bounds=..., output=...)` downloads/crops; `elevation.clean()` cleans
+temporary cache products, not raster voids. Void filling needs a separately chosen
+method and QA. Never call `clean(input, output)` expecting a repaired DEM.
 
 ```python
-# Geocoding
-import requests
-
-url = "https://api.mapbox.com/geocoding/v5/mapbox.places/Golden%20Gate%20Bridge.json"
-params = {'access_token': YOUR_ACCESS_TOKEN}
-
-response = requests.get(url, params=params)
-data = response.json()
-```
-
-### OpenWeatherMap
-
-```python
-# Current weather
-url = "https://api.openweathermap.org/data/2.5/weather"
-params = {
-    'lat': 37.7,
-    'lon': -122.4,
-    'appid': YOUR_API_KEY
-}
-
-response = requests.get(url, params=params)
-weather = response.json()
-```
-
-## Data APIs in Python
-
-### STAC (SpatioTemporal Asset Catalog)
-
-```python
-import pystac_client
-
-# Connect to STAC catalog
-catalog = pystac_client.Client.open("https://earth-search.aws.element84.com/v1")
-
-# Search
-search = catalog.search(
-    collections=["sentinel-2-l2a"],
-    bbox=[-122.5, 37.7, -122.3, 37.9],
-    datetime="2023-01-01/2023-12-31",
-    query={"eo:cloud_cover": {"lt": 20}}
-)
-
-items = search.get_all_items()
-```
-
-### Planetary Computer
-
-```python
-import planetary_computer
-import pystac_client
-
-catalog = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace
-)
-
-# Search and sign items
-items = catalog.search(...)
-signed_items = [planetary_computer.sign(item) for item in items]
-```
-
-## Download Scripts
-
-### Automated Download Script
-
-```python
-from sentinelsat import SentinelAPI
+import numpy as np
 import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-import os
 
-def download_and_process_sentinel2(aoi, date_range, output_dir):
-    """
-    Download and process Sentinel-2 imagery.
-    """
-    # Initialize API
-    api = SentinelAPI('user', 'password', 'https://scihub.copernicus.eu/dhus')
-
-    # Search
-    products = api.query(
-        aoi,
-        date=date_range,
-        platformname='Sentinel-2',
-        processinglevel='Level-2A',
-        cloudcoverpercentage=(0, 20)
-    )
-
-    # Download
-    api.download_all(products, directory_path=output_dir)
-
-    # Process each product
-    for product in products:
-        product_path = f"{output_dir}/{product['identifier']}.SAFE"
-        processed = process_sentinel2_product(product_path)
-        save_rgb_composite(processed, f"{output_dir}/{product['identifier']}_rgb.tif")
-
-def process_sentinel2_product(product_path):
-    """Process Sentinel-2 L2A product."""
-    # Find 10m bands (B02, B03, B04, B08)
-    bands = {}
-    for band_id in ['B02', 'B03', 'B04', 'B08']:
-        band_path = find_band_file(product_path, band_id, resolution='10m')
-        with rasterio.open(band_path) as src:
-            bands[band_id] = src.read(1)
-            profile = src.profile
-
-    # Stack bands
-    stacked = np.stack([bands['B04'], bands['B03'], bands['B02']])  # RGB
-
-    return stacked, profile
+def assess_data_quality(path):
+    with rasterio.open(path) as src:
+        data = src.read(masked=True).astype('float64')
+        valid = data.compressed()
+        valid = valid[np.isfinite(valid)]
+        return {'valid_fraction': valid.size / data.size,
+                'range': (float(valid.min()), float(valid.max())) if valid.size else None,
+                'crs': str(src.crs), 'resolution': src.res}
 ```
 
-## Data Quality Assessment
-
-```python
-def assess_data_quality(raster_path):
-    """
-    Assess quality of geospatial raster data.
-    """
-    import rasterio
-    import numpy as np
-
-    with rasterio.open(raster_path) as src:
-        data = src.read()
-        profile = src.profile
-
-    quality_report = {
-        'nodata_percentage': np.sum(data == src.nodata) / data.size * 100,
-        'data_range': (data.min(), data.max()),
-        'mean': np.mean(data),
-        'std': np.std(data),
-        'has_gaps': np.any(data == src.nodata),
-        'projection': profile['crs'],
-        'resolution': (profile['transform'][0], abs(profile['transform'][4]))
-    }
-
-    return quality_report
-```
-
-For data access code examples, see [code-examples.md](code-examples.md).
+This checks numeric support, not acquisition quality or product correctness.
+[Elevation source](https://github.com/bopen/elevation) documents its native dependencies.

@@ -296,7 +296,7 @@ backend = service.backend(
 )
 ```
 
-Fractional-gate support and dynamic-control support have evolved across Runtime versions. Inspect the returned target and current feature-compatibility documentation instead of assuming both are available for every backend and option combination.
+Fractional-gate support and dynamic-control support have evolved across Runtime versions. The actual service keyword is `use_fractional_gates=True`; the fractional-gates guide currently contains a `fractional_gates=True` typo. Parameterized `rzz` angles must satisfy the returned target bounds (currently `[0, pi/2]` in the Runtime validator); parameter values outside the range are not repaired by compiling the symbolic circuit once. Inspect the returned target and current feature-compatibility documentation instead of assuming both are available for every backend and option combination.
 
 If a circuit uses `if_else`, `while_loop`, `switch_case`, `for_loop`, or classical expressions:
 

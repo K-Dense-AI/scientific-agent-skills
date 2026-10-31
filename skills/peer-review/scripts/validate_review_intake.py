@@ -45,6 +45,7 @@ CONFLICT_STATUSES = {
     "not_assessed",
     "none_identified",
     "disclosed_to_editor",
+    "editor_cleared",
     "unresolved",
 }
 PEER_REVIEW_MODELS = {
@@ -312,7 +313,7 @@ def validate_intake(payload: Any) -> dict[str, Any]:
     elif conflict_status == "none_identified" and conflicts:
         errors.append(issue("CONFLICT_STATUS_MISMATCH", "reviewer.conflicts"))
     elif conflict_status == "disclosed_to_editor":
-        warnings.append(
+        errors.append(
             issue("EDITOR_CONFLICT_CLEARANCE_REQUIRED", "reviewer.conflict_status")
         )
 

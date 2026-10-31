@@ -53,6 +53,8 @@ Top-level JSON fields:
 
 The report validates declarations, not their truth.
 
+`reviewer.conflict_status` accepts `not_assessed`, `none_identified`, `disclosed_to_editor`, `editor_cleared`, or `unresolved`. Disclosure alone does not clear a conflict: `disclosed_to_editor` blocks until an editor actually clears participation. The validator cannot verify that clearance.
+
 ## Reporting-guideline selector and coverage audit
 
 Selection only:
@@ -87,7 +89,11 @@ Coverage columns:
 - `location`: required for reported or partly reported items
 - `rationale`: required for not-applicable items
 
-The catalog is `assets/reporting_guidelines.json`, verified on the date embedded in that file. It does not fetch live updates. The output deliberately has no percentage or quality score.
+The catalog is `assets/reporting_guidelines.json`, reviewed on the date embedded in that file; source-specific verification limits are in `assets/source_ledger.csv`. It does not fetch live updates. The output deliberately has no percentage or quality score.
+
+For an AI trial protocol use `study_types: ["randomized_trial"]`, `report_kind: "protocol"`, `features: ["ai_intervention"]`, and `domains: ["health"]`; this selects SPIRIT 2025 and SPIRIT-AI 2020. For an LLM development, tuning, prompt-engineering, or evaluation study use `study_types: ["llm_study"]`, `report_kind: "results"`, `features: ["large_language_model"]`, and `domains: ["health"]`. Add `prediction_model` only if that design also applies. Abstracts have different checklists; the bundled catalog has no abstract checklist and a no-match result does not mean no guideline exists.
+
+Main-item rows are an aggregate navigation record. `coverage_record_complete` means those row IDs are present, even if all are `not_assessed`; it does not certify coverage of subitems or a completed review.
 
 ## Claim–evidence matrix validator
 
@@ -111,7 +117,7 @@ Columns:
 Rules include:
 
 - Supported claims need evidence IDs and no declared alignment issue.
-- Partly supported claims need evidence, an issue code, and a requested action.
+- Partly supported claims require evidence and an issue code; a missing requested action is a warning that still needs human resolution.
 - Unsupported claims need an issue code.
 - Claim IDs must be unique.
 
@@ -178,6 +184,8 @@ The audit finds:
 - Malformed citation syntax
 
 It validates DOI/URL shape only. It does not resolve identifiers, search the web, verify existence, or determine whether a reference supports a claim.
+
+The parser is a lightweight bracket scanner, not Pandoc. Use single-line groups such as `[@ref-one; @ref-two]` with ASCII letter-leading keys up to 96 characters containing letters, digits, `.`, `_`, `:`, or `-`. Full Pandoc also supports other key characters, braced keys, author-in-text citations, and other constructions that this tool does not support. Multiline groups are not supported; code examples, links, escaped text, or other bracketed `@` text can produce false matches. Review these cases separately using the [official Pandoc citation syntax](https://pandoc.org/MANUAL.html#citation-syntax); a clean report is not proof that every citation was found.
 
 ## Review scaffold generator
 

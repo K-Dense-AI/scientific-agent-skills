@@ -1,464 +1,125 @@
-# ESM3 API Reference
+# ESM3 generation: esm 3.4.1.post1
 
-## Overview
+## Model and interface
 
-ESM3 is a frontier multimodal generative language model that reasons over the sequence, structure, and function of proteins. It uses iterative masked language modeling to simultaneously generate across these three modalities.
+Local `ESM3.from_pretrained("esm3-sm-open-v1", device=torch.device("cpu"))`
+loads the open 1.4B checkpoint. Hosted `esm.sdk.client()` uses Biohub, with
+`esm3-small-2024-08`, `esm3-medium-2024-08` (7B), and `esm3-large-2024-03`
+(98B) listed in the current ESM3 README. Access depends on the account; model
+listing is not an authenticated availability test. Do not rely on the old
+unverified `esm3-medium-multimer-2024-09` example.
 
-Examples below are illustrative legacy `esm==3.2.3` patterns; model inference was not rerun for this documentation refresh. PDB export signatures were checked against that release.
+`ESMProtein` contains optional sequence, secondary-structure, SASA, function and
+coordinate tracks. Sequence masking uses `_`. Use consistent track lengths and
+explicit chain/residue mappings; plain single-chain recipes here exclude `|`
+chain breaks. Coordinates are `torch.Tensor` atom37 arrays `(L,37,3)` in angstroms,
+with missing atoms represented by NaN, not Python `None` entries in a tensor.
 
-## Model Architecture
+`ESMProtein.from_pdb(path, chain_id="A")` selects an author chain. The current
+default `chain_id="all"` combines chains, so specify the desired chain explicitly.
+`to_pdb(path)` writes a file; `to_pdb_string()` returns text. Preserve original
+residue numbers/insertion codes externally when sequence indices differ.
 
-**ESM3 Family Models:**
+## Generation controls
 
-| Model ID | Parameters | Availability | Best For |
-|----------|-----------|--------------|----------|
-| `esm3-open` | 1.4B | Open weights (local, Hugging Face license acceptance required) | Development, testing, learning |
-| `esm3-medium-2024-08` | 7B | Forge API only | Production, balanced quality/speed |
-| `esm3-large-2024-03` | 98B | Forge API only | Maximum quality, research |
-| `esm3-medium-multimer-2024-09` | 7B | Forge API only | Protein complexes (experimental) |
+`GenerationConfig` supports tracks `sequence`, `structure`,
+`secondary_structure`, `sasa`, and `function`. Relevant released defaults are
+`num_steps=20`, `temperature=1.0`, `temperature_annealing=True`, `top_p=1.0`,
+`strategy="random"`, `schedule="cosine"`, and
+`condition_on_coordinates_only=True`. Source comments about earlier defaults
+can differ from the actual field values; record explicit settings.
 
-**Key Features:**
-- Simultaneous reasoning across sequence, structure, and function
-- Iterative generation with controllable number of steps
-- Support for partial prompting across modalities
-- Chain-of-thought generation for complex designs
-- Temperature control for generation diversity
+- Use a positive step count suited to the missing positions. Local generation
+  caps excessive steps at the number of masks; the hosted client also caps by
+  sequence length and can mutate the config. Create a separate config per request.
+- `top_p` is a float; `1.0` disables nucleus restriction. Do not pass `None`.
+- Temperature has no maximum of 1.0. At zero, sampling can select argmax, but
+  default annealing has a positive floor and random unmasking remains stochastic.
+  Temperature zero alone is not a reproducibility guarantee.
+- `condition_on_coordinates_only` selects coordinates instead of discrete
+  structure tokens as structure conditioning. It does **not** clear the sequence
+  or every other track. For inverse folding, remove the sequence explicitly.
+- `.generate()` fills masked positions. It does not resample all fixed residues;
+  a temperature schedule made from repeated calls on completed sequences is not
+  refinement. Remask intended sites, or use the SDK's actual annealing option.
 
-## Core API Components
+The unified low-level inference path is `encoded = model.encode(protein)` then
+`output = model.logits(encoded, LogitsConfig(...))`. Inspect `output.logits.sequence`
+for sequence logits. `model.forward(encoded)` followed by `model.decode(output)`
+is invalid: `forward` has lower-level batched tensor arguments and `decode`
+expects an `ESMProteinTensor`, not a logits object.
 
-### ESMProtein Class
+## Inverse folding and independent checking
 
-The central data structure representing a protein with optional sequence, structure, and function information.
-
-**Constructor:**
-
-```python
-from esm.sdk.api import ESMProtein
-
-protein = ESMProtein(
-    sequence="MPRTKEINDAGLIVHSP",           # Amino acid sequence (optional)
-    coordinates=coordinates_array,          # 3D structure (optional)
-    function_annotations=[...],             # Function labels (optional)
-    secondary_structure="HHHEEEECCC",       # SS annotations (optional)
-    sasa=sasa_array                        # Solvent accessibility (optional)
-)
-```
-
-**Key Methods:**
-
-```python
-# Load from PDB file
-protein = ESMProtein.from_pdb("protein.pdb")
-
-# Export to PDB format
-pdb_string = protein.to_pdb_string()
-
-# Save to file
-with open("output.pdb", "w") as f:
-    f.write(protein.to_pdb_string())
-```
-
-**Masking Conventions:**
-
-Use `_` (underscore) to represent masked positions for generation:
+Illustrative pretrained inference; `model` is a loaded ESM3 inference client.
 
 ```python
-# Mask positions 5-10 for generation
-protein = ESMProtein(sequence="MPRT______AGLIVHSP")
+from esm.sdk.api import ESMProtein, ESMProteinError, GenerationConfig
 
-# Fully masked sequence (generate from scratch)
-protein = ESMProtein(sequence="_" * 200)
+original = ESMProtein.from_pdb("target.pdb", chain_id="A")
+assert original.coordinates is not None and original.sequence
+prompt = ESMProtein(coordinates=original.coordinates.clone())
+design = model.generate(prompt, GenerationConfig(
+    track="sequence", num_steps=min(20, len(original.sequence)),
+    temperature=0.7, condition_on_coordinates_only=True,
+))
+if isinstance(design, ESMProteinError):
+    raise design
+assert design.sequence is not None and len(design.sequence) == len(original.sequence)
 
-# Partial structure (some coordinates None)
-protein = ESMProtein(
-    sequence="MPRTKEIND",
-    coordinates=partial_coords  # Some positions can be None
-)
+# Sequence-only input avoids conditioning the structural check on the target.
+predicted = model.generate(ESMProtein(sequence=design.sequence), GenerationConfig(
+    track="structure", num_steps=min(20, len(design.sequence)),
+))
+if isinstance(predicted, ESMProteinError):
+    raise predicted
+predicted.to_pdb("independently_predicted.pdb")
 ```
 
-### GenerationConfig Class
+Compare matched, finite atoms after structural superposition; report alignment
+coverage and confidence, not just an RMSD number. Successful coordinate generation
+is not evidence that a design is stable or functional. A same-model round trip
+also is not independent experimental validation.
 
-Controls generation behavior and parameters.
+## Function conditioning
 
-**Basic Configuration:**
+`FunctionAnnotation` is exported from `esm.sdk.api` and defined in
+`esm.utils.types`. Its `start` and `end` are **1-based, inclusive**. Labels must
+occur in the selected function/residue-annotation tokenizer vocabulary: supported
+InterPro IDs or exact keyword entries, not invented natural-language underscored
+labels. A range specifies where a function annotation applies; it is not a
+constraint fixing a catalytic residue or GFP chromophore.
+
+For a local loaded ESM3 model, inspect the supported vocabulary before constructing
+annotations (illustrative; vocabulary assets were not downloaded in this review):
 
 ```python
-from esm.sdk.api import GenerationConfig
+from esm.sdk.api import ESMProtein, FunctionAnnotation, GenerationConfig
 
-config = GenerationConfig(
-    track="sequence",              # Track to generate: "sequence", "structure", or "function"
-    num_steps=8,                  # Number of demasking steps
-    temperature=0.7,              # Sampling temperature (0.0-1.0)
-    top_p=None,                   # Nucleus sampling threshold
-    condition_on_coordinates_only=False  # For structure conditioning
-)
+label = selected_supported_label  # Chosen from this model's vocabulary.
+tokenizer = model.tokenizers.function
+assert label in tokenizer.interpro_labels or label in tokenizer.keyword_vocabulary
+annotation = FunctionAnnotation(label=label, start=1, end=150)
+prompt = ESMProtein(sequence="_" * 150, function_annotations=[annotation])
+result = model.generate(prompt, GenerationConfig(track="sequence", num_steps=20))
 ```
 
-**Parameter Details:**
-
-- **track**: Which modality to generate
-  - `"sequence"`: Generate amino acid sequence
-  - `"structure"`: Generate 3D coordinates
-  - `"function"`: Generate function annotations
-
-- **num_steps**: Number of iterative demasking steps
-  - Higher = slower but potentially better quality
-  - Typical range: 8-100 depending on sequence length
-  - For full sequence generation: approximately sequence_length / 2
-
-- **temperature**: Controls randomness
-  - 0.0: Fully deterministic (greedy decoding)
-  - 0.5-0.7: Balanced exploration
-  - 1.0: Maximum diversity
-  - Higher values increase novelty but may reduce quality
-
-- **top_p**: Nucleus sampling parameter
-  - Limits sampling to top probability mass
-  - Values: 0.0-1.0 (e.g., 0.9 = sample from top 90% probability mass)
-  - Use for controlled diversity without extreme sampling
-
-- **condition_on_coordinates_only**: Structure conditioning mode
-  - `True`: Condition only on backbone coordinates (ignore sequence)
-  - Useful for inverse folding tasks
-
-### ESM3InferenceClient Interface
-
-The unified interface for both local and remote inference.
-
-**Local Model Loading:**
-
-```python
-from esm.models.esm3 import ESM3
-
-# Load with automatic device placement
-model = ESM3.from_pretrained("esm3-open").to("cuda")
-
-# Or explicitly specify device
-model = ESM3.from_pretrained("esm3-open").to("cpu")
-```
-
-**Forge API (same interface as local):**
-
-```python
-import os
-import esm
-
-# Drop-in replacement for ESM3.from_pretrained(); reads ESM_API_KEY by default
-model = esm.sdk.client("esm3-medium-2024-08", token=os.environ["ESM_API_KEY"])
-```
-
-**Generation Method:**
-
-```python
-# Basic generation
-protein_output = model.generate(protein_input, config)
-
-# With explicit track specification
-protein_output = model.generate(
-    protein_input,
-    GenerationConfig(track="sequence", num_steps=16, temperature=0.6)
-)
-```
-
-**Forward Pass (Advanced):**
-
-```python
-# Get raw model logits for custom sampling
-protein_tensor = model.encode(protein)
-output = model.forward(protein_tensor)
-logits = model.decode(output)
-```
-
-## Common Usage Patterns
-
-### 1. Sequence Completion
-
-Fill in masked regions of a protein sequence:
-
-```python
-# Define partial sequence
-protein = ESMProtein(sequence="MPRTK____LIVHSP____END")
-
-# Generate missing positions
-config = GenerationConfig(track="sequence", num_steps=12, temperature=0.5)
-completed = model.generate(protein, config)
-
-print(f"Original:  {protein.sequence}")
-print(f"Completed: {completed.sequence}")
-```
-
-### 2. Structure Prediction
-
-Predict 3D structure from sequence:
-
-```python
-# Input: sequence only
-protein = ESMProtein(sequence="MPRTKEINDAGLIVHSPQWFYK")
-
-# Generate structure
-config = GenerationConfig(track="structure", num_steps=len(protein.sequence))
-protein_with_structure = model.generate(protein, config)
-
-# Save as PDB
-with open("predicted_structure.pdb", "w") as f:
-    f.write(protein_with_structure.to_pdb_string())
-```
-
-### 3. Inverse Folding
-
-Design sequence for a target structure:
-
-```python
-# Load target structure
-target = ESMProtein.from_pdb("target.pdb")
-
-# Remove sequence, keep structure
-target.sequence = None
-
-# Generate sequence that folds to this structure
-config = GenerationConfig(
-    track="sequence",
-    num_steps=50,
-    temperature=0.7,
-    condition_on_coordinates_only=True
-)
-designed = model.generate(target, config)
-
-print(f"Designed sequence: {designed.sequence}")
-```
-
-### 4. Function-Conditioned Generation
-
-Generate protein with specific function:
-
-```python
-from esm.sdk.api import FunctionAnnotation
-
-# Specify desired function
-protein = ESMProtein(
-    sequence="_" * 150,
-    function_annotations=[
-        FunctionAnnotation(
-            label="enzymatic_activity",
-            start=30,
-            end=90
-        )
-    ]
-)
-
-# Generate sequence with this function
-config = GenerationConfig(track="sequence", num_steps=75, temperature=0.6)
-functional_protein = model.generate(protein, config)
-```
-
-### 5. Multi-Track Generation (Chain-of-Thought)
-
-Iteratively generate across multiple tracks:
-
-```python
-# Start with partial sequence
-protein = ESMProtein(sequence="MPRT" + "_" * 100)
-
-# Step 1: Complete sequence
-protein = model.generate(
-    protein,
-    GenerationConfig(track="sequence", num_steps=50, temperature=0.6)
-)
-
-# Step 2: Predict structure for completed sequence
-protein = model.generate(
-    protein,
-    GenerationConfig(track="structure", num_steps=50)
-)
-
-# Step 3: Predict function
-protein = model.generate(
-    protein,
-    GenerationConfig(track="function", num_steps=20)
-)
-
-print(f"Final sequence: {protein.sequence}")
-print(f"Functions: {protein.function_annotations}")
-```
-
-### 6. Variant Generation
-
-Generate multiple variants of a protein:
-
-```python
-import numpy as np
-
-base_sequence = "MPRTKEINDAGLIVHSPQWFYK"
-variants = []
-
-for i in range(10):
-    # Mask random positions
-    seq_list = list(base_sequence)
-    mask_indices = np.random.choice(len(seq_list), size=5, replace=False)
-    for idx in mask_indices:
-        seq_list[idx] = '_'
-
-    protein = ESMProtein(sequence=''.join(seq_list))
-
-    # Generate variant
-    variant = model.generate(
-        protein,
-        GenerationConfig(track="sequence", num_steps=8, temperature=0.8)
-    )
-    variants.append(variant.sequence)
-
-print(f"Generated {len(variants)} variants")
-```
-
-## Advanced Topics
-
-### Temperature Scheduling
-
-Vary temperature during generation for better control:
-
-```python
-def generate_with_temperature_schedule(model, protein, temperatures):
-    """Generate with decreasing temperature for annealing."""
-    current = protein
-    steps_per_temp = 10
-
-    for temp in temperatures:
-        config = GenerationConfig(
-            track="sequence",
-            num_steps=steps_per_temp,
-            temperature=temp
-        )
-        current = model.generate(current, config)
-
-    return current
-
-# Example: Start diverse, end deterministic
-result = generate_with_temperature_schedule(
-    model,
-    protein,
-    temperatures=[1.0, 0.8, 0.6, 0.4, 0.2]
-)
-```
-
-### Constrained Generation
-
-Preserve specific regions during generation:
-
-```python
-# Keep active site residues fixed
-def mask_except_active_site(sequence, active_site_positions):
-    """Mask everything except specified positions."""
-    seq_list = ['_'] * len(sequence)
-    for pos in active_site_positions:
-        seq_list[pos] = sequence[pos]
-    return ''.join(seq_list)
-
-# Define active site
-active_site = [23, 24, 25, 45, 46, 89]
-constrained_seq = mask_except_active_site(original_sequence, active_site)
-
-protein = ESMProtein(sequence=constrained_seq)
-result = model.generate(protein, GenerationConfig(track="sequence", num_steps=50))
-```
-
-### Secondary Structure Conditioning
-
-Use secondary structure information in generation:
-
-```python
-# Define secondary structure (H=helix, E=sheet, C=coil)
-protein = ESMProtein(
-    sequence="_" * 80,
-    secondary_structure="CCHHHHHHHEEEEECCCHHHHHHCC" + "C" * 55
-)
-
-# Generate sequence with this structure
-result = model.generate(
-    protein,
-    GenerationConfig(track="sequence", num_steps=40, temperature=0.6)
-)
-```
-
-## Performance Optimization
-
-### Memory Management
-
-For large proteins or batch processing:
-
-```python
-import torch
-
-# Clear CUDA cache between generations
-torch.cuda.empty_cache()
-
-# Use half precision for memory efficiency
-model = ESM3.from_pretrained("esm3-open").to("cuda").half()
-
-# Process in chunks for very long sequences
-def chunk_generate(model, long_sequence, chunk_size=500):
-    chunks = [long_sequence[i:i+chunk_size]
-              for i in range(0, len(long_sequence), chunk_size)]
-    results = []
-
-    for chunk in chunks:
-        protein = ESMProtein(sequence=chunk)
-        result = model.generate(protein, GenerationConfig(track="sequence"))
-        results.append(result.sequence)
-
-    return ''.join(results)
-```
-
-### Batch Processing Tips
-
-When processing multiple proteins:
-
-1. Sort by sequence length for efficient batching
-2. Use padding for similar-length sequences
-3. Process on GPU when available
-4. Implement checkpointing for long-running jobs
-5. Use Forge API for large-scale processing (see `forge-api.md`)
-
-## Error Handling
-
-```python
-try:
-    protein = model.generate(protein_input, config)
-except ValueError as e:
-    print(f"Invalid input: {e}")
-    # Handle invalid sequence or structure
-except RuntimeError as e:
-    print(f"Generation failed: {e}")
-    # Handle model errors
-except torch.cuda.OutOfMemoryError:
-    print("GPU out of memory - try smaller model or CPU")
-    # Fallback to CPU or smaller model
-```
-
-## Model-Specific Considerations
-
-**esm3-open:**
-- Suitable for development and testing
-- Lower quality than larger models
-- Fast inference on consumer GPUs
-- Open weights allow fine-tuning
-
-**esm3-medium-2024-08:**
-- Production quality
-- Good balance of speed and accuracy
-- Requires Forge API access
-- Recommended for most applications
-
-**esm3-large-2024-03:**
-- State-of-the-art quality
-- Slowest inference
-- Use for critical applications
-- Best for novel protein design
-
-## Citation
-
-If using ESM3 in research, cite:
-
-```
-Hayes, T. et al. (2025). Simulating 500 million years of evolution with a language model.
-Science. DOI: 10.1126/science.ads0018
-```
+Function-track predictions are annotation hypotheses. Low temperature is not
+calibrated confidence. Confirm with curated evidence and task-specific assays;
+function conditioning alone cannot guarantee fluorescence or enzyme activity.
+
+## Multitrack designs
+
+A useful sequence is: complete masked sequence -> predict structure -> optionally
+remask selected sequence positions while retaining chosen structural conditions
+-> create a fresh sequence-only prompt for structural checking. Explicitly clear
+`coordinates` before predicting a new structure on an existing protein object.
+Keep the initial prompt, each generated candidate and the exact mutations.
+Avoid splitting long proteins into arbitrary independent chunks and claiming a
+coherent full-length fold.
+
+Sources: [ESM3 README](https://github.com/Biohub/esm/blob/main/_assets/ESM3_README.md),
+[SDK types](https://github.com/Biohub/esm/blob/main/esm/sdk/api.py),
+[generation](https://github.com/Biohub/esm/blob/main/esm/utils/generation.py),
+[annotation coordinates](https://github.com/Biohub/esm/blob/main/esm/utils/types.py),
+[function tokenizer](https://github.com/Biohub/esm/blob/main/esm/tokenization/function_tokenizer.py).

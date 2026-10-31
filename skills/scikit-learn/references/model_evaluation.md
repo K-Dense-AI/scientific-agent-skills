@@ -1,5 +1,7 @@
 # Model Selection and Evaluation Reference
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 ## Overview
 
 Comprehensive guide for evaluating models, tuning hyperparameters, and selecting the best model using scikit-learn's model selection tools.
@@ -24,9 +26,13 @@ X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 ```
 
+Split by the independent unit: patients/specimens/sites and related molecules must not cross partitions. Future prediction requires temporal boundaries and available-at-prediction features. Integer index examples below assume NumPy arrays; use `.iloc[index]` for pandas. CV fold SD is descriptive, not a confidence interval, because folds overlap in training data.
+
 ## Cross-Validation
 
-### Cross-Validation Strategies
+#Split by the independent unit: patients/specimens/sites and related molecules must not cross partitions. Future prediction requires temporal boundaries and available-at-prediction features. Integer index examples below assume NumPy arrays; use `.iloc[index]` for pandas. CV fold SD is descriptive, not a confidence interval, because folds overlap in training data.
+
+## Cross-Validation Strategies
 
 **KFold**
 - Standard k-fold cross-validation
@@ -89,7 +95,9 @@ for train_idx, val_idx in loo.split(X):
     y_train, y_val = y[train_idx], y[val_idx]
 ```
 
-### Cross-Validation Functions
+#Split by the independent unit: patients/specimens/sites and related molecules must not cross partitions. Future prediction requires temporal boundaries and available-at-prediction features. Integer index examples below assume NumPy arrays; use `.iloc[index]` for pandas. CV fold SD is descriptive, not a confidence interval, because folds overlap in training data.
+
+## Cross-Validation Functions
 
 **cross_val_score**
 - Evaluate model using cross-validation
@@ -102,7 +110,7 @@ model = RandomForestClassifier(n_estimators=100, random_state=42)
 scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
 
 print(f"Scores: {scores}")
-print(f"Mean: {scores.mean():.3f} (+/- {scores.std() * 2:.3f})")
+print(f"Mean: {scores.mean():.3f} (fold SD {scores.std():.3f})")
 ```
 
 **cross_validate**
@@ -114,19 +122,19 @@ from sklearn.model_selection import cross_validate
 model = RandomForestClassifier(n_estimators=100, random_state=42)
 cv_results = cross_validate(
     model, X, y, cv=5,
-    scoring=['accuracy', 'precision', 'recall', 'f1'],
+    scoring=['accuracy', 'precision_macro', 'recall_macro', 'f1_macro'],
     return_train_score=True,
     return_estimator=True  # Returns fitted estimators
 )
 
 print(f"Test accuracy: {cv_results['test_accuracy'].mean():.3f}")
-print(f"Test precision: {cv_results['test_precision'].mean():.3f}")
+print(f"Test precision: {cv_results['test_precision_macro'].mean():.3f}")
 print(f"Fit time: {cv_results['fit_time'].mean():.3f}s")
 ```
 
 **cross_val_predict**
 - Get predictions for each sample when it was in validation set
-- Useful for analyzing errors
+- Useful for analyzing errors; requires each sample to appear in exactly one test fold. Pooled prediction metrics need not equal average fold scores
 ```python
 from sklearn.model_selection import cross_val_predict
 
@@ -232,8 +240,8 @@ model = RandomForestClassifier(random_state=42)
 halving_search = HalvingGridSearchCV(
     model, param_grid,
     cv=5,
-    factor=3,  # Proportion of candidates eliminated in each iteration
-    resource='n_samples',  # Can also use 'n_estimators' for ensembles
+    factor=3,  # Roughly one third of candidates survive each iteration
+    resource='n_samples',  # For n_estimators, remove it from the grid and set max_resources
     max_resources='auto',
     random_state=42
 )
@@ -291,6 +299,8 @@ plt.show()
 
 ### ROC and AUC
 
+Binary `predict_proba[:, 1]` corresponds to `model.classes_[1]`; explicitly identify the scientific positive class. Multiclass probability columns must follow the class order. ROC AUC is threshold-free and does not establish calibrated probabilities or clinical utility.
+
 ```python
 from sklearn.metrics import roc_auc_score, roc_curve, RocCurveDisplay
 
@@ -300,11 +310,12 @@ auc = roc_auc_score(y_test, y_proba)
 print(f"ROC AUC: {auc:.3f}")
 
 # Plot ROC curve
-fpr, tpr, thresholds = roc_curve(y_test, y_proba)
+fpr, tpr, thresholds = roc_curve(y_test, y_proba, pos_label=model.classes_[1])
 RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=auc).plot()
 
 # Multiclass (one-vs-rest)
-auc_ovr = roc_auc_score(y_test, y_proba_multi, multi_class='ovr')
+y_proba_multi = model.predict_proba(X_test)  # Use a multiclass fitted model here
+auc_ovr = roc_auc_score(y_test, y_proba_multi, labels=model.classes_, multi_class='ovr')
 ```
 
 ### Precision-Recall Curve
@@ -313,8 +324,8 @@ auc_ovr = roc_auc_score(y_test, y_proba_multi, multi_class='ovr')
 from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay
 from sklearn.metrics import average_precision_score
 
-precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
-ap = average_precision_score(y_test, y_proba)
+precision, recall, thresholds = precision_recall_curve(y_test, y_proba, pos_label=model.classes_[1])
+ap = average_precision_score(y_test, y_proba, pos_label=model.classes_[1])
 
 disp = PrecisionRecallDisplay(precision=precision, recall=recall, average_precision=ap)
 disp.plot()
@@ -331,6 +342,8 @@ print(f"Log Loss: {logloss:.3f}")
 ```
 
 ## Regression Metrics
+
+MAPE is a relative value (0.1 means 10%) and becomes unstable near zero targets. R² may be negative on test data; constant targets require care with its default `force_finite=True` behavior.
 
 ```python
 from sklearn.metrics import (
@@ -377,6 +390,8 @@ v_measure = v_measure_score(y_true, y_pred)
 
 ### Without Ground Truth
 
+Require `2 <= n_labels < n_samples`; do not let DBSCAN noise label -1 silently become a cluster. If excluding noise, report coverage and avoid comparing the resulting score directly with all-row scores. These internal indices favor compact/convex geometry and cannot confirm scientific validity.
+
 ```python
 from sklearn.metrics import (
     silhouette_score, calinski_harabasz_score, davies_bouldin_score
@@ -395,10 +410,13 @@ db_score = davies_bouldin_score(X, labels)  # Lower better
 from sklearn.metrics import make_scorer
 
 def custom_metric(y_true, y_pred):
-    # Your custom logic
-    return score
+    # Illustrative binary cost: a missed positive costs five false positives.
+    import numpy as np
+    y_true, y_pred = np.asarray(y_true), np.asarray(y_pred)
+    return np.mean(5 * ((y_true == 1) & (y_pred == 0)) +
+                   ((y_true == 0) & (y_pred == 1)))
 
-custom_scorer = make_scorer(custom_metric, greater_is_better=True)
+custom_scorer = make_scorer(custom_metric, greater_is_better=False)
 
 # Use in cross-validation or grid search
 scores = cross_val_score(model, X, y, cv=5, scoring=custom_scorer)
@@ -491,6 +509,8 @@ plt.grid(True)
 
 ## Model Persistence
 
+Pickle/joblib loading can execute arbitrary code: load trusted artifacts only. Cross-version scikit-learn loading is unsupported. Save the fitted pipeline, exact package versions, feature schema, and validation provenance together.
+
 ### Save and Load Models
 
 ```python
@@ -544,15 +564,14 @@ from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline as ImbPipeline
 
-# SMOTE oversampling
-smote = SMOTE(random_state=42)
-X_resampled, y_resampled = smote.fit_resample(X_train, y_train)
-
+# Resampling belongs inside each training fold; pass this pipeline to CV/search.
+# Binary numeric features only here: float ratios are not multiclass strategies.
+# For nominal columns consider SMOTENC; never interpolate arbitrary category codes.
 # Combined approach
 pipeline = ImbPipeline([
-    ('over', SMOTE(sampling_strategy=0.5)),
-    ('under', RandomUnderSampler(sampling_strategy=0.8)),
-    ('model', RandomForestClassifier())
+    ('over', SMOTE(sampling_strategy=0.5, random_state=42)),
+    ('under', RandomUnderSampler(sampling_strategy=0.8, random_state=42)),
+    ('model', RandomForestClassifier(random_state=42))
 ])
 ```
 
@@ -568,18 +587,20 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 ### Appropriate Metrics
 - **Balanced data**: Accuracy, F1-score
-- **Imbalanced data**: Precision, Recall, F1-score, ROC AUC, Balanced Accuracy
+- **Imbalanced data**: Per-class Precision/Recall, Average Precision, macro F1, Balanced Accuracy; weighted averages can hide minority failures
 - **Cost-sensitive**: Define custom scorer with costs
 - **Ranking**: ROC AUC, Average Precision
 
-### Cross-Validation
+#Split by the independent unit: patients/specimens/sites and related molecules must not cross partitions. Future prediction requires temporal boundaries and available-at-prediction features. Integer index examples below assume NumPy arrays; use `.iloc[index]` for pandas. CV fold SD is descriptive, not a confidence interval, because folds overlap in training data.
+
+## Cross-Validation
 - Use 5 or 10-fold CV for most cases
 - Use StratifiedKFold for classification
 - Use TimeSeriesSplit for time series
 - Use GroupKFold when samples are grouped
 
 ### Nested Cross-Validation
-For unbiased performance estimates when tuning:
+Estimate the complete selection procedure on untouched outer folds; do not choose algorithms or preprocessing using the outer scores. Both levels must respect groups/time where applicable:
 ```python
 from sklearn.model_selection import cross_val_score, GridSearchCV
 
@@ -588,5 +609,12 @@ grid_search = GridSearchCV(model, param_grid, cv=5)
 
 # Outer loop: performance estimation
 scores = cross_val_score(grid_search, X, y, cv=5)
-print(f"Nested CV score: {scores.mean():.3f} (+/- {scores.std() * 2:.3f})")
+print(f"Nested CV score: {scores.mean():.3f} (fold SD {scores.std():.3f})")
 ```
+
+## Upstream references
+
+- https://scikit-learn.org/stable/modules/cross_validation.html
+- https://scikit-learn.org/stable/modules/model_evaluation.html
+- https://scikit-learn.org/stable/model_persistence.html
+- https://imbalanced-learn.org/stable/common_pitfalls.html

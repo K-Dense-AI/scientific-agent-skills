@@ -35,8 +35,8 @@ def valid_source_manifest() -> dict:
     }
 
 
-def valid_claim_csv() -> str:
-    digest = hashlib.sha256(b"test claim").hexdigest()
+def valid_claim_csv(text: str = "Verified test statement") -> str:
+    digest = hashlib.sha256(" ".join(text.split()).encode("utf-8")).hexdigest()
     return (
         "claim_id,section,claim_kind,claim_text_sha256,evidence_ids,"
         "verification_status,uncertainty,analysis_intent\n"

@@ -3,7 +3,7 @@
 
 MANDATORY: Run this script before loading TimesFM for the first time.
 It checks RAM, GPU/VRAM, disk space, Python version, and package
-installation so the agent never crashes a user's machine.
+installation. Thresholds are advisory heuristics, not an OOM guarantee.
 
 Usage:
     python check_system.py
@@ -21,7 +21,8 @@ import json
 import os
 import platform
 import shutil
-import struct
+import re
+from importlib.metadata import version as package_version, PackageNotFoundError
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +34,12 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 MODEL_PROFILES: dict[str, dict[str, Any]] = {
+    "v3.0": {
+        "name": "TimesFM 3.0 (330M)", "params": "330M",
+        "min_ram_gb": 4.0, "recommended_ram_gb": 8.0,
+        "min_vram_gb": 4.0, "recommended_vram_gb": 8.0,
+        "disk_gb": 3.0, "hf_repo": "google/timesfm-3.0-pytorch",
+    },
     "v2.5": {
         "name": "TimesFM 2.5 (200M)",
         "params": "200M",
@@ -167,8 +174,7 @@ def _get_total_ram_gb() -> float:
     except Exception:
         pass
 
-    # Fallback: use struct to estimate (unreliable)
-    return struct.calcsize("P") * 8 / 8  # placeholder
+    return 0.0  # Unknown; never infer physical memory from pointer width.
 
 
 def _get_available_ram_gb() -> float:
@@ -187,7 +193,10 @@ def _get_available_ram_gb() -> float:
                 ["vm_stat"], capture_output=True, text=True, check=True
             )
             free = 0
-            page_size = 4096
+            match = re.search(r"page size of (\d+) bytes", result.stdout)
+            if not match:
+                return 0.0
+            page_size = int(match.group(1))
             for line in result.stdout.split("\n"):
                 if "Pages free" in line or "Pages inactive" in line:
                     val = line.split(":")[1].strip().rstrip(".")
@@ -229,23 +238,25 @@ def check_ram(profile: dict[str, Any]) -> CheckResult:
 
     value = f"Total: {total:.1f} GB | Available: {available:.1f} GB"
 
-    if total < min_ram:
+    if total <= 0 or available <= 0:
+        return CheckResult("RAM", "warn", "RAM measurement unavailable; check manually.", value)
+    if min(total, available) < min_ram:
         return CheckResult(
             name="RAM",
             status="fail",
             detail=(
-                f"System has {total:.1f} GB RAM but {profile['name']} requires "
+                f"System has {total:.1f} GB total / {available:.1f} GB available RAM but {profile['name']} uses a preflight threshold of "
                 f"at least {min_ram:.0f} GB. The model will likely fail to load "
                 f"or cause the system to swap heavily and become unresponsive."
             ),
             value=value,
         )
-    elif total < rec_ram:
+    elif min(total, available) < rec_ram:
         return CheckResult(
             name="RAM",
             status="warn",
             detail=(
-                f"System has {total:.1f} GB RAM. {profile['name']} recommends "
+                f"System has {total:.1f} GB total / {available:.1f} GB available RAM. Preflight recommends "
                 f"{rec_ram:.0f} GB. It may work with small batch sizes but could "
                 f"be tight. Use per_core_batch_size=4 or lower."
             ),
@@ -255,7 +266,7 @@ def check_ram(profile: dict[str, Any]) -> CheckResult:
         return CheckResult(
             name="RAM",
             status="pass",
-            detail=f"System has {total:.1f} GB RAM, meets {rec_ram:.0f} GB recommendation.",
+            detail=f"Available RAM {available:.1f} GB meets the {rec_ram:.0f} GB preflight recommendation.",
             value=value,
         )
 
@@ -278,8 +289,8 @@ def check_gpu() -> CheckResult:
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             return CheckResult(
                 name="GPU",
-                status="pass",
-                detail="Apple Silicon MPS backend available. Uses unified memory.",
+                status="warn",
+                detail="MPS is available, but the 2.5 loader selects CPU when CUDA is absent.",
                 value="Apple Silicon MPS",
             )
         else:
@@ -304,9 +315,11 @@ def check_gpu() -> CheckResult:
 def check_disk(profile: dict[str, Any]) -> CheckResult:
     """Check available disk space for model download."""
     # Check HuggingFace cache dir or home dir
-    hf_cache = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
-    cache_dir = Path(hf_cache)
-    check_dir = cache_dir if cache_dir.exists() else Path.home()
+    hf_home = os.environ.get("HF_HOME", str(Path(os.environ.get("XDG_CACHE_HOME", "~/.cache")).expanduser() / "huggingface"))
+    hf_cache = os.environ.get("HF_HUB_CACHE", str(Path(hf_home).expanduser() / "hub"))
+    check_dir = Path(hf_cache).expanduser().resolve()
+    while not check_dir.exists():
+        check_dir = check_dir.parent
 
     usage = shutil.disk_usage(str(check_dir))
     free_gb = usage.free / (1024**3)
@@ -360,7 +373,10 @@ def check_package(pkg_name: str, import_name: str | None = None) -> CheckResult:
     import_name = import_name or pkg_name
     try:
         mod = importlib.import_module(import_name)
-        version = getattr(mod, "__version__", "unknown")
+        try:
+            version = package_version(pkg_name)
+        except PackageNotFoundError:
+            version = getattr(mod, "__version__", "unknown")
         return CheckResult(
             name=pkg_name,
             status="pass",
@@ -383,46 +399,9 @@ def check_package(pkg_name: str, import_name: str | None = None) -> CheckResult:
 
 def recommend_batch_size(report: SystemReport) -> int:
     """Recommend per_core_batch_size based on available resources."""
-    total_ram = _get_total_ram_gb()
-
-    # Check if GPU is available
-    gpu_check = next((c for c in report.checks if c.name == "GPU"), None)
-
-    if gpu_check and gpu_check.status == "pass" and "VRAM" in gpu_check.value:
-        # Extract VRAM
-        try:
-            vram_str = gpu_check.value.split("VRAM:")[1].strip().split()[0]
-            vram = float(vram_str)
-            if vram >= 24:
-                return 256
-            elif vram >= 16:
-                return 128
-            elif vram >= 8:
-                return 64
-            elif vram >= 4:
-                return 32
-            else:
-                return 16
-        except (ValueError, IndexError):
-            return 32
-    elif gpu_check and "MPS" in gpu_check.value:
-        # Apple Silicon — use unified memory heuristic
-        if total_ram >= 32:
-            return 64
-        elif total_ram >= 16:
-            return 32
-        else:
-            return 16
-    else:
-        # CPU only
-        if total_ram >= 32:
-            return 64
-        elif total_ram >= 16:
-            return 32
-        elif total_ram >= 8:
-            return 8
-        else:
-            return 4
+    # Context, horizon, compilation and workload dominate peak allocation.
+    # Start one series at a time; measured tuning belongs to the caller.
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -459,10 +438,11 @@ def run_checks(model_version: str = "v2.5") -> SystemReport:
     # Verdict
     if report.passed:
         report.verdict = (
-            f"[OK] System is ready for {profile['name']} ({report.mode.upper()} mode)"
+            f"[OK] Preflight thresholds passed for {profile['name']} ({report.mode.upper()} mode)"
         )
         report.verdict_detail = (
-            f"Recommended: per_core_batch_size={report.recommended_batch_size}"
+            f"Start with per_core_batch_size={report.recommended_batch_size}; "
+            "this does not guarantee available peak memory or package compatibility."
         )
     else:
         failed = [c for c in report.checks if c.status == "fail"]

@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/packages
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi packages bundle extensions, skills, prompt templates, and themes for sharing through npm, git, URL, or local paths. Packages run with full system access — extensions execute arbitrary code and skills can instruct the model to run executables. Review third-party source before installing.
 
 ## Install and Manage
@@ -64,7 +66,7 @@ Without a manifest, Pi auto-discovers convention directories: `extensions/` (`.t
 
 Third-party runtime dependencies belong in `dependencies`; Pi runs `npm install` when installing from npm or git.
 
-Pi bundles core packages for extensions and skills. If you import `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, or `typebox`, list them in `peerDependencies` with `"*"` and do not bundle them.
+Pi bundles core packages for extensions and skills. If you import `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, or `typebox`, list them in `peerDependencies` with `"*"` and do not bundle them or add physical runtime copies in `dependencies`. Managed installs suppress automatic peer installation; local packages retain the author's dependency tree. A duplicate host package can create separate classes and registries in compiled ESM.
 
 Other Pi packages must be bundled: add them to `dependencies` **and** `bundledDependencies`, then reference their resources through `node_modules/` paths. Pi loads packages with separate module roots, so separate installs neither collide nor share modules.
 

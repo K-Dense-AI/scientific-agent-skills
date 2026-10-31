@@ -1,6 +1,6 @@
 # FASTA, FASTQ, and Tabix-Indexed Files
 
-This reference targets pysam 0.24.0.
+This reference targets pysam 0.24.1.
 
 ## Indexed FASTA
 
@@ -17,7 +17,9 @@ with pysam.FastaFile("reference.fa") as fasta:
     print(fasta.get_reference_length("chr1"))
 ```
 
-An uncompressed FASTA needs `<name>.fai`. A BGZF-compressed FASTA also needs a
+An uncompressed FASTA uses `<name>.fai`. With a default index path, `FastaFile`
+can build a missing index on open. Pass an existing `filepath_index` to prevent
+implicit index creation (as the bundled inspector does). A BGZF-compressed FASTA also needs a
 `.gzi` compressed-offset index. Ordinary gzip is not suitable for indexed
 random access.
 
@@ -42,9 +44,11 @@ with pysam.FastaFile("reference.fa") as fasta:
     same_sequence = fasta.fetch(region="chr1:1000-1099")
 ```
 
-If start or end is omitted, pysam uses the sequence boundary. Invalid regions
-raise `ValueError` or `IndexError`; do not silently clip unless that is the
-documented workflow.
+If start or end is omitted, pysam uses the sequence boundary. Negative or
+inverted coordinates raise, but an end beyond the contig clips and a start
+at/beyond the end returns an empty string in 0.24.1. Check
+`0 <= start <= stop <= fasta.get_reference_length(contig)` when exact length
+is required; absence of an exception is not a bounds check.
 
 ### Fetch variant context
 
@@ -56,7 +60,11 @@ def variant_context(
     ref: str,
     flank: int = 20,
 ) -> tuple[str, bool]:
+    if pos_1based < 1 or flank < 0 or not ref:
+        raise ValueError("positive POS, nonempty REF, and nonnegative flank required")
     start = pos_1based - 1
+    if start + len(ref) > fasta.get_reference_length(contig):
+        raise ValueError("REF extends beyond the contig")
     context_start = max(0, start - flank)
     context_stop = min(
         fasta.get_reference_length(contig),
@@ -76,19 +84,9 @@ normalization.
 Coordinates do not encode strand. Reverse-complement after fetching:
 
 ```python
-IUPAC_COMPLEMENT = str.maketrans(
-    "ACGTRYMKBDHVNacgtrymkbdhvn",
-    "TGCAYRKMVHDBNtgcayrkmvhdbn",
-)
-
-
-def reverse_complement(sequence: str) -> str:
-    return sequence.translate(IUPAC_COMPLEMENT)[::-1]
-
-
 sequence = fasta.fetch("chr1", start, stop)
 if strand == "-":
-    sequence = reverse_complement(sequence)
+    sequence = pysam.reverse_complement(sequence)
 ```
 
 Confirm annotation coordinates before conversion: BED is normally 0-based
@@ -164,6 +162,9 @@ mismatches.
 ### Streaming statistics
 
 ```python
+from __future__ import annotations
+
+
 def fastx_stats(path: str) -> dict[str, float | int | None]:
     record_count = 0
     base_count = 0
@@ -216,8 +217,8 @@ explicitly intended.
 
 ### Input requirements
 
-- Sort by contig and coordinate first. `tabix_index()` does not verify sort
-  order.
+- Sort by contig and coordinate first. The wrapper does not sort or perform
+  a full preflight; HTSlib rejects detected ordering errors during indexing.
 - Use BGZF, not ordinary gzip.
 - Select the correct preset: commonly `bed`, `gff`, `sam`, or `vcf`.
 - Presets define columns and coordinate conventions.
@@ -238,7 +239,8 @@ Python column indices are 0-based. File coordinates are assumed 1-based unless
 `zerobased=True`. This is separate from query coordinates, which are always
 numeric 0-based in the Python API.
 
-Use CSI for references beyond legacy TBI limits:
+Use CSI for references beyond legacy TBI limits, then pass its path to
+`TabixFile(..., index="regions.bed.gz.csi")` (the default only looks for TBI):
 
 ```python
 pysam.tabix_index(
@@ -255,7 +257,6 @@ pysam.tabix_index(
 with pysam.TabixFile(
     "regions.bed.gz",
     parser=pysam.asBed(),
-    threads=4,
 ) as regions:
     for row in regions.fetch("chr1", 1_000, 2_000):
         print(row.contig, row.start, row.end, row.name)
@@ -268,7 +269,8 @@ Useful parsers:
 
 - `pysam.asTuple()`: tuple-like fields
 - `pysam.asBed()`: BED fields with 0-based start/end
-- `pysam.asGTF()`: GTF/GFF-like fields and attributes
+- `pysam.asGTF()`: GTF fields and quoted attributes
+- `pysam.asGFF3()`: GFF3 fields and `key=value` attributes
 - `pysam.asVCF()`: lightweight tabix VCF parser
 
 For complete VCF semantics, use `VariantFile`, not `TabixFile(asVCF())`.
@@ -305,7 +307,7 @@ Header lines are yielded without trailing newlines. Each
 ## Common Pitfalls
 
 - Mixing numeric 0-based coordinates with 1-based region strings
-- Expecting `FastaFile` to open without `.fai`
+- Unexpected `.fai` creation when opening `FastaFile` without an explicit index
 - Using ordinary gzip for indexed FASTA or tabix data
 - Retaining a `persist=False` FASTX proxy
 - Assuming every FASTX record has qualities

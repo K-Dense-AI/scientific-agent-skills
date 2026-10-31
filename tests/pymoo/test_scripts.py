@@ -51,11 +51,7 @@ import many_objective_example  # noqa: E402,F401
 import multi_objective_example  # noqa: E402,F401
 import single_objective_example  # noqa: E402,F401
 
-# No script here builds an argparse parser; each is an importable module with a
-# worked example under `if __name__ == "__main__"`. Four of them finish in about
-# two seconds; `many_objective_example` costs roughly 30 (NSGA-III, 5
-# objectives, 300 generations) and is included anyway because running it is the
-# only thing that exercises its reference-direction call for real.
+# The bounded demos exercise the complete entry points, including plots.
 DemoBlockTests = skill_contract.cli.demo_test_case(
     SKILL_ROOT,
     (
@@ -307,3 +303,31 @@ class DecisionMakingExampleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_selection_rejects_nonfinite_infeasible_and_degenerate_fronts():
+    from types import SimpleNamespace
+    select = decision_making_example.apply_pseudo_weights
+    def result(F, CV=None):
+        return SimpleNamespace(F=F, X=None if F is None else np.zeros((len(F), 2)), CV=CV)
+    with pytest.raises(ValueError, match="No feasible"):
+        select(result(None), [0.5, 0.5])
+    with pytest.raises(ValueError, match="finite"):
+        select(result(np.array([[0, np.nan], [1, 0]])), [0.5, 0.5])
+    with pytest.raises(ValueError, match="infeasible"):
+        select(result(np.array([[0, 1], [1, 0]]), np.ones((2, 1))), [0.5, 0.5])
+    misaligned = result(np.array([[0, 1], [1, 0]]))
+    misaligned.X = np.zeros((1, 2))
+    with pytest.raises(ValueError, match="aligned"):
+        select(misaligned, [0.5, 0.5])
+    with pytest.raises(ValueError, match="per candidate"):
+        select(result(np.array([[0, 1], [1, 0]]), np.zeros(2)), [0.5, 0.5])
+    with pytest.raises(ValueError, match="constant"):
+        select(result(np.array([[1, 1], [1, 1]])), [0.5, 0.5])
+    with pytest.raises(ValueError, match="dominated"):
+        select(result(np.array([[0, 0], [1, 1]])), [0.5, 0.5])
+    with pytest.raises(ValueError, match="sum to one"):
+        select(result(np.array([[0, 1], [1, 0]])), [1, 1])
+    i, _, F = select(result(np.array([[3.0, 4.0]])), [0.5, 0.5])
+    assert i == 0
+    np.testing.assert_array_equal(F, [3, 4])

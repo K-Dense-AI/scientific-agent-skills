@@ -1,157 +1,93 @@
-# Database Search Guidance and Citation Styles
+# Search, citation chaining, and source verification
 
-Per-database search guidance (coverage, syntax, and export paths) followed by the
-citation style guide. See also `database_strategies.md` and `citation_styles.md`.
+Use [database_strategies.md](database_strategies.md) for current request syntax,
+authentication, response shapes, and paging limits. Commands below are
+illustrative discovery recipes, not executed searches or complete corpora.
 
-## Database-Specific Search Guidance
+## Supplementary web search
 
-### PubMed / PubMed Central
+Parallel CLI 0.9.3 supports the flags below. Authenticate with `parallel-cli auth`
+or `PARALLEL_API_KEY`; installation and authentication are described in the
+[official CLI guide](https://docs.parallel.ai/integrations/cli). It is optional
+for the review workflow and may incur provider charges.
 
-Access via `gget` skill:
 ```bash
-# Search PubMed
-gget search pubmed "CRISPR gene editing" -l 100
+mkdir -p sources
+parallel-cli search "CRISPR sickle cell clinical studies" \
+  -q 'CRISPR sickle cell clinical trial' --json --max-results 10 \
+  --excerpt-max-chars-total 27000 \
+  --include-domains 'pubmed.ncbi.nlm.nih.gov,biorxiv.org,medrxiv.org' \
+  -o sources/scoping-web.json
 
-# Search with filters
-# Use PubMed Advanced Search Builder to construct complex queries
-# Then execute via gget or direct Entrez API
+parallel-cli extract 'https://arxiv.org/abs/1706.03762' \
+  --full-content --json -o sources/paper-extract.json
 ```
 
-**Search tips**:
-- Use MeSH terms: `"sickle cell disease"[MeSH]`
-- Field tags: `[Title]`, `[Title/Abstract]`, `[Author]`
-- Date filters: `2020:2024[Publication Date]`
-- Boolean operators: AND, OR, NOT
-- See MeSH browser: https://meshb.nlm.nih.gov/search
+`--max-results` is a cap on ranked returned hits, not the database total.
+`--full-content` requests a fuller extraction; unavailable or truncated content
+still requires retrieval from the original source. Save the URL, extraction
+status, date, and exact text supporting each inference. Never report a title,
+web excerpt, or machine summary as if the full paper was assessed.
 
-### bioRxiv / medRxiv
+## Citation chaining
 
-Access via `gget` skill:
+- **Forward:** use Google Scholar Cited by or documented Semantic Scholar /
+  OpenAlex citation queries. Search-engine queries such as "papers citing ..."
+  are supplementary leads, not complete forward-citation exports.
+- **Backward:** inspect reference lists of eligible reports and relevant reviews;
+  retrieve candidate records and apply the same eligibility criteria.
+- Track seed papers, tools, dates, retrieved counts, and screening decisions.
+  Link preprint, journal, protocol, and follow-up reports to a study ID before
+  synthesis. Citation-count thresholds and journal prestige are not eligibility
+  rules; recent and negative studies must have an equal chance of inclusion.
+
+## DOI checks and bibliographic identity
+
 ```bash
-gget search biorxiv "CRISPR sickle cell" -l 50
+python scripts/verify_citations.py review.md --output review_citation_report.json
 ```
 
-**Important considerations**:
-- Preprints are not peer-reviewed
-- Verify findings with caution
-- Check if preprint has been published (CrossRef)
-- Note preprint version and date
+Optional `--email` supplies a real contact to the Crossref polite pool. The
+helper extracts unique DOI candidates, URL-encodes them, and checks
+`GET https://doi.org/api/handles/{doi}`. Registration requires a successful
+Handle `responseCode=1` and matching identifier, not HTTP 200 alone. It then
+requests `GET https://api.crossref.org/works/{doi}` and checks metadata identity.
+These public singleton reads require no key or pagination.
 
-### arXiv
+Read the report's `verified` as **registration confirmed**, `failed` as
+**unresolved/missing/inconclusive**, and `metadata_unavailable` as **manual
+metadata follow-up needed**. Transient errors and throttling are not proof of
+fabrication. Crossref does not cover every registration agency. The script
+preserves the original Crossref message and full author list; its compatibility
+formatting methods are previews, not compliant APA or Nature output.
 
-Access via direct API or WebFetch:
-```python
-# Example search categories:
-# q-bio.QM (Quantitative Methods)
-# q-bio.GN (Genomics)
-# q-bio.MN (Molecular Networks)
-# cs.LG (Machine Learning)
-# stat.ML (Machine Learning Statistics)
+DOI extraction is heuristic: inspect ambiguous trailing punctuation and older
+suffixes with parentheses. Citations without DOIs require manual verification.
+Check titles, authors, year, version, correction/retraction notices, and that
+the source actually supports the cited statement. Registered identifiers and
+accessible URLs do not establish those properties.
 
-# Search format: category AND terms
-search_query = "cat:q-bio.QM AND ti:\"single cell sequencing\""
+Sources: [Handle proxy API](https://www.handle.net/proxy_servlet.html),
+[Crossref REST API](https://www.crossref.org/documentation/retrieve-metadata/rest-api/).
+
+## Rendering references
+
+Use complete metadata in BibTeX/CSL JSON and a current, venue-appropriate CSL
+file. See [citation_styles.md](citation_styles.md). With Pandoc, cite using
+`[@citation_key]`; manually typed reference strings are not reformatted by
+selecting a style.
+
+```bash
+# Requires your populated review.bib and local styles/apa.csl.
+python scripts/generate_pdf.py review.md --bibliography review.bib \
+  --csl styles/apa.csl --output review.pdf
 ```
 
-### Semantic Scholar
+No CSL files are bundled or downloaded automatically. A sibling `.bib` is
+recognized; otherwise provide `--bibliography` or Pandoc bibliography metadata.
+Omitting `--csl` uses Pandoc's default citation style. `--citation-style` remains
+an alias for a local file/name (e.g. `apa` requires `apa.csl`).
 
-Access via direct API (requires API key, or use free tier):
-- 200M+ papers across all fields
-- Excellent for cross-disciplinary searches
-- Provides citation graphs and paper recommendations
-- Use for finding highly influential papers
-
-### Specialized Biomedical Databases
-
-Use appropriate skills:
-- **ChEMBL**: `bioservices` skill for chemical bioactivity
-- **UniProt**: `gget` or `bioservices` skill for protein information
-- **KEGG**: `bioservices` skill for pathways and genes
-- **COSMIC**: `gget` skill for cancer mutations
-- **AlphaFold**: `gget alphafold` for protein structures
-- **PDB**: `gget` or direct API for experimental structures
-
-### Citation Chaining
-
-Expand search via citation networks:
-
-1. **Forward citations** (papers citing key papers):
-   - Use `parallel-cli search` to find papers citing a specific work:
-     ```bash
-     parallel-cli search "papers citing [Author et al. Year] [paper title]" \
-       -q "citing" -q "[key author]" \
-       --json --max-results 10 --excerpt-max-chars-total 27000 \
-       --include-domains "scholar.google.com,semanticscholar.org,arxiv.org,pubmed.ncbi.nlm.nih.gov" \
-       -o sources/litreview_forward_citations.json
-     ```
-   - Use Google Scholar "Cited by"
-   - Use Semantic Scholar or OpenAlex APIs
-   - Identifies newer research building on seminal work
-
-2. **Backward citations** (references from key papers):
-   - Use `parallel-cli extract` to fetch full text of key papers and extract their reference lists:
-     ```bash
-     parallel-cli extract "https://doi.org/10.xxxx/yyyy" --json
-     ```
-   - Extract references from included papers
-   - Identify highly cited foundational work
-   - Find papers cited by multiple included studies
-
-## Citation Style Guide
-
-Detailed formatting guidelines are in `references/citation_styles.md`. Quick reference:
-
-### APA (7th Edition)
-- In-text: (Smith et al., 2023)
-- Reference: Smith, J. D., Johnson, M. L., & Williams, K. R. (2023). Title. *Journal*, *22*(4), 301-318. https://doi.org/10.xxx/yyy
-
-### Nature
-- In-text: Superscript numbers^1,2^
-- Reference: Smith, J. D., Johnson, M. L. & Williams, K. R. Title. *Nat. Rev. Drug Discov.* **22**, 301-318 (2023).
-
-### Vancouver
-- In-text: Superscript numbers^1,2^
-- Reference: Smith JD, Johnson ML, Williams KR. Title. Nat Rev Drug Discov. 2023;22(4):301-18.
-
-**Always verify citations** with verify_citations.py before finalizing.
-
-### Prioritizing High-Impact Papers (CRITICAL)
-
-**Always prioritize influential, highly-cited papers from reputable authors and top venues.** Quality matters more than quantity in literature reviews.
-
-#### Citation Count Thresholds
-
-Use citation counts to identify the most impactful papers:
-
-| Paper Age | Citation Threshold | Classification |
-|-----------|-------------------|----------------|
-| 0-3 years | 20+ citations | Noteworthy |
-| 0-3 years | 100+ citations | Highly Influential |
-| 3-7 years | 100+ citations | Significant |
-| 3-7 years | 500+ citations | Landmark Paper |
-| 7+ years | 500+ citations | Seminal Work |
-| 7+ years | 1000+ citations | Foundational |
-
-#### Journal and Venue Tiers
-
-Prioritize papers from higher-tier venues:
-
-- **Tier 1 (Always Prefer):** Nature, Science, Cell, NEJM, Lancet, JAMA, PNAS, Nature Medicine, Nature Biotechnology
-- **Tier 2 (Strong Preference):** High-impact specialized journals (IF>10), top conferences (NeurIPS, ICML for ML/AI)
-- **Tier 3 (Include When Relevant):** Respected specialized journals (IF 5-10)
-- **Tier 4 (Use Sparingly):** Lower-impact peer-reviewed venues
-
-#### Author Reputation Assessment
-
-Prefer papers from:
-- **Senior researchers** with high h-index (>40 in established fields)
-- **Leading research groups** at recognized institutions (Harvard, Stanford, MIT, Oxford, etc.)
-- **Authors with multiple Tier-1 publications** in the relevant field
-- **Researchers with recognized expertise** (awards, editorial positions, society fellows)
-
-#### Identifying Seminal Papers
-
-For any topic, identify foundational work by:
-1. **High citation count** (typically 500+ for papers 5+ years old)
-2. **Frequently cited by other included studies** (appears in many reference lists)
-3. **Published in Tier-1 venues** (Nature, Science, Cell family)
-4. **Written by field pioneers** (often cited as establishing concepts)
+Inspect the rendered PDF and all warnings, including unresolved keys. Match
+in-text citations to the bibliography and manually verify formatting against
+the destination journal's instructions. [Pandoc citation documentation](https://pandoc.org/MANUAL.html#citations).

@@ -6,6 +6,10 @@ similarity, substructure searching with SMARTS, chemical reactions, 2D/3D coordi
 generation, visualization, molecular modification, hashes and standardization, and
 pharmacophore and 3D features.
 
+Code fragments with undefined inputs such as `mol1`, paths, or atom IDs are
+illustrative templates. The checked, self-contained examples and coverage are
+listed in [review.md](review.md).
+
 ## Core Capabilities
 
 ### 1. Molecular I/O and Creation
@@ -59,6 +63,7 @@ for mol in suppl:
 
 # Read SMILES files
 suppl = Chem.SmilesMolSupplier('molecules.smi', titleLine=False)
+smiles_mols = [m for m in suppl if m is not None]  # iterate, do not use list(suppl)
 
 # For large files or compressed data
 import gzip
@@ -80,13 +85,21 @@ writer.close()
 ```
 
 **Important Notes:**
-- All `MolFrom*` functions return `None` on failure with error messages
+- Tested 2026.03.6 behavior: `list(SmilesMolSupplier(...))` on a fresh supplier
+  can return an empty list because of length-hint interaction. A comprehension or
+  ordinary iteration reads the records correctly; the bundled reader uses source
+  lines directly.
+- Multithreaded suppliers are still marked experimental upstream; they may
+  reorder results. Save `GetLastRecordId()` at each iteration.
+- Many molecular parse failures return `None`; missing files, wrong argument types,
+  and some sanitization errors raise exceptions. Empty SMILES gives a zero-atom Mol; reject it for these workflows.
 - Always check for `None` before processing molecules
 - Molecules are automatically sanitized on import (validates valence, perceives aromaticity)
 
 ### 2. Molecular Sanitization and Validation
 
-RDKit automatically sanitizes molecules during parsing, executing 13 steps including valence checking, aromaticity perception, and chirality assignment.
+RDKit automatically sanitizes molecules during parsing, checking supported valences and assigning graph properties such as aromaticity.
+This is not a chemical plausibility, stability, or synthetic-feasibility proof.
 
 **Sanitization Control:**
 
@@ -133,7 +146,7 @@ atom = mol.GetAtomWithIdx(0)
 atom.IsInRing()
 atom.IsInRingSize(6)  # Check for 6-membered rings
 
-# Find smallest set of smallest rings (SSSR)
+# Find the symmetrized SSSR (can contain more rings than the minimal SSSR)
 from rdkit.Chem import GetSymmSSSR
 rings = GetSymmSSSR(mol)
 ```
@@ -143,10 +156,11 @@ rings = GetSymmSSSR(mol)
 ```python
 # Find chiral centers
 from rdkit.Chem import FindMolChiralCenters
-chiral_centers = FindMolChiralCenters(mol, includeUnassigned=True)
+chiral_centers = FindMolChiralCenters(mol, includeUnassigned=True,
+                                    useLegacyImplementation=False)
 # Returns list of (atom_idx, chirality) tuples
 
-# Assign stereochemistry from 3D coordinates
+# Assign stereochemistry from existing 3D coordinates; this may overwrite tags
 from rdkit.Chem import AssignStereochemistryFrom3D
 AssignStereochemistryFrom3D(mol)
 
@@ -165,7 +179,7 @@ frags = Chem.GetMolFrags(mol, asMols=True)
 from rdkit.Chem import FragmentOnBonds
 frag_mol = FragmentOnBonds(mol, [bond_idx1, bond_idx2])
 
-# Count ring systems
+# Extract Murcko scaffold (not a ring-system count)
 from rdkit.Chem.Scaffolds import MurckoScaffold
 scaffold = MurckoScaffold.GetScaffoldForMol(mol)
 ```
@@ -240,7 +254,7 @@ fp = morgan_gen.GetFingerprint(mol)
 # Count-based fingerprint
 fp_count = morgan_gen.GetCountFingerprint(mol)
 
-# MACCS keys (166-bit structural key)
+# MACCS keys: 167-bit vector, 166 keys and unused bit 0
 fp = MACCSkeys.GenMACCSKeys(mol)
 
 # Atom pair fingerprints
@@ -330,13 +344,14 @@ amide = Chem.MolFromSmarts('C(=O)N')
 # Aromatic heterocycles
 aromatic_n = Chem.MolFromSmarts('[nR]')  # Aromatic nitrogen in ring
 
-# Macrocycles (rings > 12 atoms)
+# Atoms whose smallest ring has at least 12 atoms
 macrocycle = Chem.MolFromSmarts('[r{12-}]')
 ```
 
 **Matching Rules:**
 - Unspecified properties in query match any value in target
-- Hydrogens are ignored unless explicitly specified
+- Hydrogen count, explicit H atoms, aromaticity, and charge are query-specific.
+  Stereo is ignored by default; set `useChirality=True` for specified query stereo.
 - Charged query atom won't match uncharged target atom
 - Aromatic query atom won't match aliphatic target atom (unless query is generic)
 
@@ -348,7 +363,7 @@ macrocycle = Chem.MolFromSmarts('[r{12-}]')
 from rdkit.Chem import AllChem
 
 # Define reaction using SMARTS: reactants >> products
-rxn = AllChem.ReactionFromSmarts('[C:1]=[O:2]>>[C:1][O:2]')  # Ketone reduction
+rxn = AllChem.ReactionFromSmarts('[C:1]=[O:2]>>[C:1][O:2]')  # Carbonyl bond-order transform
 
 # Apply reaction to molecules
 reactants = (mol1,)
@@ -365,7 +380,11 @@ for product_set in products:
 - Atom mapping preserves specific atoms between reactants and products
 - Dummy atoms in products are replaced by corresponding reactant atoms
 - "Any" bonds inherit bond order from reactants
-- Chirality preserved unless explicitly changed
+- Stereo handling depends on mapped atoms and reaction stereo annotations; test
+  representative stereoisomers. Products are unsanitized and may duplicate across
+  matches. `RunReactants(..., maxProducts=1000)` defaults to a cap; hitting it may
+  mean truncation. A graph transform does not predict reagents, yield, feasibility,
+  selectivity, or a balanced experimental reaction.
 
 **Reaction Similarity:**
 
@@ -384,8 +403,9 @@ similarity = DataStructs.TanimotoSimilarity(fp1, fp2)
 ```python
 from rdkit.Chem import AllChem
 
-# Generate 2D coordinates for depiction
-AllChem.Compute2DCoords(mol)
+# Depict a copy: Compute2DCoords clears existing conformers by default
+depiction = Chem.Mol(mol)
+AllChem.Compute2DCoords(depiction)
 
 # Align molecule to template structure
 template = Chem.MolFromSmiles('c1ccccc1')
@@ -396,33 +416,44 @@ AllChem.GenerateDepictionMatching2DStructure(mol, template)
 **3D Coordinate Generation and Conformers:**
 
 ```python
-# Generate single 3D conformer using ETKDG
-AllChem.EmbedMolecule(mol, randomSeed=42)
-
-# Generate multiple conformers
-conf_ids = AllChem.EmbedMultipleConfs(mol, numConfs=10, randomSeed=42)
-
-# Optimize geometry with force field
-AllChem.UFFOptimizeMolecule(mol)  # UFF force field
-AllChem.MMFFOptimizeMolecule(mol)  # MMFF94 force field
-
-# Optimize all conformers
-for conf_id in conf_ids:
-    AllChem.MMFFOptimizeMolecule(mol, confId=conf_id)
-
-# Calculate RMSD between conformers
+from rdkit import Chem
 from rdkit.Chem import AllChem
-rms = AllChem.GetConformerRMS(mol, conf_id1, conf_id2)
 
-# Align molecules
-AllChem.AlignMol(probe_mol, ref_mol)
+mol3d = Chem.AddHs(Chem.MolFromSmiles('CCCO'))
+params = AllChem.ETKDGv3()
+params.randomSeed = 42
+params.numThreads = 1
+params.trackFailures = True
+conf_ids = list(AllChem.EmbedMultipleConfs(mol3d, numConfs=5, params=params))
+if not conf_ids:
+    raise RuntimeError(f"Embedding failed: {params.GetFailureCounts()}")
+if not AllChem.MMFFHasAllMoleculeParams(mol3d):
+    raise ValueError("MMFF parameters unavailable for this chemistry")
+results = AllChem.MMFFOptimizeMoleculeConfs(mol3d, numThreads=1, maxIters=500)
+# Conformer IDs are identifiers, not necessarily dense list positions.
+energies = {cid: energy for cid, (status, energy) in zip(conf_ids, results)
+            if status == 0}
+if not energies:
+    raise RuntimeError("No converged MMFF conformer")
+best_id = min(energies, key=energies.get)
+print(best_id, energies[best_id])  # energy in kcal/mol; coordinates in angstrom
+
 ```
+
+Single-conformer optimization returns 0 for convergence, 1 for an iteration limit;
+MMFF additionally returns -1 if setup fails. UFF needs its own
+`UFFHasAllMoleculeParams` check. Do not silently switch force fields and compare
+energies. These are local force-field energies, not free energies, conformer
+populations, binding affinities, or guarantees of global minima. For RMSD,
+`AllChem.GetConformerRMS(mol, id1, id2)` aligns and mutates conformers by default;
+use a copy when retaining original coordinates. RMSD is in angstrom and depends
+on atom mapping, H inclusion, and symmetry treatment.
 
 **Constrained Embedding:**
 
 ```python
 # Embed with part of molecule constrained to specific coordinates
-AllChem.ConstrainedEmbed(mol, core_mol)
+embedded = AllChem.ConstrainedEmbed(mol, core_mol)  # core must have 3D coordinates
 ```
 
 ### 9. Molecular Visualization
@@ -570,7 +601,7 @@ scaffold_hash = rdMolHash.MolHash(mol, rdMolHash.HashFunction.MurckoScaffold)
 # Canonical SMILES hash
 canonical_hash = rdMolHash.MolHash(mol, rdMolHash.HashFunction.CanonicalSmiles)
 
-# Regioisomer hash (ignores stereochemistry)
+# Regioisomer abstraction (not a general stereo-removal operation)
 regio_hash = rdMolHash.MolHash(mol, rdMolHash.HashFunction.Regioisomer)
 ```
 

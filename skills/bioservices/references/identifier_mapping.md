@@ -1,647 +1,136 @@
-# BioServices: Identifier Mapping Guide
+# Identifier mapping with BioServices 1.16.0
 
-This document provides comprehensive information about converting identifiers between different biological databases using BioServices.
+Reviewed 2026-09-30. Resolve species and identifier namespace before mapping;
+identical gene symbols across organisms are not equivalent entities.
 
-## Table of Contents
-
-1. [Overview](#overview)
-2. [UniProt Mapping Service](#uniprot-mapping-service)
-3. [UniChem Compound Mapping](#unichem-compound-mapping)
-4. [KEGG Identifier Conversions](#kegg-identifier-conversions)
-5. [Common Mapping Patterns](#common-mapping-patterns)
-6. [Troubleshooting](#troubleshooting)
-
----
-
-## Overview
-
-Biological databases use different identifier systems. Cross-referencing requires mapping between these systems. BioServices provides multiple approaches:
-
-1. **UniProt Mapping**: Comprehensive protein/gene ID conversion
-2. **UniChem**: Chemical compound ID mapping
-3. **KEGG**: Built-in cross-references in entries
-4. **PICR**: Protein identifier cross-reference service
-
----
-
-## UniProt Mapping Service
-
-The UniProt mapping service is the most comprehensive tool for protein and gene identifier conversion.
-
-### Basic Usage
+## UniProt request and response
 
 ```python
 from bioservices import UniProt
-
-u = UniProt()
-
-# Map single ID
-result = u.mapping(
-    fr="UniProtKB_AC-ID",    # Source database
-    to="KEGG",                # Target database
-    query="P43403"            # Identifier to convert
-)
-
-print(result)
-# Output: {'P43403': ['hsa:7535']}
+u = UniProt(verbose=False)
+source, target = "UniProtKB_AC-ID", "KEGG"
+if target not in u.valid_mapping.get(source, []):
+    raise ValueError("Unsupported mapping pair")
+response = u.mapping(fr=source, to=target, query="P43403,P04637")
+if not isinstance(response, dict) or "results" not in response:
+    raise RuntimeError("UniProt mapping did not complete")
+by_source = {}
+for row in response["results"]:
+    by_source.setdefault(row["from"], []).append(row["to"])
+print(by_source)
+print("Explicitly unmapped:", response.get("failedIds", []))
 ```
 
-### Batch Mapping
+The SDK submits form data to `https://rest.uniprot.org/idmapping/run`, gets a
+`jobId`, polls `idmapping/status/{jobId}`, and follows result links. The response
+is `results` plus optional `failedIds`. A live P43403 -> KEGG lookup returned
+`{"from": "P43403", "to": "hsa:7535"}` within `results`. Do not call
+`response.get("P43403")` or merge envelopes with `dict.update` across batches.
+
+A reverse lookup uses `fr="KEGG", to="UniProtKB", query="hsa:7535"`. Its `to`
+value is a full protein record; normalize with `row["to"]["primaryAccession"]`.
+The source code `UniProtKB_AC-ID` is not a valid target. Alias `--to uniprot`
+in the bundled converter becomes `UniProtKB`, while `--from uniprot` becomes
+`UniProtKB_AC-ID`.
+
+`u.valid_mapping` is populated from the live
+[mapping catalogue](https://rest.uniprot.org/configure/idmapping/fields).
+Its rules constrain allowed pairs; a database can be source-only or target-only.
+Common current codes include KEGG, Ensembl, Ensembl_Protein,
+Ensembl_Transcript, GeneID, RefSeq_Protein, RefSeq_Nucleotide, HGNC, PDB,
+Reactome, STRING, and BioGRID. HGNC expects an HGNC identifier, not a bare symbol.
+GO, Pfam, InterPro, PRIDE and PaxDb were **absent** from the reviewed mapping
+catalogue; retrieve their cross-references or annotation fields from UniProt
+records instead of inventing a mapping job.
 
 ```python
-# Map multiple IDs (comma-separated)
-ids = ["P43403", "P04637", "P53779"]
-result = u.mapping(
-    fr="UniProtKB_AC-ID",
-    to="KEGG",
-    query=",".join(ids)
-)
-
-for uniprot_id, kegg_ids in result.items():
-    print(f"{uniprot_id} → {kegg_ids}")
+record = u.retrieve("P43403", frmt="json")
+links = [item for item in record["uniProtKBCrossReferences"]
+         if item["database"] in {"GO", "Pfam", "InterPro"}]
 ```
 
-### Supported Database Pairs
+The service permits up to 100,000 input IDs per job; output/enrichment/filter
+limits differ. Small chunks of 50–100 in the bundled converter are a workflow
+choice, not the provider's maximum. `max_waiting_time` bounds the SDK wait and
+may yield `None`. A `failedIds`-only completion can time out in 1.16.0 because
+its loop expects `results`; classify that as unresolved, not proven absent.
+For large jobs, use the provider's explicit job/status/details/results workflow
+so the job ID can be retained and resumed.
 
-UniProt supports mapping between 100+ database pairs. Key ones include:
+[SDK mapping implementation](https://bioservices.readthedocs.io/en/main/_modules/bioservices/uniprot.html)
+and [UniProt mapping help](https://www.uniprot.org/help/id_mapping) describe the
+job contract. Search a symbol with `gene_exact:ZAP70 AND organism_id:9606` and
+review all candidate accessions before conversion. Searching reviewed records
+is useful when appropriate, but excludes unreviewed biology by design.
 
-#### Protein/Gene Databases
+## Bundled batch converter
 
-| Source Format | Code | Target Format | Code |
-|---------------|------|---------------|------|
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | KEGG | `KEGG` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | Ensembl | `Ensembl` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | Ensembl Protein | `Ensembl_Protein` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | Ensembl Transcript | `Ensembl_Transcript` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | RefSeq Protein | `RefSeq_Protein` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | RefSeq Nucleotide | `RefSeq_Nucleotide` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | GeneID (Entrez) | `GeneID` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | HGNC | `HGNC` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | MGI | `MGI` |
-| KEGG | `KEGG` | UniProtKB | `UniProtKB` |
-| Ensembl | `Ensembl` | UniProtKB | `UniProtKB` |
-| GeneID | `GeneID` | UniProtKB | `UniProtKB` |
-
-#### Structural Databases
-
-| Source | Code | Target | Code |
-|--------|------|--------|------|
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | PDB | `PDB` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | Pfam | `Pfam` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | InterPro | `InterPro` |
-| PDB | `PDB` | UniProtKB | `UniProtKB` |
-
-#### Expression & Proteomics
-
-| Source | Code | Target | Code |
-|--------|------|--------|------|
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | PRIDE | `PRIDE` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | ProteomicsDB | `ProteomicsDB` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | PaxDb | `PaxDb` |
-
-#### Organism-Specific
-
-| Source | Code | Target | Code |
-|--------|------|--------|------|
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | FlyBase | `FlyBase` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | WormBase | `WormBase` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | SGD | `SGD` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | ZFIN | `ZFIN` |
-
-#### Other Useful Mappings
-
-| Source | Code | Target | Code |
-|--------|------|--------|------|
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | GO | `GO` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | Reactome | `Reactome` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | STRING | `STRING` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | BioGRID | `BioGRID` |
-| UniProtKB AC/ID | `UniProtKB_AC-ID` | OMA | `OMA` |
-
-### Complete List of Database Codes
-
-To get the complete, up-to-date list:
-
-```python
-from bioservices import UniProt
-
-u = UniProt()
-
-# This information is in the UniProt REST API documentation
-# Common patterns:
-# - Source databases typically end in source database name
-# - UniProtKB uses "UniProtKB_AC-ID" or "UniProtKB"
-# - Most other databases use their standard abbreviation
+```bash
+python scripts/batch_id_converter.py ids.txt --from UniProtKB_AC-ID --to KEGG -o mapping.csv
+python scripts/batch_id_converter.py kegg_ids.txt --from KEGG --to UniProtKB --save-failed
 ```
 
-### Common Database Codes Reference
+`mapping_to_lists` normalizes current result rows, preserves distinct targets,
+and extracts `primaryAccession`, `uniParcId`, or `id` from supported record
+targets. Unknown record shapes fail explicitly. Its internal values are:
 
-**Gene/Protein Identifiers:**
-- `UniProtKB_AC-ID`: UniProt accession/ID
-- `UniProtKB`: UniProt accession
-- `KEGG`: KEGG gene IDs (e.g., hsa:7535)
-- `GeneID`: NCBI Gene (Entrez) IDs
-- `Ensembl`: Ensembl gene IDs
-- `Ensembl_Protein`: Ensembl protein IDs
-- `Ensembl_Transcript`: Ensembl transcript IDs
-- `RefSeq_Protein`: RefSeq protein IDs (NP_)
-- `RefSeq_Nucleotide`: RefSeq nucleotide IDs (NM_)
+| Value | CSV status | Meaning |
+| --- | --- | --- |
+| Nonempty target list | Success | One or more returned mappings |
+| `[]` | Unmapped | ID explicitly present in `failedIds` |
+| `None` | Failed | Request failed, timed out, or omitted the ID |
 
-**Gene Nomenclature:**
-- `HGNC`: Human Gene Nomenclature Committee
-- `MGI`: Mouse Genome Informatics
-- `RGD`: Rat Genome Database
-- `SGD`: Saccharomyces Genome Database
-- `FlyBase`: Drosophila database
-- `WormBase`: C. elegans database
-- `ZFIN`: Zebrafish database
+`--save-failed` includes both Unmapped and Failed identifiers for later review.
+The CSV preserves unique input IDs, not duplicate input row multiplicity. Never
+report a mapping rate using only returned successful rows as the denominator.
 
-**Structure:**
-- `PDB`: Protein Data Bank
-- `Pfam`: Protein families
-- `InterPro`: Protein domains
-- `SUPFAM`: Superfamily
-- `PROSITE`: Protein motifs
+## KEGG links
 
-**Pathways & Networks:**
-- `Reactome`: Reactome pathways
-- `BioCyc`: BioCyc pathways
-- `PathwayCommons`: Pathway Commons
-- `STRING`: Protein-protein networks
-- `BioGRID`: Interaction database
-
-### Mapping Examples
-
-#### UniProt → KEGG
-
-```python
-from bioservices import UniProt
-
-u = UniProt()
-
-# Single mapping
-result = u.mapping(fr="UniProtKB_AC-ID", to="KEGG", query="P43403")
-print(result)  # {'P43403': ['hsa:7535']}
-```
-
-#### KEGG → UniProt
-
-```python
-# Reverse mapping
-result = u.mapping(fr="KEGG", to="UniProtKB", query="hsa:7535")
-print(result)  # {'hsa:7535': ['P43403']}
-```
-
-#### UniProt → Ensembl
-
-```python
-# To Ensembl gene IDs
-result = u.mapping(fr="UniProtKB_AC-ID", to="Ensembl", query="P43403")
-print(result)  # {'P43403': ['ENSG00000115085']}
-
-# To Ensembl protein IDs
-result = u.mapping(fr="UniProtKB_AC-ID", to="Ensembl_Protein", query="P43403")
-print(result)  # {'P43403': ['ENSP00000381359']}
-```
-
-#### UniProt → PDB
-
-```python
-# Find 3D structures
-result = u.mapping(fr="UniProtKB_AC-ID", to="PDB", query="P04637")
-print(result)  # {'P04637': ['1A1U', '1AIE', '1C26', ...]}
-```
-
-#### UniProt → RefSeq
-
-```python
-# Get RefSeq protein IDs
-result = u.mapping(fr="UniProtKB_AC-ID", to="RefSeq_Protein", query="P43403")
-print(result)  # {'P43403': ['NP_001070.2']}
-```
-
-#### Gene Name → UniProt (via search, then mapping)
-
-```python
-# First search for gene
-search_result = u.search("gene:ZAP70 AND organism:9606", frmt="tab", columns="id")
-lines = search_result.strip().split("\n")
-if len(lines) > 1:
-    uniprot_id = lines[1].split("\t")[0]
-
-    # Then map to other databases
-    kegg_id = u.mapping(fr="UniProtKB_AC-ID", to="KEGG", query=uniprot_id)
-    print(kegg_id)
-```
-
----
-
-## UniChem Compound Mapping
-
-UniChem specializes in mapping chemical compound identifiers across databases.
-
-### Current UniChem 2 API (bioservices 1.16.0)
-
-Use `get_compounds(compound, source_type)` and inspect `compounds[*].sources`.
-The old per-source helpers and conversion methods are absent in 1.16.0. KEGG
-is not an accepted source; use a verified ChEBI cross-reference or InChIKey.
-Do not reuse a historical numeric source table without checking `u.source_ids`.
-
-```python
-from bioservices import UniChem
-
-u = UniChem(verbose=False)
-response = u.get_compounds("CHEBI:15365", "chebi")  # aspirin
-mappings = sorted({
-    (source["shortName"], source["compoundId"])
-    for compound in response.get("compounds", [])
-    for source in compound.get("sources", [])
-})
-for database, identifier in mappings:
-    print(f"{database}: {identifier}")
-chembl_ids = [identifier for database, identifier in mappings if database == "chembl"]
-```
-
-The ChEBI and InChIKey aspirin queries returned CHEMBL25 in a live smoke test.
-Responses can contain several structures or source IDs. Preserve them and verify
-stereochemistry, charge, and salt/parent form before selecting a single match.
-
----
-
-## KEGG Identifier Conversions
-
-KEGG entries contain cross-references that can be extracted by parsing.
-
-### Extract Database Links from KEGG Entry
+The REST API returns TSV for `/conv/{target}/{source}` and `/link/{target}/{source}`.
+BioServices converts these to dictionaries, which can lose repeated source
+keys. For one-to-many membership preserve the raw rows:
 
 ```python
 from bioservices import KEGG
-
-k = KEGG()
-
-# Get compound entry
-entry = k.get("cpd:C11222")
-
-# Preserve all ChEBI candidates, including distinct protonation forms.
-chebi_ids = []
-uniprot_ids = []
-
-for line in entry.split("\n"):
-    if "ChEBI:" in line:
-        for identifier in line.split("ChEBI:", 1)[1].split():
-            if identifier not in chebi_ids:
-                chebi_ids.append(identifier)
-chebi_id = chebi_ids[0] if len(chebi_ids) == 1 else None
-print(f"ChEBI candidates: {chebi_ids}; unique candidate: {chebi_id}")
-
-# For genes/proteins
-gene_entry = k.get("hsa:7535")
-for line in gene_entry.split("\n"):
-    if line.startswith("            "):  # Database links section
-        if "UniProt:" in line:
-            parts = line.split("UniProt:")
-            if len(parts) > 1:
-                uniprot_id = parts[1].strip()
-                uniprot_ids.append(uniprot_id)
+k = KEGG(verbose=False)
+k.services.url = "https://rest.kegg.jp"
+raw = k.services.http_get("link/pathway/hsa:7535", frmt="txt")
+if not isinstance(raw, str):
+    raise RuntimeError("KEGG links request failed")
+pairs = [tuple(line.split("\t")) for line in raw.splitlines() if line]
 ```
 
-### KEGG Gene ID Components
+`get_pathway_by_gene("7535", "hsa")` parses the PATHWAY section to a dictionary;
+use `.items()`, not list slicing. To retrieve pathway genes, `k.parse(k.get(id))`
+provides the `GENE` section; a hand-written loop can accidentally skip the first
+GENE line. For a compound, preserve every DBLINKS ChEBI candidate. KEGG's PubChem
+cross-reference uses a **SID**, not necessarily a CID.
+[KEGG conversion/link semantics](https://www.kegg.jp/kegg/rest/keggapi.html).
 
-KEGG gene IDs have format `organism:gene_id`:
+## UniChem compound mapping
 
 ```python
-kegg_id = "hsa:7535"
-organism, gene_id = kegg_id.split(":")
-
-print(f"Organism: {organism}")  # hsa (human)
-print(f"Gene ID: {gene_id}")    # 7535
+from bioservices import UniChem
+uc = UniChem(verbose=False)
+response = uc.get_compounds("BSYNRYMUTXBXSQ-UHFFFAOYSA-N", "inchikey")
+if not isinstance(response, dict) or "compounds" not in response:
+    raise RuntimeError("UniChem lookup failed")
+pairs = sorted({(source["shortName"], source["compoundId"])
+                for match in response["compounds"]
+                for source in match.get("sources", [])})
+print(pairs)
 ```
 
-### KEGG Pathway to Genes
-
-```python
-k = KEGG()
-
-# Get pathway entry
-pathway = k.get("path:hsa04660")
-
-# Parse for gene list
-genes = []
-in_gene_section = False
-
-for line in pathway.split("\n"):
-    if line.startswith("GENE"):
-        in_gene_section = True
-
-    if in_gene_section:
-        if line.startswith(" " * 12):  # Gene line
-            parts = line.strip().split()
-            if parts:
-                gene_id = parts[0]
-                genes.append(f"hsa:{gene_id}")
-        elif not line.startswith(" "):
-            break
-
-print(f"Found {len(genes)} genes")
-```
-
----
-
-## Common Mapping Patterns
-
-### Pattern 1: Gene Symbol → Multiple Database IDs
-
-```python
-from bioservices import UniProt
-
-def gene_symbol_to_ids(gene_symbol, organism="9606"):
-    """Convert gene symbol to multiple database IDs."""
-    u = UniProt()
-
-    # Search for gene
-    query = f"gene:{gene_symbol} AND organism:{organism}"
-    result = u.search(query, frmt="tab", columns="id")
-
-    lines = result.strip().split("\n")
-    if len(lines) < 2:
-        return None
-
-    uniprot_id = lines[1].split("\t")[0]
-
-    # Map to multiple databases
-    ids = {
-        'uniprot': uniprot_id,
-        'kegg': u.mapping(fr="UniProtKB_AC-ID", to="KEGG", query=uniprot_id),
-        'ensembl': u.mapping(fr="UniProtKB_AC-ID", to="Ensembl", query=uniprot_id),
-        'refseq': u.mapping(fr="UniProtKB_AC-ID", to="RefSeq_Protein", query=uniprot_id),
-        'pdb': u.mapping(fr="UniProtKB_AC-ID", to="PDB", query=uniprot_id)
-    }
-
-    return ids
-
-# Usage
-ids = gene_symbol_to_ids("ZAP70")
-print(ids)
-```
-
-### Pattern 2: Compound Name → All Database IDs
-
-Use this illustrative example only after reviewing the KEGG search hit and its
-single ChEBI candidate for stereochemistry, charge, and salt/parent form.
-A KEGG entry with multiple distinct ChEBI IDs is left unresolved: all candidates
-are returned, and no UniChem lookup occurs. For example, KEGG C00022 links both
-pyruvate (CHEBI:15361) and pyruvic acid (CHEBI:32816). Candidate preservation and
-mapping guards below were tested with mocked KEGG/UniChem responses.
-
-```python
-from bioservices import KEGG, UniChem, ChEBI
-
-def compound_name_to_ids(compound_name):
-    """Search compound and get all database IDs."""
-    k = KEGG()
-
-    # Search KEGG
-    results = k.find("compound", compound_name)
-    if not results:
-        return None
-
-    # Extract KEGG ID
-    kegg_id = results.strip().split("\n")[0].split("\t")[0].replace("cpd:", "")
-
-    # Get KEGG entry for ChEBI
-    entry = k.get(f"cpd:{kegg_id}")
-    chebi_ids = []
-    for line in entry.split("\n"):
-        if "ChEBI:" in line:
-            for identifier in line.split("ChEBI:", 1)[1].split():
-                if identifier not in chebi_ids:
-                    chebi_ids.append(identifier)
-    chebi_id = chebi_ids[0] if len(chebi_ids) == 1 else None
-
-    # Map only the unique reviewed candidate; preserve unresolved forms below.
-    chembl_ids = []
-    if chebi_id:
-        response = UniChem().get_compounds(f"CHEBI:{chebi_id}", "chebi")
-        chembl_ids = sorted({
-            source["compoundId"]
-            for match in response.get("compounds", [])
-            for source in match.get("sources", [])
-            if source.get("shortName") == "chembl"
-        })
-
-    return {
-        'kegg': kegg_id,
-        'chebi': chebi_id,
-        'chebi_ids': chebi_ids,
-        'chembl': chembl_ids
-    }
-
-# Usage
-ids = compound_name_to_ids("Geldanamycin")
-print(ids)
-```
-
-### Pattern 3: Batch ID Conversion with Error Handling
-
-```python
-from bioservices import UniProt
-
-def safe_batch_mapping(ids, from_db, to_db, chunk_size=100):
-    """Safely map IDs with error handling and chunking."""
-    u = UniProt()
-    all_results = {}
-
-    for i in range(0, len(ids), chunk_size):
-        chunk = ids[i:i+chunk_size]
-        query = ",".join(chunk)
-
-        try:
-            results = u.mapping(fr=from_db, to=to_db, query=query)
-            all_results.update(results)
-            print(f"✓ Processed {min(i+chunk_size, len(ids))}/{len(ids)}")
-
-        except Exception as e:
-            print(f"✗ Error at chunk {i}: {e}")
-
-            # Try individual IDs in failed chunk
-            for single_id in chunk:
-                try:
-                    result = u.mapping(fr=from_db, to=to_db, query=single_id)
-                    all_results.update(result)
-                except:
-                    all_results[single_id] = None
-
-    return all_results
-
-# Usage
-uniprot_ids = ["P43403", "P04637", "P53779", "INVALID123"]
-mapping = safe_batch_mapping(uniprot_ids, "UniProtKB_AC-ID", "KEGG")
-```
-
-### Pattern 4: Multi-Hop Mapping
-
-Sometimes you need to map through intermediate databases:
-
-```python
-from bioservices import UniProt
-
-def multi_hop_mapping(gene_symbol, organism="9606"):
-    """Gene symbol → UniProt → KEGG → Pathways."""
-    u = UniProt()
-    k = KEGG()
-
-    # Step 1: Gene symbol → UniProt
-    query = f"gene:{gene_symbol} AND organism:{organism}"
-    result = u.search(query, frmt="tab", columns="id")
-
-    lines = result.strip().split("\n")
-    if len(lines) < 2:
-        return None
-
-    uniprot_id = lines[1].split("\t")[0]
-
-    # Step 2: UniProt → KEGG
-    kegg_mapping = u.mapping(fr="UniProtKB_AC-ID", to="KEGG", query=uniprot_id)
-    if not kegg_mapping or uniprot_id not in kegg_mapping:
-        return None
-
-    kegg_id = kegg_mapping[uniprot_id][0]
-
-    # Step 3: KEGG → Pathways
-    organism_code, gene_id = kegg_id.split(":")
-    pathways = k.get_pathway_by_gene(gene_id, organism_code)
-
-    return {
-        'gene': gene_symbol,
-        'uniprot': uniprot_id,
-        'kegg': kegg_id,
-        'pathways': pathways
-    }
-
-# Usage
-result = multi_hop_mapping("TP53")
-print(result)
-```
-
----
-
-## Troubleshooting
-
-### Issue 1: No Mapping Found
-
-**Symptom:** Mapping returns empty or None
-
-**Solutions:**
-1. Verify source ID exists in source database
-2. Check database code spelling
-3. Try reverse mapping
-4. Some IDs may not have mappings in all databases
-
-```python
-result = u.mapping(fr="UniProtKB_AC-ID", to="KEGG", query="P43403")
-
-if not result or 'P43403' not in result:
-    print("No mapping found. Try:")
-    print("1. Verify ID exists: u.search('P43403')")
-    print("2. Check if protein has KEGG annotation")
-```
-
-### Issue 2: Too Many IDs in Batch
-
-**Symptom:** Batch mapping fails or times out
-
-**Solution:** Split into smaller chunks
-
-```python
-def chunked_mapping(ids, from_db, to_db, chunk_size=50):
-    all_results = {}
-
-    for i in range(0, len(ids), chunk_size):
-        chunk = ids[i:i+chunk_size]
-        result = u.mapping(fr=from_db, to=to_db, query=",".join(chunk))
-        all_results.update(result)
-
-    return all_results
-```
-
-### Issue 3: Multiple Target IDs
-
-**Symptom:** One source ID maps to multiple target IDs
-
-**Solution:** Handle as list
-
-```python
-result = u.mapping(fr="UniProtKB_AC-ID", to="PDB", query="P04637")
-# Result: {'P04637': ['1A1U', '1AIE', '1C26', ...]}
-
-pdb_ids = result['P04637']
-print(f"Found {len(pdb_ids)} PDB structures")
-
-for pdb_id in pdb_ids:
-    print(f"  {pdb_id}")
-```
-
-### Issue 4: Organism Ambiguity
-
-**Symptom:** Gene symbol maps to multiple organisms
-
-**Solution:** Always specify organism in searches
-
-```python
-# Bad: Ambiguous
-result = u.search("gene:TP53")  # Many organisms have TP53
-
-# Good: Specific
-result = u.search("gene:TP53 AND organism:9606")  # Human only
-```
-
-### Issue 5: Deprecated IDs
-
-**Symptom:** Old database IDs don't map
-
-**Solution:** Update to current IDs first
-
-```python
-# Check if ID is current
-entry = u.retrieve("P43403", frmt="txt")
-
-# Look for secondary accessions
-for line in entry.split("\n"):
-    if line.startswith("AC"):
-        print(line)  # Shows primary and secondary accessions
-```
-
----
-
-## Best Practices
-
-1. **Always validate inputs** before batch processing
-2. **Handle None/empty results** gracefully
-3. **Use chunking** for large ID lists (50-100 per chunk)
-4. **Cache results** for repeated queries
-5. **Specify organism** when possible to avoid ambiguity
-6. **Log failures** in batch processing for later retry
-7. **Add delays** between large batches to respect API limits
-
-```python
-import time
-
-def polite_batch_mapping(ids, from_db, to_db):
-    """Batch mapping with rate limiting."""
-    results = {}
-
-    for i in range(0, len(ids), 50):
-        chunk = ids[i:i+50]
-        result = u.mapping(fr=from_db, to=to_db, query=",".join(chunk))
-        results.update(result)
-
-        time.sleep(0.5)  # Be nice to the API
-
-    return results
-```
-
----
-
-For complete working examples, see:
-- `scripts/batch_id_converter.py`: Command-line batch conversion tool
-- `workflow_patterns.md`: Integration into larger workflows
+The aspirin InChIKey and `("CHEBI:15365", "chebi")` queries yielded CHEMBL25
+in review. `get_compounds` sends JSON to `/unichem/api/v1/compounds` with
+`compound`, `type`, `sourceID`; it is a search POST, not an external mutation.
+Discover supported names through `source_ids`; do not reuse historical numeric
+source IDs or assume KEGG is accepted. Some legacy UniChem methods remain in the
+SDK, but the examples here use the current API v1 route.
+
+Mapping must preserve chemical identity. KEGG C00022, for example, links multiple
+ChEBI forms; selecting the first can mix a neutral acid and an anion. The bundled
+compound script leaves multiple KEGG search hits, multiple ChEBI forms, or
+multiple ChEMBL mappings unresolved. Review salts, stereochemistry, protonation,
+and connectivity before joining potency or physicochemical data.
+[UniChem API](https://www.ebi.ac.uk/unichem/api/docs).

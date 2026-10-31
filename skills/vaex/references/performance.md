@@ -1,582 +1,114 @@
-# Performance and Optimization
+# Performance and memory
 
-This reference covers Vaex's performance features including lazy evaluation, caching, memory management, async operations, and optimization strategies for processing massive datasets.
+Targets core 4.19.0. See [caching](https://vaex.io/docs/guides/caching.html),
+[configuration](https://vaex.io/docs/conf.html), and released executor/cache source.
 
-Examples below are illustrative API patterns; validate on a small in-memory DataFrame before applying them to large files.
-
-## Understanding Lazy Evaluation
-
-Lazy evaluation is the foundation of Vaex's performance:
-
-### How Lazy Evaluation Works
+## Batch independent reductions
 
 ```python
-import vaex
-
-df = vaex.open('large_file.hdf5')
-
-# No computation happens here - just defines what to compute
-df['total'] = df.price * df.quantity
-df['log_price'] = df.price.log()
-mean_expr = df.total.mean(delay=True)
-
-# Trigger the queued work, then retrieve its value
-df.execute()
-result = mean_expr.get()
-```
-
-**Key concepts:**
-- **Expressions** are lazy - they define computations without executing them
-- **Materialization** happens when you access the result
-- **Query optimization** happens automatically before execution
-
-### When Does Evaluation Happen?
-
-```python
-# These trigger evaluation:
-print(df.x.mean())                    # Accessing value
-array = df.x.values                   # Getting NumPy array
-pdf = df.to_pandas_df()              # Converting to pandas
-df.export_hdf5('output.hdf5')       # Exporting
-
-# These do NOT trigger evaluation:
-df['new_col'] = df.x + df.y          # Creating virtual column
-expr = df.x.mean(delay=True)          # Queue aggregation without executing
-df_filtered = df[df.x > 10]          # Creating filtered view
-```
-
-## Batching Operations with delay=True
-
-Execute multiple operations together for better performance:
-
-### Basic Delayed Execution
-
-```python
-# Without delay - each operation processes entire dataset
-mean_x = df.x.mean()      # Pass 1 through data
-std_x = df.x.std()        # Pass 2 through data
-max_x = df.x.max()        # Pass 3 through data
-
-# With delay - single pass through dataset
-mean_x = df.x.mean(delay=True)
-std_x = df.x.std(delay=True)
-max_x = df.x.max(delay=True)
-df.execute()  # Execute the queued aggregations together
-results = [task.get() for task in (mean_x, std_x, max_x)]
-
-print(results[0])  # mean
-print(results[1])  # std
-print(results[2])  # max
-```
-
-### Delayed Execution with Multiple Columns
-
-```python
-# Compute statistics for many columns efficiently
-stats = {}
-delayed_results = []
-
-for column in ['sales', 'quantity', 'profit', 'cost']:
-    mean = df[column].mean(delay=True)
-    std = df[column].std(delay=True)
-    delayed_results.extend([mean, std])
-
-# Execute all at once
-df.execute()
-results = [task.get() for task in delayed_results]
-
-# Process results
-for i, column in enumerate(['sales', 'quantity', 'profit', 'cost']):
-    stats[column] = {
-        'mean': results[i*2],
-        'std': results[i*2 + 1]
-    }
-```
-
-### When to Use delay=True
-
-Use `delay=True` when:
-- Computing multiple aggregations
-- Computing statistics on many columns
-- Building dashboards or reports
-- Any scenario requiring multiple passes through data
-
-```python
-# Bad: 4 passes through dataset
-mean1 = df.col1.mean()
-mean2 = df.col2.mean()
-mean3 = df.col3.mean()
-mean4 = df.col4.mean()
-
-# Good: 1 pass through dataset
-tasks = [
-    df.col1.mean(delay=True),
-    df.col2.mean(delay=True),
-    df.col3.mean(delay=True),
-    df.col4.mean(delay=True)
-]
-df.execute()
-results = [task.get() for task in tasks]
-```
-
-## Asynchronous Operations
-
-Process data asynchronously using async/await:
-
-### Async with async/await
-
-```python
-import vaex
 import asyncio
+import numpy as np
+import vaex
 
-async def compute_statistics(df):
-    # Create async tasks
-    mean_task = df.x.mean(delay=True)
-    std_task = df.x.std(delay=True)
-
-    # Execute asynchronously
-    await df.execute_async()
-    results = [mean_task.get(), std_task.get()]
-
-    return {'mean': results[0], 'std': results[1]}
-
-# Run async function
-async def main():
-    df = vaex.open('large_file.hdf5')
-    stats = await compute_statistics(df)
-    print(stats)
-
-asyncio.run(main())
-```
-
-### Using Promises/Futures
-
-```python
-# Get future object
-future = df.x.mean(delay=True)
-
-# Do other work...
-
-# Execute queued work before retrieving the result
+df = vaex.from_arrays(x=np.arange(10.), y=np.arange(10.) ** 2)
+df['derived'] = df.x ** 2 + df.y
+pending = [df.derived.mean(delay=True), df.x.std(delay=True), df.y.sum(delay=True)]
 df.execute()
-result = future.get()
+values = [task.get().item() for task in pending]
+assert np.allclose(values, [57., np.std(np.arange(10.)), 285.])
+
+async def compute(frame):
+    mean = frame.x.mean(delay=True)
+    count = frame.count(delay=True)
+    await frame.execute_async()
+    return mean.get().item(), count.get().item()
+
+assert asyncio.run(compute(df)) == (4.5, 10)
 ```
 
-## Virtual Columns vs Materialized Columns
+In a notebook with a running event loop, use `await compute(df)` instead of
+`asyncio.run`. Defining an expression or virtual column defers per-row evaluation;
+ordinary reductions execute now. Promises must be executed before `.get()`.
+There is no public `vaex.execute([tasks])` collection API. Batching compatible tasks
+can share scans, but "one pass" is not universal: limits, means, variance or dependant
+tasks can need preliminary work. Measure actual data passes and timing on the target workload.
 
-Understanding the difference is crucial for performance:
+## Memory boundaries
 
-### Virtual Columns (Preferred)
+| Operation | Allocation to plan for |
+| --- | --- |
+| HDF5/Arrow open | Metadata, handles, mapped/address space and accessed pages |
+| Virtual columns | Expression metadata and per-chunk temporary arrays |
+| Filters/selections | Boolean masks and selection/cache metadata |
+| Reductions/grids | Chunk buffers and grid accumulators; grid size grows with dimensions |
+| Groupby/unique/join/sort | Cardinality dictionaries, output tables and/or row index arrays |
+| `.values`, `.to_numpy()`, unchunked pandas conversion | Requested full arrays |
+| `.materialize()` | Full selected virtual columns in memory |
+| sklearn `Predictor.fit` | Full feature matrix and target, plus estimator allocations |
+
+`df.byte_size()` describes data bytes, not resident memory or a process limit.
+`df.is_local()` tells whether the frame is local rather than a remote server frame;
+it accepts no column argument and does not indicate virtual columns or memory mapping.
+Use `df.virtual_columns` to inspect derived definitions. `df.copy()` is shallow.
 
 ```python
-# Virtual column - computed on-the-fly, zero memory
-df['total'] = df.price * df.quantity
-df['log_sales'] = df.sales.log()
-df['full_name'] = df.first_name + ' ' + df.last_name
-
-# Check if virtual
-print(df.is_local('total'))  # False = virtual
-
-# Benefits:
-# - Zero memory overhead
-# - Always up-to-date if source data changes
-# - Fast to create
+assert 'derived' in df.virtual_columns
+assert df.is_local()
+materialized = df.materialize('derived')  # small fixture only
+assert 'derived' not in materialized.virtual_columns
+assert np.allclose(materialized.derived.to_numpy(), 2 * np.arange(10.) ** 2)
+rows = 0
+for start, stop, chunk in df[['x', 'derived']].to_pandas_df(chunk_size=3):
+    assert len(chunk) == stop - start
+    rows += len(chunk)
+assert rows == 10
 ```
 
-### Materialized Columns
-
-```python
-# Materialize a virtual column
-df['total_materialized'] = df['total'].values
-
-# Or use materialize method
-df = df.materialize(df['total'], inplace=True)
-
-# Check if materialized
-print(df.is_local('total_materialized'))  # True = materialized
-
-# When to materialize:
-# - Column computed repeatedly (amortize cost)
-# - Complex expression used in many operations
-# - Need to export data
-```
-
-### Deciding: Virtual vs Materialized
-
-```python
-# Virtual is better when:
-# - Column is simple (x + y, x * 2, etc.)
-# - Column used infrequently
-# - Memory is limited
-
-# Materialize when:
-# - Complex computation (multiple operations)
-# - Used repeatedly in aggregations
-# - Slows down other operations
-
-# Example: Complex calculation used many times
-df['complex'] = (df.x.log() * df.y.sqrt() + df.z ** 2).values  # Materialize
-```
-
-## Caching Strategies
-
-Vaex automatically caches some operations, but you can optimize further:
-
-### Automatic Caching
-
-```python
-# First call computes and caches
-mean1 = df.x.mean()  # Computes
-
-# Second call uses cache
-mean2 = df.x.mean()  # From cache (instant)
-
-# Cache invalidated if DataFrame changes
-df['new_col'] = df.x + 1
-mean3 = df.x.mean()  # Recomputes
-```
-
-### State Management
-
-```python
-# Save DataFrame state (includes virtual columns)
-df.state_write('state.json')
-
-# Load state later
-df_new = vaex.open('data.hdf5')
-df_new.state_load('state.json')  # Restores virtual columns, selections
-```
-
-### Checkpoint Pattern
-
-```python
-# Export intermediate results for complex pipelines
-df['processed'] = complex_calculation(df)
-
-# Save checkpoint
-df.export_hdf5('checkpoint.hdf5')
-
-# Resume from checkpoint
-df = vaex.open('checkpoint.hdf5')
-# Continue processing...
-```
-
-## Memory Management
-
-Optimize memory usage for very large datasets:
-
-### Memory-Mapped Files
-
-```python
-# HDF5 and Arrow are memory-mapped (optimal)
-df = vaex.open('data.hdf5')  # No memory used until accessed
-
-# File stays on disk, only accessed portions loaded to RAM
-mean = df.x.mean()  # Streams through data, minimal memory
-```
-
-### Chunked Processing
-
-```python
-# Process large DataFrame in chunks
-chunk_size = 1_000_000
-
-for i1, i2, chunk in df.to_pandas_df(chunk_size=chunk_size):
-    # Process chunk (careful: defeats Vaex's purpose)
-    process_chunk(chunk)
-
-# Better: Use Vaex operations directly (no chunking needed)
-result = df.x.mean()  # Handles large data automatically
-```
-
-### Monitoring Memory Usage
-
-```python
-# Check DataFrame memory footprint
-print(df.byte_size())  # Bytes used by materialized columns
-
-# Check column memory
-for col in df.get_column_names():
-    if df.is_local(col):
-        print(f"{col}: {df[col].nbytes / 1e9:.2f} GB")
-
-# Profile operations
-import vaex.profiler
-with vaex.profiler():
-    result = df.x.mean()
-```
-
-## Parallel Computation
-
-Vaex automatically parallelizes operations:
-
-### Multithreading
-
-```python
-# Vaex uses all CPU cores by default
-import vaex
-
-# Check/set thread count
-print(vaex.multithreading.thread_count_default)
-vaex.multithreading.thread_count_default = 8  # Use 8 threads
-
-# Operations automatically parallelize
-mean = df.x.mean()  # Uses all threads
-```
-
-### Distributed Computing with Dask
-
-```python
-# Convert to Dask for distributed processing
-import vaex
-import dask.dataframe as dd
-
-# Create Vaex DataFrame
-df_vaex = vaex.open('large_file.hdf5')
-
-# Convert to Dask
-df_dask = df_vaex.to_dask_dataframe()
-
-# Process with Dask
-result = df_dask.groupby('category')['value'].sum().compute()
-```
-
-## JIT Compilation
-
-Vaex can use Just-In-Time compilation for custom operations:
-
-### Using Numba
-
-```python
-import vaex
-import numba
-
-# Define JIT-compiled function
-@numba.jit
-def custom_calculation(x, y):
-    return x ** 2 + y ** 2
-
-# Apply to DataFrame
-df['custom'] = df.apply(custom_calculation,
-                        arguments=[df.x, df.y],
-                        vectorize=True)
-```
-
-### Custom Aggregations
-
-```python
-@numba.jit
-def custom_sum(a):
-    total = 0
-    for val in a:
-        total += val * 2  # Custom logic
-    return total
-
-# Use in aggregation
-result = df.x.custom_agg(custom_sum)
-```
-
-## Optimization Strategies
-
-### Strategy 1: Minimize Materializations
-
-```python
-# Bad: Creates many materialized columns
-df['a'] = (df.x + df.y).values
-df['b'] = (df.a * 2).values
-df['c'] = (df.b + df.z).values
-
-# Good: Keep virtual until final export
-df['a'] = df.x + df.y
-df['b'] = df.a * 2
-df['c'] = df.b + df.z
-# Only materialize if exporting:
-# df.export_hdf5('output.hdf5')
-```
-
-### Strategy 2: Use Selections Instead of Filtering
-
-```python
-# Less efficient: Creates new DataFrames
-df_high = df[df.value > 100]
-df_low = df[df.value <= 100]
-mean_high = df_high.value.mean()
-mean_low = df_low.value.mean()
-
-# More efficient: Use selections
-df.select(df.value > 100, name='high')
-df.select(df.value <= 100, name='low')
-mean_high = df.value.mean(selection='high')
-mean_low = df.value.mean(selection='low')
-```
-
-### Strategy 3: Batch Aggregations
-
-```python
-# Less efficient: Multiple passes
-stats = {
-    'mean': df.x.mean(),
-    'std': df.x.std(),
-    'min': df.x.min(),
-    'max': df.x.max()
-}
-
-# More efficient: Single pass
-delayed = [
-    df.x.mean(delay=True),
-    df.x.std(delay=True),
-    df.x.min(delay=True),
-    df.x.max(delay=True)
-]
-df.execute()
-results = [task.get() for task in delayed]
-stats = dict(zip(['mean', 'std', 'min', 'max'], results))
-```
-
-### Strategy 4: Choose Optimal File Formats
-
-```python
-# Slow: Large CSV
-df = vaex.from_csv('huge.csv')  # Can take minutes
-
-# Fast: HDF5 or Arrow
-df = vaex.open('huge.hdf5')     # Instant
-df = vaex.open('huge.arrow')    # Instant
-
-# One-time conversion
-df = vaex.from_csv('huge.csv', convert='huge.hdf5')
-# Future loads: vaex.open('huge.hdf5')
-```
-
-### Strategy 5: Optimize Expressions
-
-```python
-# Less efficient: Repeated calculations
-df['result'] = df.x.log() + df.x.log() * 2
-
-# More efficient: Reuse calculations
-df['log_x'] = df.x.log()
-df['result'] = df.log_x + df.log_x * 2
-
-# Even better: Combine operations
-df['result'] = df.x.log() * 3  # Simplified math
-```
-
-## Performance Profiling
-
-### Basic Profiling
+Export already evaluates virtual columns in chunks. Materializing first is not a fix
+for an out-of-memory export. Reduce selected columns/chunk size, bound group cardinality,
+check disk capacity and profile the actual operation instead. Avoid collecting all
+pandas chunks into a list, which reconstructs the full allocation.
+
+## Explicit caching and timing
+
+`vaex.cache` starts disabled unless configured. A repeated mean is not guaranteed to
+be cached. Optional `cachetools` supplies the bounded in-memory cache below:
 
 ```python
 import time
-import vaex
+import vaex.cache
 
-df = vaex.open('large_file.hdf5')
-
-# Time operations
-start = time.time()
-result = df.x.mean()
-elapsed = time.time() - start
-print(f"Computed in {elapsed:.2f} seconds")
+with vaex.cache.memory(maxsize='8MiB', clear=True):
+    first = df.x.mean()
+    second = df.x.mean()
+    assert first == second
+with vaex.cache.off():
+    start = time.perf_counter()
+    result = df.y.sum()
+    elapsed = time.perf_counter() - start
+assert result == 285
+print({'elapsed_seconds': elapsed, 'column_bytes': df.byte_size()})
 ```
 
-### Detailed Profiling
+Cache budget is not a total-RSS cap. Cached results, operating-system file cache and
+warm compiled kernels can change timing; report warm/cold conditions, package versions,
+row/column counts, dtype, hardware, storage and workload. No universal billion-rows-per-second
+claim applies to arbitrary expressions or files. Use Python profiling tools or timing;
+`with vaex.profiler():` is not a supported context manager.
 
-```python
-# Profile with context manager
-with vaex.profiler():
-    result = df.groupby('category').agg({'value': 'sum'})
-# Prints detailed timing information
-```
+Set `VAEX_NUM_THREADS` in the process environment before starting Python for repeatable
+thread limits. Avoid oversubscription with BLAS/Numba/estimator threads. More threads
+can increase per-worker buffers and do not guarantee faster I/O.
 
-### Benchmarking Patterns
+## Other execution engines
 
-```python
-# Compare strategies
-def benchmark_operation(operation, name):
-    start = time.time()
-    result = operation()
-    elapsed = time.time() - start
-    print(f"{name}: {elapsed:.3f}s")
-    return result
+Core 4.19.0 does not have `to_dask_dataframe()`. Its documented Dask integration is
+`to_dask_array()` for numerical arrays; that alone does not provision a distributed
+cluster. Core pins Dask `<2024.9`, so current standalone Dask recommendations cannot
+be transplanted into this environment without compatibility work. [Dask guide](https://vaex.io/docs/guides/dask.html).
 
-# Test different approaches
-benchmark_operation(lambda: df.x.mean(), "Direct mean")
-benchmark_operation(lambda: df[df.x > 0].x.mean(), "Filtered mean")
-benchmark_operation(lambda: df.x.mean(selection='positive'), "Selection mean")
-```
-
-## Common Performance Issues and Solutions
-
-### Issue: Slow Aggregations
-
-```python
-# Problem: Multiple separate aggregations
-for col in df.column_names:
-    print(f"{col}: {df[col].mean()}")
-
-# Solution: Batch with delay=True
-delayed = [df[col].mean(delay=True) for col in df.column_names]
-df.execute()
-results = [task.get() for task in delayed]
-for col, result in zip(df.column_names, results):
-    print(f"{col}: {result}")
-```
-
-### Issue: High Memory Usage
-
-```python
-# Problem: Materializing large virtual columns
-df['large_col'] = (complex_expression).values
-
-# Solution: Keep virtual, or materialize and export
-df['large_col'] = complex_expression  # Virtual
-# Or: df.export_hdf5('with_new_col.hdf5')
-```
-
-### Issue: Slow Exports
-
-```python
-# Problem: Exporting with many virtual columns
-df.export_csv('output.csv')  # Slow if many virtual columns
-
-# Solution: Export to HDF5 or Arrow (faster)
-df.export_hdf5('output.hdf5')
-df.export_arrow('output.arrow')
-
-# Or materialize first for CSV
-df_materialized = df.materialize()
-df_materialized.export_csv('output.csv')
-```
-
-### Issue: Repeated Complex Calculations
-
-```python
-# Problem: Complex virtual column used repeatedly
-df['complex'] = df.x.log() * df.y.sqrt() + df.z ** 3
-result1 = df.groupby('cat1').agg({'complex': 'mean'})
-result2 = df.groupby('cat2').agg({'complex': 'sum'})
-result3 = df.complex.std()
-
-# Solution: Materialize once
-df['complex'] = (df.x.log() * df.y.sqrt() + df.z ** 3).values
-# Or: df = df.materialize('complex')
-```
-
-## Performance Best Practices Summary
-
-1. **Use HDF5 or Arrow formats** - Orders of magnitude faster than CSV
-2. **Leverage lazy evaluation** - Don't force computation until necessary
-3. **Batch operations with delay=True** - Minimize passes through data
-4. **Keep columns virtual** - Materialize only when beneficial
-5. **Use selections not filters** - More efficient for multiple segments
-6. **Profile your code** - Identify bottlenecks before optimizing
-7. **Avoid `.values` and `.to_pandas_df()`** - Keep operations in Vaex
-8. **Parallelize naturally** - Vaex uses all cores automatically
-9. **Export to efficient formats** - Checkpoint complex pipelines
-10. **Optimize expressions** - Simplify math and reuse calculations
-
-## Related Resources
-
-- For DataFrame basics: See `core_dataframes.md`
-- For data operations: See `data_processing.md`
-- For file I/O optimization: See `io_operations.md`
+For custom functions, prefer built-in expression operations. `df.apply(function,
+arguments=[...], vectorize=True)` calls the function on array chunks and can allocate
+chunk outputs; `vectorize=False` has different, row-function behavior. Verify types,
+nulls and independent numerical results. JIT compilation does not create a nonexistent
+`Expression.custom_agg` API, and compilation time is separate from steady-state timing.

@@ -21,7 +21,7 @@ When users request ChIP-seq QC or quality assessment:
    - ChIP enrichment strength (plotFingerprint)
 
 **Interpreting results:**
-- **Correlation**: Replicates should cluster together with high correlation (>0.9)
+- **Correlation**: Replicates should cluster together with a correlation pattern appropriate to the assay; no universal 0.9 cutoff
 - **Fingerprint**: Strong ChIP shows steep rise; flat diagonal indicates poor enrichment
 - **Coverage**: Assess if sequencing depth is adequate for analysis
 
@@ -51,7 +51,7 @@ Use bamCoverage with `--filterRNAstrand` to separate forward and reverse strands
 
 **Strand note:** `--filterRNAstrand` assumes common dUTP/NSR/NNSR reverse-stranded library preparation. For libraries where read 1 follows the RNA strand, forward/reverse output is inverted; use SAM flag filters when library chemistry differs.
 
-Use normalization: CPM for fixed bins, RPKM for gene-level analysis.
+Use CPM or per-bin RPKM for coverage; neither provides annotation-aware gene quantification.
 
 Template available: `scripts/workflow_generator.py rnaseq_coverage`
 
@@ -59,10 +59,10 @@ Details in `references/workflows.md` → "RNA-seq Coverage Workflow"
 
 ### ATAC-seq Analysis Workflow
 
-ATAC-seq requires Tn5 offset correction:
+For an ATAC-seq workflow that needs shifted alignments (do not shift already corrected inputs):
 
 1. **Shift reads** using alignmentSieve with `--ATACshift`
-2. **Generate coverage** with bamCoverage
+2. **Sort and index** the shifted BAM, then generate alignment coverage with bamCoverage (not insertion counts)
 3. **Analyze fragment sizes** (expect nucleosome ladder pattern)
 4. **Visualize at peaks** if available
 
@@ -96,14 +96,14 @@ Complete reference: `references/tools_reference.md` → "BAM and bigWig File Pro
 **Check ChIP enrichment:**
 ```bash
 plotFingerprint -b input.bam chip.bam -o fingerprint.png \
-    --extendReads 200 --ignoreDuplicates
+    --extendReads 200 --samFlagExclude 1024
 ```
 
 **Sample correlation:**
 ```bash
 multiBamSummary bins --bamfiles *.bam -o counts.npz
 plotCorrelation -in counts.npz --corMethod pearson \
-    --whatToShow heatmap -o correlation.png
+    --whatToPlot heatmap -o correlation.png
 ```
 
 **Key tools:** plotFingerprint, plotCoverage, plotCorrelation, plotPCA, bamPEFragmentSize

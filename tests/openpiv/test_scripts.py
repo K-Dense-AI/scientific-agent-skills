@@ -214,6 +214,68 @@ class DisplacementRecoveryTests(unittest.TestCase):
         analyzer = analyze.PIVAnalyzer(output / "params.npz")
         self.assertLess(float(np.nanmax(np.abs(analyzer.compute_vorticity()))), 0.05)
 
+    def test_fractional_tiff_intensities_are_not_truncated(self) -> None:
+        import imageio.v3 as iio
+
+        paths = [self.root / "a.tif", self.root / "b.tif"]
+        for path, dx in zip(paths, (0, 4)):
+            iio.imwrite(path, particle_image(self.rows, self.columns, 0, dx).astype(np.float32) / 255)
+        output = runner.run_openpiv(
+            *map(str, paths), output_dir=str(self.root / "float"),
+            window_size=32, search_area=32, overlap=16, dt=1, scaling_factor=1,
+        )
+        with np.load(output / "params.npz") as data:
+            good = ~data["flags"]
+            self.assertTrue(good.any())
+            np.testing.assert_allclose(data["u"][good], 4, atol=0.3)
+            self.assertEqual(str(data["backend"]), "scipy")
+            self.assertAlmostEqual(float(data["dt"]), 1)
+
+    def test_extended_search_coordinates_match_actual_windows(self) -> None:
+        field = self.field(dy=0, dx=4, search_area=38)
+        # Extraction starts at pixel zero despite unused far-edge margins.
+        self.assertEqual(field["x"][0, 0], 19)
+        self.assertEqual(field["y"][0, 0], IMAGE_SIZE - 19)
+        np.testing.assert_allclose(np.diff(field["x"], axis=1), 22)
+
+    def test_dynamic_obstacle_mask_survives_replacement_and_both_exports(self) -> None:
+        import imageio.v3 as iio
+
+        paths = [self.root / "a.png", self.root / "b.png"]
+        for path, dx in zip(paths, (0, 4)):
+            frame = particle_image(self.rows, self.columns, 0, dx)
+            frame[45:115, 45:115] = 255
+            iio.imwrite(path, frame)
+        output = runner.run_openpiv(
+            *map(str, paths), output_dir=str(self.root / "masked"), mask="dynamic",
+            window_size=32, search_area=32, overlap=16, dt=1, scaling_factor=1,
+        )
+        with np.load(output / "params.npz") as data:
+            mask = data["mask"]
+            self.assertTrue(mask.any())
+            self.assertTrue((~mask).any())
+            self.assertTrue(np.isnan(data["u"][mask]).all())
+            self.assertTrue(np.isnan(data["v"][mask]).all())
+            exported = np.loadtxt(output / "vectors.txt")
+            np.testing.assert_array_equal(exported[:, 5].astype(bool), mask.ravel())
+            self.assertTrue(np.isnan(exported[mask.ravel(), 2:4]).all())
+
+    def test_a_blank_pair_has_no_measured_vectors(self) -> None:
+        import imageio.v3 as iio
+
+        path = self.root / "blank.png"
+        iio.imwrite(path, np.zeros((64, 64), dtype=np.uint8))
+        with np.errstate(all="ignore"):
+            output = runner.run_openpiv(
+                str(path), str(path), output_dir=str(self.root / "blank"),
+                search_area=32, window_size=32, overlap=16,
+            )
+        with np.load(output / "params.npz") as data:
+            self.assertTrue(data["flags"].all())
+            self.assertTrue(np.isnan(data["u"]).all())
+        with self.assertRaisesRegex(ValueError, "No valid fluid"):
+            analyze.PIVAnalyzer(output / "params.npz").compute_statistics()
+
 
 class WindowGeometryTests(unittest.TestCase):
     """The window/overlap/search-area guards, before any image is touched."""
@@ -245,6 +307,23 @@ class WindowGeometryTests(unittest.TestCase):
                 runner.run_openpiv(
                     "no-such-a.png", "no-such-b.png", output_dir=directory
                 )
+
+    def test_nonphysical_timing_calibration_and_threshold_are_refused(self) -> None:
+        for name in ("dt", "scaling_factor", "threshold"):
+            for value in (0, -1, np.nan, np.inf):
+                with self.subTest(name=name, value=value):
+                    with self.assertRaisesRegex(ValueError, "finite and positive"):
+                        runner.run_openpiv("missing-a", "missing-b", **{name: value})
+
+    def test_negative_overlap_and_noninteger_geometry_are_refused(self) -> None:
+        for kwargs in ({"overlap": -1}, {"window_size": 0}, {"window_size": 32.5}):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ValueError):
+                    runner.run_openpiv("missing-a", "missing-b", **kwargs)
+
+    def test_broken_upstream_edge_mask_is_refused_before_image_loading(self) -> None:
+        with self.assertRaisesRegex(ValueError, "uint8"):
+            runner.run_openpiv("missing-a", "missing-b", mask="dynamic", mask_method="edges")
 
 
 class CliArgumentTests(unittest.TestCase):
@@ -476,6 +555,159 @@ class FlagsTests(AnalyzerFixtureCase):
         quivers = figure.axes[0].collections
         self.assertEqual(len(quivers), 1)
         self.assertEqual(len(quivers[0].get_offsets()), 2)
+
+    def test_statistics_exclude_repaired_vectors_unless_requested(self) -> None:
+        x = np.arange(4.0).reshape(1, 4)
+        analyzer = self.analyzer(
+            np.array([[2., 100., 2., 100.]]), np.zeros_like(x), x, np.zeros_like(x),
+            flags=np.array([[0, 1, 0, 1]]),
+        )
+        self.assertEqual(analyzer.compute_statistics()["u_mean"], 2.)
+        self.assertEqual(analyzer.compute_statistics(include_interpolated=True)["u_mean"], 51.)
+
+
+class CurrentApiTests(unittest.TestCase):
+    """Exercise released upstream paths used in the worked recipes."""
+
+    def image_pair(self):
+        generator = np.random.default_rng(20261001)
+        rows = generator.integers(12, IMAGE_SIZE - 12, 900)
+        columns = generator.integers(12, IMAGE_SIZE - 12, 900)
+        return particle_image(rows, columns, 0, 0), particle_image(rows, columns, 2, 4)
+
+    def test_2d_returns_nan_signal_array_when_quality_is_disabled(self) -> None:
+        from openpiv import pyprocess
+
+        a, b = self.image_pair()
+        u, v, quality = pyprocess.extended_search_area_piv(
+            a, b, window_size=32, overlap=16, sig2noise_method=None, backend="scipy",
+        )
+        self.assertEqual(u.shape, v.shape)
+        self.assertEqual(u.shape, quality.shape)
+        self.assertTrue(np.isnan(quality).all())
+
+    def test_simple_multipass_ignores_dt_and_scale_but_returns_y_up(self) -> None:
+        from openpiv import windef
+
+        a, b = self.image_pair()
+        fields = []
+        for dt, scale in ((1, 1), (0.5, 2)):
+            settings = windef.PIVSettings(
+                windowsizes=(64, 32, 16), overlap=(32, 16, 8), num_iterations=3,
+                backend="scipy", sig2noise_method="peak2peak", sig2noise_threshold=1.05,
+                dt=dt, scaling_factor=scale,
+            )
+            fields.append(windef.simple_multipass(a.astype(np.float32), b.astype(np.float32), settings))
+        for first, second in zip(*fields):
+            np.testing.assert_allclose(first, second)
+        x, y, u, v, flags = fields[0]
+        self.assertGreater(y[0, 0], y[-1, 0])
+        self.assertAlmostEqual(float(np.median(u[~flags])), 4, delta=0.2)
+        self.assertAlmostEqual(float(np.median(v[~flags])), -2, delta=0.2)
+
+    def test_batch_piv_applies_dt_and_scale_before_saving(self) -> None:
+        from openpiv import windef
+        import imageio.v3 as iio
+
+        a, b = self.image_pair()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            iio.imwrite(root / "a.png", a)
+            iio.imwrite(root / "b.png", b)
+            fields = []
+            for name, dt, scale in (("base", 1, 1), ("scaled", .25, 2)):
+                settings = windef.PIVSettings(
+                    filepath_images=root, save_path=root, save_folder_suffix=name,
+                    frame_pattern_a="a.png", frame_pattern_b="b.png",
+                    windowsizes=(32,), overlap=(16,), num_iterations=1,
+                    backend="scipy", dt=dt, scaling_factor=scale,
+                )
+                windef.piv(settings)
+                fields.append(np.loadtxt(root / f"OpenPIV_results_32_{name}" / "field_A0000.txt"))
+            np.testing.assert_allclose(fields[1][:, :2], fields[0][:, :2] / 2)
+            np.testing.assert_allclose(fields[1][:, 2:4], fields[0][:, 2:4] * 2, atol=1e-3)
+
+    def test_explicit_unavailable_rust_backend_raises(self) -> None:
+        from openpiv import pyprocess
+
+        if pyprocess.HAS_RUST:
+            self.skipTest("Rust is present; this test covers the missing-extension error")
+        a, b = self.image_pair()
+        with self.assertRaises(ImportError):
+            pyprocess.extended_search_area_piv(a, b, window_size=32, backend="rust")
+
+    def test_supported_replacement_methods_and_validation_masks(self) -> None:
+        from openpiv import filters, validation
+
+        u = np.ones((7, 7))
+        v = np.zeros_like(u)
+        u[3, 3] = 100
+        flags = validation.global_val(u, v, (-10, 10), (-10, 10))
+        flags |= validation.local_median_val(u, v, 3, 3)
+        self.assertEqual(flags.sum(), 1)
+        for method in ("localmean", "disk", "distance"):
+            repaired, _ = filters.replace_outliers(u, v, flags, method=method, kernel_size=2)
+            np.testing.assert_allclose(repaired, 1)
+        with self.assertRaises(ValueError):
+            filters.replace_outliers(u, v, flags, method="unknown")
+
+    def test_missing_smoothing_preserves_constant_field_without_zero_bias(self) -> None:
+        from openpiv.smoothn import smoothn
+
+        field = np.full((8, 8), 3.)
+        field[3, 3] = np.nan
+        result, _, converged, _ = smoothn(field.copy(), s=0.5)
+        self.assertTrue(converged)
+        self.assertTrue(np.isnan(field[3, 3]))
+        np.testing.assert_allclose(result, 3, atol=0.01)
+
+    def test_3d_translation_and_coordinates(self) -> None:
+        from openpiv import pyprocess3D
+        from scipy.ndimage import gaussian_filter, shift
+
+        generator = np.random.default_rng(44)
+        a = gaussian_filter((generator.random((32, 32, 32)) > .98).astype(float), .7)
+        b = shift(a, (1, 2, 1), order=0, mode="constant")
+        u, v, w, quality = pyprocess3D.extended_search_area_piv3D(
+            a, b, window_size=(12, 12, 12), overlap=(6, 6, 6),
+            search_area_size=(16, 16, 16), dt=(.5, .5, .5), sig2noise_method="peak2peak",
+        )
+        # The released 3D FFT correlates in the reverse direction to the 2D
+        # routine: convert raw components to column/row/depth velocities.
+        for actual, expected in ((-u, 4), (v, 2), (w, 2)):
+            self.assertAlmostEqual(float(np.median(actual)), expected, delta=.3)
+        x, y, z = pyprocess3D.get_coordinates(a.shape, (16, 16, 16), (12, 12, 12), (6, 6, 6))
+        self.assertEqual(x.shape, quality.shape)
+        np.testing.assert_allclose(np.diff(x, axis=1), 6)
+        self.assertTrue((np.diff(y, axis=0) > 0).all())
+        self.assertTrue((np.diff(z, axis=2) > 0).all())
+
+    def test_phase_separation_preserves_intensity_and_disjoint_phases(self) -> None:
+        from openpiv import phase_separation
+
+        y, x = np.mgrid[:64, :64]
+        # Gaussian particle images have the negative log-intensity curvature
+        # this algorithm detects; a flat square is not a particle model.
+        image = (
+            200 * np.exp(-((x - 16)**2 + (y - 16)**2) / (2 * 5**2))
+            + 120 * np.exp(-((x - 44)**2 + (y - 44)**2) / (2 * 1.5**2))
+        ).astype(np.uint8)
+        big, small = phase_separation.khalitov_longmire(
+            image, big_particles_criteria={"min_size": 100, "min_brightness": 30},
+            small_particles_criteria={"max_size": 100, "min_brightness": 30},
+            blur_kernel_size=1, I_sat=230,
+        )
+        self.assertTrue(big.any())
+        self.assertTrue(small.any())
+        self.assertGreater(big[16, 16], 0)
+        self.assertGreater(small[44, 44], 0)
+        self.assertFalse(((big > 0) & (small > 0)).any())
+        self.assertTrue((big.astype(float) + small <= image).all())
+        for method, args in ((phase_separation.median_filter_method, (3,)),
+                             (phase_separation.opening_method, (3,))):
+            phases = method(image, *args)
+            self.assertEqual(len(phases), 2)
+            self.assertTrue(all(phase.shape == image.shape for phase in phases))
 
 
 class BundledExampleTests(unittest.TestCase):

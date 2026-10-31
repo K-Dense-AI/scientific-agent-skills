@@ -1,6 +1,6 @@
 # Visualization and software-only simulation
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**.
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**.
 
 ## Three different layers
 
@@ -47,7 +47,8 @@ verified liquid-handler class/import is `LiquidHandlerChatterboxBackend`.
 
 ## Visualizer API
 
-Current stable usage:
+Source-verified illustrative usage; server startup/browser rendering was not
+run during this refresh:
 
 ```python
 from pylabrobot.visualizer import Visualizer
@@ -129,7 +130,7 @@ python3 skills/pylabrobot/scripts/generate_simulation_plan.py \
 
 The output:
 
-- fixes the target at `PyLabRobot==0.2.1`;
+- fixes the target at `PyLabRobot==0.2.2`;
 - names only `LiquidHandlerChatterboxBackend`;
 - marks live backends as forbidden;
 - records zero connection attempts and no serial/USB/network access;
@@ -147,7 +148,7 @@ Use layers of evidence:
 2. Static deck bounds and axis-aligned overlap screen.
 3. Transfer/dead-volume/destination/tip/channel/rate/height ledger.
 4. Non-executable simulation plan review.
-5. Pinned 0.2.1 import/signature inspection with zero backend instances.
+5. Pinned 0.2.2 import/signature inspection with zero backend instances.
 6. Chatterbox-only protocol smoke with synthetic resources.
 7. Optional Visualizer review on an approved loopback host.
 8. Independent physical commissioning only after explicit operator approval.
@@ -159,29 +160,28 @@ assertion pass.
 Run the skill's tests without bytecode:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
-  -s tests/pylabrobot -p "test_*.py" -v
+PYTHONDONTWRITEBYTECODE=1 python tests/run_all.py --isolated pylabrobot
 ```
 
 ## Stable versus development
 
-Use `/stable/` for pinned 0.2.1 behavior. `/dev/` and repository `main` may
-change event payloads, resource serialization, supported devices, or
-Visualizer UI. Do not copy development examples into a stable protocol without
-installing and testing an actual later stable release.
+Use the released wheel/source for pinned 0.2.2 behavior. Hosted `/stable/` now
+mixes older API pages with development pages; `/dev/` and repository `main` may
+change event payloads, serialization or the UI. See [review](review.md).
+Do not copy development examples without checking the installed release.
 
 ## Sources
 
-Checked **2026-07-23**:
+Checked **2026-10-01**:
 
-- [Stable Visualizer guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-the-visualizer.html)
-  — current imports, `Visualizer(resource=lh)`, `setup()`, and localhost ports.
+- [Hosted Visualizer guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-the-visualizer.html)
+  — development guide; released constructor and ports checked in source.
 - [Visualizer contributor architecture](https://docs.pylabrobot.org/stable/contributor_guide/visualizer.html)
   — passive rendering, file server, WebSocket server, and callbacks.
-- [Stable tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
-  — planned tip/volume state (page metadata surfaced 2025-01-01).
-- [Stable liquid-handling API](https://docs.pylabrobot.org/stable/api/pylabrobot.liquid_handling.html)
+- [Hosted tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
+  — planned tip/volume state.
+- [Hosted liquid-handling API](https://docs.pylabrobot.org/stable/api/pylabrobot.liquid_handling.html)
   — `LiquidHandlerChatterboxBackend`.
-- [`v0.2.1` Visualizer source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/visualizer)
-  and [chatterbox source](https://github.com/PyLabRobot/pylabrobot/blob/v0.2.1/pylabrobot/liquid_handling/backends/chatterbox.py)
-  — exact constructor/method verification; tag dated 2026-03-23.
+- [released 0.2.2 Visualizer source](https://pypi.org/project/PyLabRobot/0.2.2/#files)
+  and [chatterbox source](https://pypi.org/project/PyLabRobot/0.2.2/#files)
+  — exact constructor/method verification; released 2026-07-30.

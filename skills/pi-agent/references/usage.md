@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/usage
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 ## Interface
 
 Interactive mode has four areas: startup header (shortcuts, loaded context files, prompt templates, skills, extensions), messages, editor, and footer. The footer shows cwd, session name, token/cache usage, cost, context usage, and current model; totals include assistant responses, usage reported by tools, and summary generation. The editor border indicates thinking level. Built-in UI (`/settings`) or extension UI can temporarily replace the editor.
@@ -14,7 +16,7 @@ Interactive mode has four areas: startup header (shortcuts, loaded context files
 | Path completion | Tab |
 | Multi-line input | Shift+Enter, or Ctrl+Enter on Windows Terminal |
 | Copy response | Ctrl+X copies the last assistant message; in `/tree` it copies the selected message |
-| Images | Paste with Ctrl+V (Alt+V on Windows), or drag into the terminal |
+| Images | Paste with Ctrl+V (Alt+V on Windows and WSL), or drag into the terminal |
 | Shell command | `!command` runs and sends output to the model |
 | Hidden shell command | `!!command` runs without sending output to the model |
 | External editor | Ctrl+G opens `externalEditor`, `$VISUAL`, `$EDITOR`, Notepad on Windows, or `nano` elsewhere |
@@ -25,7 +27,9 @@ Interactive mode has four areas: startup header (shortcuts, loaded context files
 |---|---|
 | `/login`, `/logout` | Manage OAuth or API-key credentials |
 | `/llama` | Download, load, unload llama.cpp router models (`references/llama-cpp.md`) |
-| `/model` | Switch models |
+| `/model`, `/thinking` | Switch models or thinking level; Ctrl+S saves a default |
+| `/mcp` | Manage built-in MCP connections and exposure |
+| `/bug [description]` | Review/export or upload a redacted bug report |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
 | `/settings` | Thinking level, theme, message delivery, transport |
 | `/resume`, `/new`, `/name <name>`, `/session` | Session management |
@@ -45,11 +49,11 @@ Skills are available as `/skill:name`; prompt templates expand as `/templatename
 ## Message Queue
 
 - Enter queues a steering message, delivered after the current assistant turn finishes its tool calls.
-- Alt+Enter queues a follow-up message, delivered after the agent finishes all work.
-- Escape aborts and restores queued messages to the editor; Alt+Up retrieves them.
+- Alt+Enter (Ctrl+Q on Windows and WSL) queues a follow-up message, delivered after the agent finishes all work.
+- Escape aborts and restores queued messages to the editor; Alt+Up (Alt+Q on Windows and WSL) retrieves them.
 - `steeringMode` and `followUpMode` control one-at-a-time vs all-at-once delivery.
 
-On Windows Terminal, Alt+Enter is fullscreen by default — remap it (`references/terminal-setup.md`).
+Windows/WSL defaults use Ctrl+Q for follow-up, avoiding Windows Terminal's Alt+Enter fullscreen shortcut. Remap only if you deliberately want Alt+Enter.
 
 ## Context and System Prompt Files
 
@@ -63,7 +67,7 @@ Interactive startup asks before trusting a project folder that has project-local
 
 ## Exporting and Sharing
 
-`/export [file]` writes HTML; `/share` uploads a private GitHub gist with a shareable HTML link. `badlogic/pi-share-hf` publishes sessions to Hugging Face datasets for research.
+`/export [file]` writes HTML by default or JSONL when the output name selects it; `/share` uploads a private GitHub gist with a shareable HTML link. `badlogic/pi-share-hf` publishes sessions to Hugging Face datasets for research.
 
 ## CLI Modes
 
@@ -96,11 +100,11 @@ pi config                    # enable/disable package resources
 
 Model: `--provider <name>`, `--model <pattern>` (supports `provider/id` and `:<thinking>`), `--api-key`, `--thinking <off|minimal|low|medium|high|xhigh|max>`, `--models <patterns>`, `--list-models [search]`.
 
-Session: `-c/--continue`, `-r/--resume`, `--session <path|id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `-n/--name`.
+Session: `-c/--continue`, `-r/--resume`, `--session <path|id>`, `--session-id <id>` (open/create exact project ID), `--fork <path|id>`, `--session-dir`, `--no-session`, `-n/--name`.
 
-Tools: `-t/--tools`, `-xt/--exclude-tools`, `-nbt/--no-builtin-tools` (keeps extension/custom tools), `-nt/--no-tools`. Built-ins: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
+Tools: `-t/--tools`, `-xt/--exclude-tools`, `-nbt/--no-builtin-tools` (keeps extension/custom tools), `-nt/--no-tools`. Built-ins: `read`, `bash`, `powershell` (native Windows), `edit`, `write`, `grep`, `find`, `ls`. Built-in extensions provide optional `codemode` and `tool_search`.
 
-Resources: `-e/--extension <source>` (path, npm, or git; repeatable), `--no-extensions`, `--skill`, `--no-skills`, `--prompt-template`, `--no-prompt-templates`, `--theme`, `--no-themes`, `-nc/--no-context-files`. Combine `--no-*` with explicit flags to load exactly what you need: `pi --no-extensions -e ./my-extension.ts`.
+Resources: `-e/--extension <source>` (path, npm, or git; repeatable), `--no-extensions` (also disables built-in extensions), `--skill`, `--no-skills`, `--prompt-template`, `--no-prompt-templates`, `--theme`, `--no-themes`, `-nc/--no-context-files`. Combine `--no-*` with explicit flags to load exactly what you need: `pi --no-extensions -e ./my-extension.ts`.
 
 Other: `--system-prompt <text>` (context files and skills are still appended), `--append-system-prompt`, `--tui-mode <regular|fullscreen>`, `--use-theme <name[/name]>` (initial theme for this run only), `--verbose`, `-a/--approve`, `-na/--no-approve`, `-h/--help`, `-v/--version`.
 
@@ -126,4 +130,4 @@ pi --exclude-tools ask_question
 
 ## Design Principles
 
-Pi keeps the core small and pushes workflow-specific behavior into extensions, skills, prompt templates, and packages. It intentionally does not include built-in MCP, sub-agents, permission popups, plan mode, to-dos, or background bash. Build or install those workflows as extensions/packages, or use external tools such as containers and tmux.
+Pi keeps the core small and pushes workflow-specific behavior into extensions, skills, prompt templates, and packages. Pi 0.99 includes MCP, codemode, and tool search as built-in extensions. Subagent orchestration and other workflow policies remain package/extension concerns. Read `references/mcp.md` before installing an MCP adapter: the native and adapter configurations differ.

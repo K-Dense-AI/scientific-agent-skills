@@ -1,5 +1,31 @@
 # Primer-design validation record
 
+## Documentation/API refresh, 2026-10-01
+
+Python 3.13.3, primer3-py 2.3.1, libprimer3 2.6.1 and local BLAST+ 2.17.0 were
+rechecked. The isolated suite passed **93 tests without skips**, including seven
+real BLAST integration cases. Native additions verify alternative target semantics,
+temperature/free-energy consistency, rejection of finite but physically invalid
+Tm, and the reverse-reference coordinate transform under both search engines.
+`uv run skills-ref validate skills/primer-design` and scoped `git diff --check`
+passed. All four documented demonstration commands ran in a fresh environment:
+three primer pairs, completed thermodynamics, and scoped clean product searches
+with both exhaustive and heuristic engines.
+
+BLAST executables were `/opt/homebrew/bin/blastn` and
+`/opt/homebrew/bin/makeblastdb`; retain that directory on PATH to exercise these
+integration tests. Tests use small synthetic sequences and no network search.
+No Primer-BLAST job was submitted or biological assay performed. The public
+interface, Primer3 reference/API, current package metadata, and primary references
+were reviewed; the former NEB Taq PDF link returned a not-found page and was replaced
+with a current NEB Q5 study. Publisher MIQE full-text extraction was limited;
+official indexed text and its PubMed abstract were available. Repository-wide
+validation and the current security scan are coordinated by the collection owner.
+
+No optional `docs/images/primer-design.png` exists, so no image was generated.
+
+## Original validation, 2026-09-30
+
 Validated on 2026-09-30 with Python 3.13.3, primer3-py 2.3.1,
 libprimer3 release 2.6.1, and NCBI BLAST+ 2.17.0 on macOS. These results
 establish software behavior on synthetic inputs, not biological assay performance.

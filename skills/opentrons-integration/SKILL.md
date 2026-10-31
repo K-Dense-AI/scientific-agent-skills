@@ -1,11 +1,12 @@
 ---
 name: opentrons-integration
-description: Author, review, migrate, simulate, and troubleshoot official Opentrons Python Protocol API v2 protocols for Flex and OT-2 robots. Use for robot-specific liquid handling, deck and labware setup, pipettes, modules, runtime parameters, liquid classes, and Opentrons App analysis. Use pylabrobot instead when one workflow must support multiple robot vendors.
+description: Authors, reviews, migrates, simulates, and troubleshoots official Opentrons Python Protocol API v2 protocols for Flex and OT-2 robots. Use for robot-specific liquid handling, deck and labware setup, pipettes, modules, runtime parameters, liquid classes, and Opentrons App analysis. Use pylabrobot instead when one workflow must support multiple robot vendors.
 license: MIT
-compatibility: Requires Python 3.10+ and uv for local simulation. Flex examples target opentrons 9.1.1 and API 2.29; the separate OT-2 line targets API 2.28 and uses opentrons 9.0.0 as its local compatibility simulator. Physical execution requires compatible hardware, current robot software, and the appropriate Opentrons App.
+compatibility: Requires Python 3.10+ and uv for local simulation. Flex examples target opentrons 10.0.0 and API 2.29 (documented robot maximum 2.30); the separate OT-2 line targets API 2.28 and uses opentrons 9.0.0 as its local compatibility simulator. Physical execution requires compatible hardware, current robot software, and the appropriate Opentrons App.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-10-01"
   skill-author: "K-Dense Inc."
 ---
 
@@ -18,13 +19,17 @@ OT-2. This skill covers protocol structure, hardware and deck configuration,
 liquid handling, runtime customization, module control, simulation, and safe
 deployment.
 
-The verified baseline as of **2026-07-23** is:
+The verified baseline as of **2026-10-01** is:
 
-- `opentrons==9.1.1` for reproducible Flex simulation.
+- `opentrons==10.0.0` for reproducible Flex simulation.
 - `opentrons==9.0.0` for local OT-2 API 2.28 compatibility simulation.
-- Flex supports API levels 2.15 through 2.29 on current software.
+- Flex supports API levels 2.15 through 2.30 on current software.
 - OT-2 supports API levels 2.0 through 2.28 on current software.
-- API 2.29 is Flex-only at this baseline. Do not put `2.29` in an OT-2 protocol.
+- API 2.29 and later are Flex-only at this baseline. Keep OT-2 at 2.28 or lower.
+- Bundled Flex templates retain API 2.29 because step grouping is their newest
+  required feature. API 2.30 fixes start-only meniscus aspiration.
+- The 10.0.0 library reports a local maximum of 2.31, ahead of the documented
+  robot maximum 2.30. Do not infer robot support from that constant.
 
 Read `references/sources.md` for the upstream documentation used for this
 snapshot. Recheck the official versioning page before targeting newer robot
@@ -90,28 +95,28 @@ an explicit assumptions list rather than guessing.
 Flex:
 
 ```bash
-uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==10.0.0" opentrons_simulate protocol.py
 ```
 
 OT-2 API 2.28:
 
 ```bash
-uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==9.0.0" opentrons_simulate protocol.py
 ```
 
-The 9.1.1 package intentionally rejects OT-2 protocols after the Flex/OT-2
+The 10.0.0 package rejects OT-2 protocols after the Flex/OT-2
 release-line split. Always complete OT-2 analysis in the current OT-2 App.
 
 For a dedicated Flex environment:
 
 ```bash
-uv venv --python 3.10
-uv pip install --python .venv/bin/python -r skills/opentrons-integration/requirements-flex.txt
-.venv/bin/opentrons_simulate protocol.py
+uv venv --python 3.12 .venv-opentrons
+uv pip install --python .venv-opentrons/bin/python -r skills/opentrons-integration/requirements-flex.txt
+.venv-opentrons/bin/opentrons_simulate protocol.py
 ```
 
 Use `requirements-ot2.txt` instead for an OT-2 compatibility environment. On
-Windows, invoke the executable from `.venv\Scripts\opentrons_simulate.exe`.
+Windows, invoke the executable from `.venv-opentrons\Scripts\opentrons_simulate.exe`.
 Local simulation is for Python protocols; import Protocol Designer JSON files
 into the appropriate Opentrons App instead.
 
@@ -201,6 +206,7 @@ Important gates:
 - 2.27: dynamic pipetting and concurrent module actions.
 - 2.28: 20 µL Flex tips, improved partial-tip return, and thermocycler ramp rate.
 - 2.29: step grouping; Flex only at the verified baseline.
+- 2.30: aspirating at `meniscus(target="start")` without an `end_location`.
 
 ### 2. Build the deck explicitly
 
@@ -225,7 +231,9 @@ Current load names are:
   `p300_single_gen2`, `p300_multi_gen2`, `p1000_single_gen2`.
 
 Check that every requested volume is within the configured pipette and tip
-range. A 100 nL operation is not an Opentrons pipetting task.
+range. For Flex 50 µL pipettes handling 1–4.9 µL, call
+`configure_for_volume(volume)` while empty before pickup; low-volume mode caps
+the pipette at 30 µL. A 100 nL operation is not an Opentrons pipetting task.
 
 ### 4. Choose a liquid-handling layer
 
@@ -285,7 +293,10 @@ See `references/validation_and_operations.md`.
 
 - Using old names such as `p300_single_flex`; use current `flex_*` load names.
 - Declaring `apiLevel` in both `metadata` and `requirements`.
-- Using API 2.29 for OT-2.
+- Using API 2.29 or later for OT-2.
+- Treating a runtime parameter named `dry_run` as disabling liquid handling;
+  the bundled parameter only shortens a delay.
+- Heating the PCR template before the operator confirms a compatible seal.
 - Forgetting a Flex trash bin or waste chute.
 - Loading a Magnetic Module on Flex; use supported Flex magnetic hardware.
 - Calling `read(wavelengths=...)` on the plate reader; call `initialize()` first,

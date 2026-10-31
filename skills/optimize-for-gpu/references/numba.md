@@ -1,5 +1,8 @@
 # Numba CUDA Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 The established Numba-CUDA target compiles Python into CUDA kernels with explicit control over
 threads, blocks, shared memory, and synchronization. It is now in maintenance mode. For new kernel
 projects, evaluate Numba-CUDA-MLIR first; use this reference for existing `numba.cuda` code,
@@ -262,13 +265,15 @@ def kernel_with_shared(data, output):
     # Each thread loads one element into shared memory
     if i < data.size:
         shared[tid] = data[i]
+    else:
+        shared[tid] = 0.0
 
     # BARRIER: wait for ALL threads in block to finish loading
     cuda.syncthreads()
 
     # Now safe to read any element in shared[]
-    if i < data.size and tid > 0:
-        output[i] = shared[tid] + shared[tid - 1]
+    if i < data.size:
+        output[i] = shared[tid] + (shared[tid - 1] if tid > 0 else 0.0)
 ```
 
 ### Dynamic Shared Memory (size set at launch)
@@ -279,7 +284,8 @@ def kernel_dynamic_shared(data):
     # size=0 means "use dynamic shared memory"
     dyn = cuda.shared.array(0, dtype=float32)
     tid = cuda.threadIdx.x
-    dyn[tid] = data[cuda.grid(1)]
+    i = cuda.grid(1)
+    dyn[tid] = data[i] if i < data.size else 0.0
     cuda.syncthreads()
     # ...
 
@@ -298,7 +304,8 @@ def kernel_with_local(data):
     local_buf = cuda.local.array(10, dtype=float32)
     i = cuda.grid(1)
     for j in range(10):
-        local_buf[j] = data[i * 10 + j]
+        idx = i * 10 + j
+        local_buf[j] = data[idx] if idx < data.size else 0.0
     # Process local_buf...
 ```
 
@@ -402,7 +409,7 @@ For operations on sub-arrays (not just scalars). Uses NumPy's generalized ufunc 
 ```python
 from numba import guvectorize, float32
 
-@guvectorize([float32[:,:], float32[:,:], float32[:,:]],
+@guvectorize([(float32[:,:], float32[:,:], float32[:,:])],
              '(m,n),(n,p)->(m,p)', target='cuda')
 def gpu_matmul(A, B, C):
     for i in range(A.shape[0]):
@@ -532,7 +539,8 @@ def iterative_kernel(M):
     g = cuda.cg.this_grid()  # Get grid group
 
     for row in range(1, M.shape[0]):
-        M[row, col] = M[row - 1, col] + 1
+        if col < M.shape[1]:
+            M[row, col] = M[row - 1, col] + 1
         g.sync()  # Global barrier — all blocks wait here
 
 # Query max grid size for cooperative launch
@@ -615,6 +623,8 @@ This computes an independent scan per block, not a whole-array scan. A complete 
 also scans block totals and adds block offsets. Prefer `cupy.cumsum()`/CUB unless a custom scan
 operator is required.
 
+Launch `block_inclusive_scan` with at most 256 threads per block.
+
 ### Shared Memory Reduction
 
 ```python
@@ -639,6 +649,9 @@ def block_reduce_sum(data, partial_sums):
     if tid == 0:
         partial_sums[cuda.blockIdx.x] = shared[0]
 ```
+
+Launch `block_reduce_sum` with a power-of-two block size no greater than 256; sum the
+partial results in a second stage. Other block sizes do not satisfy this reduction algorithm.
 
 ### Stencil / Neighbor Access Pattern
 
@@ -666,6 +679,10 @@ def stencil_1d(data, output, radius):
 ```
 
 ---
+
+The stencil uses zero padding (a fixed denominator at boundaries). Launch with 256 threads
+and require `0 <= radius <= 16`; larger radii exceed its static shared allocation.
+Compare that exact boundary convention with the CPU reference.
 
 ## Performance Optimization
 
@@ -770,7 +787,7 @@ add_kernel[4, 256](a, b, out)
 import torch
 from numba import cuda
 
-t = torch.cuda.FloatTensor([1, 2, 3])
+t = torch.tensor([1, 2, 3], dtype=torch.float32, device="cuda")
 d_array = cuda.as_cuda_array(t)  # Zero-copy Numba view of PyTorch tensor
 ```
 
@@ -781,7 +798,7 @@ cuda.is_cuda_array(obj)       # True if obj has __cuda_array_interface__
 cuda.as_cuda_array(obj)       # Wrap as Numba device array (zero copy)
 ```
 
-**Compatible libraries:** CuPy, PyTorch, JAX, PyCUDA, RAPIDS (cuDF, cuML), PyArrow, mpi4py, NVIDIA DALI.
+Compatibility is object-specific: check `cuda.is_cuda_array(obj)`. Convert JAX or TensorFlow through a supported DLPack consumer such as CuPy instead of assuming every tensor exposes this interface.
 
 ---
 

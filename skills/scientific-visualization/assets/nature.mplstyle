@@ -1,7 +1,7 @@
 # Flagship Nature visual starting style
 # Usage: plt.style.use('nature.mplstyle')
 #
-# Snapshot source accessed 2026-07-23:
+# Snapshot source accessed 2026-10-01:
 # https://research-figure-guide.nature.com/figures/preparing-figures-our-specifications
 # This preset does not establish submission compliance.
 
@@ -26,7 +26,7 @@ axes.spines.right: False
 axes.edgecolor: black
 axes.axisbelow: True
 axes.grid: False
-axes.prop_cycle: cycler('color', ['0072B2', 'D55E00', '009E73', 'CC79A7', '000000'])
+axes.prop_cycle: cycler('color', ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#000000"])
 
 # Tick properties
 xtick.major.size: 2.5

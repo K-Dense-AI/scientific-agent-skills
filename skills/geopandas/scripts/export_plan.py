@@ -83,8 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--schema-version",
         choices=("1.0.0", "1.1.0"),
-        default="1.0.0",
-        help="GeoParquet schema version (default: stable 1.0.0)",
+        default="1.1.0",
+        help="Stable GeoParquet schema version (default: 1.1.0; 2.0 not planned)",
     )
     parser.add_argument(
         "--write-covering-bbox",
@@ -196,7 +196,7 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
 
     geoparquet_options_used = (
         args.geometry_encoding != "WKB"
-        or args.schema_version != "1.0.0"
+        or args.schema_version != "1.1.0"
         or args.write_covering_bbox
     )
     if format_name != "geoparquet" and geoparquet_options_used:
@@ -210,7 +210,7 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
             blockers.append(
                 "per-row bbox covering is not approved for sensitive coordinates"
             )
-        if args.schema_version == "1.1.0":
+        if args.geometry_encoding == "geoarrow" or args.write_covering_bbox:
             warnings.append(
                 "GeoPandas describes native encoding and bbox covering as experimental/interoperability-limited."
             )
@@ -256,7 +256,7 @@ def plan(args: argparse.Namespace) -> dict[str, Any]:
                 "geometry_encoding": args.geometry_encoding,
                 "write_covering_bbox": bool(args.write_covering_bbox),
                 "default_stable_contract": bool(
-                    args.schema_version == "1.0.0"
+                    args.schema_version == "1.1.0"
                     and args.geometry_encoding == "WKB"
                     and not args.write_covering_bbox
                 ),

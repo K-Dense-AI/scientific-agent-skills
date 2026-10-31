@@ -1,6 +1,6 @@
 # Discussions and Comments
 
-Verified **2026-07-23** against the official
+Verified **2026-09-30** against the official
 [Discussions API](https://apidoc.protocols.io/) and
 [protocols.io Code of Conduct](https://www.protocols.io/code-of-conduct).
 
@@ -186,7 +186,7 @@ the first request may have succeeded even if the response was lost.
 ## Sources
 
 - [Official API reference — Discussions](https://apidoc.protocols.io/),
-  accessed 2026-07-23 — comment object/tree and exact v3 read/write paths.
+  accessed 2026-09-30 — comment object/tree and exact v3 read/write paths.
 - [Code of Conduct](https://www.protocols.io/code-of-conduct), accessed
-  2026-07-23 — registered-user comments, private/public visibility, threaded
+  2026-09-30 — registered-user comments, private/public visibility, threaded
   step/protocol discussions, moderation, and attribution.

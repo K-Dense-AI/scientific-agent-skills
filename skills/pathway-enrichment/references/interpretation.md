@@ -35,36 +35,45 @@ all ~20,000 protein-coding genes. Using too large a background makes ordinary
 housekeeping categories look significant — the most common way ORA results
 mislead.
 
-- Enrichr's online API uses fixed per-library backgrounds and largely ignores a
-  custom one. If the background matters for your claim, use **g:Profiler**
-  (`domain_scope='custom'`, `background=...`) or **gseapy `gp.enrich()`** with an
-  explicit `background`.
-- The background should use the same ID namespace as the query and the library.
+- GSEApy 1.3.1 routes explicit online background lists through Speedrichr;
+  standard Enrichr uses its default background. **g:Profiler** accepts
+  `domain_scope="custom"` and `background`; local **`gp.enrich()`** with a pinned
+  GMT and explicit gene list makes the universe directly inspectable.
+- The background must contain the query, use the same ID mapping as the query
+  and library, and represent the actual selection opportunity (tested genes, not
+  a separately chosen set that makes results smaller). Record N, k, K and overlap
+  after mapping/intersection. Length, abundance and detection-dependent selection
+  can bias ORA even with the right universe; consider a bias-aware null.
 
 ## Multiple-testing correction
 
 - **Benjamini–Hochberg (FDR)** — used for Enrichr/gseapy ORA `Adjusted P-value`.
-  GSEA `FDR q-val` is instead estimated from normalized enrichment-score
-  permutation distributions; report the permutation type and do not label it BH.
+  Classic GSEA `FDR q-val` instead uses normalized enrichment-score permutation
+  distributions. GSEApy 1.3.1 multilevel GSEA uses BH; state the backend.
 - **g:SCS** — g:Profiler's default; accounts for the correlated structure of GO
-  and overlapping terms; generally stricter and more appropriate than BH for
-  ontology hierarchies.
-- **Bonferroni** — very conservative; only when you have few, independent tests.
+  and overlapping terms. It is a different error-control procedure, not an FDR
+  estimate; avoid a universal claim that it is superior to BH.
+- **Bonferroni** controls family-wise error and does not require independent
+  tests; it can be conservative with dependent/overlapping terms.
 
-FDR is computed *within a library/run*. Running many libraries multiplies the
-total tests, so report per-library FDR and avoid cherry-picking the one library
-that produced a hit.
+Define the testing family before looking at results. Classic GSEApy 1.3.1 scopes
+FDR by library prefix (`library__term`), while multilevel BH covers all submitted
+terms. Local GSEApy ORA applies BH to positive-overlap terms only. g:Profiler
+returns adjusted `p_value` and source-specific domain metadata. None of these
+automatically corrects across every cluster, contrast, library and threshold you
+tried. Report those families and avoid selecting the most favorable run.
 
 ## Reading GSEA output
 
 - **NES (normalized enrichment score)** — the headline metric; normalized for set
-  size so it is comparable across sets. Sign = direction (positive = enriched at
+  size and the chosen null. Compare cautiously within the same method/run; it
+  is not a fold-change or an interchangeable activity scale across cohorts. Sign = direction (positive = enriched at
   the top of your ranking, e.g., up in the test condition).
 - **FDR q-val** — significance; filter on this. GSEA recommends `< 0.05` for
   gene-set permutations (including preranked analyses); the exploratory `< 0.25`
   convention applies to phenotype permutations. State the chosen threshold.
 - **Leading-edge genes** (`Lead_genes`) — the subset of genes that drive the
-  signal (those before the running-sum peak). Report these; they are the concrete
+  signal: hits at/before the positive peak or at/after the negative trough. Report these; they are the concrete
   biology and are useful for overlap/redundancy analysis.
 
 ## Reducing redundant terms
@@ -87,8 +96,9 @@ biology. Don't list 40 near-duplicates. Options:
 - Watch **gene-set size**: tiny sets reach significance with few genes; huge,
   generic sets ("metabolic process") are uninformative — the `min_size`/`max_size`
   filters (15–500) exist for this reason.
-- A very short ORA input (<10 genes) is underpowered; a very long one (>2000)
-  loses specificity — prefer GSEA in both extremes.
+- Assess power relative to the universe and term size; there is no universal
+  minimum/maximum hit-list length. GSEA requires an appropriate complete ranking,
+  which cannot be reconstructed from a hit list alone.
 
 ## Reproducibility checklist
 
@@ -103,7 +113,7 @@ biology. Don't list 40 near-duplicates. Options:
 
 Report a compact, reviewer-friendly table:
 
-| Term | Source | Direction (NES / Odds Ratio) | Overlap / Set size | FDR | Key genes |
+| Term | Source | NES or odds ratio | Overlap / Set size | FDR | Key genes |
 |------|--------|------------------------------|--------------------|-----|-----------|
 | Interferon alpha response | Hallmark | NES +2.1 | 38/97 | 1e-4 | STAT1, IRF7, ISG15 |
 
@@ -113,8 +123,12 @@ Note method, library version, background, and correction in the legend.
 ## Common misinterpretations
 
 - "Enriched pathway X" does **not** mean pathway X is activated — ORA is
-  direction-agnostic unless you split up/down lists; GSEA NES sign gives direction.
+  direction-agnostic unless you split up/down lists; GSEA NES sign gives rank direction, not necessarily activation (sets can contain inhibitors).
 - Overlapping significant GO terms are **not** independent findings.
 - Absence of enrichment ≠ absence of biology (power, annotation gaps, wrong
   background, or ID mismatch can all hide real signal).
-- Don't compare raw ES across gene sets — use NES.
+- Don't compare raw ES across gene sets as effect sizes; NES still depends on the
+  null, gene-set collection and submitted ranking. Neither proves causality.
+- Report Monte Carlo resolution and method; nominal p-values at the simulation
+  floor do not establish arbitrarily tiny probabilities. More permutations do
+  not fix confounding, selection bias, or an invalid null.

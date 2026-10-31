@@ -1,8 +1,8 @@
 # Input/Output Operations
 
-AnnData provides comprehensive I/O functionality for reading and writing data in various formats.
+Reviewed against AnnData 0.13.4. Native H5AD/Zarr and small text/Excel fixtures were exercised; remote stores and 10X biological inputs below are illustrative. Preserve identifiers, matrix units, transformations, and source checksums through conversion.
 
-Since anndata 0.11, most `read_*` and `write_*` functions live in `anndata.io`. Top-level `read_h5ad` and `read_zarr` remain at `anndata` without deprecation warnings; other top-level imports still work but emit `FutureWarning`.
+Since anndata 0.11, most `read_*` and `write_*` functions live in `anndata.io`. Top-level `read_h5ad` and `read_zarr` remain supported; use `anndata.io` for other readers rather than compatibility aliases.
 
 ```python
 import anndata as ad
@@ -37,11 +37,14 @@ adata = ad.read_h5ad('data.h5ad')
 
 # Read in backed mode (lazy loading for large files)
 adata = ad.read_h5ad('data.h5ad', backed='r')  # Read-only
-adata = ad.read_h5ad('data.h5ad', backed='r+')  # Read-write for X
+adata.file.close()
+# Alternatively (do not leave a read-only handle open on this file):
+adata = ad.read_h5ad('data.h5ad', backed='r+')  # In-place dense X updates only
+adata.file.close()
 
-# Backed mode enables working with datasets larger than RAM
-# Only accessed data is loaded into memory
-# In backed mode, only X updates are persisted; write a new file for obs/var/uns changes.
+# Backed mode keeps X on disk; obs/var and named layers can still load into RAM.
+# 0.13 removed backed sparse item assignment, even with r+.
+# Write a new file for obs/var/uns or sparse-X changes.
 ```
 
 #### Backed mode operations
@@ -61,10 +64,16 @@ X_subset = subset.X[:]  # Now loads this subset
 
 # Convert entire backed object to memory
 adata_memory = adata.to_memory()
+adata.file.close()
 ```
 
 ### Zarr
-Hierarchical array storage format, optimized for cloud storage and parallel I/O.
+
+`read_zarr` is eager; use experimental `read_lazy` for lazy arrays and annotations.
+AnnData 0.13 requires the Zarr >=3 Python package and writes sharded Zarr format 3
+by default. Format 2 stores can still be read. Chunk shape and shard size have
+different effects; benchmark representative row/column access instead of assuming
+a universal setting.
 
 #### Writing Zarr
 ```python
@@ -81,32 +90,24 @@ adata.write_zarr('data.zarr', chunks=(100, 100))
 adata = ad.read_zarr('data.zarr')
 ```
 
-#### Zarr v3 (anndata 0.12+)
+#### Zarr v3 defaults (AnnData 0.13.4)
 ```python
-import anndata
-
-# Default writes Zarr v2; opt into v3 and optional auto-sharding
-anndata.settings.zarr_write_format = 3
-anndata.settings.auto_shard_zarr_v3 = True  # experimental; independent of zarr_write_format
-
-adata.write_zarr('data.zarr', chunks=(1000, 1000))
+adata.write_zarr('data.zarr', chunks=(1000, 1000), consolidate_metadata=True)
 ```
 
-Zarr v3 writing is available in anndata 0.12, with structured-array exceptions and evolving performance guidance. Consolidated metadata is recommended for remote Zarr stores.
+The deprecated `settings.zarr_write_format` is scheduled for removal in 0.14.
+If a downstream reader requires format 2, verify that compatibility separately;
+do not confuse the Zarr package version with the storage format.
 
 #### Remote Zarr access
-Only open remote stores from trusted, expected locations. Prefer allowlisted HTTPS/S3/GCS paths or signed URLs, and avoid asking an agent to fetch arbitrary user-supplied URLs.
+Use the requested dataset location, with its provider credentials and suitable fsspec adapter (`s3fs` for S3, `gcsfs` for GCS). The following placeholder stores are illustrative and were not contacted. These examples use Zarr 3 `FsspecStore`; credentials should come from provider configuration, not source code.
 
 ```python
-import fsspec
+from zarr.storage import FsspecStore
+from anndata.experimental import read_lazy
 
-# Access Zarr from an expected S3 location
-store = fsspec.get_mapper('s3://bucket-name/data.zarr')
-adata = ad.read_zarr(store)
-
-# Access Zarr from a trusted HTTPS location
-store = fsspec.get_mapper('https://example.com/data.zarr')
-adata = ad.read_zarr(store)
+store = FsspecStore.from_url('s3://bucket-name/data.zarr', read_only=True)
+adata = read_lazy(store)  # Verify provider/store support on a small slice first
 ```
 
 ## Alternative Input Formats
@@ -126,11 +127,13 @@ adata = read_csv('data.csv', first_column_names=True)
 ```
 
 ### Excel
+
+Requires `openpyxl` for `.xlsx`; first column supplies row names and first row supplies feature names. Validate numeric matrix dtype after importing.
 ```python
 from anndata.io import read_excel
 
 # Read Excel file
-adata = read_excel('data.xlsx')
+adata = read_excel('data.xlsx', sheet=0)  # sheet is required
 
 # Read specific sheet
 adata = read_excel('data.xlsx', sheet='Sheet1')
@@ -142,19 +145,18 @@ Common format for sparse matrices in genomics.
 ```python
 from anndata.io import read_mtx
 
-# Read MTX with associated files
-# Requires: matrix.mtx, genes.tsv, barcodes.tsv
-adata = read_mtx('matrix.mtx')
+import pandas as pd
 
-# Read with custom gene and barcode files
-adata = read_mtx(
-    'matrix.mtx',
-    var_names='genes.tsv',
-    obs_names='barcodes.tsv'
-)
-
-# Transpose if needed (MTX often has genes as rows)
-adata = adata.T
+# read_mtx reads ONLY the matrix; it has no obs_names/var_names arguments.
+# For this explicit feature-by-cell input, transpose to cells by features.
+adata = read_mtx('matrix.mtx').T
+features = pd.read_csv('features.tsv', sep='\t', header=None, dtype=str)
+barcodes = pd.read_csv('barcodes.tsv', sep='\t', header=None, dtype=str)
+assert adata.shape == (len(barcodes), len(features))
+adata.obs_names = barcodes[0].to_numpy()
+adata.var_names = features[0].to_numpy()  # Stable IDs; keep symbols separately
+adata.var['gene_symbol'] = features[1].to_numpy()
+assert adata.obs_names.is_unique and adata.var_names.is_unique
 ```
 
 ### 10X Genomics formats
@@ -173,7 +175,13 @@ adata = sc.read_10x_mtx('filtered_feature_bc_matrix/')
 adata = sc.read_10x_h5('data.h5', genome='GRCh38')
 ```
 
-### Loom
+### Loom input
+
+Requires `loompy`; `read_loom` is deprecated in 0.13 (legacy import still passed
+a synthetic test with loompy 3.0.8). Use the actual source layer and annotation names; defaults
+`CellID`/`Gene` do not match every Loom file. The format is lossy relative to
+AnnData (for example, it is not a full `uns`/`raw` archive).
+
 ```python
 from anndata.io import read_loom
 
@@ -209,7 +217,7 @@ adata = read_text(
 from anndata.io import read_umi_tools
 
 # Read UMI tools format
-adata = read_umi_tools('counts.tsv')
+adata = read_umi_tools('counts.tsv.gz')  # Long table: gene, cell, count columns
 ```
 
 ### HDF5 (generic)
@@ -224,24 +232,29 @@ adata = read_hdf('data.h5', key='dataset')
 
 ### CSV
 ```python
-# Write to CSV files (creates multiple files)
-adata.write_csvs('output_dir/')
+# Explicitly include X; skip_data=True is the default. Sparse X is densified.
+adata.write_csvs('output_dir/', skip_data=False)
 
 # This creates:
 # - output_dir/X.csv (expression matrix)
 # - output_dir/obs.csv (observation annotations)
 # - output_dir/var.csv (variable annotations)
-# - output_dir/uns.csv (unstructured annotations, if possible)
+# - output_dir/obsm.csv and varm.csv
+# - output_dir/uns/<key>.csv (supported unstructured annotations only)
+# This export cannot reconstruct the complete AnnData object.
 
 # Skip certain components
 adata.write_csvs('output_dir/', skip_data=True)  # Skip X matrix
 ```
 
-### Loom
-```python
-# Write to Loom format
-adata.write_loom('output.loom')
-```
+### Loom output
+
+`write_loom` is deprecated in AnnData 0.13. With AnnData 0.13.4 and loompy 3.0.8,
+a synthetic export also failed because the writer passes the `layers[None]` key
+to loompy (`AttributeError: 'NoneType' object has no attribute 'startswith'`).
+Use `write_h5ad`/`write_zarr` for the complete object; legacy Loom conversion needs
+an independently tested compatible environment and a field-by-field audit.
+Do not delete `layers[None]` to bypass this error: it deletes X.
 
 ## Reading Specific Elements
 
@@ -264,9 +277,14 @@ with h5py.File('data.h5ad', 'r') as f:
 from anndata.io import write_elem
 import h5py
 
-# Write element to existing file
-with h5py.File('data.h5ad', 'a') as f:
-    write_elem(f, 'new_layer', adata.X.copy())
+# Work on a copy of the native file. A layer belongs under /layers, not the root.
+# Match both axes and use an unused string key without '/'.
+with h5py.File('data.h5ad', 'r+') as f:
+    layers = f['layers']
+    assert 'new_layer' not in layers
+    write_elem(layers, 'new_layer', adata.X.copy())
+reopened = ad.read_h5ad('data.h5ad')
+assert reopened.layers['new_layer'].shape == reopened.shape
 ```
 
 ## Lazy Operations
@@ -277,7 +295,7 @@ For very large datasets, use lazy reading to avoid loading entire datasets. `rea
 from anndata.experimental import read_lazy
 
 adata = read_lazy('large_data.zarr')
-print(adata.obs.head())  # Does not require loading X
+print(adata.obs.iloc[:5].to_memory())  # Dataset2D is not a pandas DataFrame
 ```
 
 For element-level control, use `read_elem_lazy` on an open store:
@@ -323,43 +341,35 @@ print(adata.var.columns)
 
 ### Update backed data or write a new file
 ```python
-# Open in read-write mode for X updates
+# Open in read-write mode for dense X updates
+import h5py
 adata = ad.read_h5ad('data.h5ad', backed='r+')
 
-# X updates can be persisted in backed mode
-adata.X[0, 0] = 0
+# Only dense HDF5 X supports this in 0.13; backed sparse assignment raises TypeError.
+if isinstance(adata.X, h5py.Dataset):
+    adata.X[0, 0] = 0
 
 # Metadata changes are not persisted from backed mode; write a new file instead
 adata_memory = adata.to_memory()
 adata_memory.obs['new_column'] = values
+adata.file.close()
 adata_memory.write_h5ad('data_with_metadata.h5ad')
 ```
 
-### Download from a trusted URL
-Validate remote sources before downloading. Prefer local files or vetted object-store paths over arbitrary URLs.
+### Remote provenance
 
-```python
-import anndata as ad
-import urllib.request
-from urllib.parse import urlparse
-
-url = 'https://example.org/datasets/reference.h5ad'
-parsed = urlparse(url)
-trusted_hosts = {'example.org'}
-
-if parsed.scheme != 'https' or parsed.netloc not in trusted_hosts:
-    raise ValueError('Refusing to download from an untrusted host')
-
-urllib.request.urlretrieve(url, 'reference.h5ad')
-adata = ad.read_h5ad('reference.h5ad')
-```
+Download the dataset from its documented publisher location or object store;
+record its accession/release, exact URI, checksum, and measurement conventions.
+Validate the completed local file before opening it. A URL and valid HDF5 header
+alone do not establish biological identity or count semantics. No particular
+remote dataset, credentials, or provider was exercised for this refresh.
 
 ## Performance Tips
 
 ### Reading
 - Use `backed='r'` for large files you only need to query
-- Use `backed='r+'` only for `X` updates; write a new file for metadata changes
-- H5AD format is generally fastest for random access
+- Use `backed='r+'` only for dense `X` updates; write a new file for sparse/metadata changes
+- Benchmark H5AD and Zarr for actual density, layout, compression, and access pattern
 - Zarr is better for cloud storage and parallel access
 - Consider compression for storage, but note it may slow down reading
 
@@ -458,9 +468,30 @@ adata.write_h5ad('compressed.h5ad', compression='gzip')
 ```
 
 ### Issue: Cannot modify backed metadata
-**Solution**: Load to memory and write a new file. Backed mode only persists updates to `X`.
+**Solution**: Materialize a manageable subset and write a new file. Backed mode does not automatically save metadata; sparse X item updates are unsupported in 0.13.
 ```python
-adata = adata.to_memory()
+source = adata
+try:
+    adata = source.to_memory()
+finally:
+    source.file.close()
 adata.obs['new_column'] = values
 adata.write_h5ad('updated_file.h5ad')
 ```
+
+## Store lifetime and verification
+
+Keep a backed HDF5 object's file open until all views/chunks have been materialized;
+close it in `finally`. `read_lazy` over HDF5 has the same lifetime requirement.
+For every output, reopen it and compare shape, index order, selected values,
+categoricals, named layers, raw feature names, and relevant `uns` provenance.
+Native formats use versioned AnnData encodings; a root-level arbitrary dataset
+is not a named layer.
+
+Sources: [I/O API](https://anndata.readthedocs.io/en/stable/api.html),
+[read_h5ad](https://anndata.readthedocs.io/en/stable/generated/anndata.io.read_h5ad.html),
+[read_mtx](https://anndata.readthedocs.io/en/stable/generated/anndata.io.read_mtx.html),
+[read_lazy](https://anndata.readthedocs.io/en/stable/generated/anndata.experimental.read_lazy.html),
+[write_csvs](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.write_csvs.html),
+[on-disk specification](https://anndata.readthedocs.io/en/stable/fileformat-prose.html),
+and installed AnnData 0.13.4 I/O source.

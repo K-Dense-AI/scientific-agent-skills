@@ -7,18 +7,28 @@
 
 \documentclass[final,t]{beamer}
 \usepackage[size=a0,scale=1.4,orientation=portrait]{beamerposter}
-\usetheme{Berlin}
+\usetheme{default}
 \usecolortheme{beaver}
 
 % Remove default margins for full page coverage
 \setbeamersize{text margin left=5mm, text margin right=5mm}
-\usepackage[margin=10mm]{geometry}
+% Beamer already loads geometry; avoid a package option clash.
+\geometry{margin=10mm}
 
 % Remove navigation symbols
 \setbeamertemplate{navigation symbols}{}
 
 % Packages
 \usepackage{graphicx}
+
+% Missing figures deliberately render as visible draft placeholders.
+% Replace every placeholder and resolve these warnings before delivery.
+\newcommand{\posterfigure}[2]{%
+  \IfFileExists{#2}{\includegraphics[width=#1]{#2}}{%
+    \PackageWarningNoLine{poster}{Draft placeholder: #2}%
+    \fbox{\parbox[c][4cm][c]{\dimexpr#1-2\fboxsep-2\fboxrule\relax}{%
+      \centering\small DRAFT FIGURE\\\texttt{\detokenize{#2}}}}}}
+
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{multicol}
@@ -26,11 +36,11 @@
 \usepackage{hyperref}
 
 % Font configuration
-\setbeamerfont{title}{size=\VeryHuge,series=\bfseries}
+\setbeamerfont{title}{size=\fontsize{72}{82}\selectfont,series=\bfseries}
 \setbeamerfont{author}{size=\Large}
 \setbeamerfont{institute}{size=\normalsize}
-\setbeamerfont{block title}{size=\huge,series=\bfseries}
-\setbeamerfont{block body}{size=\LARGE}
+\setbeamerfont{block title}{size=\fontsize{40}{46}\selectfont,series=\bfseries}
+\setbeamerfont{block body}{size=\fontsize{28}{34}\selectfont}
 
 % Custom colors (customize to match your institution)
 \definecolor{primarycolor}{RGB}{0,51,102}      % Dark blue
@@ -60,22 +70,22 @@
   % HEADER
   % ============================================================================
   \begin{block}{}
-    \begin{columns}[T]
-      \begin{column}{.15\linewidth}
+    \begin{columns}[T,onlytextwidth]
+      \begin{column}{.12\linewidth}
         % Left logo
-        \includegraphics[width=0.9\linewidth]{logo1.pdf}
+        \IfFileExists{logo1.pdf}{\includegraphics[width=0.9\linewidth]{logo1.pdf}}{\fbox{Logo}}
       \end{column}
       
-      \begin{column}{.7\linewidth}
+      \begin{column}{.72\linewidth}
         \centering
         \usebeamerfont{title}\inserttitle\\[0.5cm]
         \usebeamerfont{author}\insertauthor\\[0.3cm]
         \usebeamerfont{institute}\insertinstitute
       \end{column}
       
-      \begin{column}{.15\linewidth}
+      \begin{column}{.12\linewidth}
         % Right logo
-        \includegraphics[width=0.9\linewidth]{logo2.pdf}
+        \IfFileExists{logo2.pdf}{\includegraphics[width=0.9\linewidth]{logo2.pdf}}{\fbox{Logo}}
       \end{column}
     \end{columns}
   \end{block}
@@ -86,7 +96,7 @@
   % MAIN CONTENT - 3 COLUMN LAYOUT
   % ============================================================================
   
-  \begin{columns}[t]
+  \begin{columns}[t,onlytextwidth]
     
     % ==========================================================================
     % LEFT COLUMN
@@ -128,7 +138,7 @@
         
         % Optional: Methods flowchart
         \begin{center}
-          \includegraphics[width=0.9\linewidth]{methods_flowchart.pdf}
+          \posterfigure{0.9\linewidth}{methods_flowchart.pdf}
         \end{center}
       \end{block}
       
@@ -143,7 +153,7 @@
         \textbf{Finding 1:} Brief description
         
         \begin{center}
-          \includegraphics[width=0.95\linewidth]{figure1.pdf}
+          \posterfigure{0.95\linewidth}{figure1.pdf}
           \small Figure 1: Descriptive caption with key statistics (n=X, p<0.01).
         \end{center}
         
@@ -152,7 +162,7 @@
         \textbf{Finding 2:} Brief description
         
         \begin{center}
-          \includegraphics[width=0.95\linewidth]{figure2.pdf}
+          \posterfigure{0.95\linewidth}{figure2.pdf}
           \small Figure 2: Another key result showing comparison or trend.
         \end{center}
       \end{block}
@@ -168,7 +178,7 @@
         \textbf{Finding 3:} Brief description
         
         \begin{center}
-          \includegraphics[width=0.95\linewidth]{figure3.pdf}
+          \posterfigure{0.95\linewidth}{figure3.pdf}
           \small Figure 3: Additional important result or validation.
         \end{center}
       \end{block}
@@ -212,7 +222,7 @@
   
   \begin{block}{}
     \footnotesize
-    \begin{columns}[T]
+    \begin{columns}[T,onlytextwidth]
       \begin{column}{.75\linewidth}
         \textbf{References}
         \begin{enumerate}
@@ -232,7 +242,7 @@
       
       \begin{column}{.2\linewidth}
         \centering
-        \qrcode[height=3.5cm]{https://doi.org/10.1234/your-paper}\\
+        \qrcode[height=3.5cm]{https://example.org/replace-with-paper}\\
         \tiny Scan for full paper
       \end{column}
     \end{columns}

@@ -1,14 +1,17 @@
 # Vectorized Environments in Stable Baselines3
 
-This document provides comprehensive information about vectorized environments in Stable Baselines3 for efficient parallel training.
+Targets SB3 2.9.0 / Gymnasium 1.3.0. Code snippets are illustrative fragments
+sharing imports and environment/model variables; run process-based examples in
+a Python file under a main guard. The bundled training script and repository
+tests exercise DummyVecEnv and SubprocVecEnv with small CPU environments.
 
 ## Overview
 
 Vectorized environments stack multiple independent environment instances into a single environment that processes actions and observations in batches. Instead of interacting with one environment at a time, you interact with `n` environments simultaneously.
 
 **Benefits:**
-- **Speed:** Parallel execution significantly accelerates training
-- **Sample efficiency:** Collect more diverse experiences faster
+- **Speed:** Process parallelism can help expensive environments; measure IPC overhead
+- **Batching:** Collect transitions from independent environments; this does not guarantee better sample efficiency
 - **Required for:** Frame stacking and normalization wrappers
 - **Better for:** On-policy algorithms (PPO, A2C)
 
@@ -19,6 +22,7 @@ Vectorized environments stack multiple independent environment instances into a 
 Executes environments sequentially on the current Python process.
 
 ```python
+import gymnasium as gym
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 # Method 1: Using make_vec_env
@@ -95,13 +99,14 @@ env = make_vec_env(
 env = make_vec_env("CartPole-v1", n_envs=4, seed=42)
 ```
 
-## API Differences from Standard Gym
+## API Differences from Gymnasium
 
-Vectorized environments have a different API than standard Gym environments:
+SB3 VecEnv is not Gymnasium VectorEnv. Do not pass a Gymnasium vector environment
+directly to an SB3 algorithm or reuse its autoreset/info conventions:
 
 ### reset()
 
-**Standard Gym:**
+**Gymnasium Env:**
 ```python
 obs, info = env.reset()
 ```
@@ -115,11 +120,14 @@ infos = env.reset_infos
 
 **Seeding and options:** Call `vec_env.seed(seed=seed)` and/or `vec_env.set_options(options)` before the initial `reset()`. Seed and options are discarded after each `reset()` call.
 
-**Truncation vs termination:** When an episode ends, check `infos[env_idx]["TimeLimit.truncated"]` to distinguish timeout/truncation from natural termination. Bootstrap value targets when `TimeLimit.truncated` is True or when the episode has not ended.
+**Truncation vs termination:** When an episode ends, check `infos[env_idx]["TimeLimit.truncated"]` to distinguish timeout/truncation from natural termination. It is computed as `truncated and not terminated`, so simultaneous flags count as
+termination for bootstrapping. Bootstrap through pure truncation using the
+`terminal_observation`, not the auto-reset observation; do not bootstrap through
+termination. SB3 algorithms implement this handling internally.
 
 ### step()
 
-**Standard Gym:**
+**Gymnasium Env:**
 ```python
 obs, reward, terminated, truncated, info = env.step(action)
 ```
@@ -137,9 +145,11 @@ obs, rewards, dones, infos = env.step(actions)
 **VecEnv automatically resets environments when episodes end:**
 
 ```python
+import numpy as np
+
 obs = env.reset()  # Shape: (n_envs, obs_dim)
 for _ in range(1000):
-    actions = env.action_space.sample()  # Shape: (n_envs,)
+    actions = np.array([env.action_space.sample() for _ in range(env.num_envs)])
     obs, rewards, dones, infos = env.step(actions)
     # If dones[i] is True, env i was automatically reset
     # Final observation before reset available in infos[i]["terminal_observation"]
@@ -183,7 +193,8 @@ model.learn(total_timesteps=100000)
 # - Updates after every 1024 steps
 ```
 
-**Rule of thumb:** Use 4-16 parallel environments for on-policy methods.
+Benchmark environment count and keep `n_steps * n_envs` and PPO minibatch
+divisibility explicit; changing rollout size also changes optimization.
 
 ### Off-Policy Algorithms (SAC, TD3, DQN)
 
@@ -207,7 +218,9 @@ model = SAC(
 model.learn(total_timesteps=50000)
 ```
 
-**Rule of thumb:** Use 1-4 parallel environments for off-policy methods.
+Use step-based `train_freq` with multiple environments; episode-based collection
+is restricted to a single environment. `gradient_steps=-1` matches updates to
+collected transitions after warmup; it is a compute/learning tradeoff.
 
 ## Wrappers for Vectorized Environments
 
@@ -263,12 +276,21 @@ Stacks observations from multiple consecutive frames.
 ```python
 from stable_baselines3.common.vec_env import VecFrameStack
 
-env = make_vec_env("PongNoFrameskip-v4", n_envs=8)
+import ale_py
+import gymnasium as gym
+from stable_baselines3.common.env_util import make_atari_env
+gym.register_envs(ale_py)
+
+# ALE repeats once; SB3 AtariWrapper performs the four-frame skip.
+env = make_atari_env("ALE/Pong-v5", n_envs=8,
+                     env_kwargs={"frameskip": 1},
+                     wrapper_kwargs={"frame_skip": 4})
 
 # Stack 4 frames
 env = VecFrameStack(env, n_stack=4)
 
-# Now observations have shape: (n_envs, n_stack, height, width)
+# AtariWrapper produces HWC grayscale; stacking here gives (n_envs, 84, 84, 4).
+# SB3 wraps HWC for its CNN; VecFrameStack concatenates along the channel axis.
 model = PPO("CnnPolicy", env)
 model.learn(total_timesteps=1000000)
 ```
@@ -285,8 +307,10 @@ Records videos of agent behavior.
 ```python
 from stable_baselines3.common.vec_env import VecVideoRecorder
 
-env = make_vec_env("CartPole-v1", n_envs=1)
+env = make_vec_env("CartPole-v1", n_envs=1,
+                   env_kwargs={"render_mode": "rgb_array"})
 
+# Requires moviepy, FFmpeg, and pygame-ce for CartPole.
 # Record videos
 env = VecVideoRecorder(
     env,
@@ -300,7 +324,9 @@ model = PPO("MlpPolicy", env)
 model.learn(total_timesteps=10000)
 ```
 
-**Output:** MP4 videos in `./videos/` directory.
+**Output:** MP4 clips in `./videos/`; close the outer wrapper to flush the last
+clip. Frames accumulate in memory, so keep `video_length` bounded. A periodic
+trigger records clips at vector-step intervals, not one video per episode.
 
 ### VecCheckNan
 
@@ -330,7 +356,10 @@ Transposes image observations from (height, width, channels) to (channels, heigh
 ```python
 from stable_baselines3.common.vec_env import VecTransposeImage
 
-env = make_vec_env("PongNoFrameskip-v4", n_envs=4)
+import ale_py
+import gymnasium as gym
+gym.register_envs(ale_py)
+env = make_vec_env("ALE/Pong-v5", n_envs=4)
 
 # Convert HWC to CHW format
 env = VecTransposeImage(env)
@@ -380,11 +409,11 @@ levels = env.get_attr("current_level")
 ### Setting Attributes
 
 ```python
-# Set attribute on all environments
-env.set_attr("difficulty", "hard")
+# Prefer an explicit underlying-env setter, applying changes at reset.
+env.env_method("set_difficulty", "hard")
 
-# Set attribute on specific environments
-env.set_attr("max_steps", 1000, indices=[1, 3])
+# For existing wrapped attributes, Gymnasium searches the wrapper chain:
+env.env_method("set_wrapper_attr", "max_steps", 1000, indices=[1, 3])
 ```
 
 ### Checking Attributes
@@ -427,7 +456,7 @@ model = SAC("MlpPolicy", env, gradient_steps=-1)  # 1 grad step per env step
 import multiprocessing
 
 # Use one less than total cores (leave one for Python main process)
-n_cpus = multiprocessing.cpu_count() - 1
+n_cpus = max(multiprocessing.cpu_count() - 1, 1)
 env = make_vec_env("MyEnv-v0", n_envs=n_cpus, vec_env_cls=SubprocVecEnv)
 ```
 
@@ -447,23 +476,26 @@ model = SAC(
 
 ### Issue: "Can't pickle local object"
 
-**Cause:** SubprocVecEnv requires picklable environments.
-
-**Solution:** Define environment creation outside class/function:
+**Cause:** A captured environment resource may not serialize, or spawned workers
+cannot safely import the entry module. SubprocVecEnv uses cloudpickle for factories,
+so nested factories and lambdas are supported; they are not inherently the error.
+Create native handles inside each worker rather than capturing an already-open
+simulator. Each factory must return a distinct environment. Use a main guard.
+The released source selects forkserver when available, otherwise spawn.
 
 ```python
-# Bad
-def train():
-    def make_env():
-        return gym.make("CartPole-v1")
-    env = SubprocVecEnv([make_env for _ in range(4)])
+import gymnasium as gym
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
-# Good
 def make_env():
     return gym.make("CartPole-v1")
 
 if __name__ == "__main__":
     env = SubprocVecEnv([make_env for _ in range(4)])
+    try:
+        obs = env.reset()
+    finally:
+        env.close()
 ```
 
 ### Issue: Different behavior between single and vectorized env
@@ -507,7 +539,7 @@ env = make_vec_env("CartPole-v1", n_envs=8, vec_env_cls=DummyVecEnv)
    - SubprocVecEnv: Complex environments (MuJoCo, Unity, 3D games)
 
 2. **Adjust hyperparameters for vectorization:**
-   - Divide `eval_freq`, `save_freq` by `n_envs` in callbacks
+   - Use `max(freq // n_envs, 1)` for EvalCallback/CheckpointCallback call frequencies
    - Maintain same `n_steps * n_envs` for on-policy algorithms
 
 3. **Save normalization statistics:**
@@ -575,6 +607,12 @@ model = PPO.load("model", env=eval_env)
 
 ## Additional Resources
 
-- Official SB3 VecEnv Guide: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html
-- VecEnv API Reference: https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#module-stable_baselines3.common.vec_env
+- Official SB3 VecEnv Guide: https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/vec_envs.html
+- VecEnv API Reference: https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/vec_envs.html#module-stable_baselines3.common.vec_env
 - Multiprocessing Best Practices: https://docs.python.org/3/library/multiprocessing.html
+
+Atari fragments are source-verified, not executed in this refresh. Install ALE
+and its supported ROM setup; keep action repeat, sticky actions, life-loss
+termination and reward clipping explicit. Use a separate evaluation environment
+with raw reward reporting and full-game episode semantics when comparing scores.
+[SB3 AtariWrapper source](https://github.com/DLR-RM/stable-baselines3/blob/v2.9.0/stable_baselines3/common/atari_wrappers.py).

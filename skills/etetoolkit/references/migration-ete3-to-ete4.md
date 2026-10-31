@@ -258,12 +258,9 @@ ETE 4 adds a direct midpoint convenience:
 tree.set_midpoint_outgroup()
 ```
 
-The older two-step pattern remains valid:
-
-```python
-midpoint = tree.get_midpoint_outgroup()
-tree.set_outgroup(midpoint)
-```
+`get_midpoint_outgroup()` identifies the edge containing the midpoint, but
+`set_outgroup()` defaults to a different cut position on that edge. Use
+`set_midpoint_outgroup()` when exact placement is required.
 
 ETE 4.4.0 adds `distance_matrix()`, which supersedes
 `cophenetic_matrix()` for new code.

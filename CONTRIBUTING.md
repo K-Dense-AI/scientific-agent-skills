@@ -313,7 +313,7 @@ CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ("doe_designs.py",))
 ```
 
-`skill_contract.office` and `skill_contract.schematic` cover files that several skills ship byte-identical copies of — the OOXML `office/` tree under `docx`/`pptx`/`xlsx`, and the AI schematic generator under five skills. Instantiate them against your skill root rather than writing the tests again; `tests/_meta` separately fails if the copies drift apart, so those files have to be changed together.
+`skill_contract.schematic` covers the AI schematic generator that several skills ship byte-identical copies of. Instantiate it against your skill root rather than writing the tests again; `tests/_meta` separately fails if the copies drift apart, so those files have to be changed together.
 
 Guard heavy imports at module scope so a suite degrades to skips rather than a collection error when a package is missing:
 
@@ -323,7 +323,7 @@ np = pytest.importorskip("numpy", reason="skill-name needs numpy")
 
 ### One environment per skill
 
-Four suites fail on this repository's default environment because their scientific dependencies are not installed (`exa-search`, `qutip`, `scikit-survival`, `simpy`), and installing them all into one environment is not possible: the skills' upstream pins contradict each other. `opentrons` requires `numpy<2`; `esm` caps `transformers` below the release the `transformers` skill targets; `geniml` and `spikeinterface` pin `zarr<3` while the `zarr-python` skill targets 3.x; `bioservices` caps `lxml<6` while `matchms` requires 6.0.2+; and `pytdc`, `molfeat`, `deepchem`, `histolab`, `vaex`, and `ete3` each need an interpreter older than 3.13.
+Scientific dependencies are deliberately absent from the repository's default environment, and installing them all into one environment is not possible: the skills' upstream pins contradict each other. `opentrons` requires `numpy<2`; `esm` caps `transformers` below the release the `transformers` skill targets; `geniml` and `spikeinterface` pin `zarr<3` while the `zarr-python` skill targets 3.x; `bioservices` caps `lxml<6` while `matchms` requires 6.0.2+; and `pytdc`, `deepchem`, `histolab`, `vaex`, and `ete3` each need an interpreter older than 3.13.
 
 `--isolated` therefore gives each skill its own throwaway `uv` environment, built from [`tests/skill-requirements.toml`](tests/skill-requirements.toml):
 
@@ -333,6 +333,8 @@ python tests/run_all.py --isolated qutip exa-search   # just these
 ```
 
 Nothing is installed into the project environment, so `uv sync` is unaffected. Each `[skills.<name>]` entry lists the packages that skill documents and, where needed, a `python` version for that skill alone — uv downloads the interpreter on demand. Packages that cannot be installed at all (a GitHub-only SDK, a conda-forge-only library, a CUDA build) are listed under `[unavailable]` with the reason, and the runner prints them so the gap appears in the test output.
+
+An entry may also set `uv_config = "tests/<name>/uv.toml"` for extra isolated-build dependencies. The runner applies the file only to that skill's uv process, and `tests/_meta` checks that it is valid TOML inside the skill's test directory. System compilers and native libraries remain separate prerequisites.
 
 A new skill that ships `scripts/` needs a `[skills.<name>]` entry — `tests/_meta` fails without one. Use `packages = []` when its bundled tooling is standard-library only — the skill still gets a clean environment with just pytest. uv caches wheels globally, so repeat runs create each environment in milliseconds.
 

@@ -16,9 +16,9 @@ train/val split that is reproducible because it is seeded. One short CPU fit
 then proves the pieces compose -- in particular that the metric the scheduler
 monitors is one the module actually logs, which Lightning enforces at runtime.
 
-Anything needing a GPU skips: `build_or_skip` accepts a hardware complaint but
-fails on a configuration error, so the checkpoint regression stays guarded even
-on a CPU-only machine.
+CUDA-only builders skip when CUDA hardware is absent. The companion contract
+suite runs the production callback configuration on CPU with explicit overrides;
+GPU/FSDP/DeepSpeed execution remains unvalidated here.
 """
 
 from __future__ import annotations
@@ -66,25 +66,10 @@ CUDA_DEVICES = CUDAAccelerator.auto_device_count() if CUDAAccelerator.is_availab
 
 
 def build_or_skip(test: unittest.TestCase, builder, *args, **kwargs):
-    """Build a trainer, skipping when the machine lacks the hardware it wants.
-
-    A missing accelerator is a fact about the runner. An invalid callback
-    configuration is a bug in the template, so it must still fail.
-    """
-    try:
-        return builder(*args, **kwargs)
-    except Exception as error:  # noqa: BLE001 - the message is the assertion
-        message = str(error)
-        for configuration_bug in ("top_k to track", "not a valid configuration"):
-            test.assertNotIn(
-                configuration_bug,
-                message,
-                f"{builder.__name__} is misconfigured, not hardware-limited",
-            )
-        test.skipTest(
-            f"{builder.__name__} needs unavailable hardware "
-            f"({type(error).__name__}: {message.splitlines()[0][:120]})"
-        )
+    """Only unavailable CUDA hardware skips; construction errors must fail."""
+    if not CUDA_DEVICES:
+        test.skipTest("CUDA hardware unavailable")
+    return builder(*args, **kwargs)
 
 
 class ModuleArchitectureTests(unittest.TestCase):
@@ -179,7 +164,7 @@ class OptimiserConfigurationTests(unittest.TestCase):
 
 
 class DataModuleTests(unittest.TestCase):
-    """The placeholder dataset is 1000 x 3 x 224 x 224, so build it once."""
+    """The synthetic vectors match the model and use isolated evaluation views."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -210,12 +195,12 @@ class DataModuleTests(unittest.TestCase):
             set(other.train_dataset.indices) & set(other.val_dataset.indices), set()
         )
 
-    def test_the_training_loader_shuffles_and_drops_the_short_batch(self) -> None:
+    def test_the_training_loader_shuffles_and_keeps_the_short_batch(self) -> None:
         loader = self.datamodule.train_dataloader()
-        self.assertTrue(loader.drop_last)
+        self.assertFalse(loader.drop_last)
         self.assertIsInstance(loader.sampler, torch.utils.data.RandomSampler)
-        # 750 // 8 = 93 full batches; the remaining 6 samples are dropped.
-        self.assertEqual(len(loader), 93)
+        # Keep the final six examples.
+        self.assertEqual(len(loader), 94)
 
     def test_the_validation_loader_keeps_order_and_every_sample(self) -> None:
         loader = self.datamodule.val_dataloader()
@@ -226,7 +211,7 @@ class DataModuleTests(unittest.TestCase):
 
     def test_a_batch_has_the_declared_shape_and_dtypes(self) -> None:
         samples, labels = next(iter(self.datamodule.train_dataloader()))
-        self.assertEqual(tuple(samples.shape), (8, 3, 224, 224))
+        self.assertEqual(tuple(samples.shape), (8, 784))
         self.assertEqual(tuple(labels.shape), (8,))
         self.assertEqual(samples.dtype, torch.float32)
         self.assertEqual(labels.dtype, torch.int64)
@@ -253,10 +238,10 @@ class DataModuleTests(unittest.TestCase):
 
     def test_the_checkpointed_state_round_trips(self) -> None:
         datamodule = template_datamodule.TemplateDataModule(train_val_split=0.8)
-        self.assertEqual(datamodule.state_dict(), {"train_val_split": 0.8})
+        self.assertEqual(datamodule.state_dict(), {"train_val_split": 0.8, "seed": 42, "num_samples": 1000})
         datamodule.load_state_dict({"train_val_split": 0.5})
         self.assertEqual(datamodule.hparams.train_val_split, 0.5)
-        self.assertEqual(datamodule.state_dict(), {"train_val_split": 0.5})
+        self.assertEqual(datamodule.state_dict(), {"train_val_split": 0.5, "seed": 42, "num_samples": 1000})
 
     def test_teardown_releases_only_the_stage_it_was_given(self) -> None:
         datamodule = template_datamodule.TemplateDataModule(num_workers=0)
@@ -315,7 +300,7 @@ class TrainerConfigurationTests(unittest.TestCase):
             {ModelCheckpoint, EarlyStopping, LearningRateMonitor}, kinds
         )
         checkpointer = trainer.checkpoint_callbacks[0]
-        self.assertEqual(checkpointer.monitor, "val_loss")
+        self.assertEqual(checkpointer.monitor, "val/loss")
         self.assertEqual(checkpointer.save_top_k, 3)
 
     def test_the_time_limited_trainer_is_a_valid_checkpoint_configuration(self) -> None:
@@ -355,7 +340,7 @@ class TrainerConfigurationTests(unittest.TestCase):
         self.assertEqual(trainer.accumulate_grad_batches, 4)
 
     def test_the_deepspeed_trainer_selects_the_requested_stage(self) -> None:
-        pytest.importorskip("deepspeed", reason="deepspeed is not installable here")
+        pytest.importorskip("deepspeed", reason="optional DeepSpeed is not installed")
         if CUDA_DEVICES < 8:
             self.skipTest("DeepSpeed stage 3 needs 8 CUDA devices")
         trainer = quick_trainer_setup.deepspeed_trainer(stage=3)
@@ -374,6 +359,7 @@ class TrainingLoopTests(unittest.TestCase):
         cls.module = template_lightning_module.TemplateLightningModule(
             learning_rate=0.01, hidden_dim=16, dropout=0.0
         )
+        cls.before_weights = {name: value.detach().clone() for name, value in cls.module.named_parameters()}
         cls._directory = tempfile.TemporaryDirectory()
         cls.trainer = L.Trainer(
             max_epochs=1,
@@ -427,16 +413,10 @@ class TrainingLoopTests(unittest.TestCase):
 
     def test_training_moved_the_weights(self) -> None:
         # A fit that leaves every parameter untouched has not trained.
-        fresh = template_lightning_module.TemplateLightningModule(
-            learning_rate=0.01, hidden_dim=16, dropout=0.0
-        )
         trained = dict(self.module.named_parameters())
-        self.assertTrue(
-            any(
-                not torch.allclose(value, trained[name])
-                for name, value in fresh.named_parameters()
-            )
-        )
+        self.assertTrue(any(not torch.allclose(value, trained[name])
+                            for name, value in self.before_weights.items()))
+
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Developing nf-core Pipelines, Modules & Subworkflows
 
-Conventions for building nf-core-compliant components. Sources: https://nf-co.re/docs/developing/ (guides) and https://nf-co.re/docs/specifications/ (the normative MUST/SHOULD spec).
+Conventions for building nf-core-compliant components. Reviewed against nf-core tools 4.1.0 templates and current [module specifications](https://nf-co.re/docs/specifications/components/modules/general). The small teaching wrapper was checked locally with SAMtools 1.24; container/Conda execution and full biological pipelines were not tested.
 
 ## Table of Contents
 
@@ -54,8 +54,8 @@ nf-core carries a **metadata map** alongside every sample's files in input/outpu
 [ [ id:'sample1', single_end:false ], [ sample1_R1.fastq.gz, sample1_R2.fastq.gz ] ]
 ```
 
-- **Only two keys are standard**: `meta.id` (unique sample identifier) and `meta.single_end` (paired vs single reads). No new standard keys are being defined — this is deliberate, to keep modules flexible.
-- Inside a **module**, reference only `meta.id`/`meta.single_end` (for `tag`/`prefix`). A module MUST NOT hardcode custom meta keys; pass per-sample values in via `ext.args` from `conf/modules.config` instead (e.g. `ext.args = { "--strandedness ${meta.strandedness}" }`).
+- **Prefer `meta.id` and `meta.single_end`**. Current specifications also recognize `meta.strandedness`, but new modules SHOULD pass strandedness through `ext.args`; direct use is reserved for siblings of tools already following that convention.
+- Inside a **module**, avoid custom hardcoded meta keys (the documented strandedness exception above is narrow); pass per-sample values in via `ext.args` from `conf/modules.config` instead (e.g. `ext.args = { "--strandedness ${meta.strandedness}" }`).
 - The first meta in a tuple is named `meta`, the second `meta2`, etc. — not custom names.
 - Outputs re-emit the **same `meta`** so downstream steps stay aligned: `tuple val(meta), path("*.bam")`.
 - Build it from the samplesheet with `splitCsv` + `map` (see `references/language.md`). **Subworkflows** may create/emit new meta keys (document them in `meta.yml`).
@@ -83,27 +83,29 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - bioconda::samtools=1.19.2
+  - bioconda::samtools=1.24
 ```
 
-Annotated `main.nf`:
+The following **BAM-only teaching wrapper** uses the current topic-version convention; it is not a copy of the installed nf-core `samtools/sort` module. The current upstream module takes three inputs (BAM tuple, reference tuple, index format). Inspect the installed `meta.yml` and pin its SHA before wiring modules together. Keep existing tool pins unless intentionally upgrading.
 
 ```nextflow
 process SAMTOOLS_SORT {
-    tag "$meta.id"                        // per-sample label (only meta.id / meta.single_end allowed here)
+    tag "$meta.id"                        // per-sample label
     label 'process_medium'                // exactly ONE bundled resource label (conf/base.config)
 
     conda "${moduleDir}/environment.yml"  // references the file above (NOT inline package strings)
     container "${ workflow.containerEngine in ['singularity', 'apptainer'] && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/samtools:1.19.2--h50ea8bc_0' :
-        'quay.io/biocontainers/samtools:1.19.2--h50ea8bc_0' }"
+        'https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/e9/e994bf4eb3731150511a14f5706b7bdfd64df1b6d40898fff334286c027e0859/data' :
+        'community.wave.seqera.io/library/htslib_samtools:1.24--d697cfb9dce007cd' }"
 
     input:
     tuple val(meta), path(bam)            // meta map is ALWAYS the first tuple element
 
     output:
     tuple val(meta), path("*.bam"), emit: bam
-    path "versions.yml",            emit: versions   // version reporting (see note below)
+    tuple val("${task.process}"), val("samtools"),
+          eval('samtools --version | sed "1!d; s/samtools //"'),
+          emit: versions_samtools, topic: versions
 
     when:
     task.ext.when == null || task.ext.when           // frozen line; gate via ext.when in config
@@ -114,26 +116,18 @@ process SAMTOOLS_SORT {
     """
     samtools sort $args -@ $task.cpus -o ${prefix}.bam $bam
 
-    cat <<-END_VERSIONS > versions.yml
-    "${task.process}":
-        samtools: \$(samtools --version | sed '1!d; s/samtools //')
-    END_VERSIONS
     """
 
-    stub:                                            // required: every output channel gets ≥1 file
+    stub:                                            // required: each required file output is created
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
     touch ${prefix}.bam
-    cat <<-END_VERSIONS > versions.yml
-    "${task.process}":
-        samtools: \$(samtools --version | sed '1!d; s/samtools //')
-    END_VERSIONS
     """
 }
 ```
 
 Key module rules:
-- **Both** `conda "${moduleDir}/environment.yml"` and `container` are declared (works under any engine). Containers are Biocontainers (`quay.io/biocontainers/...`) / Galaxy depot (`https://depot.galaxyproject.org/singularity/...`) images pinned by version+build.
+- **Both** `conda "${moduleDir}/environment.yml"` and `container` are declared for supported runtime profiles; this does not prove every image/architecture/engine combination works. Use the pinned image supplied by the reviewed module: current components may use Seqera Community/Wave images, while older ones use BioContainers/Galaxy depot. Preserve image digest/build and target architecture.
 - Tool arguments are **not** hardcoded — they come from `task.ext.args` (and `args2`, `args3`, … for piped tools). The output filename prefix comes from `task.ext.prefix`; output names SHOULD be `${prefix}` + suffix.
 - The `when:` line is boilerplate — never edit it; gate execution via `ext.when` in config.
 - Always include a `stub:` block (touch ≥1 file per output channel; for gzip outputs use `echo '' | gzip > x.gz`, not bare `touch`).
@@ -141,9 +135,9 @@ Key module rules:
 
 ### Reporting tool versions (current vs legacy)
 
-Two patterns exist — know both:
-- **`versions.yml`** (shown above): a HEREDOC writes a YAML file emitted as `path "versions.yml", emit: versions`. This is what **most installed modules** use today and is the clearest to read.
-- **Topic channels + `eval()`** (what `nf-core modules create` now generates): the tool version is captured declaratively and routed to a `versions` topic, removing the HEREDOC:
+Current module specifications and tools 4.1.0 templates recommend **topic channels + `eval()`**, as shown above. The command executes in the task environment, including stub runs, so the version executable is still required. Template-based scripts may retain a HEREDOC `versions.yml`, but current specifications require `topic: versions` on that output. Older installed modules may expose only `out.versions`; preserve their interface until a tested coordinated migration.
+
+The topic form emits a tuple, not a YAML file:
 
 ```nextflow
 output:
@@ -152,7 +146,7 @@ tuple val("${task.process}"), val('samtools'),
       topic: versions, emit: versions_samtools
 ```
 
-Either way, the version string MUST start with a digit (strip a leading `v`). Subworkflows/pipelines aggregate versions (mix the `versions` channels or consume the topic) and feed MultiQC.
+The version string must start with a digit (strip a leading `v`). The pipeline gathers `channel.topic("versions")` and formats the records for its report. Do not wire a topic-consuming process back into the same topic. Inspect the installed interface: `out.versions_samtools` is not interchangeable with a legacy `out.versions` file.
 
 ## meta.yml
 
@@ -171,6 +165,7 @@ tools:
       homepage: http://www.htslib.org/
       licence: ["MIT"]
       identifier: biotools:samtools
+      args_id: "$args"
 input:
   - - meta:
         type: map
@@ -190,12 +185,27 @@ output:
           description: Sorted BAM file
           pattern: "*.bam"
           ontologies: []
+  versions_samtools:
+    - - "${task.process}":
+          type: string
+          description: Process name
+      - samtools:
+          type: string
+          description: Tool name
+      - 'samtools --version | sed "1!d; s/samtools //"':
+          type: eval
+          description: Tool version command
+topics:
   versions:
-    - "versions.yml":
-        type: file
-        description: File containing software versions
-        pattern: "versions.yml"
-        ontologies: []
+    - - "${task.process}":
+          type: string
+          description: Process name
+      - samtools:
+          type: string
+          description: Tool name
+      - 'samtools --version | sed "1!d; s/samtools //"':
+          type: eval
+          description: Tool version command
 authors:
   - "@author"
 maintainers:
@@ -210,8 +220,8 @@ Per-process configuration (tool flags, output paths, naming) is injected from `c
 // conf/modules.config
 process {
     withName: 'SAMTOOLS_SORT' {
-        // use a closure so it is evaluated lazily and can read params/meta; .minus("").join(' ') drops empties
-        ext.args   = { [ '-l 9', params.fast ? '-@ 8' : '' ].minus("").join(' ') }
+        // evaluate parameter-dependent arguments lazily; threads still come from task.cpus
+        ext.args   = { [ params.fast ? '-l 1' : '-l 9' ].join(' ') }
         ext.prefix = { "${meta.id}.sorted" }         // closures can read meta
         publishDir = [
             path: { "${params.outdir}/samtools" },
@@ -223,11 +233,11 @@ process {
 }
 ```
 
-Permitted `ext` keys: `ext.args`/`args2`/`args3`/`argsN` (numbered by tool order in a piped script), `ext.prefix`/`prefix2`, `ext.when`, `ext.use_gpu`, `ext.singularity_pull_docker_container`. Rule of thumb: optional flags → `ext.args`; but any value whose change could break results MUST be a real `input:` channel (documented in `meta.yml`), not an `ext` key. This separation (logic in the module, config in `modules.config`) is what makes nf-core modules reusable across pipelines.
+Permitted `ext` keys: `ext.args`/`args2`/`args3`/`argsN` (numbered by tool order in a piped script), `ext.prefix`/`prefix2`, `ext.when`, `ext.use_gpu`, `ext.singularity_pull_docker_container`. Rule of thumb: optional flags → `ext.args`; mandatory non-file tool arguments SHOULD be declared inputs; all input files MUST be declared `path` inputs. Optional non-file flags belong in `ext.args`, including scientific parameters; record them in provenance and confirm they affect the task hash. Do not hide a file dependency in an argument string. This separation (logic in the module, config in `modules.config`) is what makes nf-core modules reusable across pipelines.
 
 ## Subworkflows
 
-A subworkflow chains modules into a reusable unit, in `subworkflows/nf-core/<name>/main.nf` with `take`/`main`/`emit` and a `meta.yml`. It MUST contain ≥2 modules and MUST aggregate/emit a `versions` channel. Name it `<file-type>_<operation(s)>_<tool(s)>`, e.g. `bam_sort_stats_samtools`.
+A subworkflow chains modules into a reusable unit, in `subworkflows/nf-core/<name>/main.nf` with `take`/`main`/`emit` and a `meta.yml`. It must contain at least two modules. Tools 4.1.0 subworkflow templates use modules that publish versions to the shared topic and do not emit a redundant `versions` channel. The public subworkflow general specification still describes legacy YAML-channel mixing; preserve that pattern only when the installed modules actually expose it. Name it `<file-type>_<operation(s)>_<tool(s)>`, e.g. `bam_sort_stats_samtools`.
 
 ```nextflow
 include { SAMTOOLS_SORT  } from '../../../modules/nf-core/samtools/sort/main'
@@ -238,22 +248,17 @@ workflow BAM_SORT_SAMTOOLS {
     ch_bam            // channel: [ val(meta), path(bam) ]
 
     main:
-    ch_versions = Channel.empty()
-
-    SAMTOOLS_SORT(ch_bam)
-    ch_versions = ch_versions.mix(SAMTOOLS_SORT.out.versions)
+    SAMTOOLS_SORT(ch_bam, [[:], [], []], '') // BAM input: no FASTA or requested inline index
 
     SAMTOOLS_INDEX(SAMTOOLS_SORT.out.bam)
-    ch_versions = ch_versions.mix(SAMTOOLS_INDEX.out.versions)
 
     emit:
     bam      = SAMTOOLS_SORT.out.bam        // [ val(meta), path(bam) ]
-    bai      = SAMTOOLS_INDEX.out.bai
-    versions = ch_versions                  // collect versions from all modules
+    index    = SAMTOOLS_INDEX.out.index
 }
 ```
 
-Convention: collect each module's `versions` into one channel and `emit` it; document channel shapes in comments and `meta.yml`.
+Document each channel shape in comments and `meta.yml`. For legacy modules, explicitly mix their YAML `out.versions` channels and emit that legacy channel; for current modules, collect the pipeline-level topic. Do not invent missing outputs to satisfy stale examples.
 
 ## Resource labels and base.config
 
@@ -278,7 +283,7 @@ process {
 }
 ```
 
-Attach exactly **one** bundled label (`process_single/low/medium/high`) per module and optionally stack a modifier (`process_long`, `process_high_memory`). Resources auto-scale with `task.attempt` and retry on out-of-resource exit codes. To cap escalation to what the platform allows, set `process.resourceLimits = [ cpus: 16, memory: 128.GB, time: 24.h ]` (the modern replacement for the old `check_max()`/`--max_cpus`/`--max_memory` pattern) in `nextflow.config` or an institutional config.
+Attach exactly **one** bundled label (`process_single/low/medium/high`) per module and optionally stack a modifier (`process_long`, `process_high_memory`). These closures scale on retries; exit codes are only a heuristic, so check scheduler logs and bound retries. To cap escalation to what the platform allows, set `process.resourceLimits = [ cpus: 16, memory: 128.GB, time: 24.h ]` (the modern replacement for the old `check_max()`/`--max_cpus`/`--max_memory` pattern) in `nextflow.config` or an institutional config.
 
 ## Schema and parameters
 
@@ -295,7 +300,7 @@ The samplesheet itself is validated against the pipeline's own
 ## Linting and the Harshil alignment style
 
 - Run `nf-core pipelines lint` (pipelines) and `nf-core modules lint <tool>` / `nf-core subworkflows lint <name>` (components) before every PR; CI enforces them. Lint exceptions live in `.nf-core.yml`.
-- Code must be free of Nextflow syntax warnings: `NXF_SYNTAX_PARSER=v2 nextflow lint modules/nf-core/<tool>` (strict syntax becomes the default in Nextflow 26.04 — see `references/language.md`). Common fixes: always `def` your variables, use explicit closure params (`{ meta, file -> ... }`) not `it`, avoid `for` loops.
+- Code must be free of Nextflow syntax warnings: `NXF_SYNTAX_PARSER=v2 nextflow lint modules/nf-core/<tool>` (strict syntax is the default in Nextflow 26.04 — see `references/language.md`). Common fixes: declare local variables with `def` inside closures/process scripts, use explicit closure params (`{ meta, file -> ... }`) not `it`, avoid `for` loops.
 - Code is formatted with **Prettier** (`prettier -w .`) and follows the **Harshil alignment** style: align assignment `=`, the commas/`emit:`/`optional:` in I/O declarations, and trailing comments into columns for readability. EditorConfig + pre-commit hooks ship in the template; comment `@nf-core-bot fix linting` on a PR to auto-fix.
 - Other expectations: pinned tool versions, `conda`+`container`, a `stub:` block, nf-test tests for every module/subworkflow, and `CHANGELOG.md`/`CITATIONS.md` updates.
 

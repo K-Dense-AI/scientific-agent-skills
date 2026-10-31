@@ -1,6 +1,6 @@
 # General Scientific Formats and EDA Rigor
 
-**Reviewed:** 2026-07-23
+**Reviewed:** 2026-09-30
 **Scope:** Exact capabilities of the bundled scripts plus conservative,
 documented workflows for common tabular and array containers.
 
@@ -10,8 +10,8 @@ documented workflows for common tabular and array containers.
 |---|---|---|
 | `.csv`, `.tsv` | Yes, Python standard library | Bounded UTF-8 rectangular scan; schema, missingness, aggregate statistics, duplicate hashes, group/split leakage, and sensitivity |
 | `.json` | Yes, Python standard library | Bounded strict whole-document parse; structure and type counts only |
-| `.npy` | Optional, `numpy==2.5.1` | Header/shape/dtype plus bounded numeric sample; `allow_pickle=False` |
-| `.npz` | Optional, `numpy==2.5.1` | ZIP member/size/ratio preflight, then bounded per-array inspection; `allow_pickle=False` |
+| `.npy` | Optional, `numpy==2.5.3` | Header/shape/dtype plus bounded numeric sample; `allow_pickle=False` |
+| `.npz` | Optional, `numpy==2.5.3` | ZIP member/size/ratio preflight, then bounded per-array inspection; `allow_pickle=False` |
 | `.h5`, `.hdf5` | Optional, `h5py==3.16.0` | Bounded hierarchy and dataset metadata; payloads, attributes, soft links, external links, and external storage are not read |
 | `.parquet`, `.feather` | No | Reference-only pandas/Polars/Arrow workflow |
 | `.xlsx`, `.xls` | No | Reference-only workbook review; formulas, links, hidden content, and macros require separate handling |
@@ -61,9 +61,9 @@ Delimiter, decimal convention, thousands separators, encodings, comment
 syntax, and missing codes are part of the data dictionary. Do not silently
 guess them.
 
-### pandas 3.0.5 (documented alternate backend)
+### pandas 3.0.6 (documented alternate backend)
 
-PyPI published `pandas==3.0.5` on 2026-07-22; it supersedes the yanked 3.0.4.
+PyPI published `pandas==3.0.6` on 2026-09-17; it is the tested alternate backend.
 When pandas is appropriate, preserve the same outer path/size checks and use
 bounded selections:
 
@@ -85,9 +85,9 @@ frame = pd.read_csv(
 privacy controls. Keep parsing errors visible. Do not use `on_bad_lines="skip"`
 for EDA because it changes the analyzed population.
 
-### Polars 1.43.0 (documented alternate backend)
+### Polars 1.44.2 (documented alternate backend)
 
-PyPI published `polars==1.43.0` on 2026-07-21. Current `polars.read_csv`
+PyPI published `polars==1.44.2` on 2026-09-09. Current `polars.read_csv`
 supports `columns`, `schema`, `schema_overrides`, `null_values`,
 `infer_schema_length`, and `n_rows`. Its docs note that:
 
@@ -112,13 +112,16 @@ The bundled inspector therefore:
 
 - caps the file at 16 MiB for parsing;
 - requires UTF-8;
-- rejects duplicate keys and non-finite constants;
+- rejects duplicate keys, non-finite constants, and decimal/exponent literals
+  that overflow finite binary64 (for example `1e400`);
 - catches recursion/resource errors;
 - traverses at most 100,000 nodes; and
 - emits only root type, depth, type counts, collection sizes, and tokenized
   top-level field identifiers.
 
-JSON Lines/NDJSON is not registered. Rename-and-guess is not allowed.
+The decimal range restriction is a tool limit, not a claim that every larger
+number violates the JSON grammar. JSON Lines/NDJSON is not registered.
+Rename-and-guess is not allowed.
 
 ## NumPy NPY and NPZ
 
@@ -145,7 +148,9 @@ For NPZ it first rejects:
 - a per-member compression ratio above 100.
 
 It then loads one array at a time with `allow_pickle=False`. Numeric summaries
-use at most 4,096 deterministic sample elements. Structured dtype field names
+use at most 4,096 deterministic sample elements. Large arrays use indexed
+`ndarray.flat` reads, avoiding a full C-order copy for Fortran-contiguous NPY
+memory maps. Structured dtype field names
 are identifiers and are tokenized by default. Object dtype is rejected; there
 is no `allow_pickle` override.
 
@@ -216,33 +221,35 @@ version-aware Zarr workflow with explicit store and codec allowlists.
 
 ## Pinned optional snapshot
 
-Verified from PyPI on 2026-07-23:
+Release metadata and synthetic runtime checks verified 2026-09-30:
 
 ```bash
 uv pip install \
-  "numpy==2.5.1" \
-  "pandas==3.0.5" \
-  "polars==1.43.0" \
+  "numpy==2.5.3" \
+  "pandas==3.0.6" \
+  "polars==1.44.2" \
   "h5py==3.16.0"
 ```
 
-NumPy 2.5.1 requires Python 3.12+. These are direct-package snapshots, not a
+NumPy 2.5.3 requires Python 3.12+. These are direct-package snapshots, not a
 transitive lock; record a lockfile for a real analysis.
 
 ## Authoritative sources
 
-All links accessed 2026-07-23.
+Current parser APIs and format guidance reviewed 2026-09-30. Historical
+methodology citations are retained as source context.
 
 - Python 3.14, [`csv` — CSV File Reading and Writing](https://docs.python.org/3/library/csv.html).
 - Python 3.14, [`json` — JSON encoder and decoder](https://docs.python.org/3/library/json.html).
 - NumPy 2.5, [input/output reference](https://numpy.org/doc/stable/reference/routines.io.html),
   [`numpy.load`](https://numpy.org/doc/stable/reference/generated/numpy.load.html),
   [NPY/NPZ format](https://numpy.org/doc/stable/reference/generated/numpy.lib.format.html),
+  [`ndarray.flat`](https://numpy.org/doc/stable/reference/generated/numpy.ndarray.flat.html),
   and [security guidance](https://numpy.org/doc/stable/reference/security.html).
 - pandas 3.0, [I/O tools](https://pandas.pydata.org/docs/user_guide/io.html);
-  [PyPI 3.0.5](https://pypi.org/project/pandas/), released 2026-07-22.
-- Polars 1.43, [`polars.read_csv`](https://docs.pola.rs/api/python/stable/reference/api/polars.read_csv.html);
-  [PyPI 1.43.0](https://pypi.org/project/polars/), released 2026-07-21.
+  [PyPI 3.0.6](https://pypi.org/project/pandas/), released 2026-09-17.
+- Polars 1.44, [`polars.read_csv`](https://docs.pola.rs/api/python/stable/reference/api/polars.read_csv.html);
+  [PyPI 1.44.2](https://pypi.org/project/polars/), released 2026-09-09.
 - h5py 3.16, [groups and links](https://docs.h5py.org/en/stable/high/group.html);
   [PyPI 3.16.0](https://pypi.org/project/h5py/), released 2026-03-06.
 - NIST/SEMATECH, [Exploratory Data Analysis](https://www.itl.nist.gov/div898/handbook/eda/eda.htm)

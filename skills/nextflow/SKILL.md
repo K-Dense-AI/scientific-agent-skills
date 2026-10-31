@@ -1,9 +1,12 @@
 ---
 name: nextflow
-description: Build, run, and debug Nextflow data pipelines and nf-core workflows end to end. Use whenever the user mentions Nextflow, nf-core, .nf files, nextflow.config, DSL2, processes/channels/operators, samplesheets, or wants to run a community pipeline (e.g. nf-core/rnaseq, nf-core/sarek), write or test a module/subworkflow with nf-test, configure executors/containers (Docker, Singularity/Apptainer, Conda, Wave), scale a workflow to HPC/SLURM or cloud (AWS Batch, Google Batch, Azure, Kubernetes), or debug a failed/-resume run. Make sure to use this skill for any reproducible scientific/bioinformatics workflow work even if the user does not say the word "Nextflow", and for authoring nf-core-compliant pipelines, modules, configs, and linting.
+description: Builds, runs, and debugs Nextflow DSL2 pipelines and nf-core workflows. Use for Nextflow, nf-core, .nf files, nextflow.config, processes/channels/operators, samplesheets, nf-test, modules/subworkflows, container and executor configuration, HPC/SLURM or cloud deployment, and failed or resumed pipeline runs.
 license: Apache-2.0
+compatibility: Requires Bash 3.2+, Java 17-26 and Nextflow. nf-core tools requires Python 3.10+. Containers, scheduler access and network or service credentials depend on the selected workflow.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
+  upstream-versions: "Nextflow 26.04.6; nf-core tools 4.1.0; nf-test 0.9.5"
   skill-author: K-Dense Inc.
 ---
 
@@ -16,7 +19,7 @@ Nextflow is a workflow language and runtime for building **reproducible, portabl
 Key ideas:
 - **Dataflow programming**: pipelines are `process` tasks connected by **channels**. Nextflow infers execution order and parallelism from data dependencies — there is no explicit scheduler to write.
 - **Write once, run anywhere**: the same pipeline runs locally, on HPC (SLURM, SGE, LSF, PBS), and on cloud (AWS Batch, Google Batch, Azure Batch, Kubernetes) by changing config/profiles, not code.
-- **Reproducibility**: per-task containers (Docker/Singularity/Apptainer/Conda/Wave) + `-resume` caching + pinned pipeline revisions.
+- **Reproducibility**: pinned software environments and pipeline revisions, immutable inputs/references, recorded parameters and seeds. `-resume` is a computational cache, not scientific validation. Conda is an environment manager; Wave resolves/builds images rather than executing them.
 - **DSL2** is the modern, required syntax: modular `process`/`workflow`/`include` definitions.
 
 This skill covers both **running** existing pipelines and **developing** your own (Nextflow language + nf-core conventions, testing with nf-test, configuration, and deployment).
@@ -28,30 +31,35 @@ Use this skill when the user wants to:
 - Write or modify `.nf` scripts, `nextflow.config`, profiles, or `nextflow_schema.json`.
 - Author or test nf-core-style modules/subworkflows (`main.nf`, `meta.yml`, `tests/`, nf-test).
 - Configure executors, containers, or resources; scale to HPC or cloud.
-- Build a reproducible scientific/bioinformatics workflow (even if "Nextflow" is not named).
+- Implement a scientific workflow in Nextflow or adapt an existing nf-core pipeline.
 - Understand processes, channels, operators, `take`/`emit`, `publishDir`, `ext.args`, meta maps.
 
 ## Setup
 
-Nextflow needs **Bash** and **Java 17 or newer** (17–25 supported). Verify with `java -version`.
+This review targets stable **Nextflow 26.04.6**, **nf-core tools 4.1.0**, and **nf-test 0.9.5**. Nextflow needs **Bash 3.2+** and **Java 17–26**; verify `java -version` (a launcher on PATH does not prove a runtime is installed). The strict parser is the default in 26.04. See [release notes](https://github.com/nextflow-io/nextflow/releases/tag/v26.04.6) and the [26.04 migration guide](https://docs.seqera.io/nextflow/migrations/26-04). Stable and edge documentation can differ; do not use a preview feature without its version/flag.
 
 ```bash
-# Install Nextflow (self-contained launcher)
-curl -s https://get.nextflow.io | bash      # creates ./nextflow
-sudo mv nextflow /usr/local/bin/             # put on PATH
+# Install Nextflow (self-installing launcher)
+export NXF_VER=26.04.6
+curl -fsSL https://get.nextflow.io -o install-nextflow.sh
+# Review the installer before executing it.
+bash < install-nextflow.sh
+mkdir -p "$HOME/.local/bin"
+mv nextflow "$HOME/.local/bin/"
+export PATH="$HOME/.local/bin:$PATH"
 nextflow info                                # verify
 
-# Or via conda/bioconda (also gets a managed Java)
-conda create -n nf -c bioconda -c conda-forge nextflow nf-core
+# Alternative (illustrative; confirm package availability and Java compatibility)
+conda create -n nf -c conda-forge -c bioconda nextflow=26.04.6 nf-core=4.1.0
 ```
 
 ```bash
 # nf-core tools (Python) for creating/linting/running nf-core assets
-uv pip install nf-core            # or: conda install -c bioconda nf-core
+uv tool install "nf-core==4.1.0"
 nf-core --version
 ```
 
-Pin the engine for reproducibility: `export NXF_VER=24.10.0` (use an [edge] release only if needed). For air-gapped/HPC, see `references/running-pipelines.md` (offline mode) and `references/configuration.md`.
+Pin the engine for reproducibility: `export NXF_VER=26.04.6`; check the selected pipeline release’s engine constraint before upgrading. Use edge only for a required, explicitly tested feature. For air-gapped/HPC, see `references/running-pipelines.md` (offline mode) and `references/configuration.md`.
 
 ## Two Modes of Work
 
@@ -68,28 +76,30 @@ Decide which path the user is on — it changes everything:
 
 ### Run an nf-core pipeline
 
-Always smoke-test with the bundled `test` profile first; it uses tiny data and proves your environment works.
+Use the selected release’s small `test` profile first after checking its resource/download requirements. A passing smoke test verifies that configuration and fixture, not scientific accuracy or full-scale capacity. The following RNA-seq examples are illustrative; no biological pipeline or containers were run in this review.
 
 ```bash
 # 1. Confirm setup works (downloads pipeline + tiny test data)
-nextflow run nf-core/rnaseq -profile test,docker --outdir results
+nextflow run nf-core/rnaseq -r 3.27.0 -profile test,docker --outdir test_results
 
 # 2. Real run: pin a revision (-r), pick a container engine, pass inputs
-nextflow run nf-core/rnaseq -r 3.14.0 \
+nextflow run nf-core/rnaseq -r 3.27.0 \
   -profile docker \
   --input samplesheet.csv \
-  --genome GRCh38 \
+  --fasta reference.fa --gtf annotation.gtf \
   --outdir results \
   -resume
 ```
 
-- `-profile` (single dash) selects bundled config profiles; **combine** them comma-separated, e.g. `test,docker`. Container/infra profiles (`docker`, `singularity`, `conda`) are mutually exclusive — pick one.
-- `--input`, `--genome`, `--outdir` (double dash) are **pipeline** parameters. nf-core pipelines take a **samplesheet CSV**, not loose files.
+- `-profile` (single dash) selects bundled config profiles; **combine** them comma-separated, e.g. `test,docker`. Choose one execution environment profile (`docker`, `singularity`, or `conda`); a site/executor profile can be combined with it when compatible.
+- `--input`, `--genome`, `--outdir` (double dash) are **pipeline** parameters. Many nf-core pipelines take a **samplesheet CSV**; use the selected pipeline release’s input schema.
 - `-resume` reuses cached results from the last run. `-r <version>` pins a release for reproducibility.
 
 Use `nf-core pipelines launch <name>` for an interactive, schema-validated way to build the command and a `-params-file`. See `references/running-pipelines.md`.
 
 ### Write a minimal pipeline
+
+This fixed-input example was executed with Nextflow 26.04.6, including `-resume`. Do not interpolate unvalidated sample IDs or arbitrary text into shell commands.
 
 ```nextflow
 #!/usr/bin/env nextflow
@@ -102,7 +112,7 @@ process SAYHELLO {
     val greeting
 
     output:
-    path "${greeting}.txt"
+    path "${greeting}.txt", emit: message
 
     script:
     """
@@ -123,8 +133,8 @@ The full language (processes, channels, operators, DSL2 workflows with `take`/`m
 
 ## Core Concepts at a Glance
 
-- **Process**: a unit of work that runs a script (Bash by default). Declares `input:`, `output:`, optional `directives` (resources, container, `publishDir`, `tag`, `errorStrategy`), and a `script:`/`shell:`/`exec:` block. Each task runs in its own isolated work directory (`work/xx/yy…`).
-- **Channel**: the async queues that connect processes. **Queue channels** are consumable streams; **value channels** hold a single reusable value. Created with factories like `channel.of`, `channel.fromPath`, `channel.fromFilePairs`, `channel.value`.
+- **Process**: a unit of work that runs a script (Bash by default). Declares `input:`, `output:`, directives (resources, container, `publishDir`, `tag`, `errorStrategy`), and a `script:` or `exec:` block (`shell:` is deprecated). Each task runs in its own isolated work directory (`work/xx/yy…`).
+- **Channel**: the async queues that connect processes. **Queue channels** are streams that DSL2 broadcasts to each downstream consumer; **value channels** hold a single reusable value. Within one process invocation, combine one queue input with reusable values, or join keyed streams into one tuple channel first. Created with factories like `channel.of`, `channel.fromPath`, `channel.fromFilePairs`, `channel.value`.
 - **Operator**: transforms/combines channels — `map`, `filter`, `collect`, `groupTuple`, `join`, `combine`, `mix`, `flatten`, `branch`, `multiMap`, `splitCsv`, `view`, `set`.
 - **Workflow**: composes processes. DSL2 workflows can declare `take:` (inputs), `main:` (logic), `emit:` (named outputs) and be `include`d as subworkflows. The unnamed `workflow {}` is the entry point.
 - **Module**: a `.nf` file exposing processes/workflows via `include { NAME } from './path'` (supports `as` aliasing).
@@ -133,7 +143,7 @@ The full language (processes, channels, operators, DSL2 workflows with `take`/`m
 
 ## nf-core tools CLI
 
-nf-core tools (v3+) group subcommands under `pipelines`, `modules`, and `subworkflows`. (Bare forms like `nf-core lint` still work but warn — prefer the grouped form.)
+nf-core tools 4.1.0 groups subcommands under `pipelines`, `modules`, and `subworkflows`. Removed bare forms such as `nf-core lint` now fail; use `nf-core pipelines lint`.
 
 | Command | Purpose |
 |---------|---------|
@@ -162,7 +172,7 @@ Full command reference, flags, and examples: `references/nf-core-tools.md`.
 | `-params-file params.yml` | Supply parameters from YAML/JSON |
 | `-c custom.config` | Layer in an extra config file |
 | `-with-report -with-trace -with-timeline -with-dag flow.html` | Execution report, trace, timeline, DAG |
-| `-stub-run` | Run `stub:` blocks only (dry-run plumbing) |
+| `-stub-run` | Execute task stubs; tasks without a stub still execute their real script |
 | `nextflow log` | Inspect past runs |
 | `nextflow clean -f -before <run>` | Delete old `work/` data |
 | `nextflow pull / drop / list / info <repo>` | Manage cached remote pipelines |
@@ -171,14 +181,14 @@ Config, executors, caching internals, and tracing details: `references/configura
 
 ## Best Practices (high-value habits)
 
-- **Always `test` first**: `-profile test,docker` (or `singularity`/`conda`) before real data — fast and catches environment problems.
+- **Test the selected release first** with its small profile and resource limits. Check sample identity, counts, paired reads, reference assembly/annotation compatibility and expected outputs independently of exit status.
 - **Pin everything**: pipeline revision (`-r`), `NXF_VER`, and tool versions (containers). Don't run `latest` for science you'll publish.
 - **Use `-resume`** and understand caching: a task re-runs if its inputs, script, or container change. See cache-debugging in `references/configuration.md`.
 - **Parameterize via config/params-file**, not hardcoded paths. Keep `params` and profiles in `nextflow.config`.
-- **One container/conda env per process**; never rely on tools installed on the host.
+- **Declare the environment per process** for real analyses. Pin image digests/platform or lock Conda dependencies; preserve reference/input checksums, module/plugin versions, configuration, seeds and run reports. Local shell-only examples are suitable for plumbing tests.
 - **For nf-core dev**: reuse existing modules (`nf-core modules install`) before writing new ones; pass tool flags through `ext.args` (not hardcoded in the script); always include a `stub:` block and nf-test tests; run `nf-core pipelines lint` and `prettier` before committing.
 - **Right-size resources** with `process_low/medium/high` labels and `errorStrategy 'retry'` with dynamic `task.attempt` scaling instead of one giant request.
-- **Write forward-compatible syntax**: the strict-syntax parser becomes the default in Nextflow 26.04. Prefer lowercase `channel.of(...)`, explicit closure params (`{ v -> ... }`), `def` for all variables, and `emit:`-named outputs. Check with `nextflow lint`.
+- **Use the strict parser**, the default in 26.04. Prefer lowercase `channel`, explicit closure parameters, local `def` variables inside closures/process scripts, and named outputs. Check with `nextflow lint`; static typing remains a separate preview (`nextflow.enable.types = true`). Legacy operators have migration guidance in `references/language.md`.
 
 ## Reference Files
 
@@ -192,7 +202,7 @@ Read the relevant file when you need depth — each is self-contained:
 - `references/developing.md` — authoring nf-core pipelines & modules: template layout, module `main.nf`/`meta.yml`, meta maps, `ext.args`/`modules.config`, subworkflows, resource labels, linting & Harshil alignment style.
 - `references/testing.md` — nf-test for modules/subworkflows/pipelines: test structure, assertions, snapshots, tags, running tests, CI.
 
-Official docs: Nextflow https://www.nextflow.io/docs/latest/ · nf-core https://nf-co.re/docs/ · Training https://training.nextflow.io/
+Official docs: Nextflow https://docs.seqera.io/nextflow/ · nf-core https://nf-co.re/docs/ · Training https://training.nextflow.io/
 
 ## Citing Scientific Agent Skills
 

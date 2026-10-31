@@ -390,6 +390,19 @@ def require_alphagenome():
 # --------------------------------------------------------------------------
 
 
+def unit_interval(text: str) -> float:
+    """Validate a finite quantile threshold for argparse."""
+    import argparse
+
+    try:
+        value = float(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected a number in [0, 1]") from error
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        raise argparse.ArgumentTypeError("expected a finite number in [0, 1]")
+    return value
+
+
 def cdf_to_tail_and_phred(cdf_quantile: float, floor: float = 1e-7) -> tuple[float, float]:
     """Convert the Atlas ``quantiles`` layer (a CDF value) to (tail quantile, Phred).
 

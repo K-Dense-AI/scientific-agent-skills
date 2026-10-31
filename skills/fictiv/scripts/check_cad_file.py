@@ -8,16 +8,19 @@ Usage:
     python3 check_cad_file.py PART.step [MORE FILES...] [--process cnc|3dp|sheet|urethane|im|compression|diecast] [--json]
 
 Checks performed (standard library only, no CAD kernel needed):
-  * extension accepted by Fictiv for the chosen process (mesh = 3D printing only;
-    IGES / F3D / DXF / drawings-alone / assemblies are rejected)
+  * documented format support for the chosen process (mesh = 3D printing only;
+    uploader acceptance alone is not manufacturing support)
   * STEP: schema, declared length unit, number of solid bodies (Fictiv needs
-    exactly one), surface-only models, assemblies, approximate bounding box
+    one in most cases), surface-only models, assemblies, approximate bounding box
   * STL: ascii/binary, triangle count, watertightness (every edge shared by
     exactly two triangles), bounding box, and a units sanity guess
   * PDF: reminds you a drawing must accompany a CAD file
   * rough size vs. Fictiv's published max build envelopes
 
-Exit code: 0 = no blocking problems, 1 = at least one blocking problem.
+This is a heuristic pre-flight, not CAD-kernel validation or export classification.
+Native files and PDF contents are not inspected. An OK result does not certify
+manufacturability, topology, units, or absence of export-controlled data.
+Exit code: 0 = no blocking problems detected, 1 = at least one blocking problem.
 """
 from __future__ import annotations
 
@@ -29,29 +32,30 @@ import struct
 import sys
 from collections import Counter
 
-# Extensions the upload widget accepts for non-3DP processes (read from the
-# <input type=file accept=...> attribute on app.fictiv.com, Sep 2026).
+# Manufacturing formats documented in the Help Center, reviewed 2026-09-30:
+# https://www.fictiv.com/help/uploading-and-organizing-parts/what-file-formats-does-fictiv-support
+# The upload widget's accept list also contains unsupported/reference-only types.
 PARAMETRIC = {
-    ".3dm", ".3dxml", ".3mf", ".acs", ".arc", ".cgr", ".catpart", ".catshape", ".dlv",
-    ".exp", ".gts", ".ifc", ".ifczip", ".ipt", ".jt", ".mf1", ".model", ".neu", ".par",
-    ".pkg", ".prc", ".prt", ".psm", ".pwd", ".sab", ".sat", ".session", ".sldprt", ".step",
-    ".stp", ".u3d", ".unv", ".vda", ".wrl", ".x3dv", ".x_b", ".x_t", ".xas", ".xmt",
-    ".xmt_txt", ".xpr",
+    ".3dm", ".3dxml", ".cgr", ".catpart", ".catshape", ".dlv", ".exp", ".ifc",
+    ".ipt", ".jt", ".mf1", ".model", ".neu", ".par", ".prc", ".prt", ".sab",
+    ".sat", ".session", ".sldprt", ".step", ".stp", ".u3d", ".vda", ".x3dv",
+    ".x_b", ".x_t", ".xas", ".xpr",
 }
+UPLOAD_ONLY = {".3mf", ".arc", ".gts", ".ifczip", ".pkg", ".unv", ".xmt", ".xmt_txt"}
 # Mesh formats: 3D printing only.
 MESH = {".stl", ".3ds", ".collada", ".dae", ".obj", ".off", ".ply", ".v3d", ".pts",
         ".tri", ".acs", ".x3d", ".wrl"}
 ASSEMBLY = {".sldasm", ".asm", ".iam", ".catproduct"}
 UNSUPPORTED = {".igs": "IGES", ".iges": "IGES", ".f3d": "Fusion 360 archive",
                ".slddrw": "SolidWorks drawing", ".dxf": "DXF", ".dwg": "DWG",
-               ".catdrawing": "CATIA drawing"}
+               ".catdrawing": "CATIA drawing", ".psm": "Solid Edge sheet metal",
+               ".pwd": "Solid Edge weldment"}
 
 # Published max envelopes in mm (largest first); used only for a soft warning.
 MAX_ENVELOPE_MM = {
     "cnc": (1828, 500, 152),        # mill, per Help Center; larger parts via sales
-    "3dp": (914, 610, 914),         # largest FDM; other technologies are smaller
+    "3dp": (914, 609, 914),         # largest FDM; other technologies are smaller
     "urethane": (2200, 1200, 1000),
-    "compression": (1000, 600, 600),
 }
 PROCESSES = ["cnc", "3dp", "sheet", "urethane", "im", "compression", "diecast"]
 
@@ -97,9 +101,12 @@ def inspect_step(path: str) -> dict:
     pts = [tuple(s.strip() for s in p.split(",")) for p in chosen]
     if pts:
         xs, ys, zs = zip(*((float(a), float(b), float(c)) for a, b, c in pts))
-        scale = {"inch": 25.4, "mm": 1.0, "cm": 10.0, "m": 1000.0}.get(info["length_unit"], 1.0)
-        dims = sorted(((max(v) - min(v)) * scale for v in (xs, ys, zs)), reverse=True)
-        info["approx_bbox_mm"] = [round(d, 2) for d in dims]
+        scale = {"inch": 25.4, "mm": 1.0, "cm": 10.0, "m": 1000.0}.get(info["length_unit"])
+        dims = sorted((max(v) - min(v) for v in (xs, ys, zs)), reverse=True)
+        if scale is None:
+            info["approx_bbox_units"] = [round(d, 2) for d in dims]
+        else:
+            info["approx_bbox_mm"] = [round(d * scale, 2) for d in dims]
     if re.search(r"\bITAR\b|ITAR[- ]CONTROLLED|22 CFR 120", data, re.I):
         info["itar_marking"] = True
     return info
@@ -173,12 +180,15 @@ def check(path: str, process: str) -> dict:
     elif ext == ".pdf":
         r["warnings"].append("PDF drawings cannot be quoted alone; attach it to its CAD part "
                              "(Configure > Technical drawing > Upload drawing) or upload it together with the CAD file")
-    elif ext in MESH and ext not in PARAMETRIC:
+    elif ext in MESH:
         if process != "3dp":
             r["blocking"].append(f"mesh files ({ext}) are accepted for 3D printing only; "
                                  f"{process} needs STEP or native CAD")
+    elif ext in UPLOAD_ONLY:
+        r["blocking"].append(f"{ext} appeared in the uploader but manufacturing support is unverified; "
+                             "export STEP or a documented format before submitting")
     elif ext not in PARAMETRIC:
-        r["blocking"].append(f"unrecognized extension {ext}; Fictiv will not accept it")
+        r["blocking"].append(f"unrecognized extension {ext}; not in the verified Fictiv format list")
 
     if ext == ".prt":
         r["warnings"].append(".prt is ambiguous (Siemens NX vs PTC Creo); if upload fails, export STEP")
@@ -193,8 +203,9 @@ def check(path: str, process: str) -> dict:
         elif s["solid_bodies"] == 0:
             r["blocking"].append("no solid body found in STEP")
         elif s["solid_bodies"] > 1:
-            msg = (f"{s['solid_bodies']} solid bodies in one file — Fictiv expects exactly one; multi-body files "
-                   "lose instant pricing ('Please request a quote') and hold up the whole quote. Split into one file per part")
+            msg = (f"{s['solid_bodies']} solid bodies in one file — split separate parts into separate files. "
+                   "CNC modeled-in pins/inserts and functional 3DP interlinked bodies have exceptions; "
+                   "this checker cannot determine eligibility. Separate floating 3DP bodies are not accepted")
             (r["warnings"] if process == "3dp" else r["blocking"]).append(msg)
         if s["assembly_links"]:
             r["warnings"].append("STEP is structured as an assembly; export the single part instead")

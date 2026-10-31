@@ -90,7 +90,7 @@ filtered = adata[
 
 ```python
 # Transpose AnnData object (swap observations and variables)
-adata_T = adata.T
+adata_T = adata.copy().T
 
 # Shape changes
 print(adata.shape)    # (1000, 2000)
@@ -100,6 +100,8 @@ print(adata_T.shape)  # (2000, 1000)
 print(adata.obs.head())   # Observation metadata
 print(adata_T.var.head()) # Same data, now as variable metadata
 
+# Transposition drops .raw and is unsupported directly on views/backed arrays.
+# Materialize backed data with .to_memory() first if it fits.
 # Useful when data is in opposite orientation
 # Common with some file formats where genes are rows
 ```
@@ -116,9 +118,9 @@ adata_copy.obs['new_column'] = 1
 print('new_column' in adata.obs.columns)  # False
 ```
 
-### Shallow copy
+### View
 ```python
-# View (doesn't copy data, modifications affect original)
+# View (subset arrays are accessed lazily; writes can materialize a copy)
 adata_view = adata[0:100, :]
 
 # Check if object is a view
@@ -152,12 +154,11 @@ adata.obs['cell_type'] = pd.Categorical(['A', 'B', 'C'] * 333 + ['A'])
 # Rename categories
 adata.rename_categories('cell_type', ['Type_A', 'Type_B', 'Type_C'])
 
-# Or using dictionary
-adata.rename_categories('cell_type', {
-    'Type_A': 'T_cell',
-    'Type_B': 'B_cell',
-    'Type_C': 'Monocyte'
-})
+# Mapping input is unsupported by AnnData.rename_categories; preserve category order.
+rename = {'Type_A': 'T_cell', 'Type_B': 'B_cell', 'Type_C': 'Monocyte'}
+adata.rename_categories(
+    'cell_type', [rename.get(c, c) for c in adata.obs['cell_type'].cat.categories]
+)
 ```
 
 ## Type Conversions
@@ -198,7 +199,7 @@ Process large datasets in chunks:
 ```python
 # Iterate through data in chunks
 chunk_size = 100
-for chunk in adata.chunked_X(chunk_size):
+for chunk, start, stop in adata.chunked_X(chunk_size):
     # Process chunk
     result = process_chunk(chunk)
 ```
@@ -331,8 +332,8 @@ adata.var.drop('unwanted_column', axis=1, inplace=True)
 # Remove specific layer
 del adata.layers['unwanted_layer']
 
-# Remove all layers
-adata.layers = {}
+# Remove named layers while explicitly preserving X (layers[None])
+adata.layers.clear(keep_x=True)
 ```
 
 ### Remove embeddings
@@ -376,29 +377,48 @@ adata = adata[:, sorted(adata.var_names)]
 ### Reorder to match external list
 ```python
 # Reorder observations to match external list
-desired_order = ['cell_10', 'cell_5', 'cell_20', ...]
+desired_order = ['cell_10', 'cell_5', 'cell_20']
 adata = adata[desired_order, :]
 
 # Reorder variables
-desired_genes = ['TP53', 'ACTB', 'GAPDH', ...]
+desired_genes = ['TP53', 'ACTB', 'GAPDH']
 adata = adata[:, desired_genes]
 ```
 
 ## Data Transformations
 
 ### Normalize
+
+For nonnegative count matrices, library-size normalization preserves sparsity.
+This is not TPM (which also needs feature lengths). Keep original counts and
+record the target sum; cells with zero counts remain zero.
+
 ```python
-# Total count normalization (CPM/TPM-like)
-total_counts = adata.X.sum(axis=1)
-adata.layers['normalized'] = adata.X / total_counts[:, np.newaxis] * 1e6
+from scipy.sparse import issparse
 
-# Log transformation
-adata.layers['log1p'] = np.log1p(adata.X)
+counts = adata.X.copy()
+total_counts = np.asarray(counts.sum(axis=1)).ravel()
+scale = np.divide(1e4, total_counts, out=np.zeros_like(total_counts, dtype=float),
+                  where=total_counts > 0)
+adata.layers['counts'] = counts
+normalized = counts.multiply(scale[:, None]).tocsr() if issparse(counts) else counts * scale[:, None]
+adata.layers['normalized'] = normalized
+logged = normalized.copy()
+if issparse(logged):
+    logged.data = np.log1p(logged.data)  # log1p(0)=0, so implicit zeros stay correct
+else:
+    logged = np.log1p(logged)
+adata.layers['log1p'] = logged
+adata.uns['normalization'] = {'method': 'library_size_then_log1p', 'target_sum': 1e4}
+```
 
-# Z-score normalization
+Centering destroys sparsity. For a small dense matrix only, protect constant columns:
+
+```python
+assert isinstance(adata.X, np.ndarray)
 mean = adata.X.mean(axis=0)
 std = adata.X.std(axis=0)
-adata.layers['scaled'] = (adata.X - mean) / std
+adata.layers['scaled'] = (adata.X - mean) / np.where(std == 0, 1, std)
 ```
 
 ### Filter
@@ -426,8 +446,8 @@ print(view.is_view)  # True
 # Views allow read access
 data = view.X
 
-# Modifying view data affects original
-# (Be careful!)
+# In 0.13, .X and annotation writes use copy-on-write; they may allocate.
+# Copy explicitly before editing for clear ownership across package versions.
 
 # Convert view to independent copy
 independent = view.copy()
@@ -442,16 +462,19 @@ adata = adata.copy()
 # Merge external metadata
 external_metadata = pd.read_csv('additional_metadata.csv', index_col=0)
 
-# Join metadata (inner join on index)
-adata.obs = adata.obs.join(external_metadata)
+# One row per identifier; retain observation order and length.
+assert external_metadata.index.is_unique
+assert adata.obs_names.isin(external_metadata.index).all()
+adata.obs = adata.obs.join(external_metadata, how='left', validate='one_to_one')
 
 # Left join (keep all adata observations)
 adata.obs = adata.obs.merge(
     external_metadata,
     left_index=True,
     right_index=True,
-    how='left'
-)
+    how='left',
+    validate='one_to_one'
+).reindex(adata.obs_names)
 ```
 
 ## Common Manipulation Patterns
@@ -459,9 +482,9 @@ adata.obs = adata.obs.merge(
 ### Quality control filtering
 ```python
 # Calculate QC metrics
-adata.obs['n_genes'] = (adata.X > 0).sum(axis=1)
-adata.obs['total_counts'] = adata.X.sum(axis=1)
-adata.var['n_cells'] = (adata.X > 0).sum(axis=0)
+adata.obs['n_genes'] = np.asarray((adata.X > 0).sum(axis=1)).ravel()
+adata.obs['total_counts'] = np.asarray(adata.X.sum(axis=1)).ravel()
+adata.var['n_cells'] = np.asarray((adata.X > 0).sum(axis=0)).ravel()
 
 # Filter low-quality cells
 adata = adata[adata.obs['n_genes'] > 200, :]
@@ -473,7 +496,9 @@ adata = adata[:, adata.var['n_cells'] >= 3]
 
 ### Select highly variable genes
 ```python
-# Mark highly variable genes
+# Illustrative variance filter for a small DENSE matrix, not a biological HVG method.
+# Use the scanpy skill for batch-aware/mean-adjusted HVG selection.
+assert isinstance(adata.X, np.ndarray)
 gene_variance = np.var(adata.X, axis=0)
 adata.var['variance'] = np.array(gene_variance).flatten()
 adata.var['highly_variable'] = adata.var['variance'] > np.percentile(gene_variance, 90)
@@ -486,7 +511,7 @@ adata_hvg = adata[:, adata.var['highly_variable']].copy()
 ```python
 # Random sampling of observations
 np.random.seed(42)
-n_sample = 500
+n_sample = min(500, adata.n_obs)
 sample_indices = np.random.choice(adata.n_obs, n_sample, replace=False)
 adata_downsampled = adata[sample_indices, :].copy()
 
@@ -495,7 +520,8 @@ from sklearn.model_selection import train_test_split
 train_idx, test_idx = train_test_split(
     range(adata.n_obs),
     test_size=0.2,
-    stratify=adata.obs['cell_type']
+    stratify=adata.obs['cell_type'],
+    random_state=42
 )
 adata_train = adata[train_idx, :].copy()
 adata_test = adata[test_idx, :].copy()
@@ -514,3 +540,7 @@ test_indices = indices[train_size:]
 adata_train = adata[train_indices, :].copy()
 adata_test = adata[test_indices, :].copy()
 ```
+
+Random cell splits are illustrative only: use donor/sample-level grouping for held-out biological evaluation to prevent leakage. Fit preprocessing on training data and then transform held-out data.
+
+Reviewed against [AnnData methods](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.html), [rename_categories](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.rename_categories.html), [chunked_X](https://anndata.readthedocs.io/en/stable/generated/anndata.AnnData.chunked_X.html), and the [0.13 copy-on-write release change](https://anndata.readthedocs.io/en/stable/release-notes/), plus installed 0.13.4 source. User-file and analysis-function placeholders are illustrative.

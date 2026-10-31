@@ -2,7 +2,7 @@
 Multi-criteria decision making example using pymoo.
 
 This script demonstrates how to select preferred solutions from
-a Pareto front using various MCDM methods.
+an approximate Pareto front using various MCDM methods.
 """
 
 from pymoo.algorithms.moo.nsga2 import NSGA2
@@ -15,23 +15,23 @@ import numpy as np
 
 
 def run_optimization_for_decision_making():
-    """Run optimization to obtain Pareto front."""
+    """Run optimization to obtain approximate Pareto front."""
 
-    print("Running optimization to obtain Pareto front...")
+    print("Running optimization to obtain approximate Pareto front...")
 
     # Solve ZDT1 problem
     problem = get_problem("zdt1")
-    algorithm = NSGA2(pop_size=100)
+    algorithm = NSGA2(pop_size=40)
 
     result = minimize(
         problem,
         algorithm,
-        ('n_gen', 200),
+        ('n_gen', 50),
         seed=1,
         verbose=False
     )
 
-    print(f"Obtained {len(result.F)} solutions in Pareto front\n")
+    print(f"Obtained {len(result.F)} solutions in approximate Pareto front\n")
 
     return problem, result
 
@@ -41,12 +41,35 @@ def apply_pseudo_weights(result, weights):
 
     print(f"Applying Pseudo-Weights with weights: {weights}")
 
-    # Normalize objectives to [0, 1]
-    F_norm = (result.F - result.F.min(axis=0)) / (result.F.max(axis=0) - result.F.min(axis=0))
-
-    # Apply MCDM
-    dm = PseudoWeights(weights)
-    selected_idx = dm.do(F_norm)
+    if result.F is None or result.X is None:
+        raise ValueError("No feasible candidates are available for selection")
+    F = np.asarray(result.F, dtype=float)
+    weights = np.asarray(weights, dtype=float)
+    if F.ndim != 2 or len(F) == 0 or not np.isfinite(F).all():
+        raise ValueError("Expected a nonempty, finite multi-objective matrix")
+    if len(result.X) != len(F):
+        raise ValueError("Candidate X and F rows must remain aligned")
+    if weights.shape != (F.shape[1],) or not np.isfinite(weights).all():
+        raise ValueError("Supply one finite weight per objective")
+    if np.any(weights < 0) or not np.isclose(weights.sum(), 1.0):
+        raise ValueError("Weights must be nonnegative and sum to one")
+    if result.CV is not None and np.asarray(result.CV).shape != (len(F), 1):
+        raise ValueError("Expected one constraint-violation value per candidate")
+    if result.CV is not None and (
+        not np.isfinite(result.CV).all() or np.any(np.asarray(result.CV) > 0)
+    ):
+        raise ValueError("Recheck and filter infeasible candidates before selection")
+    from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+    if len(NonDominatedSorting().do(F, only_non_dominated_front=True)) != len(F):
+        raise ValueError("Filter dominated candidates before preference selection")
+    if len(F) == 1:
+        selected_idx = 0
+    else:
+        if np.any(np.ptp(F, axis=0) <= 0):
+            raise ValueError("Remove constant objectives and revise weights explicitly")
+        # PseudoWeights normalizes distances from the nadir internally.
+        # It matches pseudo-weight vectors, not a weighted sum of objectives.
+        selected_idx = int(PseudoWeights(weights).do(F))
 
     selected_x = result.X[selected_idx]
     selected_f = result.F[selected_idx]
@@ -81,7 +104,7 @@ def compare_different_preferences(result):
 
     # Visualize all selections
     plot = Scatter(title="Decision Making - Different Preferences")
-    plot.add(result.F, color="lightgray", alpha=0.5, s=20, label="Pareto Front")
+    plot.add(result.F, color="lightgray", alpha=0.5, s=20, label="Approximate Front")
 
     colors = ["red", "blue", "green"]
     for (name, (idx, f)), color in zip(selections.items(), colors):
@@ -152,7 +175,7 @@ def main():
     print("="*60)
     print("\nKey Takeaways:")
     print("1. Different weights lead to different selected solutions")
-    print("2. Higher weight on an objective selects solutions better in that objective")
+    print("2. Weight sensitivity must be checked on the actual candidate set")
     print("3. Visualization helps understand trade-offs")
     print("4. MCDM methods help formalize decision maker preferences")
 

@@ -1,355 +1,88 @@
 # Core Capabilities
 
-The seven capability areas in full, with code: authentication and setup, registry and
-entity management, inventory management, notebook and documentation, workflows and
-automation, events and integration, and the data warehouse and analytics.
+Reviewed against Benchling's current platform documentation and SDK 1.25.0 on
+2026-09-30. Executable patterns are centralized in [SDK reference](sdk_reference.md);
+all tenant-specific writes are illustrative and require actual schemas and permissions.
 
-## Core Capabilities
+## 1. Authentication and setup
 
-### 1. Authentication & Setup
+Use OAuth app credentials for scheduled jobs and integration services. Actions are
+attributed to the app, not an end user. Use delegated authorization for user attribution.
+Personal API keys remain available for temporary use. See [authentication](authentication.md)
+for current expiration rules, token paths, and legacy OIDC boundaries.
 
-**Python SDK installation:**
+Start with a small list query for an accessible project/resource. An empty authorized
+response is valid; do not use nonexistent `users.get_me()` as a connectivity check.
 
-```bash
-uv pip install "benchling-sdk==1.25.0"
-```
+## 2. Registry and entity management
 
-Preview builds (alpha; not for production):
+Manage DNA, RNA, AA sequences, custom entities, and mixtures using their typed SDK
+services. Read the relevant entity schema through `benchling.schemas` first.
 
-```bash
-uv pip install "benchling-sdk" --prerelease allow
-```
+For create-and-register, supply a registry ID plus either a human entity registry ID or
+a naming strategy. Preserve the distinction between an API entity ID, a human registry
+identifier, and a registry ID. Required fields and naming rules are tenant-specific.
 
-**Environment variables (scoped reads only):**
-
-Read only the named keys you need — never dump or iterate over the full environment:
+For sequence imports, preserve the original record identifier and evidence of alphabet,
+length, topology, translation frame, and any transformations. A successfully registered
+construct does not establish the correctness of the sequence or biological annotation.
+Use returned IDs to reconcile interrupted imports and avoid accidental duplication.
 
-```python
-import os
+## 3. Inventory
 
-tenant_url = os.environ.get("BENCHLING_TENANT_URL")  # e.g. https://your-tenant.benchling.com
-api_key = os.environ.get("BENCHLING_API_KEY")
-
-if not tenant_url or not api_key:
-    raise ValueError("Set BENCHLING_TENANT_URL and BENCHLING_API_KEY")
-```
-
-Obtain an API key from **Profile Settings** in Benchling. For OAuth apps, use the [Developer Console](https://docs.benchling.com/docs/getting-started-benchling-apps) and store `BENCHLING_CLIENT_ID` / `BENCHLING_CLIENT_SECRET` separately.
-
-**Authentication methods:**
-
-API key (scripts and personal automation):
-
-```python
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.api_key_auth import ApiKeyAuth
-
-benchling = Benchling(
-    url=tenant_url,
-    auth_method=ApiKeyAuth(api_key),
-)
-```
+Containers hold biological contents; locations, boxes, and plates organize storage.
+Schema IDs are required for creation of these inventory types. A physical container move
+updates `parent_storage_id`; material transfer changes contents/amounts and is performed
+through transfer APIs. Check-in/out tracks custody and does not substitute for either.
 
-OAuth client credentials (multi-user apps and production integrations):
+Resolve storage position/well IDs from actual records. Check quantity units and source
+availability before transfers. Do not represent tracked volume or content concentration
+by writing a similarly named custom text field. Read back quantities and contents after
+an operation, and preserve sample provenance through splits, pooling, and aliquoting.
 
-```python
-from benchling_sdk.benchling import Benchling
-from benchling_sdk.auth.client_credentials_oauth2 import ClientCredentialsOAuth2
+## 4. Notebook and documentation
 
-benchling = Benchling(
-    url=tenant_url,
-    auth_method=ClientCredentialsOAuth2(
-        client_id=os.environ["BENCHLING_CLIENT_ID"],
-        client_secret=os.environ["BENCHLING_CLIENT_SECRET"],
-    ),
-)
-```
-
-**Key points:**
-- All API requests require HTTPS; network calls must target your tenant URL only
-- Authentication permissions mirror UI permissions
-- Verify credentials with `benchling.users.get_me()` before bulk operations
-
-For detailed authentication information including OIDC and security best practices, refer to `references/authentication.md`.
-
-### 2. Registry & Entity Management
-
-Registry entities include DNA sequences, RNA sequences, AA sequences, custom entities, and mixtures. The SDK provides typed classes for creating and managing these entities.
-
-**Creating DNA Sequences:**
-```python
-from benchling_sdk.models import DnaSequenceCreate
-
-sequence = benchling.dna_sequences.create(
-    DnaSequenceCreate(
-        name="My Plasmid",
-        bases="ATCGATCG",
-        is_circular=True,
-        folder_id="fld_abc123",
-        schema_id="ts_abc123",  # optional
-        fields=benchling.models.fields({"gene_name": "GFP"})
-    )
-)
-```
-
-**Registry Registration:**
-
-To register an entity directly upon creation:
-```python
-sequence = benchling.dna_sequences.create(
-    DnaSequenceCreate(
-        name="My Plasmid",
-        bases="ATCGATCG",
-        is_circular=True,
-        folder_id="fld_abc123",
-        entity_registry_id="src_abc123",  # Registry to register in
-        naming_strategy="NEW_IDS"  # or "IDS_FROM_NAMES"
-    )
-)
-```
-
-**Important:** Use either `entity_registry_id` OR `naming_strategy`, never both.
-
-**Updating Entities:**
-```python
-from benchling_sdk.models import DnaSequenceUpdate
-
-updated = benchling.dna_sequences.update(
-    sequence_id="seq_abc123",
-    dna_sequence=DnaSequenceUpdate(
-        name="Updated Plasmid Name",
-        fields=benchling.models.fields({"gene_name": "mCherry"})
-    )
-)
-```
-
-Unspecified fields remain unchanged, allowing partial updates.
-
-**Listing and Pagination:**
-```python
-# List all DNA sequences (returns a generator)
-sequences = benchling.dna_sequences.list()
-for page in sequences:
-    for seq in page:
-        print(f"{seq.name} ({seq.id})")
-
-# Check total count
-total = sequences.estimated_count()
-```
-
-**Key Operations:**
-- Create: `benchling.<entity_type>.create()`
-- Read: `benchling.<entity_type>.get_by_id(id)` or `.list()`
-- Update: `benchling.<entity_type>.update(id, update_object)`
-- Archive: `benchling.<entity_type>.archive(id)`
-
-Entity types: `dna_sequences`, `rna_sequences`, `aa_sequences`, `custom_entities`, `mixtures`
-
-For comprehensive SDK reference and advanced patterns, refer to `references/sdk_reference.md`.
-
-### 3. Inventory Management
-
-Manage physical samples, containers, boxes, and locations within the Benchling inventory system.
-
-**Creating Containers:**
-```python
-from benchling_sdk.models import ContainerCreate
-
-container = benchling.containers.create(
-    ContainerCreate(
-        name="Sample Tube 001",
-        schema_id="cont_schema_abc123",
-        parent_storage_id="box_abc123",  # optional
-        fields=benchling.models.fields({"concentration": "100 ng/μL"})
-    )
-)
-```
-
-**Managing Boxes:**
-```python
-from benchling_sdk.models import BoxCreate
-
-box = benchling.boxes.create(
-    BoxCreate(
-        name="Freezer Box A1",
-        schema_id="box_schema_abc123",
-        parent_storage_id="loc_abc123"
-    )
-)
-```
-
-**Transferring Items:**
-```python
-# Transfer a container to a new location
-transfer = benchling.containers.transfer(
-    container_id="cont_abc123",
-    destination_id="box_xyz789"
-)
-```
-
-**Key Inventory Operations:**
-- Create containers, boxes, locations, plates
-- Update inventory item properties
-- Transfer items between locations
-- Check in/out items
-- Batch operations for bulk transfers
-
-### 4. Notebook & Documentation
-
-Interact with electronic lab notebook (ELN) entries, protocols, and templates.
-
-**Creating Notebook Entries:**
-```python
-from benchling_sdk.models import EntryCreate
-
-entry = benchling.entries.create(
-    EntryCreate(
-        name="Experiment 2025-10-20",
-        folder_id="fld_abc123",
-        schema_id="entry_schema_abc123",
-        fields=benchling.models.fields({"objective": "Test gene expression"})
-    )
-)
-```
-
-**Linking Entities to Entries:**
-```python
-# Add references to entities in an entry
-entry_link = benchling.entry_links.create(
-    entry_id="entry_abc123",
-    entity_id="seq_xyz789"
-)
-```
-
-**Key Notebook Operations:**
-- Create and update lab notebook entries
-- Manage entry templates
-- Link entities and results to entries
-- Export entries for documentation
-
-### 5. Workflows & Automation
-
-Automate laboratory processes using Benchling's workflow system.
-
-**Creating Workflow Tasks:**
-```python
-from benchling_sdk.models import WorkflowTaskCreate
-
-task = benchling.workflow_tasks.create(
-    WorkflowTaskCreate(
-        name="PCR Amplification",
-        workflow_id="wf_abc123",
-        assignee_id="user_abc123",
-        fields=benchling.models.fields({"template": "seq_abc123"})
-    )
-)
-```
-
-**Updating Task Status:**
-```python
-from benchling_sdk.models import WorkflowTaskUpdate
-
-updated_task = benchling.workflow_tasks.update(
-    task_id="task_abc123",
-    workflow_task=WorkflowTaskUpdate(
-        status_id="status_complete_abc123"
-    )
-)
-```
-
-**Asynchronous Operations:**
-
-Some operations are asynchronous and return tasks. The SDK default `max_wait_seconds` for polling is **600 seconds** (since SDK 1.11.0):
-
-```python
-from benchling_sdk.helpers.tasks import wait_for_task
-
-result = wait_for_task(
-    benchling,
-    task_id="task_abc123",
-    interval_wait_seconds=2,
-    max_wait_seconds=300,  # override for long-running serverless handlers
-)
-```
-
-**Key Workflow Operations:**
-- Create and manage workflow tasks
-- Update task statuses and assignments
-- Execute bulk operations asynchronously
-- Monitor task progress
-
-### 6. Events & Integration
-
-Subscribe to Benchling changes via **AWS EventBridge** (customer-owned bus) or **Webhooks** (recommended for new Benchling Apps). EventBridge delivers hydrated v2 API objects; webhooks use thinner payloads.
-
-**Common EventBridge `detail-type` values:**
-- `v2.dnaSequence.created`, `v2.dnaSequence.updated`
-- `v2.entity.registered`
-- `v2.entry.created`, `v2.entry.updated`
-- `v2.workflowTask.updated.status`
-- `v2.request.created`
-
-**Minimal EventBridge rule** (filter request creation by schema name):
-
-```json
-{
-  "detail-type": ["v2.request.created"],
-  "detail": {
-    "schema": {
-      "name": ["Validated Request"]
-    }
-  }
-}
-```
-
-**Lambda handler skeleton:**
-
-```python
-def handler(event, context):
-    detail_type = event["detail-type"]
-    detail = event["detail"]
-
-    if detail.get("deprecated"):
-        # Alert — migrate before Benchling removes this event type
-        pass
-
-    if detail.get("excludedProperties"):
-        # Payload exceeded 256 KB; re-fetch via detail["request"]["apiURL"]
-        pass
-
-    if detail_type == "v2.request.created":
-        request_id = (detail.get("request") or {}).get("id")
-        # Re-fetch authoritative state — events can be late or out of order
-        # request = benchling.requests.get_by_id(request_id)
-        return {"request_id": request_id}
-
-    return {"status": "ignored", "detail_type": detail_type}
-```
-
-**Setup flow:**
-1. Tenant admin creates a subscription at `https://your-tenant.benchling.com/event-subscriptions`
-2. Associate the AWS partner event source with a dedicated event bus immediately (within ~12 days)
-3. Create rules + targets (Lambda, SQS, SNS) and grant invoke permissions
-4. Validate with a CloudWatch Logs rule, then trigger a matching Benchling action
-
-**Recovery:** EventBridge deliveries are not replayed. Use the [List Events API](https://benchling.com/api/reference#/Events/listEvents) for events up to ~2 weeks old after outages.
-
-For payload schema, CloudFormation templates, SDK list/recovery examples, and validation steps, see `references/eventbridge.md`.
-
-### 7. Data Warehouse & Analytics
-
-Query historical Benchling data using SQL through the Data Warehouse.
-
-**Access Method:**
-The Benchling Data Warehouse provides SQL access to Benchling data for analytics and reporting. Connect using standard SQL clients with provided credentials.
-
-**Common Queries:**
-- Aggregate experimental results
-- Analyze inventory trends
-- Generate compliance reports
-- Export data for external analysis
-
-**Integration with Analysis Tools:**
-- Jupyter notebooks for interactive analysis
-- BI tools (Tableau, Looker, PowerBI)
-- Custom dashboards
+Use `entries.create_entry`, `get_entry_by_id`, `list_entries`, and `update_entry`.
+Entry creation supports templates and initial tables; metadata updates are not general
+rich-text editing. Inspect the supported entry/template models before promising an
+arbitrary notebook modification. There is no general `entry_links` service in 1.25.0.
+
+Relationships should use the applicable schema field, table, result, or template
+mechanism. Keep experiment provenance linked to the underlying entity and result IDs.
+
+## 5. Workflows and automation
+
+Workflow tasks belong to workflow task groups. Create with `workflow_task_group_id`,
+filter with `workflow_task_group_ids` and `status_ids`, and update with
+`workflow_task_id`. Resolve statuses from the workflow schema rather than assuming
+literal strings such as `pending` or `complete` are IDs.
+
+Workflow tasks (`/workflow-tasks`) are distinct from async processing jobs (`/tasks/{id}`).
+Polling returns at completion even if the job failed. Retain a job's ID after timeouts,
+inspect its status, and reconcile results before resubmitting a mutation.
+
+## 6. Events and integrations
+
+Benchling recommends webhooks for new apps; AWS EventBridge remains useful for existing
+AWS integrations. Payloads, subscription mechanisms, event names, and permissions differ.
+Do not substitute generic DNA-created/updated names for documented EventBridge event
+names. See [EventBridge](eventbridge.md) for examples using `v2.entity.registered`,
+`v2.entry.created`, `v2.entry.updated.fields`, and `v2.workflowTask.updated.status`.
+
+Deduplicate by Benchling event ID, allow out-of-order delivery, and re-fetch authoritative
+state. Recover historical EventBridge events within their retention window; recovery is
+not a complete backup or an alternative to a reconciliation query.
+
+## 7. Warehouse and analytics
+
+The [warehouse](https://docs.benchling.com/docs/getting-started) is read-only PostgreSQL
+with separately issued credentials. It is not a REST endpoint, and API OAuth tokens do
+not authenticate database connections. Use the exact host, database, user, TLS settings,
+and permissions provided for your tenant; do not invent table names from REST paths.
+
+For scientific exports, record query text, extraction time, schema version, relevant
+entity IDs, units, and inclusion/exclusion of archived records. Warehouse replication is
+not real-time, so use API reads for immediate post-write validation. Consult the
+[warehouse tables](https://docs.benchling.com/docs/wh-registry) for joins and archived/raw
+views, and [limits](https://docs.benchling.com/docs/rate-limiting) for connection and
+transaction guidance. Keep transactions short and avoid high-frequency polling.

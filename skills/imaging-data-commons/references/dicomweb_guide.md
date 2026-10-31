@@ -1,6 +1,8 @@
 # DICOMweb Guide for IDC
 
-IDC provides DICOMweb access through Google Cloud Healthcare API DICOM stores. This guide covers the implementation specifics and usage patterns.
+Reviewed 2026-09-30 against IDC endpoint/policy documentation and Google Healthcare
+conformance. Public QIDO and metadata reads were probed; authenticated Google-store
+access and pixel/frame retrieval were not executed.
 
 ## When to Use DICOMweb
 
@@ -23,7 +25,7 @@ https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-se
 - **100% data coverage** - Contains all IDC data from all storage buckets
 - Points to the latest IDC version automatically
 - **Updates immediately** on new IDC releases
-- Per-IP daily quota (suitable for testing and moderate use)
+- Per-IP and global daily egress quotas; use when bucket downloads cannot meet the task
 - No authentication required
 - Read-only access
 - Note: "viewer-only-no-downloads" in URL is legacy naming with no functional meaning
@@ -34,7 +36,11 @@ https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-se
 https://healthcare.googleapis.com/v1/projects/nci-idc-data/locations/us-central1/datasets/idc/dicomStores/idc-store-v{VERSION}/dicomWeb
 ```
 
-Replace `{VERSION}` with the IDC release number. To find the current version:
+The pattern is historical, not proof that a store exists for the latest IDC release.
+IDC currently documents `idc-store-v23`, while Google
+[documents `idc-store` and an access-request form](https://docs.cloud.google.com/healthcare-api/docs/resources/public-datasets/idc).
+Confirm the provisioned store URL and access with those pages/the IDC health monitor; do
+not synthesize `idc-store-v24` solely from this client output:
 
 ```python
 from idc_index import IDCClient
@@ -42,8 +48,8 @@ client = IDCClient()
 print(client.get_idc_version())  # e.g., "v24" for current version
 ```
 
-- **~96% data coverage** - Only replicates data from `idc-open-data` bucket (missing ~4% from other buckets)
-- **Updates 1-2 weeks after** IDC releases
+- Replicates `idc-open-data`; excludes the other two buckets, so check your selected series
+- IDC targets synchronization within 1-2 weeks of a release; this is not guaranteed
 - Requires authentication and provides higher quotas
 - Better performance (no proxy routing)
 - Each release gets a new versioned store
@@ -59,7 +65,7 @@ See [Content Coverage Differences](#content-coverage-differences) and [Authentic
 | Endpoint | Coverage | Missing Data |
 |----------|----------|--------------|
 | **IDC Public Proxy** | 100% | None |
-| **Google Healthcare API** | ~96% | ~4% (two buckets not replicated) |
+| **Google Healthcare API** | Only `idc-open-data` | Two other buckets; possibly newer releases |
 
 ### What's Missing from Google Healthcare?
 
@@ -68,16 +74,17 @@ The Google Healthcare DICOM store **only replicates data from the `idc-open-data
 - `idc-open-data-cr`
 - `idc-open-data-two`
 
-These missing buckets typically contain several thousand series each, representing approximately 4% of total IDC data. The exact counts vary by IDC version.
+The often-quoted 95.89% coverage is an IDC v21 series-count snapshot. Recalculate the
+share for the selected release; it is not a current guarantee or a fraction by file size.
 
 See `cloud_storage_guide.md` for details on bucket organization, file structure, and direct access methods.
 
 ### Update Timing
 
 - **IDC Public Proxy**: Updates immediately when new IDC versions are released
-- **Google Healthcare**: Updates 1-2 weeks after each new IDC version release
+- **Google Healthcare**: Independently maintained; synchronization within 1-2 weeks is a goal.
 
-Between releases, both endpoints remain current. The 1-2 week delay only occurs during the transition period after a new IDC version is published.
+Verify the actual store release and query representative selected UIDs before a large job.
 
 **Warning from IDC documentation:** *"Google-hosted DICOM store may not contain the latest version of IDC data!"* - Check during the weeks following a new release.
 
@@ -91,7 +98,7 @@ Between releases, both endpoints remain current. The 1-2 week delay only occurs 
 - You're accessing slide microscopy images frame-by-frame
 
 **Use Google Healthcare API when:**
-- The ~4% missing data doesn't affect your use case
+- Your selected series exist in the particular Google store
 - You need higher quotas for heavy usage
 - You want better performance (direct access, no proxy routing)
 
@@ -106,15 +113,15 @@ client = IDCClient()
 
 # Check which buckets contain your collection's data
 results = client.sql_query("""
-    SELECT series_aws_url, COUNT(*) as series_count
+    SELECT aws_bucket, COUNT(*) as series_count
     FROM index
     WHERE collection_id = 'your_collection_id'
-    GROUP BY series_aws_url
+    GROUP BY aws_bucket
 """)
 
 print(results)
 
-# Look for URLs containing 'idc-open-data-cr' or 'idc-open-data-two'
+# Look for bucket values 'idc-open-data-cr' or 'idc-open-data-two'
 # If present, that data won't be available in Google Healthcare endpoint
 ```
 
@@ -150,7 +157,11 @@ The implementation supports a limited set of searchable tags:
 
 - Maximum results: 5,000 for studies/series searches; 50,000 for instances
 - Maximum offset: 1,000,000
-- DICOM sequence tags larger than ~1 MB are not returned in metadata (BulkDataURI provided instead)
+- Sequence tags (VR SQ) larger than approximately 1 MiB are omitted without a BulkDataURI;
+  other bulk data can have a BulkDataURI. Retrieve the full instance for omitted sequences.
+- QIDO defaults to 100 studies/series or 1,000 instances. Use `limit` and `offset` for pages,
+  including a final empty-page check; there is no reliable warning header marking exhaustion.
+  WADO series metadata does not use these QIDO pagination parameters.
 
 ## Code Examples
 
@@ -192,8 +203,10 @@ study_uid = "1.3.6.1.4.1.14519.5.2.1.6450.9002.307623500513044641407722230440"
 response = requests.get(
     f"{base_url}/studies",
     params={"StudyInstanceUID": study_uid},
-    headers={"Accept": "application/dicom+json"}
+    headers={"Accept": "application/dicom+json"},
+    timeout=60,
 )
+response.raise_for_status()
 
 if response.status_code == 200:
     studies = response.json()
@@ -210,8 +223,10 @@ study_uid = "1.3.6.1.4.1.14519.5.2.1.6450.9002.307623500513044641407722230440"
 
 response = requests.get(
     f"{base_url}/studies/{study_uid}/series",
-    headers={"Accept": "application/dicom+json"}
+    headers={"Accept": "application/dicom+json"},
+    timeout=60,
 )
+response.raise_for_status()
 
 if response.status_code == 200:
     series_list = response.json()
@@ -235,8 +250,10 @@ series_uid = "1.3.6.1.4.1.14519.5.2.1.6450.9002.217441095430480124587725641302"
 response = requests.get(
     f"{base_url}/studies/{study_uid}/series/{series_uid}/instances",
     params={"limit": 10},
-    headers={"Accept": "application/dicom+json"}
+    headers={"Accept": "application/dicom+json"},
+    timeout=60,
 )
+response.raise_for_status()
 
 if response.status_code == 200:
     instances = response.json()
@@ -257,8 +274,10 @@ series_uid = "1.3.6.1.4.1.14519.5.2.1.6450.9002.217441095430480124587725641302"
 
 response = requests.get(
     f"{base_url}/studies/{study_uid}/series/{series_uid}/metadata",
-    headers={"Accept": "application/dicom+json"}
+    headers={"Accept": "application/dicom+json"},
+    timeout=60,
 )
+response.raise_for_status()
 
 if response.status_code == 200:
     instances = response.json()
@@ -296,8 +315,10 @@ base_url = "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-
 
 response = requests.get(
     f"{base_url}/studies/{study_uid}/series/{series_uid}/metadata",
-    headers={"Accept": "application/dicom+json"}
+    headers={"Accept": "application/dicom+json"},
+    timeout=60,
 )
+response.raise_for_status()
 
 if response.status_code == 200:
     metadata = response.json()
@@ -325,31 +346,34 @@ DICOMweb returns tags as hexadecimal codes. Common tags:
 To use the Google Healthcare endpoint with higher quotas:
 
 ```python
+import os
 from google.auth import default
-from google.auth.transport.requests import Request
-import requests
+from google.auth.transport.requests import AuthorizedSession
 
-# Get credentials (requires gcloud auth)
-credentials, project = default()
-credentials.refresh(Request())
+# Get ADC; AuthorizedSession refreshes expiring tokens automatically.
+credentials, project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+session = AuthorizedSession(credentials)
 
-# Build authenticated request
-base_url = "https://healthcare.googleapis.com/v1/projects/nci-idc-data/locations/us-central1/datasets/idc/dicomStores/idc-store-v24/dicomWeb"
+# Set IDC_DICOMWEB_URL to the verified provisioned Google store URL (ending /dicomWeb).
+base_url = os.environ["IDC_DICOMWEB_URL"].rstrip("/")
 
-response = requests.get(
+response = session.get(
     f"{base_url}/studies",
     params={"limit": 5},
     headers={
-        "Authorization": f"Bearer {credentials.token}",
         "Accept": "application/dicom+json"
-    }
+    },
+    timeout=60,
 )
+response.raise_for_status()
 ```
 
 **Prerequisites:**
 1. Google Cloud SDK installed (`gcloud`)
 2. Authenticated: `gcloud auth application-default login`
-3. Account has access to public Google Cloud datasets
+3. `google-auth` and `requests` installed; account authorized for the selected Google store
+4. `IDC_DICOMWEB_URL` set to the verified endpoint. Google documents an access-request form;
+   follow it if ADC alone is insufficient. No authenticated access was verified in this refresh.
 
 ## Troubleshooting
 
@@ -363,7 +387,8 @@ response = requests.get(
 
 ### Issue: 429 Too Many Requests
 - **Cause:** Rate limit exceeded
-- **Solution:** Add delays between requests, reduce `limit` values, or use authenticated endpoint for higher quotas
+- **Solution:** Honor `Retry-After`, back off, and use public buckets for complete files.
+  A daily proxy egress cap is not fixed by repeated retries; do not rotate IPs to bypass it.
 
 ### Issue: 204 No Content for valid UIDs
 - **Cause:** UID may be from an older IDC version not in current data, or data is in buckets not replicated by Google Healthcare
@@ -371,11 +396,13 @@ response = requests.get(
   - Verify UID exists using `idc-index` query first
   - Check if data is in `idc-open-data-cr` or `idc-open-data-two` buckets (not available in Google Healthcare endpoint)
   - Switch to IDC public proxy for 100% coverage
-  - During new version releases, Google Healthcare may lag 1-2 weeks behind
+  - Verify store release/access; synchronization timing is not guaranteed
 
 ### Issue: Large metadata responses slow to parse
 - **Cause:** Series with many instances returns large JSON
-- **Solution:** Use `limit` parameter on instance queries, or query specific instances by SOPInstanceUID
+- **Solution:** Use `limit`/`offset` on QIDO instance searches, or retrieve metadata for a
+  specific instance by appending `/instances/{SOPInstanceUID}/metadata`; do not assume
+  `limit` paginates WADO series metadata
 
 ### Issue: Response missing expected attributes
 - **Cause:** DICOM sequences larger than ~1 MB are excluded from metadata responses

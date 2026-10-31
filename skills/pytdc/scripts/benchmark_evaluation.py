@@ -82,6 +82,8 @@ def normalize_prediction_mapping(
         if not isinstance(query, str):
             raise CliError("benchmark names in prediction objects must be strings")
         dataset = canonical_name(query, available, "benchmark")
+        if dataset in normalized:
+            raise CliError(f"duplicate benchmark after name normalization: {dataset!r}")
         if selected_dataset is not None and dataset != selected_dataset:
             raise CliError(
                 f"prediction object contains {dataset!r}, but --dataset selects "
@@ -144,6 +146,11 @@ def normalize_predictions(
         mapping, count = normalize_prediction_mapping(
             predictions, available=available, selected_dataset=selected_dataset
         )
+        if normalized_runs:
+            if mapping.keys() != normalized_runs[0].keys():
+                raise CliError("every run must contain the same benchmarks")
+            if any(len(mapping[name]) != len(normalized_runs[0][name]) for name in mapping):
+                raise CliError("each benchmark must have the same prediction count in every run")
         normalized_runs.append(mapping)
         run_seeds.append(seed)
         total += count
@@ -204,6 +211,13 @@ def execute_evaluation(
     module_name, class_name = GROUPS[group]
     group_class = getattr(importlib.import_module(module_name), class_name)
     benchmark_group = group_class(path=str(data_dir))
+    runs = [predictions] if mode == "single" else predictions
+    for name, values in runs[0].items():
+        expected = len(benchmark_group.get(name)["test"])
+        if any(len(run[name]) != expected for run in runs):
+            raise CliError(
+                f"{name} requires {expected} test predictions in exact test-row order"
+            )
     if mode == "single":
         results = benchmark_group.evaluate(predictions)
         run_count = 1

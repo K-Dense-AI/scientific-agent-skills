@@ -1,15 +1,15 @@
 # Opentrons Protocol API v2 Quick Reference
 
-Verified against `opentrons==9.1.1` and the official documentation on
-2026-07-23. This is a curated authoring reference, not a replacement for the
+Verified against `opentrons==10.0.0` and the official documentation on
+2026-10-01. This is a curated authoring reference, not a replacement for the
 [ProtocolContext API reference](https://docs.opentrons.com/python-api/reference/protocols/)
 and its linked class references.
 
 ## Version Baseline
 
-| Robot | Supported API range on current software | Recommended maximum for new robot-specific protocols |
+| Robot | Supported API range on current software | Documented robot maximum |
 | --- | --- | --- |
-| Flex | 2.15–2.29 | 2.29 |
+| Flex | 2.15–2.30 | 2.30 |
 | OT-2 | 2.0–2.28 | 2.28 |
 
 API versions are independent of the installed Python package and robot software.
@@ -47,6 +47,7 @@ Rules:
 | 2.27 | Concurrent module actions; dynamic aspirate, dispense, and mix; `capture_image()`; explicit liquid-class tips |
 | 2.28 | Flex 20 µL tips; partial-tip return; thermocycler ramp rate; empty tip-rack tracking |
 | 2.29 | Protocol step grouping |
+| 2.30 | Start-only meniscus aspiration without an end location |
 
 See
 [Versioning](https://docs.opentrons.com/python-api/versioning/) for complete
@@ -64,6 +65,14 @@ behavior changes and robot-software mappings.
 | 8-Channel 1000 µL | 5–1000 µL | `flex_8channel_1000` |
 | 96-Channel 200 µL | 1–200 µL | `flex_96channel_200` |
 | 96-Channel 1000 µL | 5–1000 µL | `flex_96channel_1000` |
+
+Flex 50 µL pipettes need `configure_for_volume(1)` (or the intended 1–4.9 µL
+volume) before low-volume handling. Call it while empty, preferably before tip
+pickup. That mode permits 1–30 µL; normal mode permits 5–50 µL. Tip capacity
+can impose a lower maximum. These are documented ranges; the simulator's
+lower `min_volume` value does not qualify sub-1 µL dispensing. Changing mode
+resets flow rates. See the
+[volume-mode guide](https://docs.opentrons.com/python-api/pipettes/volume-modes/).
 
 The 96-channel pipette occupies both mounts. From API 2.16 onward its `mount`
 argument is optional.
@@ -122,7 +131,7 @@ Useful methods:
 - `move_lid(source_location, new_location, use_gripper=...)`
 - `define_liquid(name, description=None, display_color=None)`
 - `get_liquid_class(name, version=None)` — API 2.24+
-- `define_liquid_class(name, properties, display_name)` — API 2.24+
+- `define_liquid_class(name, properties, base_liquid_class=None, display_name=None)` — API 2.24+
 
 ### Execution and organization
 
@@ -217,7 +226,8 @@ pipette.transfer_with_liquid_class(
 Related methods are `distribute_with_liquid_class()` and
 `consolidate_with_liquid_class()`. Opentrons-verified classes include water,
 80% ethanol, and 50% glycerol. Compatibility depends on the exact Flex pipette
-and tip combination.
+and tip combination. Omitted `version` selects the latest class for the declared
+API level; record and pin a qualified class version for assay reproducibility.
 
 ## Labware and Wells
 
@@ -245,7 +255,9 @@ well.center()
 well.meniscus(z=0, target="start")  # API 2.23+
 ```
 
-`meniscus()` depends on declared or measured liquid volume. Validate liquid
+`meniscus()` depends on declared or measured liquid volume. Start-only aspiration
+without `end_location` requires API 2.30; at 2.29 and lower use the documented
+end-target or start-to-end pattern. Validate liquid
 height behavior on hardware before relying on it for low-volume aspiration.
 
 ### Liquid setup visualization, API 2.22+
@@ -322,7 +334,9 @@ Flex pressure-sensing pipettes support:
 - `liquid_presence_detection=True` in `load_instrument()`
 - Runtime toggling with `pipette.liquid_presence_detection`
 
-Detection requires a fresh, dry, empty tip. It can add substantial run time,
+Detection requires a fresh, dry, empty tip for each check. Global detection plus
+a complex command may reuse a wet tip on a refill: use explicit building blocks
+with a fresh pickup immediately before each checked aspiration. It can add substantial run time,
 and not every channel on a multi-channel pipette contains a pressure sensor.
 
 ## Partial Nozzle Layouts
@@ -369,14 +383,14 @@ Module availability also depends on robot model and physical generation. See
 
 ```bash
 # Flex API 2.29
-uv run --with "opentrons==9.1.1" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==10.0.0" opentrons_simulate protocol.py
 
 # OT-2 API 2.28 compatibility simulation
-uv run --with "opentrons==9.0.0" opentrons_simulate protocol.py
+uv run --no-project --isolated --python 3.12 --with "opentrons==9.0.0" opentrons_simulate protocol.py
 ```
 
 Python integrations may use `opentrons.simulate.simulate()` with an opened
-protocol file. `opentrons==9.1.1` rejects OT-2 protocols after the release-line
+protocol file. `opentrons==10.0.0` rejects OT-2 protocols after the release-line
 split, so complete OT-2 validation in the current OT-2 App. Do not use
 `opentrons_execute` from a workstation as a substitute for App analysis and
 controlled robot operation.

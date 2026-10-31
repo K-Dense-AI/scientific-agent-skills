@@ -1,7 +1,7 @@
 # Official LabArchives Integrations
 
 Verified against the official help-center integration section on
-**2026-07-23**:
+**2026-09-30**:
 https://help.labarchives.com/hc/en-us/sections/11732611360660-Integrations
 
 The current index lists:
@@ -108,21 +108,28 @@ are synchronized beyond what the article states.
 ## GraphPad Prism
 
 Official article:
-https://help.labarchives.com/hc/en-us/articles/11780457243668-GraphPad-Prism
+https://help.labarchives.com/hc/en-us/articles/11780457243668-GraphPad-Prism-Integration
 
-Follow the supported Prism/LabArchives UI workflow from that page. Do not post
-Prism files to an inferred attachment endpoint or place Access Passwords in
-multipart form fields. Verify supported Prism versions and behavior from the
-current article at implementation time.
+The article (2026-06-25) documents Prism 8+ and regional configuration for
+AU/UK/EU/CA using `labarchivesconfig.txt`; US accounts skip that configuration.
+A first save goes to the LabArchives Inbox, where the user moves it to a page.
+On later saves, choose between a new Inbox copy and updating the existing file
+version. Do not post files to an inferred endpoint. Copy region configuration
+values carefully: the article's Canada hyperlink targets currently point to EU
+hosts even though the displayed Canada URLs use `ca-` / `caapi`. Use the
+verified regional table in `authentication_guide.md` and confirm the destination.
 
 ## SnapGene
 
 Official article:
 https://help.labarchives.com/hc/en-us/articles/11780512729492-SnapGene-Integration
 
-Use the documented SnapGene/LabArchives connection and file behavior. Do not
-assume a SnapGene CLI exists, generate previews through an undocumented command,
-or infer supported file extensions from old examples.
+The article (2025-11-03) documents SnapGene 4.2+, **Preferences > Files >
+Enable file exchange with LabArchives**, then **File > Save to LabArchives**
+or **Open File from LabArchives**. Use the correct regional API server; its
+Canada link has the same displayed-URL/target mismatch as the Prism article.
+SSO uses a temporary token. Do not assume a SnapGene CLI or universal file
+compatibility; the article makes support dependent on version and data structure.
 
 ## Geneious and other indexed integrations
 

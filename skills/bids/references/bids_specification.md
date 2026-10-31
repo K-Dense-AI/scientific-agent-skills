@@ -1,6 +1,6 @@
 # BIDS Specification Reference
 
-> **Note**: The canonical, machine-readable source of truth is `bids_schema.json` (in this directory), exported from the [BIDS Schema](https://github.com/bids-standard/bids-specification/tree/master/src/schema). The tables below are a human-readable summary. When the two disagree, trust the schema.
+> **Note**: The canonical, machine-readable source of truth is `bids_schema.json` (in this directory), exported from the [BIDS Schema](https://github.com/bids-standard/bids-specification/tree/master/src/schema). The tables below are a human-readable summary. Snapshot reviewed against BIDS 1.11.2 / schema 2.0.0 on 2026-09-30. Read rule selectors and prose together; field definitions alone do not establish requiredness.
 
 ## Entity Table
 
@@ -8,7 +8,7 @@ Complete list of BIDS entities, their keys, and where they apply. **Rows are lis
 
 | # | Entity | Key | Format | Applies to |
 |---|--------|-----|--------|------------|
-| 1 | Subject | `sub-` | `<label>` (alphanumeric) | All files (required) |
+| 1 | Subject | `sub-` | `<label>` | Subject-specific raw data (not dataset-level files) |
 | 2 | Template | `tpl-` | `<label>` | derivatives (template-based) |
 | 3 | Session | `ses-` | `<label>` | All datatypes |
 | 4 | Cohort | `cohort-` | `<label>` | derivatives (template cohorts) |
@@ -48,7 +48,7 @@ Complete list of BIDS entities, their keys, and where they apply. **Rows are lis
 
 | Datatype | Description | Common Suffixes |
 |----------|-------------|-----------------|
-| `anat` | Structural MRI | `T1w`, `T2w`, `FLAIR`, `T2star`, `inplaneT1`, `inplaneT2`, `PDw`, `T1map`, `T2map`, `T1rho`, `UNIT1`, `MP2RAGE`, `MTR`, `MTS` |
+| `anat` | Structural MRI | `T1w`, `T2w`, `FLAIR`, `T2starw`, `inplaneT1`, `inplaneT2`, `PDw`, `T1map`, `T2map`, `T1rho`, `UNIT1`, `MP2RAGE`, `MTR`, `MTS` |
 | `func` | Functional MRI | `bold`, `cbv`, `sbref` |
 | `dwi` | Diffusion-weighted imaging | `dwi`, `sbref` |
 | `fmap` | Fieldmaps | `phasediff`, `phase1`, `phase2`, `magnitude1`, `magnitude2`, `fieldmap`, `epi` |
@@ -57,10 +57,13 @@ Complete list of BIDS entities, their keys, and where they apply. **Rows are lis
 | `meg` | Magnetoencephalography | `meg`, `channels`, `coordsystem`, `events`, `headshape` |
 | `ieeg` | Intracranial EEG | `ieeg`, `channels`, `electrodes`, `events`, `coordsystem` |
 | `pet` | Positron Emission Tomography | `pet`, `blood` |
-| `micr` | Microscopy | `2PE`, `BF`, `CARS`, `CONF`, `DIC`, `DF`, `FLUO`, `MPE`, `NLO`, `OCT`, `PC`, `PLI`, `SRS`, `TL` |
+| `micr` | Microscopy | `2PE`, `BF`, `CARS`, `CONF`, `DIC`, `DF`, `FLUO`, `MPE`, `NLO`, `OCT`, `PC`, `PLI`, `SRS`, `XPCT` |
 | `beh` | Behavioral data (no imaging) | `events`, `beh`, `physio`, `stim` |
 | `motion` | Motion capture | `motion`, `channels`, `events` |
 | `nirs` | Near-infrared spectroscopy | `nirs`, `channels`, `optodes`, `coordsystem`, `events` |
+| `mrs` | MR spectroscopy | `svs`, `mrsi`, `unloc` |
+| `emg` | Electromyography | `emg`, `channels`, `electrodes`, `coordsystem`, `events` |
+| `phenotype` | Dataset-level phenotypic tables | questionnaire-specific TSV names |
 
 ## File Extensions
 
@@ -95,15 +98,15 @@ Complete list of BIDS entities, their keys, and where they apply. **Rows are lis
 - `sub-<label>/[ses-<label>/]sub-<label>[_ses-<label>]_scans.tsv` - per-run acquisition metadata
 
 ### Modality-specific required files
-- **func/bold**: corresponding `_events.tsv` for task data; `TaskName` in JSON sidecar
+- **func/bold**: `TaskName` plus valid volume timing metadata; describe recorded events in `_events.tsv` (not every task has recorded events)
 - **dwi**: `.bvec` and `.bval` files
-- **eeg/meg/ieeg**: `_channels.tsv`, `_events.tsv`
+- **eeg/meg/ieeg**: consult datatype rules for channel tables and event recordings; iEEG requires electrodes and coordinate metadata. Requirements differ by datatype and format
 - **perf/asl**: `_aslcontext.tsv`
 
 ## Directory Structure Rules
 
 1. Subject directories are named `sub-<label>` and sit at dataset root
-2. Session directories `ses-<label>` are optional; if used, must be used for ALL subjects
+2. For multi-session subjects, use `ses-<label>` directories. When any subject has multiple sessions, this layer SHOULD be added for all subjects (not a universal MUST)
 3. Datatype directories (`anat/`, `func/`, etc.) sit inside subject (or session) directories
 4. `sourcedata/` stores raw unprocessed data (DICOM, etc.) - not validated
 5. `derivatives/` stores processed outputs - each pipeline in its own subdirectory
@@ -141,25 +144,20 @@ Common `space-` values used in derivatives:
 | `OASIS30ANTs` | OASIS-30 ANTs template |
 | `UNCInfant` | UNC infant templates |
 
-Full list managed by TemplateFlow: https://www.templateflow.org/
+Use the [BIDS coordinate-system identifiers](https://bids-specification.readthedocs.io/en/stable/appendices/coordinate-systems.html); TemplateFlow provides many reference resources: https://www.templateflow.org/. Pipeline aliases such as fsaverage5/fsaverage6 may encode density; confirm the target output convention.
 
-## Specification Changelog (Selected)
+## Recent specification changes
 
-| Version | Key Changes |
-|---------|-------------|
-| 1.10.0 | Motion capture modality; refined derivative entity rules |
-| 1.9.0 | NIRS modality; Python-based validator reference implementation |
-| 1.8.0 | Microscopy modality; `chunk-` entity for large files |
-| 1.7.0 | PET modality fully specified |
-| 1.6.0 | EEG/MEG/iEEG matured; `_coordsystem.json` |
-| 1.5.0 | Genetic descriptors; ASL perfusion |
-| 1.4.0 | `dataset_description.json` expanded; derivatives framework |
-| 1.0.0 | Initial release: MRI only (anat, func, dwi, fmap) |
+The [official changelog](https://bids-specification.readthedocs.io/en/stable/CHANGES.html)
+is the maintained version history. BIDS 1.11.2 adds OME-Zarr imaging support and
+PET surface-map derivatives, accepts institutional authors, and requires complete
+BrainVision triplets in the schema. BIDS 1.11.0 added eye tracking, atlases and EMG;
+1.10.0 added MR spectroscopy. These are specification versions, not validator versions.
 
 ## Entity Label Rules
 
-- **Labels** (`<label>`): alphanumeric only, no special characters, no leading zeros (except `run-`)
-- **Indices** (`<index>`): non-negative integers, zero-padded to equal width within a dataset (e.g., `run-01`, `run-02`)
+- **Labels** (`<label>`): alphanumeric with `+` allowed; leading zeros are allowed; labels must not collide when case is ignored
+- **Indices** (`<index>`): non-negative integers, optionally zero-padded for consistent width; padding does not create a distinct numeric index (e.g., `run-01`, `run-02`)
 - Subject labels: typically numeric (`01`, `02`) but can be alphanumeric (`CON01`, `PAT01`)
 - Session labels: descriptive (`pre`, `post`, `baseline`, `followup`) or numeric
 - Task labels: brief, descriptive, no spaces (`rest`, `nback`, `faces`, `gonogo`)

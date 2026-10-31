@@ -1,6 +1,6 @@
 # Variant Files: VCF and BCF
 
-This reference targets pysam 0.24.0. Numeric pysam coordinates are 0-based,
+This reference targets pysam 0.24.1. Numeric pysam coordinates are 0-based,
 half-open even though VCF text uses a 1-based `POS`.
 
 ## Open and Iterate
@@ -22,7 +22,11 @@ Common modes:
   unnecessary
 - `w`: VCF output; a `.vcf.gz` suffix selects BGZF-compressed VCF
 - `wb`: compressed BCF output
-- `wbu` / `wb0`: uncompressed BCF output
+- `wz`: explicitly BGZF-compressed VCF output
+- `wb0`: BCF in BGZF blocks with compression level zero
+
+The advertised `wbu` mode is rejected as conflicting format specifiers in
+0.24.1; use `wb0`. Do not mistake level-zero BGZF for a raw unframed BCF stream.
 
 Writing requires a `VariantHeader`.
 
@@ -65,8 +69,15 @@ Random access requires:
 - BCF: `.csi`
 
 An unindexed VCF.gz or BCF can still be read sequentially with normal
-iteration. `fetch()` with no region is index-driven; use `for record in
-variants` for a true sequential pass.
+iteration. In 0.24.1, `fetch()` with no contig/region rewinds to the start of
+records and returns a sequential iterator without requiring an index. Normal
+`for record in variants` iteration starts at the current position. This differs
+from the broad index-driven wording in the upstream fetch docstring; verified
+against tagged source and native VCF/BCF tests.
+
+Use the canonical `contig=` keyword. In 0.24.1, supplying only the legacy
+`reference=` alias takes the no-contig sequential branch and ignores the
+intended region bounds.
 
 For simultaneous iterators, `VariantFile.fetch()` uses `reopen=True`:
 
@@ -119,7 +130,7 @@ Handle non-simple alleles:
 
 - multiallelic records can have several ALT alleles
 - symbolic alleles include `<DEL>`, `<DUP>`, `<INS>`, and others
-- breakends use bracket notation
+- paired breakends use bracket notation; single breakends use `A.` or `.A`
 - spanning deletion uses `*`
 - gVCF records often use `<NON_REF>` or `<*>`
 
@@ -144,6 +155,11 @@ Number semantics matter:
 - `R`: one value per REF+ALT allele
 - `G`: one value per genotype
 - `.`: variable number
+
+For FORMAT fields, 0.24.1 also supports `P` (ploidy), local-allele `LA`, `LR`,
+`LG`, and modification `M` cardinalities. Preserve the source VCF version and
+required companion fields such as `LAA`; these are not interchangeable with
+ordinary `A`/`R`/`G`. Consult VCF 4.5 and test the actual caller's schema.
 
 Flag fields are represented as booleans. Missing values may be `None`, a tuple
 containing `None`, or absent from the mapping depending on the field.
@@ -270,7 +286,6 @@ existing field.
 
 ```python
 header = pysam.VariantHeader()
-header.add_meta("fileformat", value="VCFv4.5")
 header.contigs.add("chr1", length=248_956_422)
 header.info.add(
     "DP",
@@ -300,6 +315,11 @@ with pysam.VariantFile("new.vcf.gz", "w", header=header) as output:
     record.samples["sample_A"]["GT"] = (0, 1)
     output.write(record)
 ```
+
+`VariantHeader()` already starts with `##fileformat=VCFv4.2`. Do not append a
+second `fileformat` line with `add_meta`; that creates a duplicate rather than
+changing the version. To use newer-version fields, copy a valid header read
+from that version and check `header.version`.
 
 `start`/`stop` here are numeric Python coordinates. `start=99_999` writes VCF
 `POS=100000`.

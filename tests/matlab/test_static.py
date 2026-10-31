@@ -44,7 +44,7 @@ class SkillStructureTests(unittest.TestCase):
             text,
             r'\nmetadata:\n  version: "\d+\.\d+"\n'
             r'  skill-author: "K-Dense Inc\."\n'
-            r'  last-reviewed: "2026-07-23"\n',
+            r'  last-reviewed: "\d{4}-\d{2}-\d{2}"\n',
         )
         self.assertNotIn('metadata: {"version"', text)
 
@@ -54,7 +54,7 @@ class SkillStructureTests(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
-                self.assertIn("Sources (verified 2026-07-23)", text)
+                self.assertRegex(text, r"Sources \(reviewed \d{4}-\d{2}-\d{2}\)")
                 self.assertIn("https://", text)
 
     def test_assets_are_strict_json(self) -> None:
@@ -85,7 +85,7 @@ class SkillStructureTests(unittest.TestCase):
 
     def test_external_sources_use_allowed_official_domains(self) -> None:
         pattern = re.compile(r"\[[^\]]+\]\((https://[^)]+)\)")
-        allowed = ("mathworks.com", "octave.org", "gnu.org", "pypi.org")
+        allowed = ("mathworks.com", "octave.org", "gnu.org", "pypi.org", "scipy.org", "h5py.org")
         markdown = [SKILL_ROOT / "SKILL.md", *sorted(REFERENCES.glob("*.md"))]
         for path in markdown:
             for target in pattern.findall(path.read_text(encoding="utf-8")):

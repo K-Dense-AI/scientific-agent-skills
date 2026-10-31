@@ -1,507 +1,278 @@
-"""Tests for the phylogenetics pipeline script.
-
-The pipeline is a thin shell around MAFFT, IQ-TREE 2, and FastTree, none of
-which are Python packages and none of which are installed here. What can still
-be wrong -- and would only show up as a wasted multi-hour run -- is the *command
-line* the script hands to them: MAFFT's accuracy/speed strategy is chosen from
-the sequence count, and FastTree's substitution model must match the sequence
-type (`-gtr` is nucleotide-only, `-lg` protein-only). Those commands are
-therefore asserted argument by argument with `subprocess.run` replaced by a
-recorder, so no external binary is ever invoked.
-
-`count_sequences` and the ETE3 tree summary are checked against a FASTA and a
-Newick string whose answers are known by construction; the summary's branch
-lengths hold because rerooting relocates the root along an existing branch and
-so preserves the tree's total length.
-"""
-
-from __future__ import annotations
+"""Behavioral tests; command doubles are not live native-tool validation."""
 
 import contextlib
 import io
 import subprocess
 import sys
-import tempfile
-import unittest
 from pathlib import Path
 from unittest import mock
 
 import pytest
-
 import skill_contract
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "phylogenetics"
-SCRIPTS = SKILL_ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS))
-
-# The script imports nothing heavier than the standard library at module scope
-# -- ete3 is imported lazily inside the two visualisation helpers -- so there is
-# no module-level package to guard. The ete3-dependent tests skip individually.
-import phylogenetic_analysis as pipeline  # noqa: E402
+sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+import phylogenetic_analysis as pipeline
 
 CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
+TREE = "((A:1,B:1)81/99:1,(C:2,D:2):1);"
+FASTA = ">A\nACGTACGT\n>B\nACGTTCGT\n>C\nTCGTACGT\n>D\nTCGTTCGT\n"
+
+
+@pytest.fixture
+def fasta(tmp_path):
+    path = tmp_path / "input.fasta"
+    path.write_text(FASTA)
+    return path
+
+
+@pytest.fixture
+def native_mock():
+    def complete(command, **kwargs):
+        if command[0] == "mafft":
+            kwargs["stdout"].write(Path(command[-1]).read_text())
+        elif "--prefix" in command:
+            Path(command[command.index("--prefix") + 1] + ".treefile").write_text(TREE)
+        else:
+            kwargs["stdout"].write(TREE)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+    with mock.patch.object(pipeline.subprocess, "run", side_effect=complete) as run:
+        yield run
+
+
+def test_fasta_validation_counts_records_and_wrapped_sequences(fasta):
+    assert pipeline.count_sequences(fasta) == 4
+    assert pipeline.validate_fasta(fasta, aligned=True)["A"] == "ACGTACGT"
+
+
+@pytest.mark.parametrize("content,message", [
+    ("", "at least"),
+    (FASTA + ">A\nACGT\n", "Duplicate"),
+    (FASTA.replace(">A", ">A description"), "whitespace"),
+    (FASTA.replace(">A", ">A:B"), "punctuation"),
+    ("ACGT\n" + FASTA, "before"),
+    (FASTA.replace("ACGTACGT", "----????", 1), "missing"),
+    (FASTA.replace("ACGTACGT", "NNNNNNNN", 1), "missing"),
+    (FASTA.replace("ACGTACGT", "ACGT*CGT", 1), "Invalid"),
+    (FASTA.replace("ACGTACGT", "ACGT", 1), "equal lengths"),
+])
+def test_invalid_alignment_fails_before_inference(tmp_path, content, message):
+    path = tmp_path / "bad.fasta"
+    path.write_text(content)
+    with pytest.raises(ValueError, match=message):
+        pipeline.validate_fasta(path, aligned=True)
+
+
+@pytest.mark.parametrize("method,flags", [
+    ("auto", ["--auto"]),
+    ("linsi", ["--localpair", "--maxiterate", "1000"]),
+    ("einsi", ["--genafpair", "--maxiterate", "1000"]),
+    ("fftnsi", ["--retree", "2", "--maxiterate", "2"]),
+    ("fftns", ["--retree", "2", "--maxiterate", "0"]),
+])
+def test_mafft_methods_use_real_options(fasta, native_mock, method, flags):
+    destination = fasta.with_name("aligned.fasta")
+    pipeline.run_mafft(str(fasta), str(destination), method=method, n_threads=2)
+    command = native_mock.call_args.args[0]
+    assert command == ["mafft", *flags, "--thread", "2", "--inputorder", str(fasta)]
+    assert destination.read_text() == FASTA
+
+
+def test_mafft_rejects_invalid_method_and_in_place_output(fasta, native_mock):
+    with pytest.raises(ValueError, match="Unsupported"):
+        pipeline.run_mafft(str(fasta), str(fasta.with_suffix(".aln")), method="bad")
+    with pytest.raises(ValueError, match="differ"):
+        pipeline.run_mafft(str(fasta), str(fasta))
+    native_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("returncode,stderr", [(1, "bad alignment"), (0, "")])
+def test_external_failure_or_empty_output_does_not_clobber_existing_file(fasta, returncode, stderr):
+    output = fasta.with_suffix(".out")
+    output.write_text("previous result")
+    result = subprocess.CompletedProcess([], returncode, stdout="", stderr=stderr)
+    with mock.patch.object(pipeline.subprocess, "run", return_value=result):
+        with pytest.raises(RuntimeError):
+            pipeline.run_mafft(str(fasta), str(output))
+    assert output.read_text() == "previous result"
+    assert {p.name for p in fasta.parent.iterdir()} == {fasta.name, output.name}
+
+
+@pytest.mark.parametrize("seq_type,alphabet", [("nt", "DNA"), ("aa", "AA")])
+def test_iqtree_honors_alphabet_and_preserves_checkpoint(fasta, native_mock, seq_type, alphabet):
+    tree = pipeline.run_iqtree(str(fasta), str(fasta.with_suffix("")), seq_type=seq_type)
+    command = native_mock.call_args.args[0]
+    for flag, value in [("-st", alphabet), ("-m", "MFP"), ("-B", "1000"),
+                        ("--alrt", "1000"), ("--seed", "42")]:
+        assert command[command.index(flag) + 1] == value
+    assert command[0] == "iqtree3"
+    assert "--redo" not in command
+    assert Path(tree).read_text() == TREE
+
+
+def test_iqtree_overrides_are_explicit(fasta, native_mock):
+    pipeline.run_iqtree(str(fasta), str(fasta.with_suffix("")), executable="iqtree2",
+                         redo=True, outgroup="A", model="GTR+G4", seed=8, bootstrap=2000)
+    command = native_mock.call_args.args[0]
+    assert command[0] == "iqtree2"
+    assert "--redo" in command
+    assert command[command.index("-o") + 1] == "A"
+    assert command[command.index("-m") + 1] == "GTR+G4"
+    assert command[command.index("-B") + 1] == "2000"
+    assert command[command.index("--seed") + 1] == "8"
+
+
+def test_iqtree_rejects_invalid_bootstrap_before_call(fasta, native_mock):
+    with pytest.raises(ValueError, match="at least 1000"):
+        pipeline.run_iqtree(str(fasta), "run", bootstrap=99)
+    native_mock.assert_not_called()
 
-#: Four taxa, total branch length 8 (1+1+1+1+2+2); the six non-zero branches
-#: give a mean of 8/6 and a maximum of 2.
-FOUR_TAXA = "((A:1,B:1):1,(C:2,D:2):1);"
-
-
-class Recorder:
-    """Stands in for `subprocess.run`: records argv, launches nothing."""
-
-    def __init__(self, returncode: int = 0, stderr: str = "", failing: str | None = None):
-        self.calls: list[list[str]] = []
-        self._returncode = returncode
-        self._stderr = stderr
-        self._failing = failing
-
-    def __call__(self, command, **kwargs) -> subprocess.CompletedProcess:
-        self.calls.append(list(command))
-        returncode = self._returncode
-        if self._failing is not None:
-            returncode = 1 if self._failing in command else 0
-        return subprocess.CompletedProcess(
-            list(command), returncode, stdout="", stderr=self._stderr
-        )
-
-    @property
-    def command(self) -> list[str]:
-        self.assert_called()
-        return self.calls[-1]
-
-    def assert_called(self) -> None:
-        if not self.calls:
-            raise AssertionError("subprocess.run was never called")
-
-
-@contextlib.contextmanager
-def recorded(recorder: Recorder):
-    with mock.patch.object(pipeline.subprocess, "run", recorder):
-        yield recorder
-
-
-class ScratchCase(unittest.TestCase):
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self._temporary.cleanup)
-        self.root = Path(self._temporary.name)
-
-    def fasta(self, count: int, name: str | None = None) -> Path:
-        path = self.root / (name or f"seqs{count}.fasta")
-        path.write_text(
-            "".join(f">seq{index}\nACGTACGT\n" for index in range(count)),
-            encoding="utf-8",
-        )
-        return path
-
-    def newick(self, text: str = FOUR_TAXA, name: str = "tree.nwk") -> Path:
-        path = self.root / name
-        path.write_text(text + "\n", encoding="utf-8")
-        return path
-
-
-class SequenceCountTests(ScratchCase):
-    def test_headers_are_counted_not_lines(self) -> None:
-        self.assertEqual(pipeline.count_sequences(str(self.fasta(3))), 3)
-
-    def test_an_empty_file_has_no_sequences(self) -> None:
-        # 0 must come back as 0 rather than raise: run_mafft divides the world
-        # into size bands on this number.
-        self.assertEqual(pipeline.count_sequences(str(self.fasta(0))), 0)
-
-    def test_a_wrapped_sequence_counts_once(self) -> None:
-        path = self.root / "wrapped.fasta"
-        path.write_text(">only\nACGT\nACGT\nACGT\n", encoding="utf-8")
-        self.assertEqual(pipeline.count_sequences(str(path)), 1)
-
-    def test_an_angle_bracket_that_does_not_start_a_line_is_not_a_header(self) -> None:
-        # Indented or mid-line ">" appears in quality lines and comments; only a
-        # line-initial one opens a FASTA record.
-        path = self.root / "odd.fasta"
-        path.write_text(">real\nACGT\n  >indented\nAC>GT\n", encoding="utf-8")
-        self.assertEqual(pipeline.count_sequences(str(path)), 1)
-
-    def test_a_missing_file_raises_rather_than_reporting_zero(self) -> None:
-        with self.assertRaises(FileNotFoundError):
-            pipeline.count_sequences(str(self.root / "absent.fasta"))
-
-
-class MafftCommandTests(ScratchCase):
-    """`--mafft-method auto` trades accuracy for speed as the dataset grows."""
-
-    def align(self, sequences: int, **kwargs) -> list[str]:
-        source = self.fasta(sequences)
-        with recorded(Recorder()) as recorder:
-            with contextlib.redirect_stdout(io.StringIO()):
-                pipeline.run_mafft(
-                    str(source), str(self.root / "aligned.fasta"), **kwargs
-                )
-        return recorder.command
-
-    def test_small_datasets_get_the_accurate_pairwise_strategy(self) -> None:
-        command = self.align(10)
-        self.assertEqual(command[0], "mafft")
-        self.assertIn("--localpair", command)
-        self.assertEqual(command[command.index("--maxiterate") + 1], "1000")
-
-    def test_the_two_hundred_sequence_boundary_is_inclusive(self) -> None:
-        # `n_seqs <= 200` -- 200 still gets --localpair, 201 drops to --auto.
-        self.assertIn("--localpair", self.align(200))
-        self.assertNotIn("--localpair", self.align(201))
-        self.assertIn("--auto", self.align(201))
-
-    def test_the_thousand_sequence_boundary_is_inclusive(self) -> None:
-        # `n_seqs <= 1000` -- above it MAFFT must drop to the FFT-NS heuristic,
-        # because --auto on a large alignment can run for days.
-        self.assertIn("--auto", self.align(1000))
-        self.assertNotIn("--auto", self.align(1001))
-        self.assertIn("--fftns", self.align(1001))
-
-    def test_an_explicit_method_overrides_the_size_bands(self) -> None:
-        command = self.align(10, method="fftns")
-        self.assertIn("--fftns", command)
-        self.assertNotIn("--localpair", command)
-
-    def test_the_thread_count_reaches_mafft_as_a_string(self) -> None:
-        for sequences in (10, 500, 2000):
-            with self.subTest(sequences=sequences):
-                command = self.align(sequences, n_threads=7)
-                self.assertEqual(command[command.index("--thread") + 1], "7")
-
-    def test_the_input_order_is_preserved_and_the_file_comes_last(self) -> None:
-        # Without --inputorder MAFFT reorders the alignment, which silently
-        # breaks any downstream code that pairs it with a metadata table.
-        source = self.fasta(10, "in.fasta")
-        with recorded(Recorder()) as recorder:
-            with contextlib.redirect_stdout(io.StringIO()):
-                pipeline.run_mafft(str(source), str(self.root / "out.fasta"))
-        self.assertIn("--inputorder", recorder.command)
-        self.assertEqual(recorder.command[-1], str(source))
-
-    def test_the_alignment_is_written_to_the_requested_path(self) -> None:
-        destination = self.root / "aligned.fasta"
-        with recorded(Recorder()):
-            with contextlib.redirect_stdout(io.StringIO()):
-                returned = pipeline.run_mafft(str(self.fasta(5)), str(destination))
-        self.assertEqual(returned, str(destination))
-        self.assertTrue(destination.exists())
-
-    def test_a_mafft_failure_is_raised_not_swallowed(self) -> None:
-        # Continuing with a truncated alignment would produce a tree from
-        # nothing, so a non-zero exit has to stop the pipeline.
-        with recorded(Recorder(returncode=1, stderr="mafft: bad input")):
-            with contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaisesRegex(RuntimeError, "MAFFT failed"):
-                    pipeline.run_mafft(
-                        str(self.fasta(5)), str(self.root / "aligned.fasta")
-                    )
-
-
-class IqTreeCommandTests(ScratchCase):
-    def build(self, **kwargs) -> tuple[list[str], str, str]:
-        alignment = self.root / "aligned.fasta"
-        alignment.write_text(">a\nACGT\n", encoding="utf-8")
-        prefix = str(self.root / "run")
-        buffer = io.StringIO()
-        with recorded(Recorder()) as recorder:
-            with contextlib.redirect_stdout(buffer):
-                tree_file = pipeline.run_iqtree(str(alignment), prefix, **kwargs)
-        return recorder.command, tree_file, buffer.getvalue()
-
-    def test_the_command_carries_the_documented_flags(self) -> None:
-        command, _, _ = self.build(bootstrap=1000, n_threads=4)
-        self.assertEqual(command[0], "iqtree2")
-        pairs = {
-            "-s": str(self.root / "aligned.fasta"),
-            "--prefix": str(self.root / "run"),
-            # TEST selects the substitution model instead of assuming one.
-            "-m": "TEST",
-            "-B": "1000",
-            "-T": "4",
-            # SH-aLRT is a second branch test alongside ultrafast bootstrap.
-            "-alrt": "1000",
-        }
-        for flag, value in pairs.items():
-            with self.subTest(flag=flag):
-                self.assertEqual(command[command.index(flag) + 1], value)
-        self.assertIn("--redo", command)
-
-    def test_the_bootstrap_and_thread_counts_are_not_hardcoded(self) -> None:
-        command, _, _ = self.build(bootstrap=5000, n_threads=16)
-        self.assertEqual(command[command.index("-B") + 1], "5000")
-        self.assertEqual(command[command.index("-T") + 1], "16")
-
-    def test_an_outgroup_is_passed_only_when_one_is_given(self) -> None:
-        command, _, _ = self.build()
-        self.assertNotIn("-o", command)
-        command, _, _ = self.build(outgroup="Escherichia_coli")
-        self.assertEqual(command[command.index("-o") + 1], "Escherichia_coli")
-
-    def test_the_returned_path_is_iqtrees_treefile(self) -> None:
-        _, tree_file, _ = self.build()
-        self.assertEqual(tree_file, str(self.root / "run.treefile"))
-
-    def test_the_selected_model_is_echoed_from_the_log(self) -> None:
-        # The chosen model is the one result a reader needs to report, and it
-        # only exists in IQ-TREE's log file.
-        (self.root / "run.log").write_text(
-            "Reading alignment\nBest-fit model: GTR+F+I+G4 chosen according to BIC\n",
-            encoding="utf-8",
-        )
-        _, _, output = self.build()
-        self.assertIn("Best-fit model: GTR+F+I+G4", output)
-
-    def test_a_missing_log_is_not_an_error(self) -> None:
-        _, tree_file, output = self.build()
-        self.assertTrue(tree_file)
-        self.assertNotIn("Best-fit model", output)
-
-    def test_an_iqtree_failure_is_raised(self) -> None:
-        alignment = self.root / "aligned.fasta"
-        alignment.write_text(">a\nACGT\n", encoding="utf-8")
-        with recorded(Recorder(returncode=2, stderr="ERROR: too few sites")):
-            with contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaisesRegex(RuntimeError, "IQ-TREE failed"):
-                    pipeline.run_iqtree(str(alignment), str(self.root / "run"))
-
-
-class FastTreeCommandTests(ScratchCase):
-    def build(self, seq_type: str) -> list[str]:
-        alignment = self.root / "aligned.fasta"
-        alignment.write_text(">a\nACGT\n", encoding="utf-8")
-        with recorded(Recorder()) as recorder:
-            with contextlib.redirect_stdout(io.StringIO()):
-                pipeline.run_fasttree(
-                    str(alignment), str(self.root / "out.tree"), seq_type=seq_type
-                )
-        return recorder.command
-
-    def test_nucleotides_get_the_nucleotide_model(self) -> None:
-        # -nt switches FastTree out of its protein default, and GTR is only
-        # defined for nucleotides.
-        command = self.build("nt")
-        self.assertEqual(command[:4], ["FastTree", "-nt", "-gtr", "-gamma"])
-
-    def test_amino_acids_get_a_protein_model_and_no_nucleotide_flag(self) -> None:
-        # Passing -nt on protein data makes FastTree read every residue as an
-        # ambiguous base, so the flag must be absent here.
-        command = self.build("aa")
-        self.assertEqual(command[:3], ["FastTree", "-lg", "-gamma"])
-        self.assertNotIn("-nt", command)
-        self.assertNotIn("-gtr", command)
-
-    def test_the_alignment_is_the_final_argument(self) -> None:
-        for seq_type in ("nt", "aa"):
-            with self.subTest(seq_type=seq_type):
-                self.assertEqual(
-                    self.build(seq_type)[-1], str(self.root / "aligned.fasta")
-                )
-
-    def test_the_tree_path_is_returned_and_created(self) -> None:
-        alignment = self.root / "aligned.fasta"
-        alignment.write_text(">a\nACGT\n", encoding="utf-8")
-        destination = self.root / "out.tree"
-        with recorded(Recorder()):
-            with contextlib.redirect_stdout(io.StringIO()):
-                returned = pipeline.run_fasttree(str(alignment), str(destination))
-        self.assertEqual(returned, str(destination))
-        self.assertTrue(destination.exists())
-
-    def test_a_fasttree_failure_is_raised(self) -> None:
-        alignment = self.root / "aligned.fasta"
-        alignment.write_text(">a\nACGT\n", encoding="utf-8")
-        with recorded(Recorder(returncode=1, stderr="FastTree: no sequences")):
-            with contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaisesRegex(RuntimeError, "FastTree failed"):
-                    pipeline.run_fasttree(str(alignment), str(self.root / "out.tree"))
-
-
-class DependencyCheckTests(unittest.TestCase):
-    def test_a_complete_toolchain_reports_success_and_returns(self) -> None:
-        buffer = io.StringIO()
-        with recorded(Recorder(returncode=0)) as recorder:
-            with contextlib.redirect_stdout(buffer):
-                pipeline.check_dependencies()
-        self.assertIn("All dependencies found", buffer.getvalue())
-        # Both binaries are probed, not just the first.
-        self.assertEqual(
-            [call[1] for call in recorder.calls], ["mafft", "iqtree2"]
-        )
-
-    def test_a_missing_tool_exits_with_its_install_command(self) -> None:
-        buffer = io.StringIO()
-        with recorded(Recorder(failing="iqtree2")):
-            with contextlib.redirect_stdout(buffer):
-                with self.assertRaises(SystemExit) as raised:
-                    pipeline.check_dependencies()
-        self.assertEqual(raised.exception.code, 1)
-        report = buffer.getvalue()
-        self.assertIn("Missing dependencies", report)
-        self.assertIn("conda install -c bioconda iqtree", report)
-        # mafft was present, so it must not be listed as missing.
-        self.assertNotIn("bioconda mafft", report)
-
-    def test_every_tool_is_probed_by_name_on_the_path(self) -> None:
-        with recorded(Recorder(returncode=0)) as recorder:
-            with contextlib.redirect_stdout(io.StringIO()):
-                pipeline.check_dependencies()
-        for call in recorder.calls:
-            self.assertEqual(call[0], "which")
-
-
-class TreeSummaryTests(ScratchCase):
-    def test_the_summary_matches_the_newick_string(self) -> None:
-        pytest.importorskip("ete3", reason="tree summaries need ete3")
-        with contextlib.redirect_stdout(io.StringIO()):
-            stats = pipeline.tree_summary(str(self.newick()))
-        self.assertEqual(stats["n_taxa"], 4)
-        # Midpoint rooting relocates the root along an existing branch, splitting
-        # it in two, so the total length is unchanged at 1+1+1+1+2+2 = 8.
-        self.assertAlmostEqual(stats["total_branch_length"], 8.0)
-        self.assertAlmostEqual(stats["max_branch_length"], 2.0)
-        # Six non-zero branches survive rerooting, so the mean is 8/6.
-        self.assertAlmostEqual(stats["mean_branch_length"], 8 / 6)
-
-    def test_the_mean_is_consistent_with_the_total(self) -> None:
-        pytest.importorskip("ete3", reason="tree summaries need ete3")
-        with contextlib.redirect_stdout(io.StringIO()):
-            stats = pipeline.tree_summary(str(self.newick("(A:0.5,(B:0.5,C:1.5):0.5);")))
-        self.assertEqual(stats["n_taxa"], 3)
-        self.assertAlmostEqual(stats["total_branch_length"], 3.0)
-        self.assertLessEqual(stats["mean_branch_length"], stats["max_branch_length"])
-
-    def test_an_unreadable_tree_returns_an_empty_summary(self) -> None:
-        # tree_summary is called for its report, so a bad tree file must not
-        # abort a pipeline that has already produced its outputs.
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            self.assertEqual(pipeline.tree_summary(str(self.root / "absent.nwk")), {})
-        self.assertIn("Could not compute tree stats", buffer.getvalue())
-
-    def test_malformed_newick_returns_an_empty_summary(self) -> None:
-        malformed = self.root / "bad.nwk"
-        malformed.write_text("((A:1,B:1)\n", encoding="utf-8")
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(pipeline.tree_summary(str(malformed)), {})
-
-
-class VisualisationTests(ScratchCase):
-    def test_the_rooting_choice_is_reported(self) -> None:
-        ete3 = pytest.importorskip("ete3", reason="visualisation needs ete3")
-        if not hasattr(ete3, "TreeStyle"):
-            self.skipTest("ete3's Qt treeview is unavailable, so rooting is not reached")
-        for outgroup, expected in (("A", "Rooted at outgroup: A"), ("Z", "midpoint")):
-            with self.subTest(outgroup=outgroup):
-                buffer = io.StringIO()
-                with contextlib.redirect_stdout(buffer):
-                    pipeline.visualize_tree(
-                        str(self.newick()),
-                        str(self.root / f"{outgroup}.png"),
-                        outgroup=outgroup,
-                    )
-                self.assertIn(expected, buffer.getvalue())
-
-    def test_a_missing_qt_backend_names_the_package_it_needs(self) -> None:
-        ete3 = pytest.importorskip("ete3", reason="visualisation needs ete3")
-        if hasattr(ete3, "TreeStyle"):
-            self.skipTest("ete3's Qt treeview is installed, so the hint is not reached")
-        # ete3 imports fine without PyQt5 but cannot render, so the diagnostic
-        # has to name PyQt5 rather than tell the user to install ete3 again.
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            self.assertIsNone(
-                pipeline.visualize_tree(str(self.newick()), str(self.root / "t.png"))
-            )
-        report = buffer.getvalue()
-        self.assertIn("PyQt5", report)
-        self.assertIn("Skipping visualization", report)
-
-
-class PipelineWiringTests(ScratchCase):
-    """`main` end to end with every external tool replaced by a recorder."""
-
-    def run_pipeline(self, extra: list[str] | None = None) -> tuple[Recorder, mock.Mock]:
-        source = self.fasta(5, "in.fasta")
-        output_dir = self.root / "results"
-        argv = [
-            "phylogenetic_analysis.py",
-            str(source),
-            "--output-dir",
-            str(output_dir),
-            *(extra or []),
-        ]
-        recorder = Recorder()
-        with mock.patch.object(pipeline.subprocess, "run", recorder), mock.patch.object(
-            pipeline, "visualize_tree"
-        ) as visualise, mock.patch.object(
-            pipeline, "tree_summary", return_value={}
-        ), mock.patch.object(sys, "argv", argv):
-            with contextlib.redirect_stdout(io.StringIO()):
-                pipeline.main()
-        self.assertTrue(output_dir.is_dir())
-        return recorder, visualise
-
-    def test_the_default_run_is_align_then_iqtree(self) -> None:
-        recorder, visualise = self.run_pipeline()
-        self.assertEqual([call[0] for call in recorder.calls], ["mafft", "iqtree2"])
-        # IQ-TREE must be handed MAFFT's *output*, not the unaligned input.
-        aligned = str(self.root / "results" / "in_aligned.fasta")
-        iqtree = recorder.calls[1]
-        self.assertEqual(iqtree[iqtree.index("-s") + 1], aligned)
-        visualise.assert_called_once()
-        self.assertEqual(
-            visualise.call_args.args,
-            (
-                str(self.root / "results" / "in.treefile"),
-                str(self.root / "results" / "in_tree.png"),
-            ),
-        )
-
-    def test_fasttree_replaces_iqtree_rather_than_running_alongside_it(self) -> None:
-        recorder, _ = self.run_pipeline(["--fasttree"])
-        self.assertEqual([call[0] for call in recorder.calls], ["mafft", "FastTree"])
-
-    def test_the_sequence_type_reaches_fasttrees_model_choice(self) -> None:
-        recorder, _ = self.run_pipeline(["--fasttree", "--type", "aa"])
-        self.assertIn("-lg", recorder.calls[1])
-        self.assertNotIn("-nt", recorder.calls[1])
-
-    def test_the_outgroup_reaches_both_iqtree_and_the_visualisation(self) -> None:
-        recorder, visualise = self.run_pipeline(["--outgroup", "Outgroup_sp"])
-        iqtree = recorder.calls[1]
-        self.assertEqual(iqtree[iqtree.index("-o") + 1], "Outgroup_sp")
-        self.assertEqual(visualise.call_args.kwargs["outgroup"], "Outgroup_sp")
-
-    def test_an_unsupported_sequence_type_is_refused_before_any_tool_runs(self) -> None:
-        recorder = Recorder()
-        argv = ["phylogenetic_analysis.py", str(self.fasta(5, "in.fasta")), "--type", "protein"]
-        with mock.patch.object(pipeline.subprocess, "run", recorder), mock.patch.object(
-            sys, "argv", argv
-        ):
-            with contextlib.redirect_stderr(io.StringIO()):
-                with self.assertRaises(SystemExit) as raised:
-                    pipeline.main()
-        self.assertEqual(raised.exception.code, 2)
-        self.assertEqual(recorder.calls, [])
-
-    def test_an_unsupported_mafft_method_is_refused(self) -> None:
-        # An unknown method would otherwise be interpolated straight into
-        # `--{method}` and reach MAFFT as an invalid flag.
-        recorder = Recorder()
-        argv = [
-            "phylogenetic_analysis.py",
-            str(self.fasta(5, "in.fasta")),
-            "--mafft-method",
-            "hmmalign",
-        ]
-        with mock.patch.object(pipeline.subprocess, "run", recorder), mock.patch.object(
-            sys, "argv", argv
-        ):
-            with contextlib.redirect_stderr(io.StringIO()):
-                with self.assertRaises(SystemExit):
-                    pipeline.main()
-        self.assertEqual(recorder.calls, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+
+def test_iqtree_checks_that_a_tree_was_produced(fasta):
+    with mock.patch.object(pipeline.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")):
+        with pytest.raises(RuntimeError, match="nonempty"):
+            pipeline.run_iqtree(str(fasta), str(fasta.with_suffix("")))
+
+
+@pytest.mark.parametrize("seq_type,options", [("nt", ["-nt", "-gtr"]), ("aa", ["-lg"])])
+def test_fasttree_model_depends_on_alphabet(fasta, native_mock, seq_type, options):
+    pipeline.run_fasttree(str(fasta), str(fasta.with_suffix(".tree")), seq_type)
+    assert native_mock.call_args.args[0] == ["FastTree", *options, "-gamma", str(fasta)]
+
+
+def test_dependency_check_only_requires_selected_backend():
+    with mock.patch.object(pipeline.shutil, "which", return_value="/tool") as which:
+        pipeline.check_dependencies(use_fasttree=True)
+    assert which.call_args_list == [mock.call("mafft"), mock.call("FastTree")]
+    with mock.patch.object(pipeline.shutil, "which", return_value=None):
+        with pytest.raises(RuntimeError, match="iqtree3"):
+            pipeline.check_dependencies()
+
+
+@pytest.fixture
+def tree_file(tmp_path):
+    pytest.importorskip("ete3")
+    path = tmp_path / "tree.nwk"
+    path.write_text(TREE)
+    return path
+
+
+def test_slash_support_labels_survive_loading_and_roundtrip(tree_file):
+    tree = pipeline.load_tree(tree_file)
+    assert "81/99" in [n.name for n in tree.iter_descendants()]
+    assert "81/99" in tree.write(format=1)
+    assert tree.get_leaf_names() == ["A", "B", "C", "D"]
+
+
+def test_summary_does_not_reroot_or_ignore_zero_edges(tree_file):
+    tree_file.write_text("((A:0,B:1)81/99:1,(C:2,D:2):1);")
+    stats = pipeline.tree_summary(tree_file)
+    assert stats == {"n_taxa": 4, "total_branch_length": 7, "mean_branch_length": 7/6,
+                     "max_branch_length": 2}
+
+
+def test_missing_outgroup_is_an_error_never_midpoint_fallback(tree_file):
+    with pytest.raises(ValueError, match="Outgroup not found"):
+        pipeline.root_for_display(pipeline.load_tree(tree_file), outgroup="missing")
+
+
+@pytest.mark.parametrize("options", [{"outgroup": "C"}, {"midpoint": True}])
+def test_rerooting_preserves_distances_and_support_split(tree_file, options):
+    tree = pipeline.load_tree(tree_file)
+    before = {(a,b): tree.get_distance(a,b) for a in "ABCD" for b in "ABCD" if a != b}
+    pipeline.root_for_display(tree, **options)
+    assert {(a,b): tree.get_distance(a,b) for a,b in before} == before
+    supported = [set(n.get_leaf_names()) for n in tree.iter_descendants() if n.name == "81/99"]
+    assert supported
+    assert all(s in ({"A", "B"}, {"C", "D"}) for s in supported)
+
+
+def test_no_implicit_midpoint_root(tree_file):
+    tree = pipeline.load_tree(tree_file)
+    before = tree.write(format=1)
+    assert pipeline.root_for_display(tree).write(format=1) == before
+
+
+def test_negative_branch_length_is_rejected(tree_file):
+    tree_file.write_text("(A:-1,B:1,C:2);")
+    with pytest.raises(ValueError, match="nonnegative"):
+        pipeline.load_tree(tree_file)
+
+
+def test_missing_qt_does_not_claim_an_image(tree_file):
+    import ete3
+    if hasattr(ete3, "TreeStyle"):
+        pytest.skip("No missing-Qt path in this environment")
+    with contextlib.redirect_stdout(io.StringIO()) as output:
+        result = pipeline.visualize_tree(str(tree_file), str(tree_file.with_suffix(".png")))
+    assert result is None
+    assert "PyQt5" in output.getvalue()
+    assert not tree_file.with_suffix(".png").exists()
+
+
+@pytest.mark.parametrize("extra,executables", [([], ["mafft", "iqtree3"]),
+    (["--fasttree"], ["mafft", "FastTree"]), (["--aligned"], ["iqtree3"])])
+def test_pipeline_wires_reviewed_alignment_and_selected_backend(fasta, native_mock, extra, executables):
+    argv = ["pipeline", str(fasta), "--output-dir", str(fasta.parent / "results"),
+            "--no-visualization", *extra]
+    with mock.patch.object(sys, "argv", argv), mock.patch.object(pipeline, "tree_summary"):
+        pipeline.main()
+    assert [call.args[0][0] for call in native_mock.call_args_list] == executables
+    if "--aligned" not in extra:
+        assert "input_aligned.fasta" in native_mock.call_args_list[-1].args[0][-1] or any(
+            "input_aligned.fasta" in a for a in native_mock.call_args_list[-1].args[0])
+
+
+def test_cli_validates_outgroup_before_calling_tools(fasta, native_mock):
+    with mock.patch.object(sys, "argv", ["pipeline", str(fasta), "--outgroup", "missing"]):
+        with pytest.raises(SystemExit) as error:
+            pipeline.main()
+    assert error.value.code == 2
+    native_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("method", list(pipeline.MAFFT_METHODS))
+def test_native_mafft_method_when_available(fasta, method):
+    if pipeline.shutil.which("mafft") is None:
+        pytest.skip("MAFFT executable is not installed")
+    destination = fasta.with_name(f"{method}.fasta")
+    pipeline.run_mafft(str(fasta), str(destination), n_threads=1, method=method)
+    aligned = pipeline.validate_fasta(destination, aligned=True)
+    assert list(aligned) == ["A", "B", "C", "D"]
+    assert {name: seq.replace("-", "") for name, seq in aligned.items()} == pipeline.validate_fasta(fasta)
+
+
+@pytest.mark.parametrize("seq_type", ["nt", "aa"])
+@pytest.mark.parametrize("backend", ["iqtree3", "FastTree"])
+def test_native_pipeline_when_executables_available(tmp_path, seq_type, backend):
+    """Small reproducible smoke data; not an inference-accuracy benchmark."""
+    import random
+    if any(pipeline.shutil.which(exe) is None for exe in ["mafft", backend]):
+        pytest.skip(f"Native integration requires MAFFT and {backend} on PATH")
+    pytest.importorskip("ete3")
+    rng = random.Random(7)
+    alphabet = "ACGT" if seq_type == "nt" else "ACDEFGHIKLMNPQRSTVWY"
+    ancestor = "".join(rng.choice(alphabet) for _ in range(300))
+    records = []
+    for i in range(6):
+        sequence = "".join(rng.choice(alphabet) if rng.random() < 0.12 else c for c in ancestor)
+        records.append(f">sample_{i}\n{sequence}\n")
+    source = tmp_path / "input.fasta"
+    source.write_text("".join(records))
+    argv = ["pipeline", str(source), "--type", seq_type, "--threads", "1",
+            "--no-visualization", "--output-dir", str(tmp_path / "output")]
+    if backend == "FastTree":
+        argv.append("--fasttree")
+    elif seq_type == "aa":
+        argv += ["--model", "LG+G4"]
+    with mock.patch.object(sys, "argv", argv):
+        pipeline.main()
+    suffix = "tree" if backend == "FastTree" else "treefile"
+    tree = pipeline.load_tree(tmp_path / "output" / f"input.{suffix}")
+    assert set(tree.get_leaf_names()) == {f"sample_{i}" for i in range(6)}
+    labels = [n.name for n in tree.iter_descendants() if not n.is_leaf()]
+    if backend == "iqtree3":
+        assert any("/" in label for label in labels)
+    else:
+        assert all(0 <= float(label) <= 1 for label in labels if label)
+    assert pipeline.tree_summary(tmp_path / "output" / f"input.{suffix}")["total_branch_length"] > 0

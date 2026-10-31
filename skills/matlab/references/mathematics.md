@@ -110,6 +110,9 @@ correct model. Check conservation laws, event localization, stiffness,
 step-size convergence, and an independent formulation. R2026a adds an
 automatic-differentiation Jacobian option for the `ode` object; verify the
 specific solver/problem and release notes before using it.
+R2026b extends `ode` automatic Jacobians to complex equations and adds the
+`Waypoints` property for time values the solver must reach exactly. These are
+release-specific `ode` object features, not `ode45` options.
 
 ## Optimization and fitting boundaries
 
@@ -193,7 +196,7 @@ At minimum capture:
 Use `scripts/reproducibility_report.py` to hash only named local artifacts. It
 does not inspect the broad environment.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [Linear Algebra](https://www.mathworks.com/help/matlab/linear-algebra.html)
 - [`mldivide`](https://www.mathworks.com/help/matlab/ref/double.mldivide.html)
@@ -203,6 +206,7 @@ does not inspect the broad environment.
 - [`rng`](https://www.mathworks.com/help/matlab/ref/rng.html)
 - [`RandStream`](https://www.mathworks.com/help/matlab/ref/randstream.html)
 - [ODE Solvers](https://www.mathworks.com/help/matlab/ordinary-differential-equations.html)
+- [`ode` properties and version history](https://www.mathworks.com/help/matlab/ref/ode.html)
 - [Optimization](https://www.mathworks.com/help/matlab/optimization.html)
 - [MATLAB product list and pricing/licensing](https://www.mathworks.com/pricing-licensing.html)
-- [MATLAB R2026a release notes](https://www.mathworks.com/help/matlab/release-notes.html)
+- [MATLAB release notes](https://www.mathworks.com/help/matlab/release-notes.html)

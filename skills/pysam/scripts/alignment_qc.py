@@ -210,10 +210,18 @@ def inspect_alignments(args: argparse.Namespace) -> dict[str, Any]:
             if read.query_sequence is None:
                 counts["sequence_missing_records"] += 1
 
-            if read.query_length is not None:
+            # query_length is 0, not None, when SEQ is absent. Do not make
+            # missing sequence look like a measured zero-length read.
+            if read.query_sequence is not None:
                 query_length_sum += int(read.query_length)
                 query_length_count += 1
-            if read.query_alignment_length is not None:
+            # pysam reports the full query length for unmapped/CIGAR-less
+            # records; that is not evidence of aligned bases.
+            if (
+                not read.is_unmapped
+                and read.cigartuples is not None
+                and read.query_sequence is not None
+            ):
                 aligned_query_bases += int(read.query_alignment_length)
 
         try:
@@ -251,7 +259,10 @@ def inspect_alignments(args: argparse.Namespace) -> dict[str, Any]:
             "semantics": (
                 "Counts are alignment records, not unique query names, "
                 "templates, or fragments. MAPQ 255 is reported as unavailable "
-                "and excluded from mean_mapping_quality."
+                "and excluded from mean_mapping_quality. Mean query length "
+                "excludes missing SEQ. Aligned query bases count non-soft-clipped "
+                "query bases (including insertions) only in mapped records "
+                "with CIGAR and SEQ; they are not reference coverage."
             ),
             "counts": counts,
             "derived": {

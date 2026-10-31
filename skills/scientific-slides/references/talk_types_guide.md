@@ -4,6 +4,11 @@
 
 Different presentation contexts require different approaches, structures, and emphasis. This guide provides detailed guidance for common scientific talk types: conference presentations, academic seminars, thesis defenses, grant pitches, and journal club presentations.
 
+Treat the section ranges below as planning options, not additive time budgets.
+Choose one concrete allocation whose sum includes transitions, buffer, and any in-slot
+Q&A. The [timing guide](../assets/timing_guidelines.md) gives checked 5-, 15-, and
+45-minute budgets; rehearsal, not slide count, determines whether the deck fits.
+
 ## Conference Talks
 
 ### Context and Expectations

@@ -1,6 +1,6 @@
 # Pymoo Test Problems Reference
 
-Comprehensive reference for benchmark optimization problems in pymoo.
+Reference for pymoo 0.6.2 benchmark problems. Dimensions below are defaults unless specified. Custom parameter choices can change the benchmark. The built-in Sphere is sum((x - 0.5)**2) on [0, 1], not sum(x**2) about the origin.
 
 ## Single-Objective Test Problems
 
@@ -60,13 +60,13 @@ Comprehensive reference for benchmark optimization problems in pymoo.
 - **Purpose:** Tests diversity maintenance across discontinuous front
 
 #### ZDT4
-- **Variables:** 10 continuous (x₁ ∈ [0,1], x₂₋₁₀ ∈ [-10,10])
+- **Variables:** 10 continuous (x₁ ∈ [0,1], x₂₋₁₀ ∈ [-5,5])
 - **Pareto front:** Convex
 - **Difficulty:** 21⁹ local Pareto fronts
 - **Purpose:** Tests global search with many local optima
 
 #### ZDT5
-- **Variables:** 11 discrete (bitstring)
+- **Variables:** 80 Boolean entries in pymoo by default (11 bitstring groups)
 - **Encoding:** x₁ uses 30 bits, x₂₋₁₁ use 5 bits each
 - **Pareto front:** Convex
 - **Purpose:** Tests discrete optimization and deceptive landscapes
@@ -92,7 +92,7 @@ problem = ZDT1()  # or ZDT2(), ZDT3(), etc.
 
 ### OSY (Osyczka and Kundu)
 **Characteristics:**
-- 6 objectives
+- 2 objectives
 - 6 variables
 - Multiple constraints
 - Real-world inspired
@@ -136,7 +136,7 @@ problem = ZDT1()  # or ZDT2(), ZDT3(), etc.
 
 #### DTLZ1
 - **Pareto front:** Linear (hyperplane)
-- **Difficulty:** 11^k local Pareto fronts
+- **Difficulty:** 11^k - 1 local Pareto fronts
 - **Purpose:** Tests convergence with many local optima
 
 #### DTLZ2
@@ -146,7 +146,7 @@ problem = ZDT1()  # or ZDT2(), ZDT3(), etc.
 
 #### DTLZ3
 - **Pareto front:** Spherical
-- **Difficulty:** 3^k local Pareto fronts
+- **Difficulty:** Multimodal distance term shared with DTLZ1
 - **Purpose:** Combines DTLZ1's multimodality with DTLZ2's geometry
 
 #### DTLZ4
@@ -155,11 +155,11 @@ problem = ZDT1()  # or ZDT2(), ZDT3(), etc.
 - **Purpose:** Tests diversity maintenance with bias
 
 #### DTLZ5
-- **Pareto front:** Degenerate (curve in M-dimensional space)
+- **Pareto front:** Degenerate; the standard three-objective case is a curve
 - **Purpose:** Tests handling of degenerate fronts
 
 #### DTLZ6
-- **Pareto front:** Degenerate curve
+- **Pareto front:** Degenerate; inspect the selected objective count
 - **Difficulty:** Harder convergence than DTLZ5
 - **Purpose:** Challenging degenerate front
 
@@ -263,3 +263,5 @@ class MyProblem(ElementwiseProblem):
 - Continuous: Most problems
 - Discrete: ZDT5
 - Mixed: Define custom problem
+
+Reviewed 2026-10-01 against native problem objects and [ZDT](https://pymoo.org/problems/multi/zdt.html), [OSY](https://pymoo.org/problems/multi/osy.html), and [DTLZ](https://pymoo.org/problems/many/dtlz.html). Benchmark engineering equations are synthetic validation cases, not validated physical designs. A known Pareto-front helper is not available for every custom problem or parameterization; never fabricate a reference front.

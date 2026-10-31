@@ -1,6 +1,28 @@
 # Validation record
 
-Checked on 2026-09-29 using the environment pinned in `tests/skill-requirements.toml`.
+## Current dependency refresh, 2026-09-30
+
+- Confirmed the immutable mfapy commit still matches official `master`. Its README
+  calls the last change "064", while installed package metadata remains `0.6.3`.
+- Updated the tested environment to Python 3.12.10, NumPy 2.5.3, SciPy 1.18.1, and
+  NLopt 2.11.0, retaining mfapy commit `a10433af16682386548b360297e2476152d46ede`.
+- `python3 tests/run_all.py --isolated 13c-metabolic-flux`: 45 tests passed.
+  A separate isolated pytest run also reported one shared CLI subtest passed.
+- `uv run skills-ref validate skills/13c-metabolic-flux`: passed.
+- Installed the documented requirements in a fresh external environment, then ran
+  the three workflow commands and all four worked-example commands successfully.
+  The branch recovered 70/30 with a bracketed profile; whole-molecule-only data
+  retained rank zero and an unresolved profile. The TCA fits retained rank one of
+  two free dimensions, a bracketed v3 profile, and a bound-limited v7 profile.
+- Reviewed the constructor, source-mixture bit order/correction flag, steady-state
+  MDV methods, and EMU turnover threshold against the pinned upstream source.
+  No solver change was required. These remain synthetic numerical checks, not
+  biological validation. The paired agent evaluation below was not repeated.
+
+## Original validation, 2026-09-29
+
+Checked on 2026-09-29 using the then-pinned Python 3.11, NumPy 2.4.6,
+SciPy 1.17.1 environment in `tests/skill-requirements.toml`.
 
 - Skill specification validation passed.
 - Isolated numerical/CLI suite: 45 tests and one shared-contract subtest passed.

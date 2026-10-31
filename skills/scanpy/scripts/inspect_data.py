@@ -20,12 +20,12 @@ from _common import configure_scanpy, info, load_anndata
 
 
 def _is_integer_matrix(X, n=10000):
-    sub = X[:50] if X.shape[0] > 50 else X
-    arr = sub.toarray() if hasattr(sub, "toarray") else np.asarray(sub)
-    arr = arr.ravel()[:n]
-    if arr.size == 0:
+    from scipy import sparse
+    if X is None:
         return False
-    return bool(np.all(np.equal(np.mod(arr, 1), 0)))
+    arr = X.data[:n] if sparse.issparse(X) else np.asarray(X[:50]).ravel()[:n]
+    return bool(arr.size and np.isfinite(arr).all() and (arr >= 0).all()
+                and np.equal(arr, np.floor(arr)).all())
 
 
 def main():
@@ -43,15 +43,20 @@ def main():
     print("=" * 70)
 
     X = adata.X
-    looks_int = _is_integer_matrix(X)
-    xmax = X.max() if not hasattr(X, "toarray") else X.max()
-    print(f"\nX dtype={X.dtype}  max={float(xmax):.2f}  "
-          f"=> {'raw counts (likely)' if looks_int else 'normalized/log (likely)'}")
+    if X is None:
+        print("\nX is absent; inspect named layers and their provenance")
+    else:
+        looks_int = _is_integer_matrix(X)
+        xmax = float(X.max()) if min(X.shape) else float("nan")
+        print(f"\nX dtype={X.dtype} max={xmax:.2f}; sampled values are "
+              f"{'nonnegative integers' if looks_int else 'not count-like'}. "
+              "This does not establish raw-count provenance.")
 
     print(f"\nobs columns ({len(adata.obs.columns)}):")
     for c in adata.obs.columns[:args.max_cols]:
         col = adata.obs[c]
-        if str(col.dtype) in ("category", "object"):
+        from pandas.api.types import is_numeric_dtype
+        if not is_numeric_dtype(col.dtype):
             nuniq = col.nunique()
             extra = f"  {nuniq} categories" + (f": {list(col.unique()[:8])}" if nuniq <= 8 else "")
         else:

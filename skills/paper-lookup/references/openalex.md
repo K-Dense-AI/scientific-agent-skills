@@ -11,13 +11,13 @@ https://api.openalex.org
 ## Authentication
 
 - **API key recommended** (free). Get one at https://openalex.org/settings/api
-- Pass as: `?api_key=YOUR_KEY`
-- Legacy polite pool still works: add `?mailto=you@example.com` for better rate limits
+- Pass as `?api_key=YOUR_KEY` or `Authorization: Bearer YOUR_KEY`.
+- Current access is budget-based; do not promise a higher quota from the legacy `mailto` parameter.
 
 ## Rate Limits
 
 - **100 requests/second** max
-- Usage-based pricing with $1/day free allowance
+- Usage-based pricing: $0.10/day without a key, $1/day with a free account key
 - Single entity lookups by ID/DOI are free (unlimited)
 - List + filter queries: ~$0.0001 each (~10,000/day free)
 - Search queries: ~$0.001 each (~1,000/day free)
@@ -83,7 +83,7 @@ Key filter fields:
 | `authorships.author.id` | `A5048491430` | By author ID |
 | `primary_location.source.id` | `S137773608` | By journal/source |
 | `institutions.country_code` | `us` | By country |
-| `concepts.id` | `C41008148` | By concept/topic |
+| `topics.id` | `T10001` | By topic ID; legacy concepts are deprecated |
 | `doi` | `10.1038/nature12373` | By DOI |
 
 **Operators:** `>`, `<`, `!` (negation), `|` (OR within filter)
@@ -113,7 +113,7 @@ Authors and institutions accept similar filter/sort/pagination parameters.
 GET /works?filter=publication_year:2024&cursor=*&per_page=100
 ```
 
-Response includes `meta.next_cursor`. Pass it as `cursor={value}` in the next request. Stop when `next_cursor` is null.
+Response includes `meta.next_cursor`. Pass it as `cursor={value}` in the next request. Stop when `next_cursor` is null and the results are exhausted. The supported page maximum is 100; 200 is deprecated legacy behavior.
 
 ## Response Format
 
@@ -150,15 +150,13 @@ Response includes `meta.next_cursor`. Pass it as `cursor={value}` in the next re
 
 ### Abstract inverted index
 
-Abstracts are stored as `{word: [positions]}`. To reconstruct:
-```python
-def reconstruct(inverted_index):
-    positions = {}
-    for word, indices in inverted_index.items():
-        for idx in indices:
-            positions[idx] = word
-    return ' '.join(positions[i] for i in sorted(positions.keys()))
+Abstracts are stored as `{word: [positions]}`. Use the bundled parser:
+```bash
+python3 scripts/openalex_abstract.py work.json
 ```
+
+It reports collisions and gaps instead of silently overwriting tokens. A null
+index means no abstract was supplied; `select` can also exclude the field.
 
 ### List response
 
@@ -172,3 +170,12 @@ def reconstruct(inverted_index):
 ## Error Format
 
 HTTP 403 for invalid API key, 429 for rate limit exceeded. Error responses include a message field.
+
+## Official sources reviewed 2026-09-30
+
+- https://help.openalex.org/api/authentication/
+- https://help.openalex.org/api/paging/
+- https://help.openalex.org/api/searching/
+- https://help.openalex.org/api/semantic-search/
+- https://help.openalex.org/api/endpoints/
+- https://help.openalex.org/access/example-costs/

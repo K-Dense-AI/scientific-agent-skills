@@ -1,6 +1,12 @@
 # Security Validation Record
 
-Validation date: **2026-07-23**
+Historical validation date: **2026-07-23**
+
+The results below describe the earlier remediation, not a fresh scan. The
+2026-10-01 refresh adds synthetic regression coverage for evaluation-round
+agreement, bounded pair aggregation, scale consistency, unrounded sensitivity,
+and companion membership. Collection-wide security scanning is recorded by
+the refresh coordinator; do not infer a current scan from this historical record.
 
 ## Baseline
 

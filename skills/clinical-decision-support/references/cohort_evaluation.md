@@ -118,12 +118,12 @@ The table generator implements:
 
 - a configurable minimum cell size;
 - primary suppression for small nonzero cells;
-- complementary suppression when one cell could be recovered from a row;
+- an additional within-row suppression when exactly one group cell is suppressed;
 - group-level suppression when denominators are too small;
 - bounded groups and rows;
 - omission of raw values and identifiers.
 
-The default threshold is a conservative operational setting, not a universal rule. It does not address all differencing, linkage, longitudinal, geographic, genomic, or rare-combination risks. Follow an approved disclosure policy and privacy review.
+The default threshold is a conservative operational setting, not a universal rule. The helper does not model row/column dependencies, overlapping groups, or prior releases, so its within-row suppression does not guarantee protection from reconstruction. All supplied counts must remain internally consistent even if a group is suppressed. Validation errors prevent table export. CSV labels and summaries are escaped as text for spreadsheet use. It does not address all differencing, linkage, longitudinal, geographic, genomic, or rare-combination risks. Follow an approved disclosure policy and privacy review.
 
 ## Interpretation Template
 

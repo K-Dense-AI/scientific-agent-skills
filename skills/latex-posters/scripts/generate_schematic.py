@@ -6,7 +6,7 @@ Generate any scientific diagram by describing it in natural language.
 Nano Banana 2 handles everything automatically with smart iterative refinement.
 
 Smart iteration: Only regenerates if quality is below threshold for your document type.
-Quality review: Uses Gemini 3.6 Flash for professional scientific evaluation.
+Quality review: Uses Gemini 3.7 Flash for professional scientific evaluation.
 
 Usage:
     # Generate for journal paper (highest quality threshold)
@@ -95,9 +95,9 @@ How it works:
   Simply describe your diagram in natural language
   Nano Banana 2 generates it automatically with:
   - Smart iteration (only regenerates if quality is below threshold)
-  - Quality review by Gemini 3.6 Flash
+  - Quality review by Gemini 3.7 Flash
   - Document-type aware quality thresholds
-  - Publication-ready output
+  - PNG draft for visual and scientific verification
 
 Document Types (quality thresholds):
   journal      8.5/10  - Nature, Science, peer-reviewed journals
@@ -134,7 +134,7 @@ Environment Variables:
     parser.add_argument("prompt", 
                        help="Description of the diagram to generate")
     parser.add_argument("-o", "--output", required=True,
-                       help="Output file path")
+                       help="Output PNG file path (.png required)")
     parser.add_argument("--doc-type", default="default",
                        choices=["journal", "conference", "poster", "presentation",
                                "report", "grant", "thesis", "preprint", "default"],
@@ -152,6 +152,9 @@ Environment Variables:
     # lookup so an out-of-range value reports itself rather than an absent key.
     if not 1 <= args.iterations <= 2:
         parser.error("--iterations must be 1 or 2")
+
+    if Path(args.output).suffix.lower() != ".png":
+        parser.error("--output must end in .png; format conversion is not supported")
 
     # Check for API key — resolves --api-key, the environment, then any .env file
     api_key = resolve_api_key(args.api_key)

@@ -1,6 +1,6 @@
 # Censoring-aware evaluation, calibration, and model selection
 
-Verified for scikit-survival 0.28.0 on 2026-07-23. API statements below use
+Verified for scikit-survival 0.28.0 on 2026-10-01. API statements below use
 official scikit-survival documentation; interpretation is anchored to the cited
 primary methodological literature.
 
@@ -115,9 +115,10 @@ uno_c = concordance_index_ipcw(
 train+test outcomes or `y_test` as the training distribution.
 
 `tau` truncates the concordance target. Choose it before seeing model performance
-and where the estimated training censoring survival is positive. Test follow-up
-must be supported by training follow-up; otherwise scikit-survival raises a
-`ValueError`.
+and where the estimated training censoring survival is positive. In 0.28.0 only test event times strictly below `tau` enter its censoring-weight
+lookup; later records remain potential comparison partners with zero event weight.
+A valid `tau` can therefore avoid a late-event support error for Uno C. This does
+not make the same test outcomes valid for AUC or Brier APIs.
 
 The implementation uses Kaplan-Meier censoring weights and assumes censoring is
 random/independent of features. If censoring depends on covariates, this marginal
@@ -145,7 +146,10 @@ Requirements:
 - `times` is one-dimensional, unique, and strictly increasing;
 - every value lies within test follow-up;
 - training follow-up supports test outcomes and the grid;
-- the training censoring survival is positive over the grid;
+- the training censoring survival is positive over the grid and at every test
+  event time used by the implementation (AUC weights all test events before
+  applying horizons);
+- each horizon has at least one observed case and a later control;
 - risk has shape `(n_test,)` or `(n_test, n_times)`;
 - higher values mean higher event risk.
 
@@ -186,8 +190,8 @@ Requirements:
 - the marginal Kaplan-Meier censoring estimator's independence assumption is
   plausible.
 
-IBS integrates Brier score over `[times[0], times[-1]]` with the implementation's
-time weighting. It depends on the chosen interval; IBS values from different
+IBS in 0.28.0 equals `np.trapezoid(brier, times) / (times[-1] - times[0])`.
+It is the normalized trapezoidal integral over the supplied interval. It depends on the chosen interval; IBS values from different
 time ranges are not directly comparable.
 
 Compare against useful reference predictions such as a training-derived
@@ -217,7 +221,7 @@ inner resampling, then assess on independent data.
 
 ## Safe time-grid construction
 
-A pragmatic fold-specific grid:
+A conservative grid for jointly computing AUC, Uno C, and Brier metrics:
 
 ```python
 import numpy as np
@@ -241,7 +245,17 @@ if not test_time.max() < train_time.max():
 censoring = CensoringDistributionEstimator().fit(y_train)
 if np.any(censoring.predict_proba(times) <= 0):
     raise ValueError("training censoring survival reaches zero on grid")
+censoring.predict_ipcw(y_test)  # AUC needs positive support at all test event times
+if not np.any(y_test["event"] & (test_time <= times[0])):
+    raise ValueError("AUC has no observed cases at the first horizon")
 ```
+
+This strict maximum-follow-up check is a helper policy, not an exact universal API
+restriction. Native Brier metrics also query censoring survival at all test times;
+zero weights may be suppressed by the implementation, so a successful call alone
+is not evidence of valid support. Never silently drop long-followed test subjects
+to obtain a score: define administrative truncation and recode late events as
+censored under a prespecified estimand if that is scientifically intended.
 
 Quantiles are an operational example, not a scientific default. Prefer
 prespecified meaningful horizons, then verify fold support. Do not select a grid
@@ -263,11 +277,15 @@ Its NPZ contract is:
 - `risk`
 - optional `survival`
 
-Archives are loaded with `allow_pickle=False`.
+Archives are loaded with `allow_pickle=False`, with compressed-file and total
+expanded-member bounds. The evaluator requires at least two horizons for the
+combined workflow; native AUC and Brier permit a single horizon, whereas IBS does not.
 
 ## Scorer wrappers and model selection
 
-Survival estimators' default `.score()` is Harrell concordance. For other targets,
+Survival estimators' default `.score()` is Harrell concordance and handles their
+own prediction direction. Discrimination wrappers below call raw `.predict()`;
+they do not reverse time-oriented IPCRidge, SVM-regression, or AFT-boosting output. For other targets,
 scikit-survival provides estimator wrappers:
 
 - `as_concordance_index_ipcw_scorer(estimator, tau=None, tied_tol=...)`
@@ -378,7 +396,7 @@ State event coding and use methods designed for the cause-specific estimand. See
 
 ## Official API sources
 
-Checked 2026-07-23:
+Checked 2026-10-01:
 
 - [Evaluation user guide](https://scikit-survival.readthedocs.io/en/stable/user_guide/evaluating-survival-models.html)
 - [Metrics API index](https://scikit-survival.readthedocs.io/en/stable/api/metrics.html)

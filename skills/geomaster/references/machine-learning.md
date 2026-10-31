@@ -1,95 +1,43 @@
 # Machine Learning for Geospatial Data
 
-Guide to ML and deep learning applications for remote sensing and spatial analysis.
+Machine learning for remote sensing and spatial analysis, reviewed 2026-10-01.
+RF arithmetic/masking is tested with synthetic rasters. Neural network, PyG and SHAP
+examples are illustrative, source-reviewed templates; no training run or accuracy
+claim is made. Install their packages separately. Record feature units, masks, band
+order, normalization, labels and spatial/temporal split definitions.
 
 ## Traditional Machine Learning
 
-### Random Forest for Land Cover
+### Random Forest for land cover
+
+Use the bundled `classify_imagery` helper (see the main skill) for a small masked
+raster fit/predict exercise. Rasterize labels in the raster CRS using its actual
+transform. Exclude nodata from both fitting and prediction, reserve an output nodata
+code and verify integer class range before casting.
+
+For assessment, split at independent spatial/temporal units **before** fitting:
 
 ```python
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
-import rasterio
-from rasterio.features import rasterize
-import geopandas as gpd
+from sklearn.metrics import classification_report
 import numpy as np
 
-def train_random_forest_classifier(raster_path, training_gdf):
-    """Train Random Forest for image classification."""
-
-    # Load imagery
-    with rasterio.open(raster_path) as src:
-        image = src.read()
-        profile = src.profile
-        transform = src.transform
-
-    # Extract training data
-    X, y = [], []
-
-    for _, row in training_gdf.iterrows():
-        mask = rasterize(
-            [(row.geometry, 1)],
-            out_shape=(profile['height'], profile['width']),
-            transform=transform,
-            fill=0,
-            dtype=np.uint8
-        )
-        pixels = image[:, mask > 0].T
-        X.extend(pixels)
-        y.extend([row['class_id']] * len(pixels))
-
-    X = np.array(X)
-    y = np.array(y)
-
-    # Split data
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    # Train model
-    rf = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=20,
-        min_samples_split=10,
-        min_samples_leaf=4,
-        class_weight='balanced',
-        n_jobs=-1,
-        random_state=42
-    )
-    rf.fit(X_train, y_train)
-
-    # Validate
-    y_pred = rf.predict(X_val)
-    print("Classification Report:")
-    print(classification_report(y_val, y_pred))
-
-    # Feature importance
-    feature_names = [f'Band_{i}' for i in range(X.shape[1])]
-    importances = pd.DataFrame({
-        'feature': feature_names,
-        'importance': rf.feature_importances_
-    }).sort_values('importance', ascending=False)
-
-    print("\nFeature Importance:")
-    print(importances)
-
-    return rf
-
-# Classify full image
-def classify_image(model, image_path, output_path):
-    with rasterio.open(image_path) as src:
-        image = src.read()
-        profile = src.profile
-
-    image_reshaped = image.reshape(image.shape[0], -1).T
-    prediction = model.predict(image_reshaped)
-    prediction = prediction.reshape(image.shape[1], image.shape[2])
-
-    profile.update(dtype=rasterio.uint8, count=1)
-    with rasterio.open(output_path, 'w', **profile) as dst:
-        dst.write(prediction.astype(rasterio.uint8), 1)
+# X, y and spatial_block_id have aligned rows, one row per valid labelled sample.
+train, validation = next(GroupShuffleSplit(n_splits=1, test_size=0.2,
+    random_state=42).split(X, y, groups=spatial_block_id))
+if set(np.unique(y[validation])) - set(np.unique(y[train])):
+    raise ValueError('Holdout contains classes absent from training')
+model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=1)
+model.fit(X[train], y[train])
+print(classification_report(y[validation], model.predict(X[validation]), zero_division=0))
 ```
+
+Random pixels from the same labelled polygon in both partitions leak spatial
+information. Block size and buffer separation depend on autocorrelation and the
+intended transfer region; grouping alone does not prove independence. Also report
+held-out sample/area support, imbalance and uncertainty. Feature importance is model
+association, not causal evidence.
 
 ### Support Vector Machine
 
@@ -134,13 +82,12 @@ def multiclass_svm(X_train, y_train):
 
 ## Deep Learning
 
-### CNN with TorchGeo
+### CNN tensor example (PyTorch)
 
 ```python
 import torch
 import torch.nn as nn
-import torchgeo.datasets as datasets
-import torchgeo.models as models
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 # Define CNN
@@ -186,7 +133,7 @@ def train_model(train_loader, val_loader, num_epochs=50):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = LandCoverCNN().to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(ignore_index=-1)  # explicit nodata label
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     for epoch in range(num_epochs):
@@ -220,6 +167,10 @@ def train_model(train_loader, val_loader, num_epochs=50):
 ```
 
 ### U-Net for Semantic Segmentation
+
+Inputs are `(N,C,H,W)` float tensors; labels are `(N,H,W)` integer class IDs.
+This architecture requires H/W divisible by 16; pad/crop with a recorded policy.
+The simpler CNN above requires divisibility by 8. Neither model is pretrained.
 
 ```python
 class UNet(nn.Module):
@@ -305,7 +256,7 @@ class SiameseNetwork(nn.Module):
         )
 
         self.classifier = nn.Sequential(
-            nn.Conv2d(256, 128, 3, padding=1),
+            nn.Conv2d(384, 128, 3, padding=1),
             nn.ReLU(),
             nn.Conv2d(128, 64, 3, padding=1),
             nn.ReLU(),
@@ -320,7 +271,8 @@ class SiameseNetwork(nn.Module):
         diff = torch.abs(f1 - f2)
         combined = torch.cat([f1, f2, diff], dim=1)
 
-        return self.classifier(combined)
+        logits = self.classifier(combined)
+        return F.interpolate(logits, size=x1.shape[-2:], mode='bilinear', align_corners=False)
 ```
 
 ## Graph Neural Networks
@@ -329,31 +281,40 @@ class SiameseNetwork(nn.Module):
 
 ```python
 import torch
+import numpy as np
+import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
 
 # Create spatial graph
-def create_spatial_graph(points_gdf, k_neighbors=5):
+def create_spatial_graph(points_gdf, feature_columns, k_neighbors=5):
     """Create graph from point data using k-NN."""
 
     from sklearn.neighbors import NearestNeighbors
 
+    if points_gdf.crs is None or not points_gdf.crs.is_projected:
+        raise ValueError('Use a justified metric CRS for Euclidean neighbours')
+    if not 1 <= k_neighbors < len(points_gdf):
+        raise ValueError('k must be between 1 and n-1')
     coords = np.array([[p.x, p.y] for p in points_gdf.geometry])
 
     # Find k-nearest neighbors
-    nbrs = NearestNeighbors(n_neighbors=k_neighbors).fit(coords)
+    nbrs = NearestNeighbors(n_neighbors=k_neighbors + 1).fit(coords)
     distances, indices = nbrs.kneighbors(coords)
 
     # Create edge index
     edge_index = []
     for i, neighbors in enumerate(indices):
         for j in neighbors:
-            edge_index.append([i, j])
+            if i != j:
+                edge_index.append([j, i])  # neighbour sends message to the query node
 
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
 
     # Node features
-    features = points_gdf.drop('geometry', axis=1).values
+    features = points_gdf[feature_columns].to_numpy(dtype=float)
+    if not np.isfinite(features).all():
+        raise ValueError('Features must be finite numeric predictors; exclude target and IDs')
     x = torch.tensor(features, dtype=torch.float)
 
     return Data(x=x, edge_index=edge_index)
@@ -392,71 +353,39 @@ def explain_model(model, X, feature_names):
     # Calculate SHAP values
     shap_values = explainer(X)
 
-    # Summary plot
-    shap.summary_plot(shap_values, X, feature_names=feature_names)
-
-    # Dependence plot for important features
+    # For multiclass outputs, select one class Explanation first.
+    if shap_values.values.ndim != 2:
+        raise ValueError('Select the intended model output/class before plotting')
+    shap.plots.beeswarm(shap_values)
     for i in range(X.shape[1]):
-        shap.dependence_plot(i, shap_values, X, feature_names=feature_names)
+        shap.plots.scatter(shap_values[:, i])
 
     return shap_values
 
-# Spatial SHAP (accounting for spatial autocorrelation)
-def spatial_shap(model, X, coordinates):
-    """Spatial explanation considering neighborhood effects."""
-
-    # Compute SHAP values
-    explainer = shap.Explainer(model, X)
-    shap_values = explainer(X)
-
-    # Spatial aggregation
-    shap_spatial = {}
-    for i, coord in enumerate(coordinates):
-        # Find neighbors
-        neighbors = find_neighbors(coord, coordinates, radius=1000)
-
-        # Aggregate SHAP values for neighborhood
-        neighbor_shap = shap_values.values[neighbors]
-        shap_spatial[i] = np.mean(neighbor_shap, axis=0)
-
-    return shap_spatial
 ```
+
+Averaging SHAP values over neighbours is a descriptive spatial summary, not a
+correction for autocorrelation or causal explanation. Define a compatible background
+sample, model output scale and held-out interpretation set. Explanations can shift
+when correlated features or background support change.
 
 ### Attention Maps for CNNs
 
-```python
-import cv2
-import torch
-import torch.nn.functional as F
+Grad-CAM requires activations and gradients for a chosen layer and a defined scalar
+target. Generic `nn.Module` has no `get_gradient` or `get_activation` methods. Register
+forward/backward hooks (and remove them), retain the intended target gradient, pool
+spatial gradients and combine with the captured activation. For segmentation choose
+class and pixel/region explicitly; `argmax` over every output axis is not a class index.
+Check shape, zero normalization range and detach before converting to NumPy.
 
-def generate_attention_map(model, image_tensor, target_layer):
-    """Generate attention map using Grad-CAM."""
+TorchGeo adds geospatial datasets/samplers, not an automatic scientific training
+pipeline. Follow its versioned dataset documentation, labels and preprocessing; keep
+region/scene separation when defining samplers. No model weights were downloaded.
 
-    # Forward pass
-    model.eval()
-    output = model(image_tensor)
-
-    # Backward pass
-    model.zero_grad()
-    output[0, torch.argmax(output)].backward()
-
-    # Get gradients
-    gradients = model.get_gradient(target_layer)
-
-    # Global average pooling
-    weights = torch.mean(gradients, axis=(2, 3), keepdim=True)
-
-    # Weighted combination of activation maps
-    activations = model.get_activation(target_layer)
-    attention = torch.sum(weights * activations, axis=1, keepdim=True)
-
-    # ReLU and normalize
-    attention = F.relu(attention)
-    attention = F.interpolate(attention, size=image_tensor.shape[2:],
-                              mode='bilinear', align_corners=False)
-    attention = (attention - attention.min()) / (attention.max() - attention.min())
-
-    return attention.squeeze().cpu().numpy()
-```
+Sources: [GroupShuffleSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupShuffleSplit.html),
+[SHAP plots](https://shap.readthedocs.io/en/latest/generated/shap.plots.beeswarm.html),
+[PyTorch Conv2d](https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv2d.html),
+[TorchGeo docs](https://torchgeo.readthedocs.io/en/stable/),
+[PyG GCNConv](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.conv.GCNConv.html).
 
 For more ML examples, see [code-examples.md](code-examples.md).

@@ -55,6 +55,7 @@ TSV_COLUMNS = (
     "query",
     "rank",
     "curie",
+    "iri",
     "label",
     "ontology",
     "match_type",
@@ -110,6 +111,9 @@ def resolve_one(
             **options,
         )
         ranked = rank_candidates(text, docs)
+        if exact_only:
+            ranked = [candidate for candidate in ranked
+                      if candidate["match_type"] in {"exact_label", "exact_synonym"}]
         if ranked:
             return {"query": text, "strategy": name, "candidates": ranked[:rows]}
     return {"query": text, "strategy": strategies[-1][0], "candidates": []}
@@ -125,6 +129,7 @@ def to_rows(results: list[dict]) -> list[dict]:
                     "query": result["query"],
                     "rank": 1,
                     "curie": "",
+                    "iri": "",
                     "label": "",
                     "ontology": "",
                     "match_type": "unresolved",
@@ -139,6 +144,7 @@ def to_rows(results: list[dict]) -> list[dict]:
                     "query": result["query"],
                     "rank": position,
                     "curie": candidate.get("obo_id", ""),
+                    "iri": candidate.get("iri", ""),
                     "label": candidate.get("label", ""),
                     "ontology": candidate.get("ontology_name", ""),
                     "match_type": candidate["match_type"],
@@ -204,6 +210,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.top < 1:
+        print("--top must be positive.", file=sys.stderr)
+        return 2
     queries = read_inputs(args)
     if not queries:
         print("No input strings given. See --help.", file=sys.stderr)

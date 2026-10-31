@@ -1,5 +1,7 @@
 # Unsupervised Learning Reference
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 ## Overview
 
 Unsupervised learning discovers patterns in unlabeled data through clustering, dimensionality reduction, and density estimation.
@@ -13,7 +15,7 @@ Unsupervised learning discovers patterns in unlabeled data through clustering, d
 - Key parameters:
   - `n_clusters`: Number of clusters to form
   - `init`: Initialization method ('k-means++', 'random')
-  - `n_init`: Number of initializations (default=10)
+  - `n_init`: Number of initializations (default='auto'; one run with k-means++, ten with random init). Set an integer explicitly for repeatable search effort
   - `max_iter`: Maximum iterations
 - Use when: Know number of clusters, spherical cluster shapes
 - Fast and scalable
@@ -67,7 +69,8 @@ print(f"Clusters: {n_clusters}, Noise points: {n_noise}")
 
 **HDBSCAN (`sklearn.cluster.HDBSCAN`)**
 - Hierarchical DBSCAN with adaptive epsilon (added in scikit-learn 1.3)
-- More robust than DBSCAN; prefer this over the separate `hdbscan` PyPI package for new projects
+- Handles varying density; performance and semantics still depend on data and parameters
+- scikit-learn includes the point itself in `min_samples`; the contrib `hdbscan` package does not. Do not transfer that parameter unchanged between implementations
 - Key parameter: `min_cluster_size`
 - Use when: Varying density clusters
 - Example:
@@ -184,6 +187,7 @@ fmi = fowlkes_mallows_score(y_true, y_pred)
 ```
 
 **Metrics without ground truth:**
+These require `2 <= n_labels < n_samples`. Noise label `-1` is otherwise treated as an ordinary cluster: explicitly decide whether to exclude noise and report retained coverage. Scores on different subsets are not directly comparable, and these Euclidean indices favor compact/convex clusters.
 ```python
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score
@@ -279,7 +283,7 @@ X_reduced = pca.fit_transform(X)
   - `learning_rate`: Usually 10-1000
   - `max_iter`: Number of iterations (minimum 250; renamed from `n_iter` in 1.5)
 - Use when: Visualizing high-dimensional data
-- Note: Slow on large datasets, no transform() method
+- `perplexity` must be less than the sample count. No `transform()` method; refitting on new data changes the embedding
 - Example:
 ```python
 from sklearn.manifold import TSNE
@@ -295,7 +299,7 @@ plt.title('t-SNE visualization')
 
 **UMAP (not in scikit-learn, but compatible)**
 - Uniform Manifold Approximation and Projection
-- Faster than t-SNE, preserves global structure better
+- Runtime and apparent geometry depend on dataset and settings; neither UMAP nor t-SNE reliably preserves global distances or proves clusters
 - Install: `uv pip install umap-learn`
 - Example:
 ```python
@@ -348,7 +352,7 @@ X_embedded = mds.fit_transform(X)
 ```python
 from sklearn.manifold import ClassicalMDS
 
-cmds = ClassicalMDS(n_components=2, random_state=42)
+cmds = ClassicalMDS(n_components=2)
 X_embedded = cmds.fit_transform(X)
 ```
 
@@ -370,7 +374,7 @@ H = nmf.components_  # Topic-word matrix
 
 **TruncatedSVD**
 - SVD for sparse matrices
-- Similar to PCA but works with sparse data
+- Unlike PCA, does not center input, preserving sparsity; components need not match centered PCA
 - Use when: Text data, sparse matrices
 - Example:
 ```python
@@ -443,10 +447,11 @@ lof = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
 predictions = lof.fit_predict(X)  # -1 for outliers, 1 for inliers
 outlier_scores = lof.negative_outlier_factor_
 ```
+For novelty detection use `LocalOutlierFactor(novelty=True).fit(X_train)` and call `predict`/`score_samples` only on unseen observations. Do not use novelty predictions to reproduce training `fit_predict` labels.
 
 **One-Class SVM**
 - Learns decision boundary around normal data
-- Key parameters: `nu` (upper bound on outliers), `kernel`, `gamma`
+- `nu` bounds the fraction of training margin errors and lower-bounds the support-vector fraction; it is not an estimated test-set outlier prevalence. Other parameters: `kernel`, `gamma`
 - Use when: Small training set of normal data
 - Example:
 ```python
@@ -515,3 +520,11 @@ print(f"AIC: {gmm.aic(X)}")  # Lower is better
 - **High-dimensional**: IsolationForest
 - **Varying density**: LocalOutlierFactor
 - **Gaussian data**: EllipticEnvelope
+
+## Upstream references
+
+- https://scikit-learn.org/stable/modules/clustering.html
+- https://scikit-learn.org/stable/modules/generated/sklearn.cluster.HDBSCAN.html
+- https://scikit-learn.org/stable/modules/generated/sklearn.manifold.ClassicalMDS.html
+- https://scikit-learn.org/stable/modules/outlier_detection.html
+- https://umap-learn.readthedocs.io/en/latest/parameters.html

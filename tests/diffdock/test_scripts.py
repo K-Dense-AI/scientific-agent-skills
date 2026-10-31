@@ -1,6 +1,6 @@
 """Tests for the DiffDock helper scripts.
 
-Docking itself needs a GPU, the upstream repository, and downloaded
+Docking itself needs the upstream repository and downloaded
 checkpoints, so nothing here runs inference. What these scripts do around a run
 is what the tests cover, and each group guards a specific way the surrounding
 work goes wrong:
@@ -185,6 +185,19 @@ class ComplexParsingTests(TemporaryDirectoryTestCase):
         # The subdirectory with no poses is omitted rather than listed empty.
         self.assertEqual(sorted(results), ["complex_a", "complex_b"])
 
+    def test_an_input_sdf_in_the_batch_root_does_not_hide_nested_poses(self) -> None:
+        self.write(self.root, "ligand.sdf")
+        self.write(self.root / "complex_a", "rank1_confidence0.5.sdf")
+        results = analyze_results.parse_confidence_scores(self.root)
+        self.assertEqual(list(results), ["complex_a"])
+        self.assertEqual(results["complex_a"]["predictions"][0]["confidence"], 0.5)
+
+    def test_mixed_pose_layout_is_rejected_instead_of_dropping_complexes(self) -> None:
+        self.write(self.root, "rank1_confidence0.5.sdf")
+        self.write(self.root / "complex_a", "rank1_confidence-1.0.sdf")
+        with self.assertRaisesRegex(ValueError, "Mixed single-complex and batch"):
+            analyze_results.parse_confidence_scores(self.root)
+
 
 class TopPredictionTests(unittest.TestCase):
     @staticmethod
@@ -349,7 +362,7 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
     def test_a_usable_csv_passes_without_complaint(self) -> None:
         (self.root / "protein.pdb").write_text("")
         path = self.write_csv(f"target_1,protein.pdb,{ASPIRIN},")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertTrue(valid, "\n".join(messages))
         joined = "\n".join(messages)
         self.assertIn("All required columns present", joined)
@@ -359,12 +372,12 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
 
     def test_a_sequence_only_row_needs_no_protein_file(self) -> None:
         path = self.write_csv(f"target_1,,{ASPIRIN},MSKGEELFTG")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertTrue(valid, "\n".join(messages))
 
     def test_a_row_with_neither_protein_input_is_rejected(self) -> None:
         path = self.write_csv(f"target_1,,{ASPIRIN},")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         self.assertIn("Must provide either protein_path or protein_sequence",
                       "\n".join(messages))
@@ -372,13 +385,13 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
     def test_a_missing_complex_name_is_reported(self) -> None:
         path = self.write_csv(f",protein.pdb,{ASPIRIN},")
         (self.root / "protein.pdb").write_text("")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         self.assertIn("Missing complex_name", "\n".join(messages))
 
     def test_a_missing_protein_file_is_reported_with_its_row(self) -> None:
         path = self.write_csv(f"target_1,gone.pdb,{ASPIRIN},")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         joined = "\n".join(messages)
         self.assertIn("Row 1", joined)
@@ -387,7 +400,7 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
     def test_a_missing_ligand_description_is_reported(self) -> None:
         (self.root / "protein.pdb").write_text("")
         path = self.write_csv("target_1,protein.pdb,,")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         self.assertIn("Missing ligand_description", "\n".join(messages))
 
@@ -396,14 +409,14 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
         # SDF must be reported as a file problem rather than as bad chemistry.
         (self.root / "protein.pdb").write_text("")
         path = self.write_csv("target_1,protein.pdb,ligands/gone.sdf,")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         self.assertIn("Ligand file issue", "\n".join(messages))
 
     def test_both_protein_inputs_together_warn_but_still_validate(self) -> None:
         (self.root / "protein.pdb").write_text("")
         path = self.write_csv(f"target_1,protein.pdb,{ASPIRIN},MSKGEELFTG")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertTrue(valid, "\n".join(messages))
         self.assertIn("will use protein_path", "\n".join(messages))
 
@@ -412,7 +425,7 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
         # without that column used to abort with KeyError.
         path = self.root / "partial.csv"
         path.write_text(f"complex_name,ligand_description\ntarget_1,{ASPIRIN}\n")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         joined = "\n".join(messages)
         self.assertIn("Missing required columns", joined)
@@ -424,10 +437,10 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
         self.assertFalse(valid)
         self.assertIn("Error reading CSV", messages[0])
 
-    def test_a_header_only_csv_is_vacuously_valid(self) -> None:
+    def test_a_header_only_csv_is_rejected(self) -> None:
         path = self.write_csv()
-        valid, messages = prepare_batch_csv.validate_csv(path)
-        self.assertTrue(valid, "\n".join(messages))
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
+        self.assertFalse(valid)
         self.assertIn("0 rows", messages[0])
 
     def test_an_invalid_smiles_row_fails_validation(self) -> None:
@@ -435,7 +448,7 @@ class BatchCsvValidationTests(TemporaryDirectoryTestCase):
             self.skipTest("RDKit is not installed; SMILES validation is a no-op")
         (self.root / "protein.pdb").write_text("")
         path = self.write_csv("target_1,protein.pdb,C1CCCC,")
-        valid, messages = prepare_batch_csv.validate_csv(path)
+        valid, messages = prepare_batch_csv.validate_csv(path, base_dir=self.root)
         self.assertFalse(valid)
         self.assertIn("SMILES issue", "\n".join(messages))
 
@@ -519,10 +532,10 @@ class PythonVersionCheckTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertIn("3.9", output)
 
-    def test_a_newer_interpreter_is_accepted(self) -> None:
+    def test_a_newer_interpreter_is_not_claimed_compatible(self) -> None:
         with self.version(3, 13, 1):
             passed, _ = quietly(setup_check.check_python_version)
-        self.assertTrue(passed)
+        self.assertFalse(passed)
 
 
 class PackageProbeTests(unittest.TestCase):
@@ -598,12 +611,11 @@ class PackageProbeTests(unittest.TestCase):
         self.assertEqual((installed, has_cuda), (False, False))
         self.assertIn("not installed", output)
 
-    def test_missing_esm_is_reported_as_optional(self) -> None:
+    def test_missing_esm_is_reported_as_required(self) -> None:
         with mock.patch.dict(sys.modules, {"esm": None}):
             found, output = quietly(setup_check.check_esm)
         self.assertFalse(found)
-        # ESM is only needed to fold a sequence, so the message must say so
-        # rather than reading as a hard failure.
+        # ESM2 is required for PDB inputs too, not just sequence folding.
         self.assertIn("protein sequence folding", output)
         self.assertIn("fair-esm", output)
 
@@ -628,7 +640,8 @@ class InstallationProbeTests(TemporaryDirectoryTestCase):
         self.assertIn("inference.py", output)
 
     def test_absent_checkpoints_are_a_note_not_a_failure(self) -> None:
-        (self.root / "inference.py").write_text("")
+        for name in ("inference.py", "default_inference_args.yaml", "environment.yml"):
+            (self.root / name).write_text("")
         found, output = quietly(setup_check.check_diffdock_installation)
         # Weights download on first run, so their absence must not fail setup.
         self.assertTrue(found)
@@ -636,8 +649,11 @@ class InstallationProbeTests(TemporaryDirectoryTestCase):
 
     def test_present_checkpoints_are_recognised_at_the_documented_path(self) -> None:
         (self.root / "inference.py").write_text("")
-        for name in ("score_model", "confidence_model"):
-            (self.root / "workdir" / "v1.1" / name).mkdir(parents=True)
+        for name, checkpoint in (("score_model", "best_ema_inference_epoch_model.pt"), ("confidence_model", "best_model_epoch75.pt")):
+            directory = self.root / "workdir" / "v1.1" / name
+            directory.mkdir(parents=True)
+            (directory / "model_parameters.yml").write_text("fixture")
+            (directory / checkpoint).write_text("fixture")
         _, output = quietly(setup_check.check_diffdock_installation)
         self.assertIn("Model checkpoints found", output)
 
@@ -651,6 +667,107 @@ class PerformanceNoteTests(unittest.TestCase):
         # CPU docking is hours per complex; the warning is the point of the note.
         self.assertIn("No GPU detected", without)
         self.assertIn("SIGNIFICANTLY slower", without)
+
+
+
+
+class RefreshRegressionTests(TemporaryDirectoryTestCase):
+    def batch(self, rows, header=None):
+        path = self.root / 'batch.csv'
+        with path.open('w', newline='') as handle:
+            writer = csv.writer(handle)
+            writer.writerow(header or ['complex_name', 'protein_path', 'ligand_description', 'protein_sequence'])
+            writer.writerows(rows)
+        return path
+
+    def test_stereo_smiles_separators_are_not_paths(self):
+        for smiles in ('F/C=C/F', r'F/C=C\F'):
+            path = self.batch([['stereo', '', smiles, 'ACDEFGHIK']])
+            valid, messages = prepare_batch_csv.validate_csv(path)
+            self.assertTrue(valid, messages)
+
+    def test_plain_filename_ligand_is_checked_relative_to_inference_cwd(self):
+        (self.root / 'ligand.sdf').write_text('fixture; chemistry not inspected')
+        path = self.batch([['file_input', '', 'ligand.sdf', 'ACDEFGHIK']])
+        with mock.patch('pathlib.Path.cwd', return_value=self.root):
+            valid, messages = prepare_batch_csv.validate_csv(path)
+        self.assertTrue(valid, messages)
+
+    def test_csv_parent_does_not_silently_replace_inference_cwd(self):
+        (self.root / 'protein.pdb').write_text('fixture')
+        path = self.batch([['relative', 'protein.pdb', ASPIRIN, '']])
+        elsewhere = self.root / 'other'
+        elsewhere.mkdir()
+        with mock.patch('pathlib.Path.cwd', return_value=elsewhere):
+            self.assertFalse(prepare_batch_csv.validate_csv(path)[0])
+        self.assertTrue(prepare_batch_csv.validate_csv(path, self.root)[0])
+
+    def test_duplicate_names_cannot_overwrite_predictions(self):
+        path = self.batch([['same', '', 'CCO', 'ACDE'], ['same', '', 'CCN', 'ACDE']])
+        valid, messages = prepare_batch_csv.validate_csv(path)
+        self.assertFalse(valid)
+        self.assertIn('Duplicate complex_name', '\n'.join(messages))
+
+    def test_duplicate_headers_are_detected_before_pandas_mangles_them(self):
+        path = self.batch([['a', '', 'CCO', 'ACDE', 'CCC']],
+                          ['complex_name', 'protein_path', 'ligand_description', 'protein_sequence', 'ligand_description'])
+        self.assertFalse(prepare_batch_csv.validate_csv(path)[0])
+
+    def test_wrong_row_width_is_rejected(self):
+        path = self.batch([['a', '', 'CCO', 'ACDE', 'extra']])
+        self.assertFalse(prepare_batch_csv.validate_csv(path)[0])
+
+    def test_output_path_traversal_and_numeric_ids_are_rejected(self):
+        for name in ('../outside', '/absolute', 'a/b', '42', 'NA'):
+            path = self.batch([[name, '', 'CCO', 'ACDE']])
+            self.assertFalse(prepare_batch_csv.validate_csv(path)[0], name)
+
+    def test_incomplete_or_truncated_sequences_are_rejected(self):
+        for sequence in ('ACDE...', 'A' * 1023, 'ACD E'):
+            path = self.batch([['sequence', '', 'CCO', sequence]])
+            self.assertFalse(prepare_batch_csv.validate_csv(path)[0], sequence[:20])
+
+    def test_a_directory_is_not_an_input_file(self):
+        self.assertFalse(prepare_batch_csv.validate_file_path(self.root)[0])
+
+    def test_missing_rdkit_does_not_claim_smiles_validation(self):
+        with mock.patch.object(prepare_batch_csv, 'RDKIT_AVAILABLE', False):
+            self.assertFalse(prepare_batch_csv.validate_smiles('CCO')[0])
+
+    def test_two_scored_files_for_one_rank_are_rejected(self):
+        for name in ('rank1_confidence0.87.sdf', 'rank1_confidence-1.0.sdf'):
+            (self.root / name).write_text('fixture')
+        with self.assertRaisesRegex(ValueError, 'Duplicate scored files'):
+            analyze_results.parse_single_complex(self.root)
+
+    def test_unrelated_sdf_is_not_a_successful_complex(self):
+        (self.root / 'ligand.sdf').write_text('fixture')
+        self.assertEqual(analyze_results.parse_confidence_scores(self.root), {})
+
+    def test_exponent_score_is_not_truncated(self):
+        path = self.root / 'rank1_confidence-1.2e-3.sdf'
+        path.write_text('fixture')
+        self.assertEqual(analyze_results.extract_confidence_score(path, self.root), -0.0012)
+
+    def test_nonfinite_score_is_unknown(self):
+        for score in (float('nan'), float('inf'), -float('inf')):
+            self.assertEqual(analyze_results.classify_confidence(score), 'Unknown')
+        (self.root / 'confidence_scores.txt').write_text('nan\n')
+        path = self.root / 'rank1.sdf'
+        path.write_text('fixture')
+        self.assertIsNone(analyze_results.extract_confidence_score(path, self.root))
+
+    def test_empty_checkpoint_directories_are_not_checkpoint_files(self):
+        with mock.patch('os.getcwd', return_value=str(self.root)), mock.patch('pathlib.Path.is_file', return_value=False):
+            _, output = quietly(setup_check.check_diffdock_installation)
+        self.assertNotIn('[OK] Model checkpoints found', output)
+
+    def test_unrelated_esm_distribution_is_rejected(self):
+        module = types.ModuleType('esm')
+        with mock.patch.dict(sys.modules, {'esm': module}):
+            result, output = quietly(setup_check.check_esm)
+        self.assertFalse(result)
+        self.assertIn('fair-esm==2.0.0', output)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 # Rowan Workflow Catalog
 
 Submission code, options, and result shapes for the common workflow categories, followed
-by the complete list of supported workflow types.
+by the SDK workflow directory. Hosted calls are illustrative, not authenticated service tests.
+The source baseline is [rowan-python 3.2.0](https://pypi.org/project/rowan-python/3.2.0/);
+see the [official workflow reference](https://docs.rowansci.com/api/python/v3/).
 
 ## Common workflow categories
 
@@ -16,17 +18,17 @@ wf = rowan.submit_descriptors_workflow(
 )
 
 result = wf.result()
-print(result.descriptors["MW"])       # 180.042 — exact mass
-print(result.descriptors["SLogP"])    # 1.31
-print(result.descriptors["TopoPSA"])  # 63.6 — topological PSA
-print(result.descriptors["nHBAcc"])   # 3.0
+print(result.descriptors["MW"])       # exact/monoisotopic mass
+print(result.descriptors["SLogP"])    # model-dependent value
+print(result.descriptors["TopoPSA"])  # topological PSA
+print(result.descriptors["nHBAcc"])   # H-bond acceptor count
 ```
 
 **Common descriptor keys:**
 
 | Key | Description | Typical drug range |
 |-----|-------------|-------------------|
-| `MW` | Exact/monoisotopic mass (Da), not average MW | <500 (Lipinski) |
+| `MW` | Exact/monoisotopic mass (Da), not average MW | Do not substitute for average MW in strict filters |
 | `SLogP` | Calculated LogP (lipophilicity) | -2 to +5 |
 | `TopoPSA` | Topological polar surface area (Å²) | <140 for oral bioavailability |
 | `TPSA` | 3D charged surface area, not topological PSA | — |
@@ -38,8 +40,8 @@ print(result.descriptors["nHBAcc"])   # 3.0
 | `FilterItLogS` | Estimated aqueous solubility (LogS) | >-4 preferred |
 | `Lipinski` | Lipinski Ro5 pass (1.0) or fail (0.0) | — |
 
-The result contains about 1,679 molecular descriptors in SDK 3.1.13 (BCUT,
-GETAWAY, WHIM, etc.); access any via `result.descriptors["key"]`. For average
+The descriptor count and available keys depend on the service calculation; do not
+hardcode a count. `result.descriptors` may be `None` before completion. For average
 molecular weight, calculate it separately (for example, RDKit `MolWt`).
 
 ### 2. Microscopic pKa
@@ -51,7 +53,7 @@ Four methods are available:
 | Method | Input | Speed | Covers | Use when |
 |--------|-------|-------|--------|----------|
 | `chemprop_nevolianis2025` | SMILES string | Fast | Deprotonation only | Acidic groups only; quick screening |
-| `starling` | SMILES string | Fast | Acid + base | Most drug-like molecules; preferred SMILES method |
+| `starling` | SMILES string | Fast | Acid + base | SMILES-based acid/base site prediction |
 | `aimnet2_wagen2024` | 3D molecule object | Slower | Acid + base | You already have a 3D structure |
 | `gxtb_wagen2026` (**default**) | 3D molecule object | Slower | Acid + base | Current SDK default; set `method=` explicitly for reproducibility |
 
@@ -64,10 +66,11 @@ wf = rowan.submit_pka_workflow(
 )
 
 result = wf.result()
-print(result.strongest_acid)    # 9.995 for phenol (verified; literature ~9.95)
+print(result.strongest_acid)    # float or None; do not treat a past prediction as a guarantee
 print(result.strongest_base)    # None when no basic site is found
 print(result.conjugate_bases)   # list of pKaMicrostate objects
-# Access each microstate with .pka, .smiles, .atom_index, .delta_g, .uncertainty
+# Each microstate has .pka and .atom_index. SMILES methods populate .smiles;
+# 3D methods populate .delta_g (kcal/mol); Chemprop also populates .uncertainty.
 ```
 
 ### 3. MacropKa
@@ -76,7 +79,8 @@ For pH-dependent protonation behavior across a range.
 
 ```python
 wf = rowan.submit_macropka_workflow(
-    initial_smiles="CN1CCN(CC1)C2=NC=NC3=CC=CC=C32",  # imidazole
+    initial_smiles="c1ncc[nH]1",  # imidazole
+    method="starling",  # 3.2.0 also accepts starling_ii; pin the intended model
     min_pH=0,
     max_pH=14,
     min_charge=-2,  # default
@@ -86,12 +90,13 @@ wf = rowan.submit_macropka_workflow(
 )
 
 result = wf.result()
-print(result.pka_values)               # list of pKa values
-print(result.logd_by_ph)               # dict of {pH: logD}
-print(result.aqueous_solubility_by_ph) # dict of {pH: solubility}
+print([(v.initial_charge, v.final_charge, v.pka) for v in result.pka_values])
+print(result.logd_by_ph)               # list of (pH, logD) pairs
+print(result.aqueous_solubility_by_ph) # list of (pH, log-solubility) pairs
 print(result.isoelectric_point)        # isoelectric point
 print(result.data)
-# {'pKa_values': [...], 'logD_by_pH': {...}, 'aqueous_solubility_by_pH': {...}, ...}
+# Raw keys use pKa_values, logD_by_pH, aqueous_solubility_by_pH.
+# Consult the method documentation before interpreting solubility units.
 ```
 
 ### 4. Conformer search
@@ -106,9 +111,10 @@ wf = rowan.submit_conformer_search_workflow(
 
 result = wf.result()
 print(result.num_conformers)
-print(result.get_energies())    # [0.0, 1.2, 2.5, ...]
+print(result.get_energies())    # absolute energies in Hartree
+print(result.get_energies(relative=True))  # relative kcal/mol, minimum is zero
 print(result.get_conformers())  # list of 3D molecules
-print(result.get_conformer(0))  # lowest-energy conformer
+print(result.get_conformer(0).molecule)  # get_conformer returns a Calculation
 
 # There is no num_conformers submit parameter. Configure the generator and
 # ensemble through conf_gen_settings.
@@ -120,13 +126,13 @@ For heterocycles and systems where tautomer state affects downstream modeling.
 
 ```python
 wf = rowan.submit_tautomer_search_workflow(
-    initial_molecule=rowan.Molecule.from_smiles("O=c1[nH]ccnc1"),
-    name="imidazolone tautomers",
+    initial_molecule=rowan.Molecule.from_smiles("O=c1cccc[nH]1"),
+    name="2-pyridone tautomers",
 )
 
 result = wf.result()
-print(result.best_tautomer)  # Most stable SMILES string
-print(result.tautomers)      # List of tautomeric SMILES
+print(result.best_tautomer)  # highest-weight Molecule, or None
+print(result.tautomers)      # Tautomer records: energy (Hartree), weight, structure_uuids
 print(result.molecules)      # List of molecule objects
 ```
 
@@ -141,30 +147,35 @@ protein = rowan.upload_protein(
     file_path="cdk2.pdb",
 )
 
-# Binding pocket: [[center_x, center_y, center_z], [size_x, size_y, size_z]] in Å
-pocket = [[10.5, 24.2, 31.8], [18.0, 18.0, 18.0]]
+# Supply a validated pocket for this exact prepared receptor.
+# pocket.json contains [[center_x, center_y, center_z], [size_x, size_y, size_z]] in Å.
+import json
+from pathlib import Path
+pocket = json.loads(Path("pocket.json").read_text())
 
 # Submit docking
 wf = rowan.submit_docking_workflow(
     protein=protein,
     pocket=pocket,
     initial_molecule=rowan.Molecule.from_smiles(
-        "CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1"
+        "Nc1ncc(F)cc1"
     ),
+    docking_settings=rowan.VinaSettings(scoring_function="vinardo"),
     do_pose_refinement=True,
     do_csearch=True,
     name="lead docking",
 )
 
 result = wf.result()
-print(result.scores)  # Docking scores (kcal/mol)
+print([s.score for s in result.scores])  # DockingScore records; .score is kcal/mol
 print(result.best_pose)  # Mol object with 3D coordinates
 print(result.data)  # Raw result dict
 ```
 
 **Protein preparation tips:**
 
-- PDB files should be reasonably clean (remove water/heteroatoms unless intended)
+- Choose waters, metals, cofactors, protonation, and chains deliberately during preparation
+- Compare scores within a consistent protocol; a docking score is not experimental affinity
 - Use the same protein object across a docking series for consistency
 - If you have a PDB ID, use `rowan.create_protein_from_pdb_id()` instead
 
@@ -173,47 +184,48 @@ print(result.data)  # Raw result dict
 For placing a compound series into a shared binding context.
 
 ```python
-# Analogue series (e.g., SAR campaign)
-analogues = [
-    "CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1",    # reference
-    "CCNc1ncc(c(Nc2ccc(Cl)cc2)n1)-c1cccnc1",   # chloro
-    "CCNc1ncc(c(Nc2ccc(OC)cc2)n1)-c1cccnc1",   # methoxy
-    "CCNc1ncc(c(Nc2cc(C)c(F)cc2)n1)-c1cccnc1", # methyl, fluoro
-]
+# Toy analogue series; these are not validated binders.
+analogues = ["Nc1ncc(F)cc1", "Nc1ncc(Cl)cc1", "Nc1ncc(OC)cc1"]
+# From the preceding docking workflow or a crystallographic bound ligand:
+reference_pose = result.best_pose  # Keep coordinates in the receptor frame.
 
 wf = rowan.submit_analogue_docking_workflow(
     analogues=analogues,
-    initial_molecule=rowan.Molecule.from_smiles(analogues[0]),  # reference ligand
+    initial_molecule=reference_pose,  # aligned bound template, not newly embedded SMILES
     protein=protein,
     name="SAR series docking",
 )
-# Analogue docking does not accept a pocket parameter in SDK 3.1.13.
+# Analogue docking does not accept a pocket parameter in SDK 3.2.0.
 
 result = wf.result()
-print(result.analogue_scores)  # List of scores for each analogue
-print(result.best_poses)  # List of poses
+print(result.analogue_scores)  # dict[str, list[DockingScore]], keyed by SMILES
+print(result.best_poses)       # dict[str, Molecule]; absent/failed analogues are omitted
 ```
 
 ### 8. MSA generation
 
-For multiple-sequence alignment (useful for downstream cofolding).
+For multiple-sequence alignment (useful for downstream cofolding). The short
+sequence below demonstrates the schema; use the complete intended biological
+construct for a scientific calculation.
 
 ```python
 wf = rowan.submit_msa_workflow(
     initial_protein_sequences=[
         "MENFQKVEKIGEGTYGVVYKARNKLTGEVVALKKIRLDTETEGVP"
     ],
-    output_formats=["colabfold", "chai", "boltz"],
+    output_formats={"colabfold", "chai", "boltz"},
     name="target MSA",
 )
 
 result = wf.result()
-result.download_files()  # Downloads alignments to disk
+result.download_files(path=f"msa/{wf.uuid}")  # one tar.gz per requested format
 ```
 
 ### 9. Protein-ligand cofolding
 
 For AI-based bound-complex prediction when no crystal structure is available.
+The short example sequence is illustrative, not a validated folding target;
+use the actual construct and inspect model-specific confidence and geometry.
 
 ```python
 wf = rowan.submit_protein_cofolding_workflow(
@@ -221,32 +233,39 @@ wf = rowan.submit_protein_cofolding_workflow(
         "MENFQKVEKIGEGTYGVVYKARNKLTGEVVALKKIRLDTETEGVP"
     ],
     initial_smiles_list=[
-        "CCNc1ncc(c(Nc2ccc(F)cc2)n1)-c1cccnc1"
+        "Nc1ncc(F)cc1"
     ],
+    model="boltz_2",
     name="protein-ligand cofolding",
 )
 
 result = wf.result()
-print(result.predictions)  # List of predicted structures
+print(result.predictions)  # CofoldingResult records with scores and structure UUIDs
 print(result.messages)  # Model metadata/warnings
 
 predicted_structure = result.get_predicted_structure()
-predicted_structure.write("predicted_complex.pdb")
+if predicted_structure is None:
+    raise RuntimeError("No predicted structure was returned")
+predicted_structure.download_structure(name="predicted_complex", file_format="mmcif")
 ```
 
-## All supported workflow types
+## Workflow directory
 
-All workflows follow the same submit → wait → retrieve pattern and support webhooks and project/folder organization.
+Named submit functions below use `POST /workflow`, build a workflow-specific
+`workflow_data` payload, and expose `folder`/`folder_uuid`, `webhook_url`, and
+`max_credits`. Availability is account-dependent. This directory covers the reviewed
+SDK, not a guarantee that every account can run every workflow.
 
 ### Core molecular modeling workflows
 
 | Workflow | Function | When to use |
 |----------|----------|-------------|
-| Descriptors | `submit_descriptors_workflow` | First-pass triage: MW, LogP, TPSA, HBA/HBD, Lipinski filter |
+| Descriptors | `submit_descriptors_workflow` | First-pass triage: exact mass, LogP, TopoPSA, HBA/HBD, Lipinski filter |
 | pKa | `submit_pka_workflow` | Single ionizable group; need protonation thermodynamics |
 | MacropKa | `submit_macropka_workflow` | Multi-ionizable drugs; pH-dependent charge/LogD/solubility |
 | Conformer Search | `submit_conformer_search_workflow` | 3D ensemble for docking, MD, or SAR; known tautomer |
 | Tautomer Search | `submit_tautomer_search_workflow` | Heterocycles, keto–enol; uncertain tautomeric form |
+| LogP | `submit_logp_workflow` | Octanol/water partition coefficient |
 | Solubility | `submit_solubility_workflow` | Aqueous or solvent-specific solubility prediction |
 | Membrane Permeability | `submit_membrane_permeability_workflow` | Caco-2, PAMPA, BBB, plasma permeability |
 | ADMET | `submit_admet_workflow` | Broad drug-likeness and ADMET property sweep |
@@ -255,6 +274,9 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 
 | Workflow | Function | When to use |
 |----------|----------|-------------|
+| Protein Preparation | `submit_protein_preparation_workflow` | Missing-atom completion and protonation |
+| Pocket Detection | `submit_pocket_detection_workflow` | Candidate pocket detection for review |
+| Binding Affinity | `submit_binding_affinity_workflow` | Model-specific complex scoring |
 | Docking | `submit_docking_workflow` | Single ligand, known binding pocket |
 | Analogue Docking | `submit_analogue_docking_workflow` | SAR series (5–100+ compounds) in a shared pocket |
 | Batch Docking | `submit_batch_docking_workflow` | Fast library screening; large compound sets |
@@ -280,6 +302,7 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 
 | Workflow | Function | When to use |
 |----------|----------|-------------|
+| Covalent Inhibitor Scan | `submit_covalent_inhibitor_scan_workflow` | Covalent reaction-coordinate scans |
 | Double-Ended TS Search | `submit_double_ended_ts_search_workflow` | Transition state between two known structures |
 | IRC | `submit_irc_workflow` | Confirm TS connectivity; intrinsic reaction coordinate |
 
@@ -289,7 +312,7 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 |----------|----------|-------------|
 | NMR | `submit_nmr_workflow` | Predicted 1H/13C chemical shifts for structure verification |
 | Ion Mobility | `submit_ion_mobility_workflow` | Collision cross-section (CCS) for MS method development |
-| Hydrogen Bond Strength | `submit_hydrogen_bond_basicity_workflow` | H-bond donor/acceptor strength for formulation/solubility |
+| Hydrogen Bond Strength | `submit_hydrogen_bond_donor_acceptor_strength_workflow` | H-bond donor/acceptor strength for formulation/solubility |
 | Fukui | `submit_fukui_workflow` | Site reactivity indices for electrophilic/nucleophilic attack |
 | Interaction Energy Decomposition | `submit_interaction_energy_decomposition_workflow` | Fragment-level interaction analysis |
 
@@ -306,3 +329,7 @@ All workflows follow the same submit → wait → retrieve pattern and support w
 |----------|----------|-------------|
 | MSA | `submit_msa_workflow` | Multiple sequence alignment for cofolding (ColabFold, Chai, Boltz) |
 | Solvent-Dependent Conformers | `submit_solvent_dependent_conformers_workflow` | Solvation-aware conformer ensembles |
+
+`submit_hydrogen_bond_basicity_workflow` remains a compatibility alias for the
+donor/acceptor-strength function. For signatures of table-only workflows, consult
+the matching page in the official reference; do not infer arguments from another workflow.

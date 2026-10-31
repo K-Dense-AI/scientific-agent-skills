@@ -33,7 +33,7 @@ ask the user for a DOAJ key to look up a journal.
 
 ## Rate Limits
 
-No published per-second cap. Be polite. Prefer a journal ISSN lookup over
+The documented rate is **2 requests/second**, with a burst queue of up to five. Serialize calls. Prefer a journal ISSN lookup over
 paging through tens of thousands of article hits.
 
 ## Query syntax
@@ -49,7 +49,7 @@ is escaped for you.
 | Exact journal title | `bibjson.title.exact:"PLoS ONE"` |
 | Short names | `title:`, `issn:`, `publisher:`, `license:` (journals) |
 
-`.exact` works on full field names, **not** on the short aliases.
+`.exact` works on full field names, **not** on the short aliases. Wildcard, regex, fuzzy, and proximity queries are disabled; do not assume all Elasticsearch operators are available.
 
 ## Key Endpoints
 
@@ -92,7 +92,7 @@ Verified:
 | Query | `total` | Notes |
 |---|---|---|
 | `issn:0028-0836` (Nature) | 0 | Subscription journal. Empty is the answer. |
-| `issn:1932-6203` (PLoS ONE) | 1 | `bibjson.title` `PLoS ONE`, `oa_start` 2006, `apc.has_apc` true, max 2477 USD |
+| `issn:1932-6203` (PLoS ONE) | 1 | `bibjson.title` `PLoS ONE`, `oa_start` 2006, `apc.has_apc` true, APC values must be re-read for the current journal and currency |
 
 HTTP 200 + `total: 0` + `results: []` means "not a DOAJ journal," not an
 outage. Unpaywall may still find a green or hybrid copy of a Nature paper.
@@ -117,3 +117,7 @@ OA in DOAJ?"
 | Used DOAJ as Unpaywall | Misses hybrid/green OA | Article-level OA is Unpaywall |
 | Second host just for yes/no | Extra call | OpenAlex `sources.is_in_doaj` if you are already there |
 | Used short field + `.exact` | Query does not mean what you think | Use `bibjson.title.exact` |
+
+## Official sources reviewed 2026-09-30
+
+- https://doaj.org/api/docs

@@ -1,6 +1,6 @@
 # Monitoring, tracing, and stepping
 
-Verified 2026-07-23 against SimPy 4.1.2.
+Reviewed 2026-10-01 against SimPy 4.1.2.
 
 Monitoring is model instrumentation, not an automatic statistical analysis. Define:
 
@@ -56,7 +56,7 @@ For Container/Store, distinguish `level`/`len(items)` from pending
 
 ## Time-weighted state
 
-For a left-continuous piecewise-constant state `q(t)`, compute:
+For a right-continuous, post-transition piecewise-constant state `q(t)`, compute:
 
 `average = sum(q_i * (t_{i+1} - t_i)) / (end - start)`.
 
@@ -98,6 +98,11 @@ CSV atomically and refuses overwrite unless requested.
 Monkey-patching changes method identity and can interact with other wrappers. Attach
 one monitor per instance, patch before processes obtain method references, and call
 `detach()` before another instrumentation layer.
+
+`summary(start=..., end=...)` clips the two time-weighted averages. Its request
+counts, mean wait, maximum queue, and final state describe the whole collected
+history; they are not filtered to that window. The library monitor accumulates
+samples in memory, so bound its environment and entity count too.
 
 ## Generic resource wrappers
 
@@ -170,7 +175,10 @@ python skills/simpy/scripts/event_trace_summary.py resource_samples.csv
 ```
 
 The summarizer validates fixed schemas, file size, record count, numeric finiteness,
-and ordering.
+and reports decreasing-time violations. It does not treat same-time decreases in
+priority/event ID as errors: callbacks can insert urgent events after normal events
+run. The trace describes step attempts, including the stopping event; an exception
+may interrupt that event's callbacks.
 
 ## Manual stepping
 
@@ -185,7 +193,7 @@ while env.peek() < 100 and processed < max_events:
     env.step()
     processed += 1
 
-if processed == max_events:
+if processed == max_events and env.peek() < 100:
     raise RuntimeError("event budget exhausted")
 if env.peek() == float("inf"):
     # Empty schedule; verify intended completion instead of assuming success.

@@ -1,6 +1,6 @@
 # Reporting Guidelines and Domain Metadata Standards
 
-Verified against primary or official sources on **2026-07-23**. The dated evidence record is `assets/source_ledger.csv`; the machine-readable selector catalog is `assets/reporting_guidelines.json`.
+Reviewed against primary or official sources on **2026-10-01**; source-specific access limitations are recorded in the ledger. The dated evidence record is `assets/source_ledger.csv`; the machine-readable selector catalog is `assets/reporting_guidelines.json`.
 
 ## What reporting guidelines do—and do not do
 
@@ -172,14 +172,18 @@ Official registry records: [SRQR](https://www.equator-network.org/reporting-guid
 
 Use the guideline that matches the study’s primary design and claim:
 
-- Randomized trial of an AI intervention: CONSORT 2025 plus current CONSORT-AI guidance
-- Protocol for such a trial: SPIRIT 2025 plus current SPIRIT-AI guidance
+- Randomized trial of an AI intervention: CONSORT 2025 plus CONSORT-AI 2020
+- Protocol for such a trial: SPIRIT 2025 plus SPIRIT-AI 2020
 - AI diagnostic accuracy: STARD-AI
 - Prediction model development or performance evaluation: TRIPOD+AI
-- Biomedical large-language-model prediction or evaluation: check TRIPOD-LLM and design-specific guidance
+- Biomedical LLM development, tuning, prompt engineering, or evaluation, including non-prediction tasks: TRIPOD-LLM 2025; add TRIPOD+AI when prediction-model reporting also applies
 - Medical imaging AI: consider current modality guidance in addition to the design-specific base
 
-Multiple guidelines can apply, but do not create redundant demands. State which base and extension address each concern.
+The 2020 AI extensions were written against CONSORT 2010 and SPIRIT 2013. Use their substantive requirements with the current base guidelines, mapping by meaning rather than reusing old item numbers. The [official extension index](https://www.consort-spirit.org/extensions) distinguishes extensions built on the 2025 checklists from those built on the previous versions. [CONSORT-AI](https://www.equator-network.org/reporting-guidelines/consort-artificial-intelligence/) and [SPIRIT-AI](https://www.equator-network.org/reporting-guidelines/spirit-artificial-intelligence/) remain listed in EQUATOR.
+
+TRIPOD-LLM has 19 main items and a separate abstract checklist. In the local selector, `llm_study` with feature `large_language_model` selects it without incorrectly classifying a summarization or question-answering evaluation as a prediction model. See the [TRIPOD-LLM record](https://www.equator-network.org/reporting-guidelines/the-tripod-llm-reporting-guideline-for-studies-using-large-language-models/).
+
+Multiple guidelines can apply, but do not create redundant demands. State which base and extension address each concern. The catalog is intentionally selective: abstract-specific checklists and many extensions require manual selection from the official source.
 
 ## Domain metadata standards: verified legacy status
 
@@ -187,12 +191,12 @@ These standards describe minimum experiment or repository metadata. They complem
 
 ### MIAME and MINSEQE
 
-**Retain with qualification.** NCBI GEO’s page was last modified 8 July 2026 and still states that GEO submission procedures implement:
+**Retain with qualification.** NCBI GEO’s official guidance states that its submission procedures support:
 
 - MIAME for microarray experiments
-- MINSEQE for next-generation/high-throughput sequencing experiments
+- MINSEQE for high-throughput functional genomics sequencing experiments
 
-ArrayExpress/Annotare also continues to reference these standards. Verify the current repository’s fields, file formats, raw/processed data expectations, and accession requirements; do not rely on an old static project page alone.
+The October 2026 live fetch returned a browser challenge; official search-indexed GEO guidance still describes both standards. Verify the current repository’s fields, file formats, raw/processed data expectations, and accession requirements; do not treat this as an executed repository submission check.
 
 Official implementation source: [GEO and MIAME/MINSEQE](https://www.ncbi.nlm.nih.gov/geo/info/MIAME.html).
 
@@ -218,7 +222,7 @@ Official source: [MIAPPE releases](https://www.miappe.org/releases).
 
 ### MIGS and MIMS
 
-**Do not present standalone MIGS/MIMS as the current umbrella.** The Genomic Standards Consortium now organizes these legacy checklists within **MIxS** (Minimum Information about any Sequence), alongside newer checklists and environmental packages. Select the current MIxS release and applicable checklist/package.
+**Do not present standalone MIGS/MIMS as the current umbrella.** The Genomic Standards Consortium now organizes these legacy checklists within **MIxS** (Minimum Information about any Sequence), alongside newer checklists and environmental packages. Select the current MIxS release and applicable checklist plus environmental extension; GSC now calls their pairing a combination (older documents use package).
 
 Official source: [GSC standards](https://www.gensc.org/pages/standards-intro.html).
 

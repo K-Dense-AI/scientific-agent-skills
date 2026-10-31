@@ -28,7 +28,9 @@ shapes across planes; it is not a native volumetric mesh.
 
 Display fields include RGBA fill/stroke colors, stroke width, fill rule, dash
 array, text label, and font properties. Geometry and display metadata are
-distinct.
+distinct. A shape can also have an affine `Transform`; preserve its six
+coefficients (`A00`, `A01`, `A02`, `A10`, `A11`, `A12`) when exporting local
+coordinates. Ignoring it can move or distort a reconstructed ROI.
 
 ## Current Service Status
 
@@ -36,7 +38,7 @@ The current Python examples still retrieve ROIs with:
 
 ```python
 roi_service = conn.getRoiService()
-result = roi_service.findByImage(image_id, None)
+result = roi_service.findByImage(image_id, None, conn.SERVICE_OPTS)
 ```
 
 However, the current OMERO Blitz API marks the `IRoi` interface deprecated.
@@ -52,7 +54,8 @@ Therefore:
 - record this dependency in long-lived integrations.
 
 The official OMERO.web JSON API also documents paginated ROI listing by image:
-`/api/v0/m/rois/?image=<id>&limit=<n>&offset=<n>`. Use it only when the site
+`/api/v0/m/rois/?image=<id>&limit=<n>&offset=<n>`. Its page cap is on
+ROIs, and each returned ROI still includes its child shapes. Use it only when the site
 exposes the documented `api` app over HTTPS and its authentication model is
 appropriate.
 
@@ -67,7 +70,7 @@ max_rois = 100
 max_shapes_per_roi = 500
 
 roi_service = conn.getRoiService()
-result = roi_service.findByImage(image_id, None)
+result = roi_service.findByImage(image_id, None, conn.SERVICE_OPTS)
 rois = list(result.rois)
 
 roi_truncated = len(rois) > max_rois
@@ -83,7 +86,9 @@ for roi in rois[:max_rois]:
 ```
 
 The cap limits client processing/output, not necessarily server work:
-`findByImage()` may already have assembled all matching ROIs. For a known very
+`findByImage()` has already loaded all matching ROIs and their shapes,
+including mask payloads. Masks are omitted from the JSON, not from that
+service response. For a known very
 large image, do not call it casually; consider the documented paginated JSON
 API or a site-reviewed query.
 
@@ -98,7 +103,9 @@ python -B scripts/export_image_metadata.py \
 ```
 
 Review the dry run, then add `--execute`. ROI labels remain redacted unless
-`--include-roi-labels` is specified.
+`--include-roi-labels` is specified. The exporter preserves the affine
+transform and flags `geometry_truncated` when a Points string exceeds the
+length cap. Such a record is an inventory, not reconstructable geometry.
 
 ## Reading Shape Fields
 
@@ -202,7 +209,7 @@ roi = omero.model.RoiI()
 roi.setImage(image._obj)
 roi.addShape(rectangle)
 
-saved = conn.getUpdateService().saveAndReturnObject(roi)
+saved = conn.getUpdateService().saveAndReturnObject(roi, conn.SERVICE_OPTS)
 print(saved.getId().getValue())
 ```
 

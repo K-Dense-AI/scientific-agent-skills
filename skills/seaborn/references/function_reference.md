@@ -1,6 +1,6 @@
 # Seaborn Function Reference
 
-This document provides a comprehensive reference for all major seaborn functions, organized by category. It is updated for seaborn 0.13.2 patterns.
+This document provides a selected reference for major seaborn functions, organized by category. Reviewed against the [0.13.2 API](https://seaborn.pydata.org/api.html) and released signatures on 2026-10-01. Parameter lists below are selected, not complete signatures. Figure-level wrappers accept only parameters supported by their selected `kind`; they do not accept `ax`. Examples use illustrative input DataFrames.
 
 ## Relational Plots
 
@@ -34,7 +34,7 @@ sns.scatterplot(data=df, x='height', y='weight',
 
 ### lineplot()
 
-**Purpose:** Draw a line plot with automatic aggregation and confidence intervals for repeated measures.
+**Purpose:** Draw a line plot with aggregation and confidence intervals across observations at each x; repeated measures need an explicit sampling-unit strategy.
 
 **Key Parameters:**
 - `data` - DataFrame, array, or dict of arrays
@@ -42,7 +42,8 @@ sns.scatterplot(data=df, x='height', y='weight',
 - `hue` - Grouping variable for color encoding
 - `size` - Grouping variable for line width
 - `style` - Grouping variable for line style (dashes)
-- `units` - Grouping variable for sampling units (no aggregation within units)
+- `units` - Separate trajectory for each sampling unit; also set `estimator=None` (no aggregation)
+- `weights` - Observation weights; only mean estimation with CI or no error bars
 - `estimator` - Function for aggregating across observations (default: mean)
 - `errorbar` - Method for error bars: "sd", "se", "pi", ("ci", level), ("pi", level), or None
 - `n_boot` - Number of bootstrap iterations for CI computation
@@ -58,8 +59,8 @@ sns.scatterplot(data=df, x='height', y='weight',
 **Example:**
 ```python
 sns.lineplot(data=timeseries, x='time', y='signal',
-             hue='condition', style='subject',
-             errorbar=('ci', 95), markers=True)
+             hue='condition', units='subject',
+             estimator=None, errorbar=None, marker='o')
 ```
 
 ### relplot()
@@ -67,7 +68,7 @@ sns.lineplot(data=timeseries, x='time', y='signal',
 **Purpose:** Figure-level interface for drawing relational plots (scatter or line) onto a FacetGrid.
 
 **Key Parameters:**
-All parameters from `scatterplot()` and `lineplot()`, plus:
+Parameters for the selected `kind` (`scatterplot` or `lineplot`), except `ax`, plus:
 - `kind` - "scatter" or "line"
 - `col` - Categorical variable for column facets
 - `row` - Categorical variable for row facets
@@ -111,7 +112,7 @@ sns.relplot(data=df, x='time', y='measurement',
 - `shrink` - Scale bar width (for multiple="dodge")
 - `kde` - Overlay KDE estimate
 - `kde_kws` - Parameters for KDE
-- `line_kws` - Parameters for step/poly elements
+- `line_kws` - Parameters for the KDE line when `kde=True`
 - `thresh` - Minimum count threshold for bins
 - `pthresh` - Minimum probability threshold
 - `pmax` - Maximum probability for color scaling
@@ -145,8 +146,8 @@ sns.histplot(data=df, x='measurement', hue='condition',
 - `bw_method` - Method for bandwidth: "scott", "silverman", or scalar
 - `bw_adjust` - Bandwidth multiplier (higher = smoother)
 - `log_scale` - Log scale for axis
-- `levels` - Number or values for contour levels (bivariate)
-- `thresh` - Minimum density threshold for contours
+- `levels` - Number or increasing iso-proportion levels in [0, 1] (bivariate)
+- `thresh` - Lowest iso-proportion contour level, not a raw density or p-value
 - `gridsize` - Grid resolution
 - `cut` - Extension beyond data extremes (in bandwidth units)
 - `clip` - Data range for curve (tuple)
@@ -174,7 +175,7 @@ sns.kdeplot(data=df, x='var1', y='var2',
 - `x, y` - Variables (specify one)
 - `hue` - Grouping variable
 - `weights` - Variable for weighting observations
-- `stat` - "proportion" or "count"
+- `stat` - "proportion", "percent", or "count"
 - `complementary` - Plot complementary CDF (1 - ECDF)
 - `palette` - Color palette
 - `hue_order` - Order for hue levels
@@ -215,7 +216,7 @@ sns.rugplot(data=df, x='value', hue='category', height=0.05)
 **Purpose:** Figure-level interface for distribution plots onto a FacetGrid.
 
 **Key Parameters:**
-All parameters from `histplot()`, `kdeplot()`, and `ecdfplot()`, plus:
+Parameters for the selected `kind` (`histplot`, `kdeplot`, or `ecdfplot`), except `ax`, plus:
 - `kind` - "hist", "kde", "ecdf"
 - `rug` - Add rug plot on marginal axes
 - `rug_kws` - Parameters for rug plot
@@ -312,7 +313,7 @@ sns.pairplot(data=df, hue='species', palette='Set2',
 - `edgecolor` - Marker edge color
 - `linewidth` - Marker edge width
 - `native_scale` - Use numeric scale for categorical axis
-- `formatter` - Formatter for categorical axis
+- `formatter` - Formats categorical values, affecting both grouping and tick labels
 - `legend` - Whether to show legend
 - `ax` - Matplotlib axes
 
@@ -332,7 +333,7 @@ Same as `stripplot()`, except:
 - `size` - Marker size (important for avoiding overlap)
 - `warn_thresh` - Threshold for warning about too many points (default: 0.05)
 
-**Note:** Computationally intensive for large datasets. Use stripplot for >1000 points.
+**Note:** Dense swarms can fail to place points without overlap; the practical limit depends on axes size, marker size, and group density. Check warnings and reduce marker size or use stripplot when needed.
 
 **Example:**
 ```python
@@ -369,7 +370,7 @@ sns.swarmplot(data=df, x='day', y='total_bill',
 - `flierprops` - Properties for outliers
 - `medianprops` - Properties for median line
 - `native_scale` - Use numeric scale
-- `formatter` - Formatter for categorical axis
+- `formatter` - Formats categorical values, affecting both grouping and tick labels
 - `legend` - Whether to show legend
 - `ax` - Matplotlib axes
 
@@ -385,13 +386,13 @@ sns.boxplot(data=df, x='day', y='total_bill',
 **Purpose:** Draw a violin plot combining boxplot and KDE.
 
 **Key Parameters:**
-Same as `boxplot()`, plus:
+Shares categorical mappings/order, color/palette, width/dodge/gap, native/log scales, formatter, legend and `ax`; box-specific `whis`, `notch`, `showmeans`, and box artist options do not apply. Additional parameters:
 - `bw_method` - KDE bandwidth method
 - `bw_adjust` - KDE bandwidth multiplier
 - `cut` - KDE extension beyond extremes
 - `density_norm` - "area", "count", "width"
-- `common_norm` - Normalize density across hue/facet groups
-- `inner` - "box", "quartile", "point", "stick", None
+- `common_norm` - Normalize density across all violins in this axes-level call; do not assume independent facets share normalization
+- `inner` - "box", "quart", "point", "stick", None
 - `split` - Split violins for hue comparison
 - `inner_kws` - Additional parameters for interior artists
 - `gridsize` - KDE grid resolution
@@ -399,7 +400,7 @@ Same as `boxplot()`, plus:
 **Example:**
 ```python
 sns.violinplot(data=df, x='day', y='total_bill',
-               hue='sex', split=True, inner='quartile',
+               hue='sex', split=True, inner='quart',
                density_norm='area', common_norm=False,
                palette='muted')
 ```
@@ -409,7 +410,7 @@ sns.violinplot(data=df, x='day', y='total_bill',
 **Purpose:** Draw enhanced box plot for larger datasets showing more quantiles.
 
 **Key Parameters:**
-Same as `boxplot()`, plus:
+Shares categorical mappings/order, color/palette, width/dodge/gap, native/log scales, formatter, legend and `ax`. Use `box_kws`, `line_kws`, and `flier_kws` for artist control; do not pass boxplot-only options. Additional parameters:
 - `k_depth` - "tukey", "proportion", "trustworthy", "full", or int
 - `outlier_prop` - Proportion of data as outliers
 - `trust_alpha` - Alpha for trustworthy depth
@@ -437,7 +438,7 @@ sns.boxenplot(data=df, x='day', y='total_bill',
 - `n_boot` - Bootstrap iterations
 - `seed` - Random seed
 - `units` - Identifier for sampling units
-- `weights` - Observation weights
+- `weights` - Observation weights; only mean with CI or no error bars
 - `orient` - "v" or "h"
 - `color` - Single bar color
 - `palette` - Color palette
@@ -447,7 +448,7 @@ sns.boxenplot(data=df, x='day', y='total_bill',
 - `err_kws` - Matplotlib keyword arguments for error bars
 - `capsize` - Error bar cap width
 - `native_scale` - Use numeric scale
-- `formatter` - Formatter for categorical axis
+- `formatter` - Formats categorical values, affecting both grouping and tick labels
 - `legend` - Whether to show legend
 - `ax` - Matplotlib axes
 
@@ -464,10 +465,10 @@ sns.barplot(data=df, x='day', y='total_bill',
 **Purpose:** Show counts of observations in each categorical bin.
 
 **Key Parameters:**
-Same as `barplot()`, but:
-- Only specify one of x or y (the categorical variable)
-- No estimator or errorbar (shows counts)
-- `stat` - "count" or "percent"
+Shares categorical mappings/order, color/palette, width/dodge/gap, native/log scales, formatter, legend and `ax`.
+- Specify only x or y (the categorical variable)
+- No estimator, weights, units, bootstrap, or errorbar parameters
+- `stat` - "count", "percent", "probability", or "proportion"; normalized across the whole plot, not separately within each hue
 
 **Example:**
 ```python
@@ -480,12 +481,12 @@ sns.countplot(data=df, x='day', hue='time',
 **Purpose:** Show point estimates and confidence intervals with connecting lines.
 
 **Key Parameters:**
-Same as `barplot()`, plus:
-- `markers` - Marker style(s)
-- `linestyles` - Line style(s)
-- `scale` - Scale for markers
-- `join` - Connect points with lines
-- `capsize` - Error bar cap width
+Shares mappings/order, estimator, errorbar, units, weights, seed/n_boot, native/log scales, formatter, legend and `ax`. It does not share bar geometry (`width`, `fill`, `gap`, `saturation`).
+- `markers`, `linestyles` - Marker/line styles, optionally one per hue
+- `markersize`, `linewidth` - Matplotlib artist sizes; replace deprecated `scale`
+- `linestyles="none"` - Disable connections; replaces deprecated `join=False`
+- `capsize`, `err_kws` - Error bar appearance
+- `dodge` - Boolean or numeric separation along the categorical axis
 
 **Example:**
 ```python
@@ -499,7 +500,7 @@ sns.pointplot(data=df, x='time', y='total_bill',
 **Purpose:** Figure-level interface for categorical plots onto a FacetGrid.
 
 **Key Parameters:**
-All parameters from categorical plots, plus:
+Parameters for the selected categorical `kind`, except `ax`, plus:
 - `kind` - "strip", "swarm", "box", "violin", "boxen", "bar", "point", "count"
 - `col` - Categorical variable for column facets
 - `row` - Categorical variable for row facets
@@ -543,7 +544,7 @@ sns.catplot(data=df, x='day', y='total_bill',
 - `logistic` - Fit logistic regression
 - `lowess` - Fit lowess smoother
 - `robust` - Fit robust regression
-- `logx` - Log-transform x
+- `logx` - Fit y against log(x), drawing in original coordinates; x must be positive
 - `x_partial, y_partial` - Partial regression (regress out variables)
 - `truncate` - Limit regression line to data range
 - `dropna` - Drop missing values
@@ -558,7 +559,7 @@ sns.catplot(data=df, x='day', y='total_bill',
 **Example:**
 ```python
 sns.regplot(data=df, x='total_bill', y='tip',
-            order=2, robust=True, ci=95,
+            order=2, ci=95, seed=7,
             scatter_kws={'alpha': 0.5})
 ```
 
@@ -567,7 +568,7 @@ sns.regplot(data=df, x='total_bill', y='tip',
 **Purpose:** Figure-level interface for regression plots onto a FacetGrid.
 
 **Key Parameters:**
-All parameters from `regplot()`, plus:
+Selected regression options from `regplot()` (not `ax`, `label`, or arbitrary axis-level artist arguments), plus:
 - `hue` - Grouping variable
 - `col` - Column facets
 - `row` - Row facets
@@ -576,12 +577,12 @@ All parameters from `regplot()`, plus:
 - `height` - Facet height
 - `aspect` - Aspect ratio
 - `markers` - Marker style(s)
-- `sharex, sharey` - Share axes
+- `facet_kws={"sharex": ..., "sharey": ...}` - Share axes; top-level forms are deprecated
 - `hue_order` - Order for hue levels
 - `col_order` - Order for column facets
 - `row_order` - Order for row facets
 - `legend` - Whether to show legend
-- `legend_out` - Place legend outside
+- `facet_kws={"legend_out": ...}` - Legend position; top-level form is deprecated
 - `facet_kws` - FacetGrid parameters
 
 **Example:**
@@ -596,10 +597,10 @@ sns.lmplot(data=df, x='total_bill', y='tip',
 **Purpose:** Plot residuals of a regression.
 
 **Key Parameters:**
-Same as `regplot()`, but:
-- Always plots residuals (y - predicted) vs x
-- Adds horizontal line at y=0
-- `lowess` - Fit lowess smoother to residuals
+Uses `data`, `x`, `y`, `x_partial`, `y_partial`, `order`, `robust`, `dropna`, `label`, `color`, `scatter_kws`, `line_kws`, and `ax`. It has no `ci`, `logistic`, or `logx` parameter.
+- Plots residuals (y - predicted) against x, not fitted values
+- Adds a horizontal line at y=0
+- `lowess=True` fits a smoother to residuals; requires statsmodels
 
 **Example:**
 ```python
@@ -635,7 +636,7 @@ sns.residplot(data=df, x='x', y='y', lowess=True,
 **Example:**
 ```python
 # Correlation matrix
-corr = df.corr()
+corr = df.select_dtypes(include='number').corr()
 mask = np.triu(np.ones_like(corr, dtype=bool))
 sns.heatmap(corr, mask=mask, annot=True, fmt='.2f',
             cmap='coolwarm', center=0, square=True,
@@ -647,11 +648,11 @@ sns.heatmap(corr, mask=mask, annot=True, fmt='.2f',
 **Purpose:** Plot a hierarchically-clustered heatmap.
 
 **Key Parameters:**
-All parameters from `heatmap()`, plus:
+Many heatmap styling parameters through `**kwargs`, but owns its figure/axes; do not pass `ax` or `cbar_ax`. Additional parameters:
 - `pivot_kws` - Parameters for pivoting (if needed)
 - `method` - Linkage method: "single", "complete", "average", "weighted", "centroid", "median", "ward"
 - `metric` - Distance metric for clustering
-- `standard_scale` - Standardize data: 0 (rows), 1 (columns), or None
+- `standard_scale` - Min-max scale to [0, 1]: 0 (rows), 1 (columns), or None; distinct from z-scoring
 - `z_score` - Z-score normalize data: 0 (rows), 1 (columns), or None
 - `row_cluster, col_cluster` - Cluster rows/columns
 - `row_linkage, col_linkage` - Precomputed linkage matrices
@@ -693,7 +694,7 @@ g = sns.FacetGrid(data, row=None, col=None, hue=None,
 - `map_dataframe(func, *args, **kwargs)` - Apply function with full DataFrame
 - `set_axis_labels(x_var, y_var)` - Set axis labels
 - `set_titles(template, **kwargs)` - Set subplot titles
-- `set(kwargs)` - Set attributes on all axes
+- `set(**kwargs)` - Set attributes on all axes
 - `add_legend(legend_data, title, label_order, **kwargs)` - Add legend
 - `savefig(*args, **kwargs)` - Save figure
 
@@ -701,7 +702,7 @@ g = sns.FacetGrid(data, row=None, col=None, hue=None,
 ```python
 g = sns.FacetGrid(df, col='time', row='sex', hue='smoker',
                   height=3, aspect=1.5, margin_titles=True)
-g.map(sns.scatterplot, 'total_bill', 'tip', alpha=0.7)
+g.map_dataframe(sns.scatterplot, x='total_bill', y='tip', alpha=0.7)
 g.add_legend()
 g.set_axis_labels('Total Bill ($)', 'Tip ($)')
 g.set_titles('{col_name} | {row_name}')
@@ -735,7 +736,7 @@ g = sns.PairGrid(data, hue=None, vars=None,
 ```python
 g = sns.PairGrid(df, hue='species', vars=['a', 'b', 'c', 'd'],
                  corner=True, height=2.5)
-g.map_upper(sns.scatterplot, alpha=0.5)
+# corner=True omits upper-triangle axes
 g.map_lower(sns.kdeplot)
 g.map_diag(sns.histplot, kde=True)
 g.add_legend()
@@ -770,3 +771,13 @@ g.plot_joint(sns.scatterplot, alpha=0.5)
 g.plot_marginals(sns.histplot, kde=True)
 g.set_axis_labels('Variable X', 'Variable Y')
 ```
+
+## Scientific constraints
+
+- In 0.13 categorical plots, statistics are computed in the transformed space when a log scale is active. A displayed mean can therefore be geometric rather than arithmetic; precompute the intended estimate when necessary.
+
+- `lineplot` removes missing rows before drawing: `estimator=None` alone does not preserve gaps. Split contiguous runs as in [patterns_and_troubleshooting.md](patterns_and_troubleshooting.md).
+- Choose one regression mode: `order>1`, `logistic`, `robust`, `lowess`, and `logx` are mutually exclusive. Lowess has no bootstrap CI; advanced fits require statsmodels. These are exploratory fits, not a substitute for a specified inference model.
+- KDE/violin bandwidth and support affect apparent modes. `cut=0` does not remove boundary bias. `common_norm=False` normalizes each underlying density separately, which hides sample-size differences; a truncated drawing need not integrate to one.
+- Correlations use pairwise-complete observations; inspect sample counts and constant columns. A heatmap does not imply significance or causation.
+- Clustering needs finite values; a heatmap mask does not make missing values valid clustering input. Reject zero-variance rows for `z_score=0` or zero-range rows for `standard_scale=0` (analogous for columns). Ward linkage requires Euclidean geometry. Choose scaling according to whether rows or features should be standardized, align annotation Series by labels, and save via the returned `ClusterGrid.savefig`.

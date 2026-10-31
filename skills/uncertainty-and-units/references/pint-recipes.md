@@ -1,7 +1,7 @@
 # Pint recipes
 
-Verified against pint 0.25.3 with NumPy 2.5.1. Every output below was produced by
-running the snippet.
+Verified against pint 0.26.1 with NumPy 2.5.3. Core recipes were rerun on 2026-10-01; optional pandas/xarray integrations are
+documentation-verified only. Last-digit floating-point formatting can vary.
 
 ## One registry per process
 
@@ -36,7 +36,8 @@ ureg = pint.get_application_registry()
 ## Offset units
 
 Degrees Celsius and Fahrenheit measure a point on a scale, not an amount, so
-multiplication and addition are undefined for them. Pint refuses rather than guessing:
+multiplication and addition are undefined for them. Pint refuses the ambiguous operations shown below. Since 0.26, string parsing
+such as `ureg("20 degC")` is supported, but that does not make offset arithmetic valid:
 
 ```python
 Q = ureg.Quantity
@@ -192,8 +193,9 @@ ureg.define("percent_v_v = 0.01 = %v/v")
 ```
 
 Defining a new base dimension in square brackets makes it dimensionally distinct from
-everything else, which is the point: `cells / mL` will then refuse to be added to
-`particles / mL`. Load a whole file of them with `ureg.load_definitions("units.txt")`.
+everything else, which is the point: define each count kind with its own base dimension when needed.
+A new name defined as a dimensionless scale factor is still freely convertible to
+other dimensionless quantities. Load a whole file of them with `ureg.load_definitions("units.txt")`.
 
 ## Formatting
 
@@ -226,3 +228,15 @@ f"{q:.2uS}"        # 2.50(10) meter
 `pint-pandas` provides a pandas extension dtype so a DataFrame column carries a unit;
 `pint-xarray` does the same for xarray. Both are separate installs and both inherit the
 one-registry rule.
+
+## Angular frequency is a semantic boundary
+
+Pint treats radians as dimensionless: `Q(1, "Hz").to("rad/s")` gives 1 rad/s,
+not 2*pi rad/s. For a cyclic frequency f, construct omega = 2*pi*f explicitly.
+An `rpm` conversion includes the full revolution and does produce 2*pi/60 rad/s.
+
+Current APIs: [changes](https://pint.readthedocs.io/en/stable/changes.html),
+[contexts](https://pint.readthedocs.io/en/stable/user/contexts.html),
+[wrapping](https://pint.readthedocs.io/en/stable/advanced/wrapping.html),
+[NumPy](https://pint.readthedocs.io/en/stable/user/numpy.html), and
+[definitions](https://pint.readthedocs.io/en/stable/advanced/defining.html).

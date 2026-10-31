@@ -1,7 +1,7 @@
 %%
 %% This is file `elsarticle-num-names.bst'  (Version 2.1),
 %% 
-%% Copyright 2009-2024 Elsevier Ltd
+%% Copyright 2009-2026 Elsevier Ltd
 %% 
 %% This file is part of the 'Elsarticle Bundle'.
 %% ---------------------------------------------
@@ -13,7 +13,7 @@
 %% and version 1.3 or later is part of all distributions of LaTeX
 %% version 1999/12/01 or later.
 %%
-%% $Id: elsarticle-num-names.bst 253 2024-04-06 10:57:58Z rishi $
+%% $Id: elsarticle-num-names.bst 288 2026-01-09 06:11:11Z rishi $
 %%
 %% $URL: https://lenova.river-valley.com/svn/elsarticle/trunk/elsarticle-num-names.bst $
 %%

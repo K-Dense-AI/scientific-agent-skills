@@ -25,8 +25,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 
 CLIENT_NAME = "ncats-arax"
-CLIENT_VERSION = "1.0"
-USER_AGENT = "scientific-agent-skills-ncats-arax/1.0"
+CLIENT_VERSION = "1.1"
+USER_AGENT = "scientific-agent-skills-ncats-arax/1.1"
 SUBMITTER = "scientific-agent-skills-ncats-arax"
 PRODUCTION_BASE_URL = "https://arax.transltr.io/api/arax/v1.4"
 TESTED_ARAX_VERSION = "1.5.4"
@@ -768,10 +768,15 @@ def parse_openapi_service_info(
     title = info.get("title")
     if not isinstance(title, str) or "arax" not in title.lower():
         raise PreflightError("OpenAPI title does not identify ARAX")
-    if "/query" not in paths:
-        raise PreflightError("OpenAPI document does not expose /query")
+    if not isinstance(paths.get("/query"), dict) or not isinstance(paths["/query"].get("post"), dict):
+        raise PreflightError("OpenAPI document does not expose POST /query")
+    if not isinstance(paths.get("/entity"), dict) or not isinstance(paths["/entity"].get("get"), dict):
+        raise PreflightError("OpenAPI document does not expose GET /entity")
     version_match = TRAPI_VERSION_RE.search(title)
-    trapi_version = version_match.group(1) if version_match else None
+    trapi_extension = info.get("x-trapi")
+    trapi_version = trapi_extension.get("version") if isinstance(trapi_extension, dict) else None
+    if not isinstance(trapi_version, str):
+        trapi_version = version_match.group(1) if version_match else None
     arax_version = str(info["version"]) if info.get("version") is not None else None
     warnings = list(initial_warnings)
     _check_trapi_version(trapi_version, allow_untested_version, warnings)
@@ -841,7 +846,8 @@ def parse_normalization_response(
     max_synonyms: int,
     service: ServiceInfo,
 ) -> tuple[dict[str, Any], bool]:
-    warnings = [make_warning("PUBLIC_QUERY", "The normalization request was sent to a public service.")]
+    warnings = [dict(item) for item in service.warnings]
+    warnings.append(make_warning("PUBLIC_QUERY", "The normalization request was sent to a public service."))
     requires_confirmation = not _looks_like_curie(term)
     if requires_confirmation:
         _append_warning(
@@ -875,7 +881,7 @@ def parse_normalization_response(
             preview.append(
                 {
                     "identifier": node.get("identifier", node.get("id")),
-                    "name": node.get("name"),
+                    "name": node.get("name") or node.get("label"),
                     "category": node.get("category"),
                 }
             )
@@ -1151,11 +1157,11 @@ def _classify_logs(
             or "timeout" in code.lower()
         )
         malformed_failure = failure_level and any(
-            token in combined for token in ("malformed", "deserial", "invalid trapi")
+            token in combined for token in ("malformed", "deserial", "invalid trapi", "not a dict")
         )
         if timeout_failure:
             _append_warning(warnings, "KP_TIMEOUT", message or "A provider timed out.", context)
-            partial = partial or contract.mode == "federated"
+            partial = True
         elif malformed_failure:
             _append_warning(
                 warnings,
@@ -1163,9 +1169,15 @@ def _classify_logs(
                 message or "A provider returned a malformed response.",
                 context,
             )
-            partial = partial or contract.mode == "federated"
-        elif contract.mode == "federated" and level in {"warning", "error", "critical"} and (
+            partial = True
+        elif failure_level and (
             "kp" in combined or provider is not None
+        ) and (
+            level in {"error", "critical", "fatal"}
+            or any(token in combined for token in (
+                "error", "exception", "failed", "couldn't", "cannot", "no 'message'", "no knowledge graph",
+                "skipping", "response of 4", "response of 5",
+            ))
         ):
             _append_warning(warnings, "KP_ERROR", message or "A provider reported an error.", context)
             partial = True
@@ -1193,6 +1205,16 @@ def parse_trapi_response(
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ResponseError("TRAPI response is not an object")
+    # ARAX can put an application error code in an otherwise valid HTTP 200
+    # envelope. A populated graph or an empty results list does not make it a
+    # successful query. Status is optional/nullable in TRAPI, so absent values
+    # remain compatible with saved responses.
+    status = payload.get("status")
+    if status is not None and status not in ("Success", "OK"):
+        raise ResponseError(
+            f"ARAX reported non-success status {_sanitize_text(status, 100)}: "
+            f"{_sanitize_text(payload.get('description') or 'inspect response.json')}"
+        )
     message = payload.get("message")
     if not isinstance(message, dict):
         raise ResponseError("TRAPI response is missing message")

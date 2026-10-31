@@ -1,5 +1,7 @@
 # Data Preprocessing and Feature Engineering Reference
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 ## Overview
 
 Data preprocessing transforms raw data into a format suitable for machine learning models. This includes scaling, encoding, handling missing values, and feature engineering.
@@ -11,8 +13,8 @@ Data preprocessing transforms raw data into a format suitable for machine learni
 **StandardScaler (`sklearn.preprocessing.StandardScaler`)**
 - Standardizes features to zero mean and unit variance
 - Formula: z = (x - mean) / std
-- Use when: Features have different scales, algorithm assumes normally distributed data
-- Required for: SVM, KNN, Neural Networks, PCA, Linear Regression with regularization
+- Use when: Different feature scales distort a distance, kernel, or regularization penalty; standardization does not make data Gaussian
+- Often useful for SVM, KNN, neural networks, PCA, and regularized linear models; choose scales using scientific units and noise. For sparse data use `with_mean=False`
 - Example:
 ```python
 from sklearn.preprocessing import StandardScaler
@@ -31,7 +33,7 @@ print(f"Std: {scaler.scale_}")
 **MinMaxScaler (`sklearn.preprocessing.MinMaxScaler`)**
 - Scales features to a given range (default [0, 1])
 - Formula: X_scaled = (X - X.min) / (X.max - X.min)
-- Use when: Need bounded values, data not normally distributed
+- Training values map to the requested range; unseen values can exceed it unless `clip=True`. Clipping can hide distribution shift
 - Sensitive to outliers
 - Example:
 ```python
@@ -78,7 +80,7 @@ X_normalized = normalizer.fit_transform(X)
 
 **MaxAbsScaler (`sklearn.preprocessing.MaxAbsScaler`)**
 - Scales by maximum absolute value
-- Range: [-1, 1]
+- Training range lies within [-1, 1]; new extrema can exceed it
 - Doesn't shift/center data (preserves sparsity)
 - Use when: Data is already centered or sparse
 - Example:
@@ -119,7 +121,7 @@ X_test_encoded = encoder.transform(X_test_categorical)
 ```python
 from sklearn.preprocessing import OrdinalEncoder
 
-# Natural ordering
+# Default sorted category order is not necessarily a scientific ordering
 encoder = OrdinalEncoder()
 X_encoded = encoder.fit_transform(X_categorical)
 
@@ -145,16 +147,18 @@ y_decoded = le.inverse_transform(y_encoded)
 print(f"Classes: {le.classes_}")
 ```
 
-### Target Encoding (using category_encoders)
+### Target Encoding (with internal cross-fitting)
 
 ```python
-# Install: uv pip install category-encoders
-from category_encoders import TargetEncoder
+from sklearn.preprocessing import TargetEncoder
+from sklearn.model_selection import StratifiedKFold
 
-encoder = TargetEncoder()
+encoder = TargetEncoder(cv=StratifiedKFold(5, shuffle=True, random_state=42))
 X_train_encoded = encoder.fit_transform(X_train_categorical, y_train)
 X_test_encoded = encoder.transform(X_test_categorical)
 ```
+
+`fit_transform` uses out-of-fold encodings for training rows, while `fit(...).transform(...)` does not; they intentionally differ. Put the encoder inside the model pipeline for outer CV. In 1.9, custom internal splitters are supported if every row occurs in exactly one validation fold; use metadata routing for groups. Ordinary `TimeSeriesSplit` does not satisfy that partition requirement. Use a study-specific causal encoding design for forecasting. Plain shuffled folds assume independent rows. The old encoder `shuffle` and `random_state` parameters are deprecated; configure the splitter instead. Numeric integer regression targets may be inferred as multiclass, so set `target_type='continuous'` when appropriate.
 
 ## Non-linear Transformations
 
@@ -215,6 +219,8 @@ X_log = log_transformer.fit_transform(X)
 
 ### SimpleImputer
 
+Default `missing_values=np.nan` does not normalize every sentinel: convert categorical `None`/`pd.NA` consistently. In 1.9 even constant-strategy imputers drop entirely missing columns unless `keep_empty_features=True`. Decide explicitly whether the schema should preserve those columns.
+
 **SimpleImputer (`sklearn.impute.SimpleImputer`)**
 - Basic imputation strategies
 - Strategies: 'mean', 'median', 'most_frequent', 'constant'
@@ -239,7 +245,7 @@ X_imputed = imputer.fit_transform(X)
 
 **IterativeImputer**
 - Models each feature with missing values as function of other features
-- More sophisticated than SimpleImputer
+- Experimental: enabling import remains required. Iterative imputation does not itself propagate missing-data uncertainty; inspect convergence and assumptions
 - Example:
 ```python
 from sklearn.experimental import enable_iterative_imputer
@@ -300,7 +306,8 @@ binner = KBinsDiscretizer(n_bins=5, encode='ordinal', strategy='uniform')
 X_binned = binner.fit_transform(X)
 
 # Equal-frequency bins (quantile-based)
-binner = KBinsDiscretizer(n_bins=5, encode='onehot', strategy='quantile')
+binner = KBinsDiscretizer(n_bins=5, encode='onehot', strategy='quantile',
+                           quantile_method='averaged_inverted_cdf', random_state=42)
 X_binned = binner.fit_transform(X)
 ```
 
@@ -355,7 +362,7 @@ feature_names = vectorizer.get_feature_names_out()
 
 **TfidfVectorizer**
 - TF-IDF (Term Frequency-Inverse Document Frequency) transformation
-- Better than CountVectorizer for most tasks
+- Weights counts by inverse document frequency; compare against counts on held-out data
 - Example:
 ```python
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -480,6 +487,8 @@ X_selected = selector.transform(X_train)
 
 ### IQR Method
 
+Illustrative exploratory filtering only: this does not establish measurement error. Learn thresholds on training data, retain valid rare biology, and apply any row mask to `y` and metadata too. Do not delete test outliers to improve reported performance.
+
 ```python
 import numpy as np
 
@@ -491,12 +500,14 @@ IQR = Q3 - Q1
 lower_bound = Q1 - 1.5 * IQR
 upper_bound = Q3 + 1.5 * IQR
 
-# Remove outliers
+# Flag rows; any removal must preserve aligned labels/metadata
 mask = np.all((X >= lower_bound) & (X <= upper_bound), axis=1)
 X_no_outliers = X[mask]
 ```
 
 ### Winsorization
+
+This computes thresholds on the supplied array. Do not winsorize test data independently or before CV; learn training cutoffs and reuse them. Report the scientific justification for clipping.
 
 ```python
 from scipy.stats import mstats
@@ -525,7 +536,7 @@ X_transformed = transformer.fit_transform(X)
 ```python
 from sklearn.base import BaseEstimator, TransformerMixin
 
-class CustomTransformer(BaseEstimator, TransformerMixin):
+class CustomTransformer(TransformerMixin, BaseEstimator):
     def __init__(self, parameter=1):
         self.parameter = parameter
 
@@ -592,15 +603,21 @@ X_transformed = preprocessor.fit_transform(X)
 
 ### Algorithm-Specific Requirements
 
-**Require Scaling:**
+**Often Benefit from Scaling:**
 - SVM, KNN, Neural Networks
 - PCA, Linear/Logistic Regression with regularization
 - K-Means clustering
 
 **Don't Require Scaling:**
 - Tree-based models (Decision Trees, Random Forest, Gradient Boosting)
-- Naive Bayes
+- Gaussian Naive Bayes; MultinomialNB requires nonnegative features
 
 **Encoding Requirements:**
 - Linear models, SVM, KNN: One-hot encoding for nominal features
-- Tree-based models: Can handle ordinal encoding directly
+- Ordinary trees accept numeric codes but impose threshold order; that can misrepresent nominal categories. HistGradientBoosting supports explicitly declared categorical features
+
+## Upstream references
+
+- https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.TargetEncoder.html
+- https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html
+- https://scikit-learn.org/stable/modules/preprocessing.html

@@ -119,7 +119,7 @@ class PlanningTests(unittest.TestCase):
         ast.parse(script)
         self.assertIn("from fluidsim.solvers.ns2d.solver import Simul", script)
         self.assertNotIn("subprocess", script)
-        self.assertNotIn("importlib", script)
+        self.assertNotIn("import_module", script)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             generated = root / "run_ns2d.py"
@@ -262,6 +262,7 @@ class RestartTests(unittest.TestCase):
             },
             "state": {
                 "datasets": ["rot"],
+                "dataset_metadata": {"rot": {"shape": [32, 32], "numeric": True}},
                 "iteration": 5,
                 "state_parameters_present": True,
                 "time": 0.05,

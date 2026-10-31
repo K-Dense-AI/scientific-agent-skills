@@ -23,7 +23,7 @@ class GraphicsApiTests(unittest.TestCase):
         plt.close("all")
 
     def test_phase_space_and_matrix_plotting_apis(self) -> None:
-        self.assertEqual(qutip.__version__, "5.3.0")
+        self.assertEqual(qutip.__version__, "5.3.1")
         state = qutip.fock_dm(6, 1)
         coordinates = np.linspace(-2.0, 2.0, 15)
 

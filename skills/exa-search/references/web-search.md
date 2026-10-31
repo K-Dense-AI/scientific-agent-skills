@@ -7,7 +7,7 @@ Search the web for: $ARGUMENTS
 Choose a short, descriptive filename based on the query (e.g., `ai-chip-news`, `crispr-off-target`). Use lowercase with hyphens, no spaces.
 
 ```bash
-uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
+uv run "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
   --text --highlights \
   -o "$FILENAME.json"
 ```
@@ -19,46 +19,58 @@ uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
 | Mode | When to use |
 |---|---|
 | `auto` (default) | Exa's general-purpose search. Use this unless you have a reason not to. |
-| `fast` | Lowest latency. Use for simple lookups where speed matters more than nuance. |
-| `deep` | Slowest but highest quality. Use for hard, conceptual, or exhaustive research queries where recall matters more than latency. |
+| `fast` | Low-latency interactive search. |
+| `instant` | Minimum response time, trading some depth for speed. |
+| `deep-lite` | Lightweight research with lower latency than deep. |
+| `deep` | Multi-step research for complex queries. |
+| `deep-reasoning` | Higher-effort reasoning for complex analysis. |
 
 **Content modes** — add any combination:
 
 - `--text` returns full-text content per result
 - `--highlights` returns the most relevant passages (good signal-to-noise, lower token cost than full text)
 
-Default to `--highlights` for broad searches (cheaper, more skimmable). Add `--text` only when you need to quote or extract in detail.
+Default to `--highlights` for broad searches (less text to process). Add `--text` only when you need to quote or extract in detail.
 
 **Filtering options** — Exa supports rich filtering via the SDK:
 
-- `--start-published-date YYYY-MM-DD` / `--end-published-date YYYY-MM-DD` for time-sensitive queries
+- `--start-published-date 2026-01-01T00:00:00Z` / `--end-published-date 2026-10-01T00:00:00Z` for ISO 8601 publication-date bounds
 - `--include-domains domain1.com,domain2.com` to restrict to an allowlist
 - `--exclude-domains spam.com,low-quality.com` to drop a blocklist
-- `--category "research paper"` to bias toward scholarly content (also: `company`, `news`, `github`, `personal site`, `financial report`, `people`)
+- `--category publication` to bias toward scholarly content (also: `company`, `news`, `personal site`, `financial report`, `people`; other strings are category hints)
 - `--user-location US` for locale-specific results
+
+`--num-results` accepts 1–100 (individual modes may impose lower limits). There
+is no documented offset/cursor pagination; reformulate a query or partition by
+supported filters when more coverage is needed. Neither method establishes an
+exhaustive literature search. `company` and `people` reject publication-date and
+exclude-domain filters; the wrapper catches these combinations before calling.
+Use `--include-domains github.com` instead of the deprecated `github` category.
+Domain filters also support paths and wildcard subdomains. No content flag
+means metadata only, despite the SDK's default text retrieval.
 
 ## Academic source strategy
 
 For scientific or technical queries, Exa has two strong levers:
 
-### 1. Use `--category "research paper"`
+### 1. Use `--category publication`
 
 ```bash
-uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
-  --category "research paper" \
+uv run "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
+  --category publication \
   --text --highlights \
   -o "$FILENAME-academic.json"
 ```
 
-This biases retrieval toward papers indexed as scholarly content (journals, preprint servers, conference proceedings) rather than blogs or news coverage.
+This selects the current scholarly-publication category (papers, preprints, and journal articles). Verify peer review, publication metadata, and relevance on the source; the category does not establish evidence quality.
 
 ### 2. Restrict to scholarly domains
 
 For stricter academic filtering, combine the category with an explicit domain allowlist:
 
 ```bash
-uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
-  --category "research paper" \
+uv run "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
+  --category publication \
   --include-domains "arxiv.org,biorxiv.org,medrxiv.org,pubmed.ncbi.nlm.nih.gov,nature.com,science.org" \
   --text --highlights \
   -o "$FILENAME-academic.json"
@@ -68,7 +80,7 @@ uv run --with exa-py python "$SKILL_PATH/scripts/exa_search.py" "$ARGUMENTS" \
 
 Run **both** an academic-focused search and an unrestricted one, then merge with academic sources first:
 
-1. Academic pass: `--category "research paper"` with the scholarly domain allowlist above.
+1. Academic pass: `--category publication` with the scholarly domain allowlist above.
 2. General pass: the standard command without `--category` or `--include-domains`, to catch relevant non-academic sources (news coverage, lab blogs, institutional pages).
 
 Merge results, leading with academic sources. If the query is clearly non-scientific, skip the academic pass.
@@ -80,8 +92,14 @@ Merge results, leading with academic sources. If the query is clearly non-scient
 Parse the JSON output. Each result includes:
 
 - `title`, `url`, `published_date`, `author`
-- `score` — Exa's relevance score for the query
-- `text` (if `--text`), `highlights` + `highlight_scores` (if `--highlights`)
+- `text` (if `--text`) and `highlights` (if `--highlights`)
+- Legacy compatibility fields `score`, `highlight_scores`, and top-level
+  `autoprompt_string` may be null/empty; never require them or infer evidence
+  quality from a retrieval score. Exa's changelog says `highlightScores` was
+  removed in May 2026 although the generated reference still lists it.
+
+Missing author/date/text metadata is normal. The wrapper exports a selected
+subset of the SDK response, not raw API JSON or structured publication entities.
 
 **Snippet fallback** — any combination of content fields may be present. Cascade through them: prefer `highlights` (tight, pre-selected passages), fall back to a truncated slice of `text`. Never assume exactly one is present.
 
@@ -114,6 +132,8 @@ Other:
 - [Source Title](https://example.com/article) (Feb 2026)
 ```
 
-This Sources section is mandatory. Do not omit it. If no academic sources were found, note that and explain why (e.g., the topic is too recent, not yet studied, or inherently non-academic).
+This Sources section is mandatory. Do not omit it. If no academic sources were found, report the search coverage and filters used; do not infer that the topic has not been studied.
 
 After the Sources section, mention the output file path (`$FILENAME.json`) so the user knows it's available for follow-up questions.
+
+Verified against the [Search API](https://exa.ai/docs/reference/search) and [changelog](https://exa.ai/docs/changelog) on 2026-09-30; authenticated commands are illustrative.

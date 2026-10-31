@@ -145,7 +145,7 @@ def validate_case_manifest(data: dict[str, Any]) -> dict[str, Any]:
             continue
         status = item.get("status")
         coverage[key] = str(status)
-        if status not in ALLOWED_ITEM_STATUSES:
+        if not isinstance(status, str) or status not in ALLOWED_ITEM_STATUSES:
             errors.append(f"care_items.{key}.status is invalid")
             continue
         try:
@@ -234,7 +234,7 @@ def validate_case_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "errors": errors,
         "warnings": warnings,
         "limitations": [
-            "Structure and provenance metadata only; no clinical-content validation.",
+            "Structure and fact-ID shape only; no cross-artifact linkage or clinical-content validation.",
             "Does not establish consent, de-identification, CARE adherence, or journal readiness.",
         ],
         "review_required": True,

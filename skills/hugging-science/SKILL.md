@@ -1,21 +1,23 @@
 ---
 name: hugging-science
-description: Use when the user is doing AI/ML work in a scientific domain such as biology, chemistry, physics, astronomy, climate, genomics, materials, medicine, ecology, energy, engineering, math, drug discovery, protein design, weather modeling, theorem proving, single-cell, or PDE solving. Hugging Science is a curated catalog of scientific datasets, models, blog posts, and interactive Spaces. This skill helps discover and use resources via `datasets`, `transformers`, the HF Inference API, `gradio_client`, and methodology citations.
+description: Discovers and evaluates scientific datasets, models, methodology posts, and Spaces through the Hugging Science catalog. Used when selecting scientific ML resources in biology, chemistry, genomics, materials, climate, physics, astronomy, medicine, mathematics, protein design, single-cell analysis, or PDE modeling, and when checking their actual datasets, Transformers, native-runtime, Inference Providers, or Gradio interfaces.
+compatibility: Requires Python 3.10+ and network access for the standard-library catalog fetcher. Resource use needs the matching scientific runtime; optional HF_TOKEN for gated access.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
 # Hugging Science
 
-Hugging Science is a curated, LLM-friendly index of scientific datasets, models, blog posts, and interactive demos for ML researchers. Use it when a scientific ML question lands in front of you — it's much higher signal than generic search and the entries are pre-filtered for quality and openness.
+Hugging Science is a curated, LLM-friendly index of scientific datasets, models, blog posts, and interactive demos for ML researchers. Use it to find candidate resources, then verify their author documentation and scientific suitability; curation does not establish quality, openness, or executable compatibility.
 
 There are two related surfaces, and you should use both:
 
 - **The catalog at `huggingscience.co`** — a static, parseable index of resources across 17 scientific domains. It exposes `llms.txt` (compact), `llms-full.txt` (full content), and `topics/<slug>.md` (per-domain). These are markdown files designed to be fetched and read.
-- **The `hugging-science` Hugging Face organization** — `huggingface.co/hugging-science` — community-submitted datasets, a few models, and ~27 interactive Spaces (notably BoltzGen for protein/binder design, Dataset Quest for submissions, and Science Release Heatmap for ecosystem visualization).
+- **The `hugging-science` Hugging Face organization** — `huggingface.co/hugging-science` — community-submitted datasets, models, and a changing collection of Gradio, Docker and static Spaces. Not every listing exposes an inference API.
 
-The catalog *points to* resources hosted on the broader Hugging Face Hub. So an entry like `arcinstitute/opengenome2` is a regular HF dataset that you load with the `datasets` library; an entry like `facebook/esm2_t33_650M_UR50D` is a regular HF model you load with `transformers`. The catalog's job is curation and discovery; usage goes through standard Hugging Face APIs.
+The catalog *points to* resources hosted on the broader Hugging Face Hub. For example, ESM2 supports Transformers, while Evo2 requires its native runtime and OpenGenome2 needs explicit file-format handling. The catalog provides discovery; use each resource through its verified loader or service.
 
 ## When to use this skill
 
@@ -31,7 +33,7 @@ If the task is generic ML (recommendation systems, chatbot RAG, vision on cats a
 
 ## Core workflow
 
-Most invocations follow this five-step loop. Don't skip discovery — the value of Hugging Science is that it has already filtered hundreds of resources down to high-signal picks per domain.
+Most invocations follow this five-step loop. Start with the relevant topic, then assess the underlying resource independently.
 
 ### 1. Identify the domain(s)
 
@@ -69,7 +71,7 @@ Read the descriptions and tags. Match to the user's task with judgment, not keyw
 - **Modality alignment** — DNA vs. protein vs. SMILES vs. crystal structure; many "biology" models are not interchangeable.
 - **Recency / supersession** — if both an older and newer entry cover the same task, prefer newer unless there's a reason not to.
 
-If you're not sure which resource to pick, briefly present the top 2–3 candidates to the user with their tradeoffs, then proceed once they choose. Don't pick silently when the choice materially changes the work.
+Explain material tradeoffs between plausible candidates. Proceed with the best fit when task requirements resolve the choice; ask only if a missing preference would materially change the result.
 
 For domain-specific go-to picks (the "if in doubt, start here" entries), see `references/flagship-resources.md`.
 
@@ -78,8 +80,8 @@ For domain-specific go-to picks (the "if in doubt, start here" entries), see `re
 The mechanics depend on resource type. Read the matching reference file before writing code:
 
 - **Datasets** → `references/using-datasets.md` — loading via `datasets`, streaming for huge corpora, common columns, splits
-- **Models** → `references/using-models.md` — local `transformers`, Hugging Face Inference API, Inference Providers for very large models, GPU sizing
-- **Spaces (interactive demos)** → `references/using-spaces.md` — `gradio_client` pattern with a worked BoltzGen example
+- **Models** → `references/using-models.md` — supported Transformers loaders, native scientific runtimes, verified Inference Provider mappings and memory limits
+- **Spaces (interactive demos)** → `references/using-spaces.md` — `gradio_client` schema discovery and the source-verified BoltzGen contract, with its current runtime limitation
 
 The reference files are short and focused. If you're already fluent in the relevant API, skim; if not, read fully before writing code. The patterns are different from generic HF usage in a few important places (e.g., `trust_remote_code` requirements, scientific-data dtype gotchas).
 
@@ -92,7 +94,7 @@ modality, normalization, and split-compatibility checks.
 
 ### 5. Cite the methodology
 
-When the catalog has a blog post matching the task (`Type: blog` or in the Blog Posts section of a topic file), include its URL when you explain your approach to the user. Methodology blogs are written by the dataset/model authors and answer "why this design" questions that model cards usually skip. Treat them like citations — a one-line "see <link> for the methodology behind X" is plenty.
+When the catalog has a blog post matching the task (`Type: blog` or in the Blog Posts section of a topic file), include its URL when you explain your approach to the user. Check the blog authorship and primary paper; methodology posts can answer "why this design" questions that model cards usually skip. Treat them like citations — a one-line "see <link> for the methodology behind X" is plenty.
 
 ## Authentication: HF_TOKEN
 
@@ -121,22 +123,30 @@ If you're creating a new project, also add `.env` to `.gitignore` if it isn't al
 
 **The entries are pointers.** Don't try to "use Hugging Science" as if it were an API. There is no Hugging Science inference endpoint. Every actionable resource lives on HF Hub or as a HF Space, and you use it via the standard HF tooling.
 
-**Many scientific models require `trust_remote_code=True`.** Custom architectures (Evo-2, many genomics/materials models) ship custom modeling code. This is normal in this ecosystem, but the flag executes arbitrary Python from the model repo on the user's machine — so ask the user before you set it, naming the repo, and wait for an answer. Appearing in the catalog is not a vetting signal: entries are pointers fetched over the network, not code review. The same applies to sending files or tokens to a Space via `gradio_client`.
+**Verify the actual runtime.** Some Transformers architectures require reviewed, revision-pinned custom code; others such as Evo2 use a separate package. `trust_remote_code=True` does not turn arbitrary Hub artifacts into compatible models, and current Datasets no longer supports loading scripts. Execution and uploads must be within the user's authorized scope; catalog membership alone does not supply that authorization.
 
-**Scientific datasets are often large and weirdly-shaped.** Genomics corpora can be billions of tokens; cosmology images can be hundreds of GB; materials datasets contain non-standard objects (crystal structures, graphs). Use streaming (`streaming=True` on `load_dataset`) by default for anything claimed to be over a few GB, and inspect schema before assuming columns.
+**Scientific datasets are often large and weirdly-shaped.** Genomics corpora can be billions of tokens; cosmology images can be hundreds of GB; materials datasets contain non-standard objects (crystal structures, graphs). Prefer bounded streaming where the format supports it; multipart compressed files need separate handling. Inspect schema before assuming columns.
 
-**Spaces are great for one-off scientific generations.** If the user wants to design a binder for a target protein or run inference on a hosted model demo, calling the Space via `gradio_client` is faster and cheaper than spinning up the model locally. Check `references/using-spaces.md` first — `huggingface.co/hugging-science` has ~27 of these.
+**Spaces require live schema checks.** Confirm SDK, runtime, endpoint inputs and outputs before calling. The BoltzGen demo ID and input contract differ from older examples; the reviewed runtime returned 503. See [Spaces](references/using-spaces.md) before attempting a job.
 
 **The catalog itself may evolve.** Entries get added regularly; occasionally entries change slugs. If a URL 404s, refetch the topic file or `llms.txt` to get the current state — don't paper over the failure.
+
+## Review scope
+
+Reviewed on 2026-10-01 against the public catalog, current author cards and released
+SDK source. Catalog fetches and public metadata queries ran live; tiny random ESM2,
+synthetic dataset and mocked client tests cover local interfaces. No pretrained
+weights, authenticated inference, large scientific dataset shards or design jobs
+were run. The [source ledger](references/review.md) records endpoint and runtime gaps.
 
 ## Bundled resources
 
 - `scripts/fetch_catalog.py` — fetch and filter catalog content. Run with `--help` for full usage. Use this in preference to ad-hoc WebFetch calls when you need structured access.
 - `references/topics-and-slugs.md` — exact topic slugs, what each covers, and the entry schema.
 - `references/using-datasets.md` — patterns and gotchas for loading scientific datasets.
-- `references/using-models.md` — running scientific models locally, via Inference API, or via Inference Providers.
+- `references/using-models.md` — supported local/native runtimes and task-specific Inference Provider checks.
 - `references/using-spaces.md` — calling HF Spaces (notably BoltzGen) programmatically with `gradio_client`.
-- `references/flagship-resources.md` — go-to dataset/model picks per domain when the user wants a sensible default.
+- `references/flagship-resources.md` — candidate resources and their verified interfaces, without treating popularity as validation.
 
 ## Citing Scientific Agent Skills
 

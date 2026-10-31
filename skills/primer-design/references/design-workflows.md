@@ -1,6 +1,6 @@
 # Assay-specific design workflows
 
-Documentation checked: 2026-09-30. These are design and review procedures. The
+Documentation checked: 2026-10-01. These are design and review procedures. The
 bundled tools automate ordinary DNA-primer design, thermodynamics, and bounded
 local-reference screening; they do not implement every specialized assay below.
 

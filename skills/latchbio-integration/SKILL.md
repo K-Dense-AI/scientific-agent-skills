@@ -1,11 +1,12 @@
 ---
 name: latchbio-integration
-description: Build, register, debug, and operate bioinformatics workflows on Latch using the Python SDK, CLI, Latch Data and Registry, Nextflow, Snakemake, programmatic execution, and Latch MCP. Use when authoring or deploying Latch workflows, configuring resources or interfaces, moving data, integrating Registry, or launching and monitoring runs.
+description: Builds, registers, debugs, and operates bioinformatics workflows on Latch using the Python SDK, CLI, Latch Data and Registry, Nextflow, Snakemake, programmatic execution, and Latch MCP. Use when authoring or deploying Latch workflows, configuring resources or interfaces, moving data, integrating Registry, or launching and monitoring runs.
 license: MIT
 allowed-tools: Read Write Edit Bash
 compatibility: Requires network access and a Latch account. The current stable SDK requires Python 3.9+; Python 3.12 is recommended. Uses uv for installation. Docker is needed for local image builds, while remote registration is the CLI default.
 metadata:
-  version: "2.2"
+  version: "2.3"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -13,8 +14,13 @@ metadata:
 
 ## Current Baseline
 
-This skill targets **Latch SDK 2.76.8**, released July 10, 2026. The package
+This skill targets **Latch SDK 2.77.1**, released September 17, 2026. The package
 metadata supports Python 3.9–3.12 and declares Python 3.9+.
+
+Review status: the SDK imports, documented signatures, CLI help, and selected
+workflow graph examples were checked locally with Python 3.12. Network-backed
+examples are illustrative: no authenticated registration, data mutation, launch,
+or MCP tool call was performed during this refresh.
 
 Treat the installed package and its changelog as authoritative when a guide
 disagrees with the SDK. Some Latch guides retain older Python ranges or
@@ -63,7 +69,7 @@ For a reproducible environment:
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install "latch==2.76.8"
+uv pip install "latch==2.77.1"
 ```
 
 On Windows, use WSL for the documented Linux workflow tooling.
@@ -115,7 +121,10 @@ def reverse_complement(sequence: str) -> str:
 
 @workflow
 def reverse_complement_workflow(sequence: str) -> str:
-    """Return the reverse complement of a DNA sequence."""
+    """Reverse-complement a DNA sequence.
+
+    This minimal example handles A, C, G, and T bases.
+    """
     return reverse_complement(sequence=sequence)
 ```
 
@@ -146,7 +155,7 @@ imperative remote path operations.
 4. **Validate in the execution image**
 
    Fresh Nextflow and Snakemake projects must generate their
-   version-compatible Python entrypoint before staging. In SDK 2.76.8, the
+   version-compatible Python entrypoint before staging. In SDK 2.77.1, the
    staging branch does not generate one from `--nf-script` or `--snakefile`.
 
    ```bash
@@ -171,8 +180,9 @@ imperative remote path operations.
    latch register --workflow-module wf.custom_entrypoint .
    ```
 
-   Duplicate registration exits with status `2`; it is not the same as a build
-   failure.
+   Ordinary duplicate registration exits with status `2`; duplicate **staging**
+   registration exits with status `1`. Staging uses the active workspace and
+   does not honor `--workspace-id`; select it with `latch workspace --id` first.
 
 6. **Launch only after reviewing cost and parameters**
    - Prefer the Console or Latch MCP for interactive operation.
@@ -205,14 +215,14 @@ imperative remote path operations.
 From this skill directory:
 
 ```bash
-uv run --no-project --python 3.12 --with "latch==2.76.8" \
+uv run --no-project --python 3.12 --with "latch==2.77.1" \
   python scripts/inspect_latch_sdk.py
 ```
 
 Use JSON output for automated comparisons:
 
 ```bash
-uv run --no-project --python 3.12 --with "latch==2.76.8" \
+uv run --no-project --python 3.12 --with "latch==2.77.1" \
   python scripts/inspect_latch_sdk.py --json
 ```
 
@@ -222,8 +232,8 @@ uv run --no-project --python 3.12 --with "latch==2.76.8" \
 - Workflow and SDK guides: https://wiki.latch.bio/workflows/overview
 - SDK API reference: https://wiki.latch.bio/reference/sdk
 - PyPI package: https://pypi.org/project/latch/
-- SDK 2.76.8 release source: https://github.com/latchbio/latch/tree/0faa9dcd8186444ac008f50adf95d43f0fa30e06
-- SDK changelog: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/CHANGELOG.md
+- SDK 2.77.1 release source: https://github.com/latchbio/latch/tree/b3768e65c6d496868f6e530f11977d857ad85dc7
+- SDK changelog: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/CHANGELOG.md
 - Latch Console: https://console.latch.bio
 
 ## Citing Scientific Agent Skills

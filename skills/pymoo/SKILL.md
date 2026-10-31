@@ -1,11 +1,13 @@
 ---
 name: pymoo
-description: Multi-objective optimization framework. NSGA-II, NSGA-III, MOEA/D, Pareto fronts, constraint handling, benchmarks (ZDT, DTLZ), for engineering design and optimization problems.
+description: Solves and validates single-, multi-, and many-objective optimization with pymoo, including NSGA-II, NSGA-III, MOEA/D, constraints, Pareto approximations, reference directions, and ZDT/DTLZ benchmarks for engineering and research problems.
 license: Apache-2.0 license
 allowed-tools: Read Write Edit Bash
-compatibility: Requires Python 3.10+ and pymoo (uv pip install). Optional matplotlib for visualization plots; optional autograd for gradient-based features; optional joblib for JoblibParallelization.
+compatibility: Requires Python 3.10+ and pymoo 0.6.2 with its NumPy, SciPy, matplotlib and autograd dependencies. Optional joblib for parallel runners, optuna for its algorithm wrapper, and dill for checkpoints. Network needed for installation only.
 metadata:
-  version: "1.5"
+  version: "1.6"
+  last-reviewed: "2026-10-01"
+  upstream-version: "0.6.2"
   skill-author: K-Dense Inc.
 ---
 
@@ -13,17 +15,17 @@ metadata:
 
 ## Overview
 
-Pymoo is a comprehensive Python framework for optimization with emphasis on multi-objective problems. Solve single and multi-objective optimization using state-of-the-art algorithms (NSGA-II/III, MOEA/D, SPEA2), benchmark problems (ZDT, DTLZ), customizable genetic operators, and multi-criteria decision making methods. Excels at finding trade-off solutions (Pareto fronts) for problems with conflicting objectives. Current stable release: **pymoo 0.6.1.6** (November 2025).
+Pymoo is a comprehensive Python framework for optimization with emphasis on multi-objective problems. Solve single and multi-objective optimization using state-of-the-art algorithms (NSGA-II/III, MOEA/D, SPEA2), benchmark problems (ZDT, DTLZ), customizable genetic operators, and multi-criteria decision making methods. Excels at finding trade-off solutions (Pareto fronts) for problems with conflicting objectives. Targets stable **pymoo 0.6.2**, reviewed 2026-10-01 against current official docs and native toy runs.
 
 ## Installation
 
 ```bash
-uv pip install pymoo
+uv pip install "pymoo==0.6.2"
 ```
 
-For reproducible environments, pin a version: `uv pip install "pymoo==0.6.1.6"`.
+For reproducible environments, pin a version: `uv pip install "pymoo==0.6.2"`.
 
-**Dependencies:** NumPy (2.x compatible since 0.6.1.3), SciPy, matplotlib (visualization). Autograd is optional for gradient-based features (since 0.6.1.3).
+**Dependencies:** The released 0.6.2 wheel requires NumPy, SciPy, moocore, autograd, cma, matplotlib, alive_progress, and Deprecated. NumPy 2.x is supported. The current installation prose describes some dependencies as optional; the released package metadata governs installation. Joblib, Optuna and dill are separate dependencies for the corresponding recipes.
 
 **Documentation:** https://pymoo.org/ — LLM-friendly index: https://pymoo.org/llms.txt
 
@@ -78,7 +80,7 @@ Pymoo supports three problem definition styles:
 
 ### Problem Types
 
-**Single-objective:** One objective to minimize/maximize
+**Single-objective:** One objective to minimize; negate a maximization objective and record the conversion
 **Multi-objective:** 2-3 conflicting objectives → Pareto front
 **Many-objective:** 4+ objectives → High-dimensional Pareto front
 **Constrained:** Objectives + inequality/equality constraints
@@ -87,7 +89,7 @@ Pymoo supports three problem definition styles:
 
 ## Quick Start Workflows
 
-Nine runnable workflows are in
+Nine workflows and context-dependent adaptation snippets are in
 [references/quick_start_workflows.md](references/quick_start_workflows.md):
 
 | # | Workflow | Use when |
@@ -99,7 +101,7 @@ Nine runnable workflows are in
 | 5 | Constraint handling | inequality and equality constraints |
 | 6 | Decision making from a Pareto front | scalarization and MCDM selection |
 | 7 | Visualization | scatter, PCP, radviz, and heatmap views |
-| 8 | Parallel evaluation | threads, processes, or Dask for expensive objectives |
+| 8 | Parallel evaluation | threads or joblib for expensive objectives |
 | 9 | Mixed-variable optimization | integer, binary, and categorical variables |
 
 ## Algorithm Selection Guide
@@ -118,7 +120,7 @@ Nine runnable workflows are in
 | Algorithm | Best For | Key Features |
 |-----------|----------|--------------|
 | **NSGA-II** | Standard benchmark | Fast, reliable, well-tested |
-| **SPEA2** | Archive-based MOO | Strength-based fitness, external archive |
+| **SPEA2** | Strength/density survival | Strength-based fitness, truncation for diversity |
 | **R-NSGA-II** | Preference regions | Reference point guidance |
 | **MOEA/D** | Decomposable problems | Scalarization approach |
 
@@ -134,11 +136,13 @@ Nine runnable workflows are in
 
 | Approach | Algorithm | When to Use |
 |----------|-----------|-------------|
-| Feasibility-first | Any algorithm | Large feasible region |
+| Feasibility-first | NSGA-II, GA and compatible algorithms | Feasible candidates available |
 | Specialized | SRES, ISRES | Heavy constraints |
 | Penalty | GA + penalty | Algorithm compatibility |
 
-**See:** `references/algorithms.md` for comprehensive algorithm reference
+Algorithm choices are starting points, not performance guarantees. Pymoo MOEA/D does not support constraints directly.
+
+**See:** `references/algorithms.md` for algorithm parameters and restrictions
 
 ## Benchmark Problems
 
@@ -224,9 +228,9 @@ algorithm = GA(
 
 ### Best practices:
 
-1. **Normalize objectives** when scales differ significantly
-2. **Set random seed** for reproducibility
-3. **Save history** to analyze convergence: `save_history=True`
+1. **Use consistent scales** and minimization signs; resolve constant objective columns before normalization
+2. **Record seeds and versions**, then compare multiple seeds at matched evaluation budgets
+3. **Use callbacks** for lightweight diagnostics; `save_history=True` deep-copies algorithm states
 4. **Visualize results** to understand solution quality
 5. **Compare with true Pareto front** when available
 6. **Use appropriate termination criteria** (generations, evaluations, tolerance)
@@ -245,6 +249,7 @@ Detailed documentation for in-depth understanding:
 - **visualization.md**: All visualization types with examples and selection guide
 - **constraints_mcdm.md**: Constraint handling techniques and multi-criteria decision making methods
 - **parallelization.md**: Parallel evaluation with StarmapParallelization and JoblibParallelization
+- [**lifecycle.md**](references/lifecycle.md): Termination, callbacks, algorithm copying, checkpoint/resume, and stochastic validation
 
 **Search patterns for references:**
 - Algorithm details: `grep -r "NSGA-II\|NSGA-III\|MOEA/D" references/`
@@ -260,7 +265,9 @@ Executable examples demonstrating common workflows:
 - **custom_problem_example.py**: Defining custom problems (constrained and unconstrained)
 - **decision_making_example.py**: Multi-criteria decision making with different preferences
 
-**Run examples:**
+The bundled demos use bounded populations/generations and do not establish convergence. Native verification covered serial GA/NSGA-II/III, constraint equations, operators, MCDM/indicators, thread runners, and checkpoint continuity. Process/distributed workers, dynamic algorithms, video encoding, and expensive external models were not executed. Pymoo is a local Python library; no remote API endpoint or credential is required for these workflows.
+
+**Run examples from the skill directory** (use `MPLBACKEND=Agg` for headless plotting):
 ```bash
 python3 scripts/single_objective_example.py
 python3 scripts/multi_objective_example.py
@@ -268,6 +275,8 @@ python3 scripts/many_objective_example.py
 python3 scripts/custom_problem_example.py
 python3 scripts/decision_making_example.py
 ```
+
+Official review sources: [release notes](https://pymoo.org/versions.html), [problem definition](https://pymoo.org/interface/problem.html), [result](https://pymoo.org/interface/result.html), and sources linked in each reference.
 
 ## Additional Notes
 
@@ -277,7 +286,10 @@ python3 scripts/decision_making_example.py
 - Constraints formulated as `g(x) <= 0` and `h(x) = 0`
 - Reference directions required for NSGA-III
 - Normalize objectives before MCDM
-- Use appropriate termination: `('n_gen', N)` or `get_termination("f_tol", tol=0.001)`
+- Use bounded termination such as `('n_gen', N)` or `DefaultMultiObjectiveTermination(ftol=0.001, n_max_gen=100)`; the `f_tol` factory name is obsolete
+- Das-Dennis direction count is `C(p + m - 1, m - 1)`; budget population size before choosing partitions
+- An obtained nondominated set is a Pareto approximation, not a global optimality certificate
+- PseudoWeights matches pseudo-weight vectors, not a weighted sum; validate weights and finite, varying objective columns
 
 ## Citing Scientific Agent Skills
 

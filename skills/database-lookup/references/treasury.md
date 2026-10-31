@@ -34,29 +34,23 @@ GET /services/api/fiscal_service/{endpoint}?{parameters}
 | `sort` | string | Sort fields: `field` (asc) or `-field` (desc); comma-separated |
 | `page[number]` | int | Page number (default 1) |
 | `page[size]` | int | Results per page (default 100, max 10000) |
-| `format` | string | `json` (default) or `csv` |
+| `format` | string | `json` (default), `csv`, or `xml` |
 
 **Filter Operators:**
 `eq` (equals), `lt`, `lte`, `gt`, `gte`, `in` (comma-separated values)
 
 ---
 
-### 1. Treasury Yield Curve Rates (Daily)
-```
-GET /v2/accounting/od/avg_interest_rates
-```
+### 1. Average interest rates on Treasury securities
 
-**Better endpoint for yield curves:**
-```
-GET /v1/accounting/od/rates_of_exchange
-```
+`GET /v2/accounting/od/avg_interest_rates` reports average interest rates on
+outstanding securities. It is not the daily par yield curve. Exchange-rate
+records at `/v1/accounting/od/rates_of_exchange` are also a different dataset.
 
-**Daily Treasury Par Yield Curve Rates:**
-Note: Daily yield curve rates are published at `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/` and available via the TreasuryDirect API. For programmatic access via Fiscal Data:
-
-```
-GET /v2/accounting/od/avg_interest_rates
-```
+Daily Treasury yield curves are provided by the separate
+[Treasury XML feeds](https://home.treasury.gov/treasury-daily-interest-rate-xml-feed).
+Select the par-yield dataset and year from that documentation; preserve maturity,
+date and yield definition rather than substituting average debt interest rates.
 
 **Example -- Average interest rates on Treasury securities:**
 ```
@@ -69,7 +63,7 @@ https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od
   "data": [
     {
       "record_date": "2024-10-31",
-      "security_type_desc": "Treasury Bills",
+      "security_type_desc": "Marketable",
       "security_desc": "Treasury Bills",
       "avg_interest_rate_amt": "5.223",
       "src_line_nbr": "1",
@@ -129,19 +123,19 @@ https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od
 
 ---
 
-### 4. Monthly Treasury Statement (Revenue & Outlays)
+### 4. Monthly Treasury Statement (Outlays)
 ```
 GET /v1/accounting/mts/mts_table_5
 ```
 
-**Example -- Federal receipts/outlays:**
+**Example -- Federal outlays:**
 ```
 https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_5?filter=record_date:gte:2024-01-01&sort=-record_date&page[size]=50
 ```
 
 ---
 
-### 5. Federal Spending by Category
+### 5. Receipts by Source and Outlays by Function
 ```
 GET /v1/accounting/mts/mts_table_9
 ```
@@ -179,12 +173,11 @@ https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od
 
 ---
 
-### 8. Savings Bonds Rates
-```
-GET /v2/accounting/od/sb_value
-```
+### 8. Other datasets
 
----
+Discover savings-bond and financial-statement endpoints in the current Fiscal
+Data catalogue; their names do not imply interchangeable rate or value series.
+Avoid undocumented guessed paths.
 
 ## Common Endpoint Paths
 
@@ -195,9 +188,8 @@ GET /v2/accounting/od/sb_value
 | `v1/accounting/od/auctions_query` | Treasury securities auction results |
 | `v1/accounting/od/rates_of_exchange` | Treasury reporting rates of exchange |
 | `v2/accounting/od/interest_expense` | Interest expense on the public debt |
-| `v1/accounting/mts/mts_table_5` | Monthly Treasury statement: receipts/outlays |
-| `v1/accounting/mts/mts_table_9` | Monthly Treasury statement: outlays by function |
-| `v2/accounting/od/statement_net_cost` | Statement of net cost |
+| `v1/accounting/mts/mts_table_5` | Outlays of the U.S. Government |
+| `v1/accounting/mts/mts_table_9` | Summary of receipts by source and outlays by function |
 | `v2/accounting/od/debt_outstanding` | Historical debt outstanding (annual) |
 
 ## Response Format
@@ -208,8 +200,12 @@ All JSON responses share the same envelope:
 
 ## Notes
 - All monetary amounts are returned as strings to preserve precision.
+- Confirm units for each table and field; monthly statement tables are not uniformly in millions.
 - Dates use `YYYY-MM-DD` format in the `record_date` field.
+- For auction analysis, use `auction_date`; `record_date` describes publication.
 - The `filter` parameter supports chaining: `filter=field1:eq:val1,field2:gte:val2`.
 - Use `fields=` to reduce response size by requesting only needed columns.
 - The API documentation and dataset explorer is at: https://fiscaldata.treasury.gov/api-documentation/
 - For Treasury yield curve rates specifically, FRED series `DGS1`, `DGS2`, `DGS5`, `DGS10`, `DGS30` may be more convenient.
+
+Pagination links may be query fragments. Preserve the original endpoint, filters and fields while replacing page parameters. Use `curl --globoff` for literal square brackets, or encode parameters with `--data-urlencode`.

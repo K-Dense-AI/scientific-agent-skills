@@ -2,8 +2,8 @@
 
 ## Principles
 
-DNAnexus bearer tokens impersonate the user who created them. They inherit that
-user's project access and can launch billable jobs. Treat
+DNAnexus bearer tokens act as the creating user within the token's scope. They
+can launch billable jobs where both user and token permissions allow it. Treat
 `DX_SECURITY_CONTEXT` as a secret:
 
 - Never print, log, serialize, return, or commit it.
@@ -31,9 +31,15 @@ dx pwd
 `dx login` stores CLI state under `~/.dnanexus_config/`. Use `dx whoami` and
 `dx pwd` to verify identity and project without exposing the token.
 
-For SSO accounts, create an API token in **My Profile → API Tokens** if required
-by the organization. Keep the login prompt interactive; avoid putting token
-values in shell history or transcripts.
+New login sessions under the normal security policy expire after two hours of
+inactivity and no later than 18 hours after issuance. Organization policies can
+shorten these limits. This includes UI, username/password CLI, and SSO
+sessions; API tokens and job tokens have separate lifetimes.
+
+For SSO accounts, follow the organization's login/token workflow. User-generated
+API tokens cannot access resources in the UKB RAP region, including tokens
+issued before this restriction. Use the supported interactive session workflow
+there. Keep login interactive; avoid token values in shell history or transcripts.
 
 ## Token Login and Automation
 
@@ -41,7 +47,9 @@ The CLI supports `dx login --token TOKEN`, but placing the literal token on a
 command line can expose it through shell history or process inspection.
 Preferred automation:
 
-1. Create a short-lived token in the DNAnexus UI.
+1. Where API tokens are supported, create a short-lived token in the DNAnexus UI
+   under **My Profile → API Tokens → New Token**. Choose **Selected projects**
+   and the minimum required access level for each project.
 2. Use a dedicated user/service identity with only the required project access.
 3. Store the complete security context in the CI or orchestration secret
    manager under the exact key `DX_SECURITY_CONTEXT`.
@@ -63,11 +71,13 @@ value has this shape:
 Have the secret manager inject the complete serialized object. Do not build or
 echo it in a traced shell command.
 
-Standard user API tokens inherit the creating user's project access; they are
-not independently project-scoped. Minimize the dedicated identity's project
-memberships and access levels before issuing its token. If an organization
-provides a more restricted credential mechanism, prefer the narrowest
-available scope.
+Tokens with **All projects** have the account's access across projects,
+including PHI data. **Selected projects** tokens limit access to the selected
+projects and levels; they cannot exceed the creating user's permissions.
+Some administrative APIs require a full-scope token even when the user has
+the relevant project access. A permission failure can therefore reflect token
+scope as well as project membership. Minimize both, and never broaden scope
+automatically to make a failing command work.
 
 Tokens created without an explicit expiration expire after one month according
 to current platform guidance. Choose a shorter expiration whenever practical.
@@ -218,6 +228,8 @@ For `AuthError`, `PermissionDenied`, or unexpected project visibility:
    - `CONTRIBUTE` to run and modify project content
    - `ADMINISTER` for membership and administrative operations
 6. Check token expiration or revocation.
+   For scoped tokens, also check that the target project and operation are in
+   scope; user-generated API tokens do not support UKB RAP access.
 7. Check organization/TRE policies and download restrictions.
 8. Reauthenticate only after preserving evidence needed to understand affected
    jobs or transfers.

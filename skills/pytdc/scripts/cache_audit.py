@@ -74,7 +74,7 @@ def audit_cache(root: Path, *, max_files: int, largest_limit: int) -> dict[str, 
                 heapq.heappush(largest, item)
             elif item > largest[0]:
                 heapq.heapreplace(largest, item)
-        if file_count >= max_files:
+        if not scan_complete and file_count >= max_files:
             break
 
     return {

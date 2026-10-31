@@ -359,8 +359,11 @@ def prediction_archive(
         try:
             functions = estimator.predict_survival_function(X_test)
             arrays["survival"] = np.vstack([function(times) for function in functions])
-        except (AttributeError, NotImplementedError, ValueError):
-            pass
+        except (AttributeError, NotImplementedError, ValueError) as exc:
+            raise CliError(f"could not export requested survival probabilities: {exc}") from exc
+    from evaluate_survival_metrics import validate_predictions
+
+    validate_predictions(arrays)
     return arrays
 
 

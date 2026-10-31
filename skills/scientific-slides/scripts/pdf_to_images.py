@@ -16,7 +16,7 @@ from typing import Optional, List
 
 # Try to import pymupdf (preferred - no external dependencies)
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz  # Avoid the unrelated PyPI package named fitz
     HAS_PYMUPDF = True
 except ImportError:
     HAS_PYMUPDF = False
@@ -41,6 +41,15 @@ class PDFToImagesConverter:
         self.first_page = first_page
         self.last_page = last_page
         
+        if dpi <= 0:
+            raise ValueError("dpi must be positive")
+        if first_page is not None and first_page < 1:
+            raise ValueError("first_page must be at least 1")
+        if last_page is not None and last_page < 1:
+            raise ValueError("last_page must be at least 1")
+        if first_page is not None and last_page is not None and first_page > last_page:
+            raise ValueError("first_page must not exceed last_page")
+
         # Validate format
         if self.format not in ['jpg', 'jpeg', 'png']:
             raise ValueError(f"Unsupported format: {format}. Use jpg or png.")
@@ -68,41 +77,21 @@ class PDFToImagesConverter:
         """Convert using PyMuPDF library (no external dependencies)."""
         print("Using PyMuPDF (no external dependencies required)...")
         
-        # Open the PDF
-        doc = fitz.open(self.pdf_path)
-        
-        # Determine page range
-        start_page = (self.first_page - 1) if self.first_page else 0
-        end_page = self.last_page if self.last_page else doc.page_count
-        
-        # Calculate zoom factor from DPI (72 DPI is the base)
-        zoom = self.dpi / 72
-        matrix = fitz.Matrix(zoom, zoom)
-        
-        output_files = []
-        output_dir = Path(self.output_prefix).parent
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        for page_num in range(start_page, end_page):
-            page = doc[page_num]
-            
-            # Render page to pixmap
-            pixmap = page.get_pixmap(matrix=matrix)
-            
-            # Determine output path
-            output_path = Path(f"{self.output_prefix}-{page_num + 1:03d}.{self.format}")
-            
-            # Save the image
-            if self.format in ['jpg', 'jpeg']:
-                pixmap.save(str(output_path), output="jpeg")
-            else:
-                pixmap.save(str(output_path), output="png")
-            
-            output_files.append(output_path)
-            print(f"  Created: {output_path.name}")
-        
-        doc.close()
-        return output_files
+        with fitz.open(self.pdf_path) as doc:
+            start_page = self.first_page - 1 if self.first_page is not None else 0
+            end_page = self.last_page if self.last_page is not None else doc.page_count
+            if not 0 <= start_page < end_page <= doc.page_count:
+                raise ValueError(f"Page range must be within 1-{doc.page_count}")
+            output_files = []
+            Path(self.output_prefix).parent.mkdir(parents=True, exist_ok=True)
+            for page_num in range(start_page, end_page):
+                # dpi records resolution metadata as well as setting pixel dimensions.
+                pixmap = doc[page_num].get_pixmap(dpi=self.dpi)
+                output_path = Path(f"{self.output_prefix}-{page_num + 1:03d}.{self.format}")
+                pixmap.save(str(output_path), output="jpeg" if self.format in ("jpg", "jpeg") else "png")
+                output_files.append(output_path)
+                print(f"  Created: {output_path.name}")
+            return output_files
 
 
 def main():

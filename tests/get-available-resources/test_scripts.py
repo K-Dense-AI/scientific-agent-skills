@@ -151,6 +151,20 @@ def canonical_snapshot() -> dict:
 
 
 class CommonSafetyTests(unittest.TestCase):
+    def test_force_does_not_truncate_another_hard_link(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target.json"
+            alias = Path(directory) / "alias.json"
+            target.write_text('{"keep":true}')
+            os.link(target, alias)
+            with mock.patch.object(_common.Path, "cwd", return_value=Path(directory)):
+                with self.assertRaises(_common.ResourceToolError):
+                    _common.emit_json({"keep": False}, "alias.json", force=True)
+            self.assertEqual(target.read_text(), '{"keep":true}')
+
+    def test_extreme_integer_is_rejected_without_overflow(self) -> None:
+        self.assertIsNone(_common.bounded_number(10**1000))
+
     def test_stdout_is_default_and_file_output_is_private(self) -> None:
         captured = io.StringIO()
         with contextlib.redirect_stdout(captured):
@@ -186,6 +200,22 @@ class CommonSafetyTests(unittest.TestCase):
 
 
 class ParserTests(unittest.TestCase):
+    def test_current_amd_smi_nested_units_preserve_memory(self) -> None:
+        devices = detect_resources.parse_amd_json(json.dumps(CASES["amd_smi_current"]))
+        self.assertEqual(devices[0]["memory"]["reported_total_bytes"], 192 * GIB)
+        self.assertIsNone(devices[0]["memory"]["dedicated_total_bytes"])
+        self.assertNotIn("private-synthetic-serial", json.dumps(devices))
+        self.assertIsNone(detect_resources._amd_memory_bytes({"vram": {"size": "N/A"}}))
+        self.assertIsNone(detect_resources._mib_to_bytes("1e308"))
+
+    def test_intel_mac_display_keeps_actual_vendor(self) -> None:
+        devices = detect_resources.parse_apple_profiler_json(json.dumps({
+            "SPDisplaysDataType": [{"sppci_model": "AMD Radeon Pro", "spdisplays_vendor": "AMD"}]
+        }), machine="x86_64")
+        self.assertEqual(devices[0]["vendor"], "amd")
+        self.assertEqual(devices[0]["backend_candidate"], "metal")
+        self.assertEqual(devices[0]["memory"]["model"], "unknown")
+
     def test_cpu_list_is_counted_without_expansion(self) -> None:
         self.assertEqual(detect_resources.parse_cpu_list("0-3,6,8-9"), 7)
         self.assertEqual(detect_resources.parse_cpu_list("0-3,2-5"), 6)
@@ -209,7 +239,7 @@ class ParserTests(unittest.TestCase):
             machine="arm64",
         )
         self.assertEqual(amd[0]["backend_candidate"], "rocm")
-        self.assertEqual(amd[0]["memory"]["dedicated_total_bytes"], 68702699520)
+        self.assertEqual(amd[0]["memory"]["reported_total_bytes"], 68702699520)
         self.assertEqual(apple[0]["backend_candidate"], "metal")
         self.assertEqual(apple[0]["memory"]["model"], "unified")
         self.assertEqual(apple[0]["device_class"], "integrated_gpu")
@@ -243,6 +273,47 @@ class ParserTests(unittest.TestCase):
 
 
 class LinuxCgroupTests(unittest.TestCase):
+    def test_broad_mount_preserves_ancestors_over_nested_bind_mount(self) -> None:
+        mountinfo = (
+            "50 20 0:27 / /sys/fs/cgroup rw - cgroup2 cgroup rw\n"
+            "51 20 0:27 /parent /run/cg rw - cgroup2 cgroup rw\n"
+        )
+        root, relative = detect_resources._resolve_cgroup_mount(mountinfo, ("parent", "task"))
+        self.assertEqual(root, Path("/sys/fs/cgroup"))
+        self.assertEqual(relative, ("parent", "task"))
+
+    def test_delegated_mount_uses_mount_root(self) -> None:
+        files = {
+            "/proc/self/cgroup": "0::/parent/task\n",
+            "/proc/self/mountinfo": "50 20 0:27 /parent /run/cg rw - cgroup2 cgroup rw\n",
+            "/run/cg/cgroup.controllers": "cpu memory\n",
+            "/run/cg/task/cgroup.controllers": "\n",
+            "/run/cg/task/cpu.max": "50000 100000\n",
+            "/run/cg/task/memory.max": "104857600\n",
+            "/run/cg/task/memory.current": "20971520\n",
+        }
+        def reader(path):
+            if str(path) not in files:
+                raise FileNotFoundError()
+            return files[str(path)]
+        report = detect_resources.detect_cgroup_v2(read_text=reader)
+        self.assertEqual(report["cpu_quota_cores"], 0.5)
+        self.assertEqual(report["memory_available_bytes"], 80 * 1024**2)
+
+    def test_bad_membership_does_not_substitute_root(self) -> None:
+        files = {"/proc/self/cgroup": "0::/../other\n",
+                 "/sys/fs/cgroup/cgroup.controllers": "cpu memory\n",
+                 "/sys/fs/cgroup/cpu.max": "800000 100000\n"}
+        def reader(path):
+            if str(path) not in files:
+                raise FileNotFoundError()
+            return files[str(path)]
+        warnings = []
+        report = detect_resources.detect_cgroup_v2(read_text=reader, warnings=warnings)
+        self.assertIsNone(report["cpu_quota_cores"])
+        self.assertEqual(report["scope"], "unknown")
+        self.assertIn("CGROUP_MEMBERSHIP_UNKNOWN", {item["code"] for item in warnings})
+
     def test_hierarchical_limits_use_most_restrictive_ancestor(self) -> None:
         case = CASES["linux_cgroup_v2"]
         files = case["files"]
@@ -270,6 +341,17 @@ class LinuxCgroupTests(unittest.TestCase):
 
 
 class SchedulerTests(unittest.TestCase):
+    def test_heterogeneous_slurm_node_does_not_inherit_first_node_tasks(self) -> None:
+        env = {"SLURM_CPUS_ON_NODE": "16", "SLURM_TASKS_PER_NODE": "1(x2),4"}
+        for index, expected in ((None, None), ("0", 16), ("2", None), ("10", None)):
+            with self.subTest(index=index):
+                current = dict(env)
+                if index is not None:
+                    current["SLURM_NODEID"] = index
+                allocation = detect_resources.detect_scheduler(current)["allocation"]
+                self.assertEqual(allocation["cpu_per_process"], expected)
+        self.assertIsNone(detect_resources._parse_node_count("1junk", 0))
+
     def test_slurm_named_allocation_is_bounded_and_redacted(self) -> None:
         environment = dict(CASES["slurm"]["environment"])
         environment["UNRELATED_SECRET"] = "must-not-be-read"
@@ -301,6 +383,34 @@ class SchedulerTests(unittest.TestCase):
 
 
 class PlatformMockTests(unittest.TestCase):
+    def test_reserved_blocks_remain_distinct_from_user_available_space(self) -> None:
+        with mock.patch.object(detect_resources.shutil, "disk_usage", return_value=SimpleNamespace(
+            total=100 * GIB, free=50 * GIB
+        )), mock.patch.object(detect_resources.os, "statvfs", return_value=SimpleNamespace(
+            f_bfree=60, f_bavail=50, f_frsize=GIB
+        ), create=True):
+            disk = detect_resources._detect_disk([], [])
+        self.assertEqual(disk["free_bytes"], 60 * GIB)
+        self.assertEqual(disk["user_available_bytes"], 50 * GIB)
+
+    def test_psutil_access_denied_does_not_discard_snapshot(self) -> None:
+        class ProbeDenied(Exception):
+            pass
+        def fail(*args, **kwargs):
+            raise ProbeDenied()
+        fake = SimpleNamespace(Error=ProbeDenied, cpu_count=fail,
+                               Process=lambda: SimpleNamespace(cpu_affinity=fail),
+                               virtual_memory=fail, swap_memory=fail)
+        snapshot = detect_resources.collect_snapshot(skip_accelerators=True, environ={}, psutil_module=fake)
+        self.assertTrue(snapshot_tools.validate_snapshot(snapshot)["valid"])
+
+    def test_host_count_does_not_inherit_python_override(self) -> None:
+        with mock.patch.object(detect_resources.os, "cpu_count", return_value=1):
+            cpu = detect_resources._detect_cpu_inventory(
+                system="Darwin", psutil_module=None, mac_sysctl={"logical": 14, "physical": 14},
+                read_text=lambda p: "", warnings=[], provenance=[])
+        self.assertEqual(cpu["logical"], 14)
+
     def test_macos_sysctl_and_unified_memory(self) -> None:
         result = {
             "status": "ok",
@@ -430,7 +540,7 @@ class PlatformMockTests(unittest.TestCase):
         ), mock.patch.object(
             detect_resources.os,
             "statvfs",
-            return_value=SimpleNamespace(f_bavail=50, f_frsize=GIB),
+            return_value=SimpleNamespace(f_bavail=50, f_bfree=60, f_frsize=GIB),
             create=True,
         ):
             snapshot = detect_resources.collect_snapshot(
@@ -450,6 +560,23 @@ class PlatformMockTests(unittest.TestCase):
 
 
 class SnapshotToolTests(unittest.TestCase):
+    def test_invalid_accelerator_maps_and_backends_are_reported(self) -> None:
+        for value in (None, [], {"cuda": True}, {"cuda": -1}):
+            snapshot = canonical_snapshot()
+            snapshot["accelerators"]["candidate_upper_bounds"] = value
+            self.assertFalse(snapshot_tools.validate_snapshot(snapshot)["valid"])
+            with self.assertRaises(_common.ResourceToolError):
+                plan_workload.build_plan(snapshot, accelerator="any")
+        snapshot = canonical_snapshot()
+        snapshot["accelerators"]["devices"][0]["backend_candidate"] = []
+        self.assertFalse(snapshot_tools.validate_snapshot(snapshot)["valid"])
+
+    def test_extreme_numeric_and_invalid_timestamp_are_rejected(self) -> None:
+        snapshot = canonical_snapshot()
+        snapshot["memory"]["effective"]["available_bytes"] = 10**1000
+        snapshot["observed_at"] = "not-a-timeZ"
+        self.assertFalse(snapshot_tools.validate_snapshot(snapshot)["valid"])
+
     def test_validator_accepts_canonical_snapshot(self) -> None:
         report = snapshot_tools.validate_snapshot(canonical_snapshot())
         self.assertTrue(report["valid"], report["errors"])
@@ -479,6 +606,18 @@ class SnapshotToolTests(unittest.TestCase):
 
 
 class PlannerTests(unittest.TestCase):
+    def test_zero_workers_when_no_worker_fits_known_memory(self) -> None:
+        plan = plan_workload.build_plan(canonical_snapshot(), memory_per_worker_mib=16384)
+        self.assertEqual(plan["recommendation"]["suggested_workers"], 0)
+        self.assertEqual(plan["recommendation"]["threads_per_worker"], 0)
+        self.assertEqual(plan["recommendation"]["status"], "insufficient_memory")
+
+    def test_unknown_memory_requires_review(self) -> None:
+        snapshot = canonical_snapshot()
+        snapshot["memory"]["effective"]["available_bytes"] = None
+        plan = plan_workload.build_plan(snapshot, memory_per_worker_mib=1024)
+        self.assertEqual(plan["recommendation"]["status"], "review_required")
+
     def test_worker_plan_uses_cpu_memory_tasks_and_request(self) -> None:
         plan = plan_workload.build_plan(
             canonical_snapshot(),
@@ -498,6 +637,7 @@ class PlannerTests(unittest.TestCase):
     def test_io_plan_is_bounded(self) -> None:
         snapshot = canonical_snapshot()
         snapshot["cpu"]["effective"]["worker_ceiling"] = 1024
+        snapshot["cpu"]["effective"]["capacity_cores"] = 1024
         plan = plan_workload.build_plan(snapshot, workload="io")
         self.assertEqual(plan["recommendation"]["suggested_workers"], 32)
 

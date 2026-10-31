@@ -66,12 +66,12 @@ journey
 
 ## Complex Example
 
-A multi-persona e-commerce journey comparing a New Customer vs Returning Customer across 5 phases. The two actors experience the same flow with different satisfaction scores, revealing exactly where first-time UX needs investment.
+A multi-persona e-commerce journey comparing a New Customer vs Returning Customer across 5 phases. Each row assigns one shared score to its listed actors. Distinct actor scores require separate rows or separate diagrams; example scores are invented.
 
 ```mermaid
 journey
     accTitle: E-Commerce Customer Journey Comparison
-    accDescr: Side-by-side journey map comparing new customer and returning customer satisfaction across discovery, shopping, checkout, fulfillment, and post-purchase phases to identify first-time experience gaps
+    accDescr: Illustrative journey map with shared and persona-specific steps across discovery, shopping, checkout, fulfillment, and post-purchase phases to identify first-time experience gaps
 
     title 👤 E-Commerce Customer Journey Comparison
     section 🔍 Discovery
@@ -102,7 +102,12 @@ journey
 
 ### Why this works
 
-- **Two personas on the same map** — instead of two separate diagrams, both actors appear in each step. The satisfaction gap between New Customer (2-3) and Returning Customer (4-5) is immediately visible in checkout and post-purchase.
+- **One score per task row** — both actors on a row share that score. Persona-specific rows can show different scores, but these illustrative ratings do not establish a measured population difference.
 - **5 sections follow the real funnel** — discovery → shopping → checkout → fulfillment → post-purchase. Each section tells a story about where the experience breaks down for new users.
 - **Some steps are persona-specific** — "Compare alternatives" is only New Customer, "Reorder same item" is only Returning Customer. This shows divergent paths within the shared journey.
 - **Low scores are the actionable insight** — New Customer scores 1-2 on payment entry, coupon application, and support contact. These are the specific UX investments that would improve conversion.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/userJourney.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

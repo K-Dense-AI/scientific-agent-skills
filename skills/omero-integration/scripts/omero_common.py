@@ -252,7 +252,10 @@ def gateway_session(
     finally:
         if connection is not None:
             with contextlib.suppress(Exception):
-                connection.close()
+                # A joined session may still be used by its original client.
+                # BlitzGateway.close() defaults to killing it regardless of
+                # the server's connection reference count.
+                connection.close(hard=not bool(config.session_key))
 
 
 def take_bounded(iterable: Iterable[Any], limit: int) -> BoundedResult:

@@ -1,6 +1,6 @@
 # Color, Contrast, and Palette Selection
 
-Reviewed 2026-07-23. Source IDs resolve in `sources.md`. A named “colorblind-safe” palette is not a guarantee that a rendered figure is accessible: background, line thickness, adjacency, text, category count, display/print conversion, and redundant encoding all matter.
+Reviewed 2026-10-01. Source IDs resolve in `sources.md`. A named “colorblind-safe” palette is not a guarantee that a rendered figure is accessible: background, line thickness, adjacency, text, category count, display/print conversion, and redundant encoding all matter.
 
 ## Start with data semantics
 

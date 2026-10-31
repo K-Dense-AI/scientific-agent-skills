@@ -1,6 +1,6 @@
 # Process interaction and interrupts
 
-Verified 2026-07-23 against SimPy 4.1.2.
+Reviewed 2026-10-01 against SimPy 4.1.2.
 
 ## Processes are event-yielding generators
 
@@ -72,8 +72,8 @@ signal.succeed("go")
 env.run()
 ```
 
-Events are one-shot. For repeated signals, replace the shared Event **after**
-triggering it and ensure all participants read the same shared attribute:
+Events are one-shot. For repeated signals, retain the old Event, replace the shared
+attribute, then trigger the old Event; ensure all participants read that attribute:
 
 ```python
 class Clock:

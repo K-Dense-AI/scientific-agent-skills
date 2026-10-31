@@ -1,5 +1,10 @@
 # Modal Functions and Classes
 
+Reviewed against Modal 1.6.0. Snippets with application-specific helpers are illustrative.
+Sources: [invocation methods](https://modal.com/docs/guide/function-invocation-methods),
+[lifecycle](https://modal.com/docs/guide/lifecycle-functions),
+[timeouts](https://modal.com/docs/guide/timeouts), and [SDK releases](https://modal.com/docs/sdk/py/releases).
+
 ## Table of Contents
 
 - [Functions](#functions)
@@ -31,18 +36,21 @@ The `@app.function()` decorator accepts:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `image` | `Image` | Container image |
-| `gpu` | `str` | GPU type (e.g., `"H100"`, `"A100:2"`) |
-| `cpu` | `float` | CPU cores |
-| `memory` | `int` | Memory in MiB |
+| `gpu` | `str` or `list[str]` | GPU type/count or ordered fallbacks |
+| `cpu` | `float` or tuple | Physical-core request or `(request, limit)` |
+| `memory` | `int` or tuple | MiB request or `(request, limit)` |
 | `timeout` | `int` | Max execution time in seconds |
+| `startup_timeout` | `int` | Separate container initialization timeout |
 | `secrets` | `list[Secret]` | Secrets to inject |
 | `volumes` | `dict[str, Volume]` | Volumes to mount |
 | `schedule` | `Schedule` | Cron or periodic schedule |
 | `max_containers` | `int` | Max container count |
 | `min_containers` | `int` | Minimum warm containers |
-| `retries` | `int` | Retry count on failure |
-| `concurrency_limit` | `int` | Max concurrent inputs |
+| `retries` | `int` or `Retries` | Retry policy per input |
 | `ephemeral_disk` | `int` | Disk in MiB |
+
+Use `max_containers` to cap containers and `@modal.concurrent(max_inputs=N)` to cap
+simultaneous inputs per container. The old `concurrency_limit` keyword is removed.
 
 ## Remote Execution
 
@@ -58,6 +66,8 @@ result = compute.remote(3, 4)  # Runs in the cloud, blocks until done
 result = compute.local(3, 4)  # Runs locally (for testing)
 ```
 
+`.local()` applies no Image, GPU, Secret, Volume or concurrency configuration.
+
 ### `.spawn()` — Async Fire-and-Forget
 
 ```python
@@ -66,7 +76,12 @@ call = compute.spawn(3, 4)  # Returns immediately
 result = call.get()  # Retrieve result later
 ```
 
-`.spawn()` supports up to 1 million pending inputs.
+`.spawn()` supports up to 1 million queued asynchronous inputs. Use a deployed Function
+for jobs that must survive the invoking process; an ephemeral App still ends when its
+run ends. Persist `call.object_id` and later use `modal.FunctionCall.from_id(id)`.
+`call.get(timeout=0)` polls and raises `TimeoutError` while pending; outputs expire
+7 days after completion (`modal.exception.OutputExpiredError`). This is separate from
+the Function's execution timeout. Retryable jobs must tolerate repeated execution.
 
 ## Classes with Lifecycle Hooks
 
@@ -79,7 +94,11 @@ class Model:
     def setup(self):
         """Runs once when the container starts."""
         import torch
-        self.model = torch.load("/weights/model.pt")
+        self.model = build_model()  # Project-defined architecture matching training
+        state_dict = torch.load(
+            "/weights/model_state.pt", map_location="cpu", weights_only=True
+        )
+        self.model.load_state_dict(state_dict)
         self.model.eval()  # PyTorch inference mode — not Python's built-in eval()
 
     @modal.method()
@@ -93,13 +112,22 @@ class Model:
         cleanup_resources()
 ```
 
+This lifecycle template requires the project's architecture, preprocessing, and
+checkpoint to be included in the Image or mounted storage. Save a `state_dict`
+and instantiate the matching model before loading it; a loaded weight dictionary
+is not a callable model. For GPU inference, move both model and tensor inputs to
+the same CUDA device. See the [PyTorch checkpoint guide](https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html).
+
 ### Lifecycle Decorators
 
 | Decorator | When It Runs |
 |-----------|-------------|
 | `@modal.enter()` | Once on container startup, before any inputs |
 | `@modal.method()` | For each remote call |
-| `@modal.exit()` | On container shutdown |
+| `@modal.exit()` | On shutdown/preemption, with a 30-second grace period |
+
+Checkpoint during work; abrupt failures need not complete cleanup. For a web method,
+use its web decorator instead of stacking it with `@modal.method()`.
 
 ### Calling Class Methods
 
@@ -113,6 +141,9 @@ results = list(model.predict.map(["text1", "text2", "text3"]))
 ```
 
 ### Parameterized Classes
+
+SDK 1.6.0 rejects custom `__init__` methods on Modal classes. Declare parameters as
+below, and initialize resources in `@modal.enter()`.
 
 ```python
 @app.cls()
@@ -128,8 +159,8 @@ class Worker:
         return self.model(data)
 
 # Different model instances autoscale independently
-gpt = Worker(model_name="gpt-4")
-llama = Worker(model_name="llama-3")
+small = Worker(model_name="small-model")
+large = Worker(model_name="large-model")
 ```
 
 ## Parallel Execution
@@ -179,15 +210,18 @@ for result in process.map(items, order_outputs=False):
 Modal supports async/await natively:
 
 ```python
-@app.function()
+@app.function(image=modal.Image.debian_slim().uv_pip_install("httpx"))
 async def fetch_data(url: str) -> str:
     import httpx
     async with httpx.AsyncClient() as client:
-        response = await client.get(url)
+        response = await client.get(url, timeout=30)
+        response.raise_for_status()
         return response.text
 ```
 
 Async functions are especially useful with `@modal.concurrent()` for handling multiple requests per container.
+From async caller code use `await fetch_data.remote.aio(url)` and
+`async for result in fetch_data.map.aio(urls)`; a blocking `.remote()` call is not awaitable.
 
 ## Local Entrypoints
 
@@ -258,3 +292,7 @@ def long_training():
 ```
 
 Default timeout is 300 seconds (5 minutes). Maximum is 86400 seconds (24 hours).
+This applies to each execution attempt, excluding queue time. Each retry gets a new
+timeout. `startup_timeout` independently bounds initialization; if omitted, `timeout`
+also supplies the startup bound. After retries are exhausted, timeout surfaces as
+`modal.exception.FunctionTimeoutError`.

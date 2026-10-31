@@ -1,6 +1,6 @@
 # Electrodermal activity
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable runtime/source,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable runtime/source,
 the official EDA API/examples, and Society for Psychophysiological Research guidance.
 
 ## Measurement contract
@@ -85,7 +85,10 @@ markers, peak_info = nk.eda_peaks(
 
 Stable methods include `neurokit`, `gamboa2008`, `kim2004`, `vanhalem2020`, and
 `nabian2018`. For `neurokit` and `kim2004`, `amplitude_min` is a fraction relative to
-the largest amplitude in the analyzed signal—not an absolute µS threshold.
+the largest detector-specific candidate in the analyzed signal—not an absolute µS
+threshold. In stable source, `neurokit` thresholds peak prominence, whereas `kim2004`
+thresholds phasic peak height. Neither is a common absolute onset-to-peak amplitude
+cutoff. Other supported methods ignore `amplitude_min`.
 
 `eda_peaks()` returns `(signals, info)`:
 
@@ -94,7 +97,8 @@ the largest amplitude in the analyzed signal—not an absolute µS threshold.
 - info dict: event-indexed arrays and sampling rate.
 
 Marker columns are same-length arrays; feature values are placed at relevant marker
-locations and are otherwise missing. Use `info` for event-level arrays. Do not average
+locations and are otherwise **zero**, not missing, in stable 0.2.13. Invalid feature
+values at a detected response can still be NaN. Use `info` for event-level arrays. Do not average
 same-length feature columns as if every sample were an independent response.
 
 `eda_fixpeaks()` is documented as a placeholder that does not currently correct EDA
@@ -150,8 +154,11 @@ The pinned official example showed six columns, including SCR count/amplitude,
 `EDA_Autocorrelation`; output depends on duration and available columns.
 
 `eda_sympathetic()` supports `posada` and `ghiasi`, with a default 0.045–0.25 Hz
-band. The implementation/documentation uses at least 64 seconds to support the spectral
-estimate. Report exact usable duration, frequency band, estimator, normalization, and
+band. Stable `posada` returns NaN when duration is **64 seconds or less**, despite a
+warning referring to 60 seconds. `ghiasi` uses 60-second STFT windows with 59-second
+overlap. The helper conservatively requires more than 64 seconds for either method;
+this is a software guard, not a universal validity threshold. Report exact usable
+duration, frequency band, estimator, normalization, and
 units. Do not turn this index into a direct clinical sympathetic-state measure.
 
 ## Bounded pipeline
@@ -167,6 +174,12 @@ python skills/neurokit2/scripts/eda_pipeline.py \
 The helper rejects missing/non-finite samples, records the observed schema, and makes
 decomposition/threshold semantics explicit.
 
+Only `neurokit` and `kim2004` apply `--amplitude-min`; the report marks it inactive
+for other detectors. Synthetic generation passes both duration and integer sample
+count: supplying `length` alone does not update NeuroKit2's default 10-second time
+axis, drift, or SCR placement. Flat/no-response inputs can raise a detector error;
+do not reinterpret that failure as a validated physiological zero-response count.
+
 ## Interpretation boundary
 
 EDA indexes eccrine sweat-gland activity under the recording conditions. It does not
@@ -175,7 +188,7 @@ within a theory-driven design with contextual measures and validated preprocessi
 Do not use this workflow for clinical/driver/workplace monitoring or medical-device
 validation.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official EDA API](https://neuropsychology.github.io/NeuroKit/functions/eda.html)
 - [Official SCR example](https://neuropsychology.github.io/NeuroKit/examples/eda_peaks/eda_peaks.html)
@@ -183,3 +196,5 @@ validation.
 - [SPR Ad Hoc Committee (2012), publication recommendations](https://doi.org/10.1111/j.1469-8986.2012.01384.x)
 - [Greco et al. (2016), cvxEDA](https://doi.org/10.1109/TBME.2015.2474131)
 - [NeuroKit2 main paper](https://doi.org/10.3758/s13428-020-01516-y)
+
+- [Stable `eda_simulate.py` implementation](https://github.com/neuropsychology/NeuroKit/blob/v0.2.13/neurokit2/eda/eda_simulate.py)

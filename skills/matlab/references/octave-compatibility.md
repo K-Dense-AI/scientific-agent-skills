@@ -1,6 +1,6 @@
 # GNU Octave 11.3.0 Compatibility
 
-GNU Octave 11.3.0 is the current stable release as of 2026-07-23 (released
+GNU Octave 11.3.0 is the current stable release as of 2026-10-01 (released
 2026-06-01). It is free software under GPLv3+. MATLAB R2026a is proprietary.
 Do not describe Octave as MATLAB, a licensed toolbox substitute, or a
 drop-in guarantee.
@@ -199,7 +199,7 @@ floating-point output without a justified contract.
 - [ ] Runtime-specific tests and deployment kept separate.
 - [ ] No package installation or code execution occurred implicitly.
 
-## Sources (verified 2026-07-23)
+## Sources (reviewed 2026-10-01)
 
 - [GNU Octave home/current release](https://octave.org/)
 - [GNU Octave 11 release notes](https://octave.org/NEWS-11.html)

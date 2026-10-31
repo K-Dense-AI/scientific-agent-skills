@@ -1,5 +1,7 @@
 # Core Workflow
 
+Illustrative workflow; example queries, dates, counts, and numerical findings are not executed review results. Run commands from this skill directory, using paths to your review workspace.
+
 All seven phases in full: planning and scoping, systematic search, screening and
 selection, data extraction and quality assessment, synthesis and analysis, citation
 verification, and document generation.
@@ -22,11 +24,11 @@ Literature reviews follow a structured, multi-phase workflow:
    - Identify 2-4 main concepts from research question
    - List synonyms, abbreviations, and related terms for each concept
    - Plan Boolean operators (AND, OR, NOT) to combine terms
-   - Select minimum 3 complementary databases
-   - **Use the parallel-web skill (`parallel-cli search`) for initial scoping** to quickly gauge the landscape before formal database searches
+   - Select complementary bibliographic databases and registries appropriate to the question
+   - **Optionally use parallel-web (`parallel-cli search`) for initial scoping** to quickly gauge the landscape before formal database searches
 
 4. **Set Inclusion/Exclusion Criteria**:
-   - Date range (e.g., last 10 years: 2015-2024)
+   - Date range (e.g., the explicitly historical interval 2015-2024)
    - Language (typically English, or specify multilingual)
    - Publication types (peer-reviewed, preprints, reviews)
    - Study designs (RCTs, observational, in vitro, etc.)
@@ -36,13 +38,14 @@ Literature reviews follow a structured, multi-phase workflow:
 
 1. **Multi-Database Search**:
 
-   Select databases appropriate for the domain. **Always start with parallel-web for broad academic coverage**, then supplement with domain-specific databases.
+   Select bibliographic databases and registries appropriate for the domain. Use optional web search for scoping and supplementary discovery; record it separately from database exports.
 
-   **Web-Based Academic Search (parallel-web skill — START HERE):**
+   **Supplementary web discovery (parallel-web):**
    - Use `parallel-cli search` with academic domain filtering for broad scholarly coverage
-   - Run two searches: academic-focused + general to catch all relevant sources
+   - Consider academic-focused and general searches; ranked samples do not guarantee complete retrieval
    ```bash
-   # Academic-focused search across scholarly sources
+   mkdir -p sources
+   # Illustrative ranked sample; not a complete search
    parallel-cli search "your research topic" -q "keyword1" -q "keyword2" \
      --json --max-results 10 --excerpt-max-chars-total 27000 \
      --include-domains "scholar.google.com,arxiv.org,pubmed.ncbi.nlm.nih.gov,semanticscholar.org,biorxiv.org,medrxiv.org,ncbi.nlm.nih.gov,nature.com,science.org,ieee.org,acm.org,springer.com,wiley.com,cell.com,pnas.org,nih.gov" \
@@ -53,26 +56,23 @@ Literature reviews follow a structured, multi-phase workflow:
      --json --max-results 10 --excerpt-max-chars-total 27000 \
      -o sources/litreview_<topic>-general.json
    ```
-   - Use `parallel-cli extract` to fetch full content from specific paper URLs or PDFs found in search results
+   - Use `parallel-cli extract --full-content` to request content from accessible paper URLs; check for truncation and retrieval errors
    ```bash
-   parallel-cli extract "https://arxiv.org/abs/XXXX.XXXXX" --json
+   parallel-cli extract "https://arxiv.org/abs/1706.03762" --full-content --json
    ```
 
    **Biomedical & Life Sciences:**
-   - Use `gget` skill: `gget search pubmed "search terms"` for PubMed/PMC
-   - Use `gget` skill: `gget search biorxiv "search terms"` for preprints
-   - Use `bioservices` skill for ChEMBL, KEGG, UniProt, etc.
+   - Search PubMed via its interface or E-utilities; PMC has different full-text coverage
+   - Search bioRxiv/medRxiv interfaces, or retrieve date-range API metadata and explicitly filter it
+   - See `database_strategies.md` for exact requests, authentication, and export limits
 
    **General Scientific Literature:**
    - Search arXiv via direct API (preprints in physics, math, CS, q-bio)
-   - Search Semantic Scholar via API (200M+ papers, cross-disciplinary)
-   - Use Google Scholar for comprehensive coverage (manual or careful scraping)
+   - Search Semantic Scholar using its documented relevance or bulk API as appropriate
+   - Use Google Scholar manually for supplementary discovery and citation chaining; preserve search and screening limits
 
-   **Specialized Databases:**
-   - Use `gget alphafold` for protein structures
-   - Use `gget cosmic` for cancer genomics
-   - Use `datacommons-client` for demographic/statistical data
-   - Use specialized databases as appropriate for the domain
+   Biological entity databases can inform background, but do not count as
+   bibliographic sources simply because they contain references.
 
 2. **Document Search Parameters**:
    ```markdown
@@ -84,7 +84,7 @@ Literature reviews follow a structured, multi-phase workflow:
    - **Search string**:
      ```
      ("CRISPR"[Title] OR "Cas9"[Title])
-     AND ("sickle cell"[MeSH] OR "SCD"[Title/Abstract])
+     AND ("Anemia, Sickle Cell"[MeSH Terms] OR "SCD"[Title/Abstract])
      AND 2015:2024[Publication Date]
      ```
    - **Results**: 247 articles
@@ -94,10 +94,10 @@ Literature reviews follow a structured, multi-phase workflow:
 
 3. **Export and Aggregate Results**:
    - Export results in JSON format from each database
-   - Combine all results into a single file
+   - Normalize raw provider responses into a JSON array, preserving raw exports and provenance separately
    - Use `scripts/search_databases.py` for post-processing:
      ```bash
-     python search_databases.py combined_results.json \
+     python scripts/search_databases.py combined_results.json \
        --deduplicate \
        --format markdown \
        --output aggregated_results.md
@@ -107,9 +107,9 @@ Literature reviews follow a structured, multi-phase workflow:
 
 1. **Deduplication**:
    ```bash
-   python search_databases.py results.json --deduplicate --output unique_results.json
+   python scripts/search_databases.py results.json --deduplicate --format json --output unique_results.json
    ```
-   - Removes duplicates by DOI (primary) or title (fallback)
+   - Keeps first normalized DOI; title fallback compares DOI-less records only. Review matches and retain raw duplicates for enrichment
    - Document number of duplicates removed
 
 2. **Title Screening**:
@@ -129,13 +129,12 @@ Literature reviews follow a structured, multi-phase workflow:
    - Record final number of included studies
 
 5. **Create PRISMA Flow Diagram**:
-   ```
-   Initial search: n = X
-   ├─ After deduplication: n = Y
-   ├─ After title screening: n = Z
-   ├─ After abstract screening: n = A
-   └─ Included in review: n = B
-   ```
+   - Use the official template matching new/updated review and source types.
+   - Track records identified and removed before screening, records screened
+     and excluded, reports sought/not retrieved/assessed, excluded reports with
+     reasons, and included studies plus reports of those studies.
+   - Reconcile counts at each transition; do not invent one included-study count
+     from the number of publications. Maintain a study-to-report map.
 
 ### Phase 4: Data Extraction and Quality Assessment
 
@@ -147,12 +146,16 @@ Literature reviews follow a structured, multi-phase workflow:
    - Limitations noted by authors
    - Funding sources and conflicts of interest
 
-2. **Assess Study Quality**:
-   - **For RCTs**: Use Cochrane Risk of Bias tool
-   - **For observational studies**: Use Newcastle-Ottawa Scale
-   - **For systematic reviews**: Use AMSTAR 2
-   - Rate each study: High, Moderate, Low, or Very Low quality
-   - Consider excluding very low-quality studies
+2. **Assess Risk of Bias and Certainty**:
+   - Use a tool appropriate to the design and question: RoB 2 for randomized
+     trial results; ROBINS-I for nonrandomized intervention results; AMSTAR 2
+     for systematic reviews of healthcare interventions. Other designs require their own appraisal tool.
+   - Preserve domain judgments and rationale. RoB 2 uses low risk, some concerns,
+     or high risk; do not force every tool onto a common numerical scale.
+   - GRADE assesses a body of evidence for each outcome (high/moderate/low/very
+     low), not a generic grade for each individual study. See the
+     [Cochrane certainty guidance](https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-14).
+   - Pre-specify how bias affects synthesis; do not invent post-hoc exclusions.
 
 3. **Organize by Themes**:
    - Identify 3-5 major themes across studies
@@ -173,7 +176,7 @@ Literature reviews follow a structured, multi-phase workflow:
    - Identify consensus areas and points of controversy
    - Highlight the strongest evidence
 
-   Example structure:
+   Fictitious structure example (replace every count and percentage with extracted evidence):
    ```markdown
    #### 3.3.1 Theme: CRISPR Delivery Methods
 
@@ -208,21 +211,21 @@ Literature reviews follow a structured, multi-phase workflow:
 
    This script:
    - Extracts all DOIs from the document
-   - Verifies each DOI resolves correctly
-   - Retrieves metadata from CrossRef
+   - Checks DOI registration via the Handle API
+   - Retrieves available Crossref metadata and preserves unresolved errors
    - Generates verification report
-   - Outputs properly formatted citations
+   - Does not verify claim support, publisher accessibility, or final citation style
 
 2. **Review Verification Report**:
    - Check for any failed DOIs
    - Verify author names, titles, and publication details match
    - Correct any errors in the original document
-   - Re-run verification until all citations pass
+   - Resolve errors against the source; do not delete a reference solely because a service timed out or lacks its metadata
 
 3. **Format Citations Consistently**:
    - Choose one citation style and use throughout (see `references/citation_styles.md`)
    - Common styles: APA, Nature, Vancouver, Chicago, IEEE
-   - Use verification script output to format citations correctly
+   - Use complete metadata with a CSL processor; the script only provides metadata previews
    - Ensure in-text citations match reference list format
 
 ### Phase 7: Document Generation
@@ -230,12 +233,17 @@ Literature reviews follow a structured, multi-phase workflow:
 1. **Generate PDF**:
    ```bash
    python scripts/generate_pdf.py my_literature_review.md \
-     --citation-style apa \
+     --bibliography my_literature_review.bib --csl styles/apa.csl \
      --output my_review.pdf
    ```
 
+   Supply an existing `.bib` and `.csl` for that example; they are not bundled.
+   `[@key]` citations are formatted, while manually typed references remain unchanged.
+
    Options:
-   - `--citation-style`: apa, nature, chicago, vancouver, ieee
+   - `--csl` / `--citation-style`: existing local CSL path/name; omitted uses Pandoc default
+   - `--bibliography`: bibliography file; sibling `.bib` also auto-detected
+   - `--output`: PDF destination
    - `--no-toc`: Disable table of contents
    - `--no-numbers`: Disable section numbering
    - `--check-deps`: Check if pandoc/xelatex are installed
@@ -248,7 +256,7 @@ Literature reviews follow a structured, multi-phase workflow:
    - Verify table of contents is accurate
 
 3. **Quality Checklist**:
-   - [ ] All DOIs verified with verify_citations.py
+   - [ ] DOI registration checked; metadata identity and claim support reviewed manually
    - [ ] Citations formatted consistently
    - [ ] PRISMA flow diagram included (for systematic reviews)
    - [ ] Search methodology fully documented

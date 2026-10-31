@@ -37,6 +37,25 @@ def test_load_skill_descriptions_skips_directories_without_skill_md(tmp_path: Pa
     assert [s["name"] for s in skills] == ["real-skill"]
 
 
+def test_frontmatter_preserves_folded_description_and_top_level_name(tmp_path):
+    root = tmp_path / "folded-skill"
+    root.mkdir()
+    (root / "SKILL.md").write_text('''---
+name: folded-skill
+description: >-
+  Scientific workflows with
+  long multi-line descriptions.
+metadata:
+  openclaw:
+    envVars:
+      - name: SOME_API_KEY
+        description: This is not the skill description.
+---
+''')
+    assert load_skill_descriptions(tmp_path) == [{"name": "folded-skill",
+        "description": "Scientific workflows with long multi-line descriptions."}]
+
+
 def _keyword_embedder(text: str):
     # deterministic, tiny vector indexed by known keywords
     keywords = ["paper", "poster", "molecule"]

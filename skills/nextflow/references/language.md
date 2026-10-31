@@ -1,8 +1,8 @@
 # Nextflow Language (DSL2)
 
-The complete Nextflow scripting language: processes, channels, operators, workflows, and modules. Nextflow is a Groovy-based DSL; DSL2 is the default and only DSL (DSL1 is removed, so `nextflow.enable.dsl=2` is unnecessary). Source: https://www.nextflow.io/docs/latest/
+A working reference for the untyped DSL2 interfaces used by many existing nf-core pipelines: processes, channels, operators, workflows, and modules. Nextflow is a Groovy-based DSL; DSL2 is the default and only DSL (DSL1 is removed, so `nextflow.enable.dsl=2` is unnecessary). Targets stable 26.04.6. Source: https://github.com/nextflow-io/nextflow/tree/v26.04.6/docs and https://docs.seqera.io/nextflow/ . Incomplete biological/tool examples below are illustrative; they require the named tools, references and missing module definitions.
 
-**Current syntax conventions** (a strict-syntax parser, `NXF_SYNTAX_PARSER=v2`, is opt-in in 25.x and becomes the default in **26.04** — write to it now, it also runs on the legacy parser):
+**Current syntax conventions**: `NXF_SYNTAX_PARSER=v2` is the default in **26.04** (opt-in in 25.x). Strict syntax does not imply static typing. Typed processes/workflows remain a preview and require `nextflow.enable.types = true` in each applicable script; do not mix their syntax with untyped examples.
 - **`channel.of(...)`** (lowercase namespace) is canonical; `Channel.of(...)` still works but is discouraged.
 - **Explicit closure parameters** (`{ v -> v * 2 }`) are preferred over the implicit `it`.
 - Name process outputs with **`emit:`**; scale resources with **`task.attempt`**.
@@ -23,7 +23,7 @@ The complete Nextflow scripting language: processes, channels, operators, workfl
 
 ## Script structure
 
-A Nextflow script (`.nf`) mixes process/workflow definitions with Groovy. Every script enables DSL2 implicitly (it is the default since 22.03). A run begins at the **unnamed `workflow {}`** block (the entry workflow).
+A Nextflow script (`.nf`) uses process/workflow definitions and the supported subset of Groovy; strict syntax does not allow arbitrary Groovy. Every script enables DSL2 implicitly (it is the default since 22.03). A run begins at the **unnamed `workflow {}`** block (the entry workflow).
 
 ```nextflow
 #!/usr/bin/env nextflow
@@ -33,7 +33,7 @@ params.input = 'data/*.fastq'        // pipeline parameter with a default
 process FASTQC { /* ... */ }          // a process definition
 
 workflow {                            // entry point
-    reads = channel.fromPath(params.input)
+    reads = channel.fromPath(params.input, checkIfExists: true)
     FASTQC(reads)
 }
 ```
@@ -48,12 +48,12 @@ A `process` defines a task: a (usually Bash) script executed in its own isolated
 process ALIGN {
     tag    "$meta.id"                 // label shown in the log/trace
     label  'process_high'             // maps to resources in config
-    container 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
+    // Supply a pinned environment containing BOTH bwa and samtools.
     publishDir "${params.outdir}/bam", mode: 'copy'
 
     input:
     tuple val(meta), path(reads)      // a sample: metadata map + file(s)
-    path  index                       // a shared reference (value channel)
+    tuple path(reference), path(index_files)  // shared FASTA + BWA sidecars as a value
 
     output:
     tuple val(meta), path("*.bam"), emit: bam
@@ -66,11 +66,12 @@ process ALIGN {
     def prefix = task.ext.prefix ?: meta.id
     def args   = task.ext.args  ?: ''   // extra flags injected from config
     """
-    bwa mem $args -t $task.cpus $index ${reads} | samtools sort -o ${prefix}.bam
+    bwa mem $args -t $task.cpus "$reference" ${reads} | samtools sort -o "${prefix}.bam"
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         bwa: \$(bwa 2>&1 | sed -n 's/Version: //p')
+        samtools: \$(samtools --version | sed '1!d; s/samtools //')
     END_VERSIONS
     """
 
@@ -110,7 +111,7 @@ Declared under `output:`; each becomes a channel. Use `emit:` to name outputs so
 | `eval('cmd')` | Capture the stdout of a command run in the task env (24.04+) — used for tool versions |
 | `path "out", emit: name` | Named output channel (reference as `PROC.out.name`) |
 | `..., topic: versions` | Also route this output to a named topic channel |
-| `optional true` | Output may be absent without erroring |
+| `path "out", optional: true` | Output may be absent without erroring |
 
 ### Script, shell, exec
 
@@ -135,7 +136,7 @@ process PY {
 
 - `when:` — skip the task when the expression is false (prefer filtering channels upstream when possible).
 - A `script:` can branch with normal Groovy `if/else` returning different command strings.
-- `stub:` — an alternate minimal script run with `-stub-run` to test pipeline wiring without the real tool. nf-core requires stubs.
+- `stub:` replaces that task’s script under `-stub-run`; a task without one runs its real script. Containers, staging and `eval()` outputs may still run, so this is not a no-execution or no-cost dry run. nf-core modules require stubs.
 
 ## Process directives
 
@@ -143,7 +144,7 @@ Set inside a process (or globally via config). Most-used:
 
 | Directive | Purpose |
 |-----------|---------|
-| `cpus`, `memory`, `time`, `disk` | Resource requests (e.g. `memory '8.GB'`, `time '2.h'`) |
+| `cpus`, `memory`, `time`, `disk` | Resource requests (e.g. `memory '8 GB'`, `time '2 h'`) |
 | `container` | Container image for this process |
 | `conda` | Conda packages/env for this process |
 | `publishDir` | Copy/link outputs to a results dir (`mode: 'copy'|'symlink'|'link'`) |
@@ -153,7 +154,7 @@ Set inside a process (or globally via config). Most-used:
 | `maxRetries`, `maxErrors` | Retry limits |
 | `cache` | `true`/`'lenient'`/`'deep'`/`false` — caching behavior |
 | `scratch` | Run in node-local scratch then stage out |
-| `stageInMode`/`stageOutMode` | `'symlink'`/`'copy'`/`'link'` staging |
+| `stageInMode` / `stageOutMode` | Input: symlink/copy/link/rellink; scratch output: copy/move/rsync/fcp/rclone |
 | `beforeScript`/`afterScript` | Commands wrapping the task script |
 | `accelerator` | GPU request (e.g. `accelerator 1, type: 'nvidia-tesla-v100'`) |
 | `array` | Submit as a job array (HPC/cloud), e.g. `array 100` |
@@ -168,7 +169,7 @@ Access the resolved values at runtime via `task.*` (`task.cpus`, `task.memory`, 
 
 Channels are the asynchronous queues connecting processes. Two kinds:
 
-- **Queue channel**: an ordered, *consumable* stream of items. Produced by most factories/operators and by process outputs. Can be consumed once.
+- **Queue channel**: an ordered, *consumable* stream of items. Produced by most factories/operators and by process outputs. DSL2 automatically fans the stream out to separate downstream consumers; each receives all items. A single process invocation consumes one item per queue input for each task.
 - **Value channel** (singleton): holds one value that can be read an unlimited number of times. Created by `channel.value()`, by operators like `collect`/`first`, or implicitly from a single value. A process input bound to a value channel is reused for every task.
 
 ### Channel factories
@@ -178,19 +179,21 @@ channel.of(1, 2, 3)                                  // emit given values (range
 channel.fromList([1, 2, 3])                          // emit list items
 channel.value('ref.fa')                              // singleton value channel
 channel.fromPath('data/*.bam')                       // one item per matching file
-channel.fromPath('data/**.fastq', checkIfExists: true)   // also: arity:'1', type:'file', hidden:true
+channel.fromPath('data/**/*.fastq', checkIfExists: true) // also: type:'file', hidden:true
 channel.fromFilePairs('data/*_{1,2}.fastq.gz')       // -> [id, [r1, r2]] for paired reads
-channel.topic('versions')                            // collect values emitted to a named topic (24.04+)
+channel.topic('versions')                            // stable since 25.04; preview in 24.04/24.10
 channel.empty()                                      // emits nothing
 ```
 
-> `channel.fromSRA(...)` exists but is deprecated as of 26.04 — prefer a **samplesheet** (`splitCsv`) over fetching reads by accession.
+> `channel.fromSRA(...)` exists but is deprecated as of 26.04 — use the documented Entrez Direct route to discover accessions, then an explicit validated samplesheet and download workflow.
+
+`arity` is a process `path` input/output option, not a `fromPath` option. `checkIfExists` checks matching paths, not sample pairing or biological metadata.
 
 `fromFilePairs` is the idiomatic way to group paired-end reads; it yields `[ sampleId, [read1, read2] ]`, which you typically `map` into the nf-core `[ meta, [reads] ]` shape.
 
 ## Operators
 
-Operators transform/combine channels. Chain with `.`; the dataflow graph is built from these connections.
+Operators transform/combine channels. Chain with `.`; the dataflow graph is built from these connections. The table includes legacy operators still used by untyped nf-core code. In 26.04, `groupTuple`, `flatten`, `concat`, `distinct`, `first`/`last`, the channel `split*` operators, `set`, and `dump` are deprecated; use the [core operator migration guide](https://docs.seqera.io/nextflow/tutorials/static-types-operators) for new code (`groupBy`, `flatMap` with Path `split*` methods, `mix`, `unique`, direct assignment, `view`, as applicable). Do not replace order-dependent logic mechanically.
 
 | Operator | Purpose |
 |----------|---------|
@@ -205,7 +208,7 @@ Operators transform/combine channels. Chain with `.`; the dataflow graph is buil
 | `cross` | Combine matching keyed items |
 | `mix` | Merge multiple channels into one stream |
 | `concat` | Emit one channel fully, then the next, in order |
-| `branch { }` | Route items into multiple named sub-channels by condition |
+| `branch { }` | Route each item to the first matching named branch |
 | `multiMap { }` | Emit to several channels from one pass |
 | `splitCsv` / `splitText` / `splitFasta` / `splitFastq` | Split file contents into items |
 | `collectFile` | Write items into one or more files |
@@ -218,16 +221,15 @@ Operators transform/combine channels. Chain with `.`; the dataflow graph is buil
 
 ```nextflow
 // Build the nf-core [meta, reads] shape from a samplesheet
-channel
-    .fromPath(params.input)
-    .splitCsv(header: true)
+reads_ch = channel
+    .fromPath(params.input, checkIfExists: true)
+    .flatMap { sheet -> sheet.splitCsv(header: true) }
     .map { row -> tuple([id: row.sample, single_end: row.fastq_2 ? false : true],
-                        row.fastq_2 ? [file(row.fastq_1), file(row.fastq_2)] : [file(row.fastq_1)]) }
-    .set { reads_ch }
+                        row.fastq_2 ? [file(row.fastq_1, checkIfExists: true), file(row.fastq_2, checkIfExists: true)] : [file(row.fastq_1, checkIfExists: true)]) }
 
-// Group per-sample results, then join two channels by meta
+// Legacy tuple workflow: group results, then join on an exact meta key
 counts.groupTuple()
-       .join(metadata)          // matches on the first (key) element
+       .join(metadata, failOnDuplicate: true, failOnMismatch: true) // exact keyed matching
        .view()
 ```
 
@@ -237,7 +239,7 @@ A `workflow` composes processes and other workflows. The **unnamed** workflow is
 
 ```nextflow
 workflow RNASEQ {
-    take:                       // typed inputs (channels)
+    take:                       // named inputs (untyped here)
     reads
     index
 
@@ -253,8 +255,10 @@ workflow RNASEQ {
 }
 
 workflow {                      // entry: wire inputs and call the named workflow
-    reads = channel.fromFilePairs(params.reads)
-    index = channel.value(file(params.index))
+    reads = channel.fromFilePairs(params.reads, checkIfExists: true)
+                   .map { id, pair -> tuple([id: id, single_end: false], pair) }
+    index = channel.value(tuple(file(params.fasta, checkIfExists: true),
+                                files(params.bwa_index, checkIfExists: true)))
     RNASEQ(reads, index)
     RNASEQ.out.counts.view()
 }
@@ -291,6 +295,7 @@ include { RNASEQ }                     from './subworkflows/rnaseq.nf'
 - `as` aliases let you include the same component multiple times.
 - Includes are resolved relative to the including file; `.nf` extension optional.
 - Params should be passed explicitly (as inputs), not read globally inside modules — this keeps modules portable (an nf-core requirement).
+- Since 26.04, registry modules can be installed with `nextflow module install -version <version> <name>` and included by registry name. This is distinct from `nf-core modules install` and its `modules.json` bookkeeping. Pin the registry version/checksum; see [module registry](https://docs.seqera.io/nextflow/modules/module-registry). Local nf-core includes remain supported.
 
 ## Dynamic resources and error handling
 
@@ -309,7 +314,7 @@ process BIG_JOB {
 }
 ```
 
-- Exit codes 137/140/143 typically mean out-of-memory/walltime kills — retry with more resources.
+- Exit codes 137/140/143 identify signals, not a definitive OOM diagnosis. Check scheduler/task logs before escalating resources; a cancellation, timeout or application failure can look similar. Bound retries and resource requests.
 - `errorStrategy 'ignore'` lets the pipeline continue past a failed task; `'finish'` stops launching new tasks but lets running ones complete.
 - In nf-core, resource scaling lives in `conf/base.config` keyed on `process_*` labels (see `references/developing.md`).
 
@@ -319,9 +324,12 @@ process BIG_JOB {
 - Define helper values with `def` inside `script:`/closures to avoid leaking globals.
 - Maps use Groovy syntax: `[ id: 'x', single_end: false ]`; access as `meta.id`.
 - **Common gotchas**:
-  - Re-using a consumed **queue** channel yields nothing — use a **value** channel (or `collect`) for things consumed by many tasks (like a reference index).
-  - `groupTuple` may emit before all items arrive unless sizes are known; provide `size:` or use `groupTuple(by:)` carefully.
+  - DSL2 allows a stream to feed multiple processes. The hazard is passing multiple independent queues into one process: completion order can mismatch samples. Join on an immutable sample key into one tuple channel; use `channel.value(...)` or `toList()` for a shared reference value.
+  - Legacy `groupTuple` without `size` buffers until the source closes. With `size`, it emits completed groups earlier and can drop incomplete groups unless `remainder: true`. Validate expected replicate/lane counts; never mistake a partial group for a complete sample.
+  - Legacy tuple `join` does not support duplicate keys. Set `failOnDuplicate`/`failOnMismatch` explicitly; for deliberate many-to-many matching use `combine(by:)` and validate cardinality. Do not assume parser mode alone supplies these checks.
+  - A full meta map used as a key must match exactly; extra/different fields can prevent joins. Keep sample keys immutable and check identities across branches.
+  - `channel.topic` consumers must not feed outputs back into the same topic: that cycle can hang the workflow.
   - A process called twice without aliasing is an error; `include ... as`.
-  - Globs in `output:` match the **work directory**, not `publishDir`.
+  - Globs in `output:` match the **work directory**, not `publishDir`. Publishing is asynchronous; downstream processes must consume output channels. Prevent output filename collisions between samples.
   - Prefer filtering channels over `when:` for clarity and caching.
-- **Strict syntax / language server**: recent Nextflow ships a VS Code extension + `nextflow lint` and a stricter parser; nf-core is migrating pipelines to it. Keep scripts to documented DSL2 constructs and avoid deprecated DSL1 idioms (`Channel.create()`, `.into{}` overuse, top-level `file()` for inputs).
+- **Strict syntax / language server**: Nextflow provides a VS Code extension + `nextflow lint` and a stricter parser; nf-core is migrating pipelines to it. Keep scripts to documented DSL2 constructs and avoid deprecated DSL1 idioms (`Channel.create()`, `.into{}` overuse, top-level `file()` for inputs).

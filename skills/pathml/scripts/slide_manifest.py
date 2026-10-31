@@ -120,6 +120,8 @@ def validate_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 if row_count > args.max_rows:
                     raise CliError(f"manifest exceeds --max-rows={args.max_rows}")
                 row_number = row_count + 1
+                if None in raw_row or any(value is None for value in raw_row.values()):
+                    raise CliError(f"row {row_number}: CSV field count does not match header")
                 row = {
                     key.strip(): (value or "").strip()
                     for key, value in raw_row.items()
@@ -151,6 +153,8 @@ def validate_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 suffix_counts[_matched_suffix(slide_path)] += 1
 
                 split = row.get("split", "")
+                if "split" in normalized_headers and not split:
+                    raise CliError(f"row {row_number}: split column must not contain blanks")
                 if split:
                     if allowed_splits and split not in allowed_splits:
                         raise CliError(
@@ -185,7 +189,7 @@ def validate_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "no_symlinks": True,
             "unique_slide_ids": True,
             "unique_slide_paths": True,
-            "patient_split_isolation": True,
+            "patient_split_isolation": bool(patient_splits),
         },
         "privacy_note": (
             "Identifiers were validated syntactically only; confirm they are "
@@ -226,6 +230,8 @@ def _inspect_openslide(path: Path) -> dict[str, Any]:
                 if destination in {"objective_power", "mpp_x", "mpp_y"}:
                     try:
                         value = float(value)
+                        if not math.isfinite(value) or value <= 0:
+                            value = None
                     except (TypeError, ValueError):
                         value = None
                 technical[destination] = value

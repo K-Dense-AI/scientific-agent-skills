@@ -35,7 +35,8 @@ Current fixed-width array columns include:
 - `DoubleArrayColumn(name, description, size, values)`
 - `LongArrayColumn(name, description, size, values)`
 
-The array `size` argument is required. Older examples that omit it are stale.
+Upstream still labels array columns experimental. The array `size` argument
+is required. Older examples that omit it are stale.
 All columns added in one operation must contain the same number of rows.
 Column names are unique; names beginning with double underscore are reserved.
 
@@ -55,8 +56,8 @@ original = conn.getObject("OriginalFile", original_file_id)
 if original is None:
     raise LookupError("Table OriginalFile unavailable")
 
-resources = conn.c.sf.sharedResources()
-table = resources.openTable(original._obj)
+resources = conn.c.sf.sharedResources(conn.SERVICE_OPTS)
+table = resources.openTable(original._obj, conn.SERVICE_OPTS)
 try:
     headers = list(table.getHeaders())
     if len(headers) > max_columns:
@@ -65,7 +66,7 @@ try:
     row_count = table.getNumberOfRows()
     stop = min(row_count, max_rows)
     column_indices = list(range(len(headers)))
-    data = table.read(column_indices, 0, stop)
+    data = table.read(column_indices, 0, stop) if stop > 0 else None
 
     print(
         {
@@ -122,19 +123,20 @@ OMERO.tables uses PyTables condition syntax. Keep the condition code fixed and
 bind user values:
 
 ```python
-from omero.rtypes import rint
+from omero.rtypes import rlong
 
 row_count = table.getNumberOfRows()
 max_rows_considered = min(row_count, 1000)
-matches = table.getWhereList(
-    condition="(Image > minimum_id)",
-    variables={"minimum_id": rint(100)},
-    start=0,
-    stop=max_rows_considered,
-    step=0,
-)
-matches = list(matches[:100])
-data = table.readCoordinates(matches)
+matches = []
+if max_rows_considered > 0:
+    matches = list(table.getWhereList(
+        condition="(Image > minimum_id)",
+        variables={"minimum_id": rlong(100)},
+        start=0,
+        stop=max_rows_considered,
+        step=0,
+    )[:100])
+data = table.readCoordinates(matches) if matches else None
 ```
 
 Never concatenate user text into a condition. Validate column names against
@@ -158,13 +160,15 @@ columns = [
     StringColumn("Status", "Review status", 32, []),
 ]
 
-resources = conn.c.sf.sharedResources()
-repositories = resources.repositories().descriptions
+resources = conn.c.sf.sharedResources(conn.SERVICE_OPTS)
+repositories = resources.repositories(conn.SERVICE_OPTS).descriptions
 if not repositories:
     raise RuntimeError("No table repository is available")
 
 repository_id = repositories[0].getId().getValue()
-table = resources.newTable(repository_id, "analysis-v2-explicit-name")
+table = resources.newTable(
+    repository_id, "analysis-v2-explicit-name", conn.SERVICE_OPTS,
+)
 try:
     table.initialize(columns)
     table.addData(
@@ -202,12 +206,14 @@ from omero.model import (
 
 file_annotation = FileAnnotationI()
 file_annotation.setFile(OriginalFileI(table_file_id, False))
-file_annotation = conn.getUpdateService().saveAndReturnObject(file_annotation)
+file_annotation = conn.getUpdateService().saveAndReturnObject(
+    file_annotation, conn.SERVICE_OPTS,
+)
 
 link = DatasetAnnotationLinkI()
 link.setParent(DatasetI(dataset_id, False))
 link.setChild(FileAnnotationI(file_annotation.getId().getValue(), False))
-conn.getUpdateService().saveAndReturnObject(link)
+conn.getUpdateService().saveAndReturnObject(link, conn.SERVICE_OPTS)
 ```
 
 This is a second write after table creation. If link creation fails, the table
@@ -225,7 +231,7 @@ general concurrent access, so OMERO.tables adds global locking. Keep table
 handles short-lived:
 
 ```python
-table = resources.openTable(original._obj)
+table = resources.openTable(original._obj, conn.SERVICE_OPTS)
 try:
     # One bounded operation.
     ...

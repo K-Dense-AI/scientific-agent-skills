@@ -42,7 +42,7 @@ Do not use:
 
 ## Size and Convergence
 
-Larger backgrounds increase cost for interventional tree, deep, kernel, and permutation methods. Current SHAP maskers default to at most 100 tabular background rows in several APIs.
+Larger backgrounds increase cost for interventional tree, deep, kernel, and permutation methods. `Independent` and `Partition` default to at most 100 tabular background rows, including when `TreeExplainer` wraps a bare frame. Increasing `shap.sample(..., 250)` alone therefore does not run a 250-row background experiment. Use `shap.maskers.Independent(background, max_samples=len(background))`, pass that to the explainer, and inspect its effective background before reporting convergence.
 
 Treat size as an empirical convergence choice:
 
@@ -127,7 +127,7 @@ Conditional games can give attribution to a feature the model does not directly 
 ### `Fixed` and composite maskers
 
 - `Fixed`: leaves an input unchanged; useful for fixed labels or auxiliary arguments.
-- `Composite`: joins maskers for multiple model inputs.
+- `Composite`: joins maskers for multiple model inputs only when their row counts, call signatures, and clustering are compatible; this is not a universal multimodal adapter.
 - `FixedComposite`: returns both masked and original inputs.
 - `OutputComposite`: combines masking with a model output used by an explanation algorithm.
 
@@ -163,7 +163,7 @@ An independent masker asks how model output changes while integrating hidden fea
 
 ### Conditional allocation
 
-A conditional masker asks how model output changes under an estimated conditional distribution. It stays closer to the observed manifold but can allocate credit to unused correlated features.
+A conditional masker asks how model output changes under an estimated conditional distribution. It may stay closer to the observed manifold if the conditional model is adequate, but can allocate credit to unused correlated features. Linear Gaussian imputation does not guarantee physically valid or categorical states.
 
 ### Grouped allocation
 
@@ -216,7 +216,8 @@ Wrap the full pipeline in a callable:
 
 ```python
 def predict_positive(frame):
-    return fitted_pipeline.predict_proba(frame)[:, 1]
+    frame = pd.DataFrame(frame, columns=raw_background.columns)
+    return fitted_pipeline.predict_proba(frame)[:, positive_class_index]
 
 masker = shap.maskers.Independent(raw_background, max_samples=100)
 explainer = shap.PermutationExplainer(
@@ -228,7 +229,7 @@ explainer = shap.PermutationExplainer(
 exp = explainer(raw_eval, max_evals=2 * raw_eval.shape[1] + 1)
 ```
 
-This attributes raw columns but may be much slower and uses model-agnostic masking. Ensure the callable preserves DataFrame columns and dtypes.
+This fragment assumes numeric raw columns and a pre-resolved `positive_class_index` from `fitted_pipeline.classes_`. It attributes raw columns but may be much slower. Delta masking can deliver arrays even when the background was a DataFrame, so reconstruct columns inside the callable. Mixed string/object/categorical frames can fail the tabular masker's numeric invariance checks; use a tested domain masker or explain a validated numeric transformed representation. Do not silently convert categories into arbitrary numbers.
 
 ## Missing Values
 

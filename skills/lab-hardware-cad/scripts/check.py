@@ -6,10 +6,10 @@
     python scripts/check.py facts out/carrier.step
     python scripts/check.py interfaces out/carrier.manifest.json
     python scripts/check.py geometry out/carrier.step --model carrier_model.py
-    python scripts/check.py probe out/carrier.step --cyl 6.6 --at 37.5,37.5 --at -37.5,37.5
+    python scripts/check.py probe out/carrier.step --cyl 6.6 --at 37.5,37.5 --at=-37.5,37.5
     python scripts/check.py bores out/carrier.step
     python scripts/check.py fit --standard slas-microplate-footprint \
-        --intent envelope --clearance 0.8 --value footprint_length=128.81
+        --intent envelope --clearance 0.8 --value footprint_length=129.06
     python scripts/check.py clearance out/carrier.step out/lid.step --min 0.3
 
 ``standards`` and ``interfaces`` on a manifest run on the standard library alone. The
@@ -32,6 +32,7 @@ from _common import (  # noqa: E402
     emit,
     eprint,
     evaluate_checks,
+    finite_number,
     format_check_result,
     get_standard,
     import_model,
@@ -44,6 +45,7 @@ from _common import (  # noqa: E402
     model_interfaces,
     normalise_checks,
     normalise_interfaces,
+    parse_params,
     shape_facts,
 )
 
@@ -60,11 +62,11 @@ def cmd_standards(args) -> int:
             f"  document:  {entry['document']}",
             f"  url:       {entry.get('url', '-')}",
             f"  verified:  {entry.get('verified')}",
-            "  dimensions (mm):",
+            "  dimensions (mm unless explicitly labelled):",
         ]
         for name, dim in entry["dimensions"].items():
             band = f"+{dim.get('tol_plus', 0)}/-{dim.get('tol_minus', 0)}"
-            lines.append(f"    {name}: {dim['nominal']} {band}")
+            lines.append(f"    {name}: {dim['nominal']} {band} {dim.get('unit', 'mm')}")
             if dim.get("note"):
                 lines.append(f"      note: {dim['note']}")
         if entry.get("design_note"):
@@ -121,8 +123,8 @@ def _evaluate(
                    around nominal, widened (never shifted) by ``offset``.
     ``envelope`` - this feature must accept ANY conforming part (a pocket, bore,
                    or slot). One-sided minimum at maximum material condition plus
-                   the clearance. Designing such a feature to nominal fits only
-                   the smallest half of conforming parts.
+                   the clearance. Nominal sizing does not guarantee clearance for
+                   all conforming parts.
 
     ``offset`` must be non-negative: a negative clearance would let a declaration
     move its own acceptance band and certify a nonconforming value.
@@ -130,6 +132,8 @@ def _evaluate(
     if dimension not in entry["dimensions"]:
         known = ", ".join(sorted(entry["dimensions"]))
         raise LabCadError(f"unknown dimension {dimension!r}. Available: {known}")
+    actual = finite_number(actual, dimension)
+    offset = finite_number(offset, "clearance")
     if offset < 0:
         raise LabCadError(
             f"{dimension}: clearance must be >= 0, got {offset}. A clearance widens the "
@@ -138,6 +142,8 @@ def _evaluate(
             "clearance."
         )
     dim = entry["dimensions"][dimension]
+    if dim.get("unit", "mm") != "mm":
+        raise LabCadError(f"{dimension} is in {dim['unit']}, not mm; inspect it with standards --show")
     nominal = float(dim["nominal"])
     tol_plus = float(dim.get("tol_plus", 0.0))
     tol_minus = float(dim.get("tol_minus", 0.0))
@@ -162,6 +168,7 @@ def _evaluate(
         "expected_range_mm": [round(low, 4), None if high is None else round(high, 4)],
         "actual_mm": round(actual, 4),
         "headroom_mm": headroom,
+        "verified_source": dim.get("verified", entry.get("verified", False)),
         "pass": passed,
     }
 
@@ -215,7 +222,7 @@ def cmd_fit(args) -> int:
         "standard": args.standard,
         "title": entry["title"],
         "document": entry["document"],
-        "verified_source": entry.get("verified", False),
+        "verified_source": all(item["verified_source"] for item in results),
         "clearance_applied_mm": offset,
         "mode": "declared" if args.value else "bounding_box",
         "swap_xy": args.swap_xy,
@@ -235,7 +242,7 @@ def cmd_fit(args) -> int:
             f"  [{mark}] {item['dimension']:<22} {item['measure']:<9} "
             f"actual {item['actual_mm']:>9.3f}  expected {expected}"
         )
-    if not entry.get("verified", False):
+    if not payload["verified_source"]:
         lines.append("  WARNING: standard entry is not verified against the primary document.")
     if not passed and not args.value:
         if not args.swap_xy:
@@ -318,7 +325,6 @@ def cmd_interfaces(args) -> int:
         result["feature"] = entry["feature"]
         result["standard"] = entry["standard"]
         result["document"] = standard["document"]
-        result["verified_source"] = standard.get("verified", False)
         result["clearance_applied_mm"] = entry["clearance"]
         results.append(result)
 
@@ -368,9 +374,12 @@ def cmd_geometry(args) -> int:
     """
     target = args.target
     if target.suffix.lower() == ".py":
-        module = import_model(target)
+        module = import_model(target, parse_params(args.param))
         declared = model_checks(module)
-        part = load_shape(target)
+        builder = getattr(module, "build", None)
+        if not callable(builder):
+            raise LabCadError("model must expose build()")
+        part = builder()
         geometry_source = target.name
     else:
         if args.model is None:
@@ -378,7 +387,7 @@ def cmd_geometry(args) -> int:
                 "checking a STEP needs the model that declares the checks: "
                 "check.py geometry out/part.step --model part_model.py"
             )
-        declared = model_checks(import_model(args.model))
+        declared = model_checks(import_model(args.model, parse_params(args.param)))
         part = load_shape(target)
         geometry_source = target.name
 
@@ -494,14 +503,15 @@ def _min_distance(shape_a, shape_b) -> float | None:
 
 
 def cmd_clearance(args) -> int:
+    args.min = finite_number(args.min, "minimum clearance")
+    if args.min < 0:
+        raise LabCadError("minimum clearance must be >= 0")
     shape_a = load_shape(args.a)
     shape_b = load_shape(args.b)
 
-    overlap_volume = 0.0
-    try:
-        overlap_volume = intersection_volume(shape_a, shape_b)
-    except LabCadError as exc:
-        eprint(f"warning: {exc}; relying on distance only")
+    # Distance alone does not establish absence of volume interference. A failed
+    # boolean is inconclusive and must not become a successful fabrication gate.
+    overlap_volume = intersection_volume(shape_a, shape_b)
 
     interferes = overlap_volume > 1e-6
     gap = None if interferes else _min_distance(shape_a, shape_b)
@@ -537,7 +547,7 @@ def cmd_clearance(args) -> int:
 
     emit(payload, args.as_json, text)
     if payload["pass"] is None:
-        return 0
+        return 2
     return 0 if payload["pass"] else 1
 
 
@@ -582,6 +592,8 @@ def main() -> int:
     p_geo.add_argument("target", type=Path, help="a *_model.py, or a STEP with --model")
     p_geo.add_argument("--model", type=Path, default=None,
                        help="the *_model.py declaring checks(), when target is a STEP")
+    p_geo.add_argument("--param", action="append", metavar="KEY=VALUE",
+                       help="repeat the overrides used by gen.py when evaluating model gauges")
     p_geo.set_defaults(func=cmd_geometry)
 
     p_probe = sub.add_parser(
@@ -626,7 +638,7 @@ def main() -> int:
     p_fit.add_argument("--standard", required=True, help="standard ID from `standards --list`")
     p_fit.add_argument("--value", action="append", metavar="DIMENSION=MM",
                        help="check a dimension the model computed, e.g. "
-                            "footprint_length=128.81. Use this when the interface is an "
+                            "footprint_length=129.06. Use this when the interface is an "
                             "internal feature. Repeatable; needs no geometry kernel.")
     p_fit.add_argument("--intent", choices=("match", "envelope"), default="match",
                        help="'match': this part must itself conform to the standard "

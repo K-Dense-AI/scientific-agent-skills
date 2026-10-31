@@ -1,132 +1,53 @@
-# Drug interactions (ICH M12) and QT assessment (ICH E14/S7B)
+# DDI screening and concentration-QTc
 
-## ICH M12 status
+## ICH M12 basic models
 
-The first globally harmonised guidance on pharmacokinetic drug interactions mediated by metabolic
-enzymes and transporters. Step 4 in 2024, then:
+Use the current [M12 guideline](https://www.pmda.go.jp/files/000268574.pdf), with measured inputs,
+units and assay binding basis recorded. A positive screen calls for further evaluation; it is not a
+predicted clinical effect size. A negative screen does not exclude unmodeled mechanisms.
 
-| Region | Adoption |
-| --- | --- |
-| FDA | Adopted 2 August 2024, with an accompanying *M12 Drug Interaction Studies: Questions & Answers* |
-| EMA / EU | Effective 30 November 2024 |
-| NMPA (China) | Implemented 29 October 2024 |
-
-It replaces the previous FDA in vitro and clinical DDI guidances and EMA's DDI guideline as the
-operative framework.
-
-## The stepwise, risk-based approach
-
-1. **In vitro characterisation** — is the drug a substrate, inhibitor or inducer of the major
-   enzymes and transporters?
-2. **Basic models** with conservative cut-offs — do the in vitro data rule the interaction out?
-3. **Mechanistic static or PBPK modelling** — refine a positive basic-model signal.
-4. **Clinical study** — where modelling cannot rule it out or the interaction is decision-relevant.
-5. **Labelling** — dose adjustment, contraindication, or monitoring.
-
-The basic models are deliberately conservative: they are built to over-predict, so a **negative
-result is meaningful** and a positive one is a trigger for further work, never an estimate of
-clinical magnitude.
-
-## Basic model cut-offs
-
-| Mechanism | Model | Cut-off |
+| Mechanism | Quantity | Screening trigger |
 | --- | --- | --- |
-| Reversible inhibition, hepatic | `R1 = 1 + Imax,u / Ki` | R1 ≥ 1.02 |
-| Reversible inhibition, intestinal (CYP3A4) | `R1,gut = 1 + Igut / Ki`, `Igut = dose / 250 mL` | R1,gut ≥ 11 |
-| Time-dependent inhibition | `R2 = (kobs + kdeg) / kdeg`, `kobs = kinact·I / (KI + I)` at 50 × Imax,u | R2 ≥ 1.25 |
-| Induction (basic) | `R3 = 1 / (1 + d·Emax·I / (EC50 + I))` at 10 × Imax,u | R3 ≤ 0.80 |
-| Hepatic uptake transporters (OATP1B1/1B3) | `1 + fu·Iin,max / Ki,u` | ≥ 1.1 |
-| Intestinal transporters (P-gp, BCRP) | `Igut / IC50` | ≥ 10 |
-| Renal transporters (OAT, OCT, MATE) | `Imax,u / Ki` | ≥ 0.1 |
+| Reversible CYP | `1+Cmax,u/Ki,u` | >=1.02 |
+| Oral gut CYP | `1+(dose/0.25L)/Ki,u` | >=11 |
+| Time-dependent inhibition | `1+(kinact*I/(KI,u+I))/kdeg`, I=5*Cmax,u | >=1.25 |
+| Kinetic induction | `1/(1+Emax*I/(EC50,u+I))`, I=10*Cmax,u | <=0.8 |
+| OAT1/3, OCT2 | `Cmax,u/IC50,u` | >=0.1 |
+| MATE1/2-K; systemic P-gp/BCRP | `Cmax,u/IC50,u` | >=0.02 |
+| Intestinal P-gp/BCRP, oral | `(dose/0.25L)/IC50` | >=10 |
+| OATP1B1/1B3 | `Iin,max,u/IC50,u` | >=0.1 |
 
-The hepatic inlet concentration for uptake transporters is
+Induction also requires interpretation of the experimental mRNA concentration-response evidence;
+the kinetic formula alone is not a complete induction assessment. For measured plasma fu<0.01,
+use 0.01 unless reliability at the low fraction has been demonstrated.
 
-```
-Iu,inlet,max = fu * (Imax + Fa*Fg*ka*Dose / (Qh * RB))
-```
+## Mechanistic static model and units
 
-which is higher than systemic Imax and is what the liver actually sees during absorption.
-
-An alternative induction assessment is the **correlation / relative induction score** approach,
-calibrated against known inducers, which is less conservative than the basic R3 model.
-
-## Mechanistic static model
-
-```
-AUCR = 1 / (Ag·Bg·Cg·(1 - Fg) + Fg)  ×  1 / (Ah·Bh·Ch·fm + (1 - fm))
-```
-
-with, at each site,
+The CLI's ka is per minute and Qh=97 L/hour, so multiply ka by 60 before combining them.
+`Ih=fu*(Cmax+Fa*Fg*ka_hour*dose/(Qh*RB))`; `Ig=Fa*ka_hour*dose/Qen`, Qen=18 L/hour.
+These inlet/enterocyte values differ from basic luminal `dose/0.25L`.
+Dose must use the same amount unit as concentration times liters (micromolar -> micromoles).
+The model separates hepatic/gut reversible inhibition, inactivation and induction:
 
 ```
-A = 1 / (1 + I/Ki)                                    reversible inhibition
-B = kdeg / (kdeg + kinact·I/(KI + I))                 time-dependent inhibition
-C = 1 + d·Emax·I/(EC50 + I)                           induction
+AUCR = 1/(Ag*Bg*Cg*(1-Fg)+Fg) / (Ah*Bh*Ch*fm + 1-fm)
 ```
 
-**`fm` and `Fg` dominate the result.** The ceiling on any inhibition of a single pathway is
-`1/(1 - fm)`: with `fm = 0.9` no inhibitor can raise AUC more than 10-fold, and with `fm = 0.7`, no
-more than 3.3-fold. These two fractions are usually the least well established inputs, and a
-sensitivity analysis across their plausible range is more informative than the point prediction.
-`ddi_static.py --msm` prints the ceiling alongside the prediction.
+Its full-inhibition ceiling is `1/((1-fm)*Fg)`, while `1/(1-fm)` is hepatic only. Run inhibition
+alone, induction alone and combined so cancellation cannot hide a signal. This implementation
+uses shared illustrative kinetic inputs and fixed adult flows; it does not implement every M12
+case, metabolite contribution, transporter-enzyme coupling or time-dependent dosing profile.
+Escalate to qualified PBPK/clinical evaluation when the question needs those features.
 
-## Perpetrator classification
+## QT concentration-response
 
-| Class | AUC ratio |
-| --- | --- |
-| Strong inhibitor | ≥ 5 |
-| Moderate inhibitor | ≥ 2 and < 5 |
-| Weak inhibitor | ≥ 1.25 and < 2 |
-| No relevant effect | > 0.8 and < 1.25 |
-| Weak inducer | > 0.5 and ≤ 0.8 |
-| Moderate inducer | > 0.2 and ≤ 0.5 |
-| Strong inducer | ≤ 0.2 |
+The CLI regresses supplied placebo-corrected change from baseline QTc on concentration and reports
+a two-sided 90% CI at a specified exposure. Verify correction, units, timing, delayed effects,
+linearity, range coverage and influence. It assumes independent observations and is not the mixed
+model normally needed for repeated trial data. A nonzero intercept needs explanation, but is not
+an automatic model rejection rule.
 
-## Clinical study design points
-
-- Use **index perpetrators** (itraconazole or clarithromycin for strong CYP3A4 inhibition,
-  rifampicin for strong induction, and the corresponding index substrates) so the result is
-  interpretable against the classification bands.
-- Worst-case first: a study with a strong index perpetrator that shows no interaction removes the
-  need for weaker ones.
-- Induction requires **multiple-dose** administration of the perpetrator; a single dose can even
-  show inhibition from the same compound.
-- Timing matters for time-dependent inhibition and for induction, both of which take days to
-  develop and days to reverse.
-- A **cocktail study** can assess several pathways at once, provided the probes are validated as
-  non-interacting.
-
----
-
-# QT assessment: ICH E14 and S7B
-
-## The framework
-
-- The threshold of regulatory concern is a **QTc effect above 10 ms**, assessed as the **upper bound
-  of the two-sided 90% confidence interval** for placebo-corrected change-from-baseline QTc (ΔΔQTc)
-  at the clinically relevant high exposure.
-- A prospective **concentration-QTc analysis** on Phase I data can substitute for a dedicated
-  thorough QT study, and this is now the routine path.
-- The **2022 E14/S7B Q&As** introduced the "double negative" integrated nonclinical risk
-  assessment — a negative hERG assay plus a negative in vivo QTc study — as supplementary evidence.
-  This allows a submission to cover high clinical exposure without attaining a high multiple of
-  clinically relevant exposure, and its uptake in FDA reviews rose sharply after 2022.
-
-## Getting a C-QTc analysis right
-
-- **Correction method**: QTcF (Fridericia) is the standard. QTcB (Bazett) over-corrects at high
-  heart rates and should not be primary. Where heart rate changes materially with treatment, a
-  study-specific or individual correction is preferable.
-- **Model**: linear mixed effects on time-matched ΔQTc against plasma concentration, with a random
-  intercept and slope per subject and a treatment-specific intercept. Assess the intercept — a
-  non-zero one suggests the baseline or the placebo correction is wrong.
-- **Linearity**: the extrapolation to supratherapeutic exposure depends on it. Check for curvature,
-  and check that the highest observed concentrations actually cover the exposure of interest.
-- **Hysteresis**: if the QTc effect lags concentration, a direct model is misspecified and an effect
-  compartment is needed. Plot ΔQTc against concentration coloured by time to see it.
-- Sample size is driven by the number of subjects **and** the spread of concentrations achieved;
-  a study where everyone has similar exposure estimates the slope poorly regardless of N.
-
-`exposure_response.py --cqtc` implements the ordinary linear version for screening and flags
-extrapolation beyond the observed concentration range. It is not a substitute for the mixed model
-in a submission.
+The relevant E14 exclusion threshold is an upper confidence bound **below 10 ms**, in a study with
+adequate exposure/design and model assessment. A result meeting that threshold is not proof of no
+arrhythmia risk. Integrated nonclinical evidence has additional best-practice requirements.
+[E14/S7B Q&A](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/e14-and-s7b-clinical-and-nonclinical-evaluation-qtqtc-interval-prolongation-and-proarrhythmic).

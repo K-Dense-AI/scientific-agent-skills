@@ -1,5 +1,8 @@
 # Experimental Design Checklist
 
+Apply items to the actual design rather than treating checked boxes as a quality score.
+Framework versions and primary guidance: [review_sources.md](review_sources.md).
+
 ## Research Question Formulation
 
 ### Is the Question Well-Formed?
@@ -25,8 +28,8 @@
 - [ ] Can be falsified by potential observations
 
 ### Types of Hypotheses
-- [ ] **Null hypothesis (H₀):** No effect/relationship exists
-- [ ] **Alternative hypothesis (H₁):** Effect/relationship exists
+- [ ] **Null hypothesis (H₀):** Explicit value or range, including any non-inferiority margin
+- [ ] **Alternative hypothesis (H₁):** Explicit competing value, range, or direction
 - [ ] **Directional vs. non-directional:** One-tailed vs. two-tailed tests
 
 ## Study Design Selection
@@ -34,7 +37,8 @@
 ### What Type of Study is Appropriate?
 
 **Experimental (Intervention) Studies:**
-- [ ] **Randomized Controlled Trial (RCT):** Gold standard for causation
+- [ ] **Randomized Controlled Trial (RCT):** Strong intervention-effect design when conduct
+  and analysis preserve its identifying assumptions
 - [ ] **Quasi-experimental:** Non-random assignment but manipulation
 - [ ] **Within-subjects:** Same participants in all conditions
 - [ ] **Between-subjects:** Different participants per condition
@@ -79,7 +83,7 @@
   - Stratification
   - Statistical adjustment
   - Restriction (inclusion/exclusion criteria)
-  - Blinding
+  - Avoid conditioning on mediators/colliders unless required by the target estimand
 
 ### Extraneous Variables
 - [ ] Potential sources of noise identified
@@ -108,12 +112,15 @@
   - Quota sampling
 
 ### Sample Size
+- [ ] Experimental/sampling unit and independent replicate count stated (animal, donor,
+  litter, cage, site, culture, etc.); repeated measurements do not increase independent n
 - [ ] **A priori power analysis conducted**
-  - Expected effect size (from literature or pilot)
-  - Desired power (typically .80 or .90)
+  - Scientifically meaningful effect and plausible variability, with sensitivity analysis
+  - Justified power or precision target (.80/.90 are conventions, not universal requirements)
   - Significance level (typically .05)
   - Statistical test to be used
 - [ ] Accounts for expected attrition/dropout
+- [ ] Accounts for clustering, repeated measures, and planned multiplicity
 - [ ] Sufficient for planned subgroup analyses
 - [ ] Practical constraints acknowledged
 
@@ -138,25 +145,26 @@
 - [ ] **Allocation concealment:**
   - Sequence generated before recruitment
   - Allocation hidden until after enrollment
-  - Sequentially numbered, sealed envelopes (if needed)
+  - Secure centralized allocation, or sequentially numbered opaque sealed envelopes
+    with safeguards preventing anticipation or tampering
 - [ ] **Stratified randomization:**
   - Balance important variables across groups
   - Block randomization to ensure equal group sizes
 - [ ] **Check randomization:**
-  - Compare groups at baseline
-  - Report any significant differences
+  - Audit sequence generation and concealment; describe baseline characteristics
+  - Do not use baseline significance tests as proof of successful/failed randomization
 
 ### Blinding
-- [ ] **Single-blind:** Participants don't know group assignment
-- [ ] **Double-blind:** Participants and researchers don't know
-- [ ] **Triple-blind:** Participants, researchers, and data analysts don't know
+- [ ] Name who was blinded (participants, providers, assessors, analysts), to what, and
+  how; single/double/triple-blind labels have inconsistent meanings
 - [ ] **Blinding feasibility:**
   - Is true blinding possible?
   - Placebo/sham controls needed?
   - Identical appearance of interventions?
 - [ ] **Blinding check:**
-  - Assess whether blinding maintained
-  - Ask participants/researchers to guess assignments
+  - Document unblinding and its likely effect on this outcome
+  - Assignment guesses after treatment can reflect efficacy/adverse effects; do not
+    interpret them automatically as a test of blinding success
 
 ## Control Groups and Conditions
 
@@ -219,7 +227,8 @@
 
 ### Reliability
 - [ ] **Test-retest:** Consistent over time
-- [ ] **Internal consistency:** Items measure same construct (Cronbach's α)
+- [ ] **Internal consistency:** Justify dimensionality and the chosen reliability model;
+  Cronbach's α alone does not establish a single construct or validity
 - [ ] **Inter-rater reliability:** Agreement between raters (Cohen's κ, ICC)
 - [ ] **Parallel forms:** Alternative versions consistent
 
@@ -257,7 +266,8 @@
 - [ ] Strategies to minimize dropout
 - [ ] Track reasons for dropout
 - [ ] Compare dropouts to completers
-- [ ] Intention-to-treat analysis planned
+- [ ] Estimand and missing-outcome handling specified; an intention-to-treat label does
+  not itself remove attrition bias
 
 ### Reporting Bias
 - [ ] Preregister study and analysis plan
@@ -272,7 +282,7 @@
 - [ ] REDCap, Qualtrics, or similar platforms
 - [ ] Range checks and validation rules
 - [ ] Regular backups
-- [ ] Secure storage (HIPAA/GDPR compliant if needed)
+- [ ] Secure storage and documented privacy requirements for the institution/jurisdiction
 
 ### Data Quality
 - [ ] Real-time data validation
@@ -285,7 +295,8 @@
 - [ ] De-identification procedures
 - [ ] Access controls
 - [ ] Audit trails
-- [ ] Compliance with regulations (IRB, HIPAA, GDPR)
+- [ ] Appropriate ethics-board review and applicable privacy-law requirements confirmed
+  by the responsible institution; this checklist does not certify legal compliance
 
 ## Statistical Analysis Planning
 
@@ -300,12 +311,13 @@
   - Exploratory analyses labeled as such
 - [ ] **Multiple comparisons:**
   - Adjustment method specified (if needed)
-  - Primary outcome protects from inflation
+  - Hypothesis family covers relevant outcomes, doses, time points, subgroups, and interim
+    analyses; naming a primary outcome alone does not control all multiplicity
 
 ### Assumptions
 - [ ] Assumptions of statistical tests identified
 - [ ] Plan to check assumptions
-- [ ] Backup non-parametric alternatives
+- [ ] Prespecified robust or alternative analysis for the same estimand, with assumptions
 - [ ] Transformation options considered
 
 ### Missing Data
@@ -333,7 +345,8 @@
 ### Ethical Approval
 - [ ] IRB/Ethics committee approval obtained
 - [ ] Study registered (ClinicalTrials.gov, etc.) if applicable
-- [ ] Protocol follows Declaration of Helsinki or equivalent
+- [ ] For medical research involving human participants, consult the current Declaration
+  of Helsinki (2024 revision) and applicable local ethics requirements before the study
 
 ### Informed Consent
 - [ ] Voluntary participation
@@ -396,12 +409,18 @@
 - [ ] Distinguishes confirmatory from exploratory
 
 ### Reporting Guidelines
-- [ ] **RCTs:** CONSORT 2010 checklist (with applicable extensions)
+- [ ] **RCT results:** CONSORT 2025 checklist (with applicable design/intervention extensions)
+- [ ] **Randomized trial protocols:** SPIRIT 2025
 - [ ] **Observational studies:** STROBE checklist
 - [ ] **Systematic reviews:** PRISMA 2020 checklist
-- [ ] **Diagnostic studies:** STARD checklist
-- [ ] **Qualitative research:** COREQ checklist
+- [ ] **Diagnostic accuracy studies:** STARD 2015 and applicable extensions (including
+  STARD-AI for AI diagnostic accuracy studies)
+- [ ] **Qualitative interviews/focus groups:** COREQ checklist
 - [ ] **Case reports:** CARE guidelines
+
+Reporting checklists improve transparency; they are not risk-of-bias tools or certificates
+of valid conduct. Select extensions for the design instead of assuming every older
+extension has been revised to the new core checklist.
 
 ### Transparency
 - [ ] All measures reported
@@ -450,9 +469,10 @@
 
 ## Common Pitfalls to Avoid
 
-- [ ] No power analysis → underpowered study
+- [ ] No justified sample-size/precision rationale; absence of a power calculation alone
+  does not prove that the completed study was underpowered
 - [ ] Hypothesis formed after seeing data (HARKing)
-- [ ] No blinding when feasible → bias
+- [ ] Lack of blinding with a plausible route to biased care, measurement, or analysis
 - [ ] P-hacking (data fishing, optional stopping)
 - [ ] Multiple testing without correction → false positives
 - [ ] Inadequate control group

@@ -4,7 +4,7 @@
 
 Automation may organize verified facts but cannot assume professional accountability. A named, qualified human must review each domain and take responsibility in the authorized system.
 
-The ICMJE Recommendations, updated January 2026, retain four authorship criteria: substantive contribution; drafting or critical review; final approval; and accountability for accuracy and integrity. Writing assistance alone does not confer authorship. An AI system cannot be an author or approve a manuscript.
+The ICMJE Recommendations, updated January 2026, retain four authorship criteria: substantive contribution; drafting or critical review; final approval; and accountability for accuracy and integrity. Writing assistance alone does not confer authorship. An AI system cannot be an author or approve a manuscript. Under the January 2026 recommendations, disclose the tool and purpose of AI assistance in the appropriate manuscript section and at submission according to the journal’s policy; accountable humans verify accuracy, attribution, and confidentiality. A skill/software citation does not replace that disclosure.
 
 ## Research ethics
 

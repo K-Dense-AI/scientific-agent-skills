@@ -81,6 +81,10 @@ is not a zero. A not-applicable item is not evidence of deficiency.
 
 ## Prohibited proxies and contextual indicators
 
+The exclusions below are this skill's scope policy. DORA and CoARA permit
+responsible contextual indicator use; they do not validate this rubric or
+authorize its use for the consequential decisions excluded above.
+
 Do not score or infer quality from:
 
 - Journal Impact Factor or other journal-level measures;
@@ -98,10 +102,18 @@ quantitative indicator descriptively outside the bundled scoring tools, record:
 1. the exact construct and purpose;
 2. why the indicator bears on that construct at the correct unit of analysis;
 3. source, version, query date, coverage, exclusions, and data quality;
-4. field, language, output-type, career-stage, and time-window effects;
+4. field, language, output-type, publication-age, career-stage, and time-window
+   effects, including the reference cohort and normalization method;
 5. uncertainty, missingness, gaming risks, and known biases;
 6. why qualitative evidence is insufficient by itself; and
 7. a statement that the indicator is not a direct measure of quality.
+
+Do not add counts from different databases as though their covered works or
+citing records were disjoint. Preserve the provider, snapshot date, exact work
+identifiers, version/deduplication rule, and unavailable values. A failed query
+is not a measured zero. A DOI identifies a work record, not scientific validity;
+author-name matches alone do not establish identity. These scripts fetch no
+bibliometric or author data.
 
 Never use an indicator merely because it is available. Never hide several
 different indicators inside an opaque composite.

@@ -150,7 +150,22 @@ def create_plan(args: argparse.Namespace) -> dict[str, Any]:
         if not args.weak_coupling_confirmed:
             warnings.append("weak-coupling assumption has not been confirmed")
     elif args.model == "diffusive":
-        solver = "ssesolve" if args.initial_state == "ket" else "smesolve"
+        # Unmonitored channels mix an initially pure state; SSE has no c_ops.
+        solver = (
+            "ssesolve"
+            if args.initial_state == "ket" and collapse_channels == 0
+            else "smesolve"
+        )
+        options.pop("atol")
+        options.pop("rtol")
+        options["method"] = "platen"
+        convergence = [
+            "decrease stochastic dt",
+            "compare an alternative stochastic integrator",
+            "increase output-grid density",
+            "sweep every Hilbert-space truncation",
+            "increase ntraj",
+        ]
         required_inputs.extend(
             [
                 "separate monitored sc_ops from unmonitored c_ops",
@@ -158,14 +173,20 @@ def create_plan(args: argparse.Namespace) -> dict[str, Any]:
                 "measurement efficiency and record convention",
             ]
         )
-        convergence.extend(["decrease stochastic dt", "increase ntraj"])
         options["dt"] = t_final / max(time_points - 1, 1) / 2.0
         options["store_measurement"] = False
+        options["keep_runs_results"] = bool(args.store_states)
         call_arguments.update(
             {"ntraj": trajectories, "seeds": seed, "heterodyne": False}
         )
     elif args.model == "periodic-closed":
         solver = "FloquetBasis + fsesolve"
+        call_arguments["floquet_basis_options"] = {
+            key: options.pop(key) for key in ("method", "atol", "rtol")
+        }
+        required_inputs.append(
+            "pass floquet_basis_options to FloquetBasis, not fsesolve result options"
+        )
         required_inputs.extend(
             [
                 "verified H(t + T) equals H(t)",
@@ -236,7 +257,12 @@ def create_plan(args: argparse.Namespace) -> dict[str, Any]:
                 "coefficient sampling/envelope convergence",
             ]
         )
-    if args.stiff:
+    if args.stiff and args.model == "diffusive":
+        warnings.append(
+            "--stiff does not select bdf for stochastic dynamics; reduce dt and "
+            "review a supported implicit stochastic method"
+        )
+    elif args.stiff:
         convergence.append("compare bdf with lsoda on representative observables")
 
     return {
@@ -272,7 +298,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("ket", "density"),
         default="ket",
     )
-    parser.add_argument("--collapse-channels", type=int, default=0)
+    parser.add_argument(
+        "--collapse-channels", type=int, default=0,
+        help="number of c_ops (unmonitored channels for diffusive models)",
+    )
     parser.add_argument("--time-dependent", action="store_true")
     parser.add_argument("--stiff", action="store_true")
     parser.add_argument("--weak-coupling-confirmed", action="store_true")

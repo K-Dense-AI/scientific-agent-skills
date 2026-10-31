@@ -1,305 +1,233 @@
 ---
 name: depmap
-description: Query the Cancer Dependency Map (DepMap) for cancer cell line gene dependency scores (CRISPR Chronos), drug sensitivity data, and gene effect profiles. Use for identifying cancer-specific vulnerabilities, synthetic lethal interactions, and validating oncology drug targets.
+description: Retrieves and analyzes Cancer Dependency Map (DepMap) release data, including CRISPR Chronos gene effects, cancer model annotations, omics biomarkers, and PRISM drug sensitivity. Supports cancer-selective dependency, co-essentiality, and candidate synthetic-lethality analyses with release-aware identifiers and statistical checks.
 license: CC-BY-4.0
+compatibility: Requires Python 3.10+ with numpy, pandas, and scipy>=1.11 for the bundled helpers. Network access is needed for release discovery; downloading current data may require browser verification through the DepMap portal.
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: Kuan-lin Huang
+  last-reviewed: "2026-09-30"
 ---
 
 # DepMap — Cancer Dependency Map
 
-## Overview
+## When to use
 
-The Cancer Dependency Map (DepMap) project, run by the Broad Institute, systematically characterizes genetic dependencies across hundreds of cancer cell lines using genome-wide CRISPR knockout screens (DepMap CRISPR), RNA interference (RNAi), and compound sensitivity assays (PRISM). DepMap data is essential for:
-- Identifying which genes are essential for specific cancer types
-- Finding cancer-selective dependencies (therapeutic targets)
-- Validating oncology drug targets
-- Discovering synthetic lethal interactions
+Use this skill to rank dependencies in cancer models, compare prespecified biomarker
+cohorts, inspect co-essentiality, or relate genetic dependencies to PRISM compound
+response. These analyses generate target and synthetic-lethality hypotheses; they
+do not establish clinical efficacy, a therapeutic window, or a causal interaction.
 
-**Key resources:**
-- DepMap Portal: https://depmap.org/portal/
-- DepMap data downloads: https://depmap.org/portal/download/all/
-- Python package: `depmap` (or access via API/downloads)
-- API: https://depmap.org/portal/api/
+DepMap integrates Broad and Sanger CRISPR screens and hosts independent RNAi and
+drug-screen datasets. Match each question to its assay and pinned release. RNAi
+DEMETER2 is a different perturbation modality, not an older CRISPR scoring method.
 
-## When to Use This Skill
+## 1. Discover a release, then obtain its files
 
-Use DepMap when:
+Use [DepMap Downloads](https://depmap.org/portal/data_page/) and the selected
+release's README and release notes. On review, the live catalogue's latest
+`DepMap Public` release was **26Q1**, dated 2026-04-01. Rediscover before new work;
+a release name or expected quarter is not evidence a release is available.
 
-- **Target validation**: Is a gene essential for survival in cancer cell lines with a specific mutation (e.g., KRAS-mutant)?
-- **Biomarker discovery**: What genomic features predict sensitivity to knockout of a gene?
-- **Synthetic lethality**: Find genes that are selectively essential when another gene is mutated/deleted
-- **Drug sensitivity**: What cell line features predict response to a compound?
-- **Pan-cancer essentiality**: Is a gene broadly essential across all cancer types (bad target) or selectively essential?
-- **Correlation analysis**: Which pairs of genes have correlated dependency profiles (co-essentiality)?
+### Verified public endpoint
 
-## Core Concepts
+`GET https://depmap.org/portal/api/no-captcha/download/files` returns a complete
+CSV catalogue, with no request body, API key, or pagination parameters. Required
+metadata columns are `release`, `release_date`, `filename`, and `md5_hash`.
+The live response also has `url`: **older files can have links, while recent
+release rows have blank links**. All 85 entries for 26Q1 had blank `url` values at
+review. Treat availability per row, not per endpoint.
 
-### Dependency Scores
+The [staff announcement](https://forum.depmap.org/t/provide-an-open-endpoint-for-latest-version-retrieval/4652)
+introduced this metadata route in July 2026. The older
+`https://depmap.org/portal/api/download/files` catalogue can supply download links
+but returned an HTML verification page during review, including with HTTP 200.
+Validate content before parsing. Obtain current files through the portal when
+verification is required. Refresh expiring signed links immediately before use;
+do not fabricate storage URLs or assume every new release is on Figshare.
 
-| Score | Range | Meaning |
-|-------|-------|---------|
-| **Chronos** (CRISPR) | Continuous, not bounded | More negative = larger loss of fitness; in normalized releases, −1 anchors the common-essential control median |
-| **RNAi DEMETER2** | ~ -3 to 0+ | Similar scale to Chronos |
-| **Gene Effect** | normalized | Normalized Chronos; −1 = median effect of common essential genes |
+No supported contract was verified for the former `/api/gene?gene_id=...` or
+`/api/data/gene_dependency` examples. Use local release matrices for gene slices.
+Do not assume a Python package named `depmap` is an official portal client.
 
-**Effect-size heuristics, not significance thresholds:**
-- Chronos ≤ −0.5 is a common exploratory filter; its error rate depends on screen quality.
-- Chronos ≈ −1 is a normalization anchor, not a universal dependency boundary.
-
-Use the selected release's documented dependency probability/FDR or hit-calling
-statistics when making binary calls; record their direction and cutoff separately from
-gene effect. Do not interpret a gene-effect value as a probability or p-value.
-
-### Cell Line Annotations
-
-Each cell line has:
-- `DepMap_ID`: unique identifier (e.g., `ACH-000001`)
-- `cell_line_name`: human-readable name
-- `primary_disease`: cancer type
-- `lineage`: broad tissue lineage
-- `lineage_subtype`: specific subtype
-
-## Core Capabilities
-
-### 1. DepMap API
+From the skill root, use the bundled [helpers](scripts/depmap_data.py):
 
 ```python
-import requests
-import pandas as pd
+from scripts.depmap_data import fetch_catalogue, select_file, verify_md5
 
-BASE_URL = "https://depmap.org/portal/api"
+catalogue = fetch_catalogue()
+public = catalogue[catalogue["release"].str.startswith("DepMap Public ")]
+print(public[["release", "release_date"]].drop_duplicates()
+      .sort_values("release_date", ascending=False).head(12))
 
-def depmap_get(endpoint, params=None):
-    url = f"{BASE_URL}/{endpoint}"
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    return response.json()
+# Explicit example pin; inspect discovery output before selecting your release.
+release = "DepMap Public 26Q1"
+record = select_file(catalogue, release, "CRISPRGeneEffect.csv")
+print(record[["release", "filename", "md5_hash"]])
+# After obtaining this file from the portal:
+# verify_md5("CRISPRGeneEffect.csv", record["md5_hash"])
 ```
 
-### 2. Gene Dependency Scores
+Save the selected metadata, retrieval date, release citation, local checksum, and
+README alongside analysis outputs. Record source dataset terms separately from
+this skill's license; newer release terms differ from older Figshare releases.
+For a missing published checksum, retain a local SHA-256 and explicitly state
+that it was not compared with a publisher checksum.
+
+## 2. Inspect file contracts before joining
+
+The following names were verified in the 26Q1 catalogue. Check that release's
+README for units and identifier level before treating a file as a numeric matrix.
+
+| File | Use and important contract |
+|---|---|
+| `CRISPRGeneEffect.csv` | Integrated, model-level Chronos effects; rows are ModelID, columns preserve `Symbol (EntrezID)` |
+| `CRISPRGeneEffectUncorrected.csv` | Uncorrected effects; not interchangeable with corrected effects |
+| `CRISPRGeneDependency.csv` | Release-specific dependency statistics; confirm probability/FDR definition and direction in the README |
+| `Model.csv` | Model metadata keyed by `ModelID` |
+| `ModelCondition.csv` | Growth/treatment conditions keyed by `ModelConditionID`, mapping to `ModelID` |
+| `ScreenGeneEffect.csv`, `ScreenSequenceMap.csv`, `CRISPRScreenMap.csv` | Screen-level effects and mappings; multiple screens can belong to one model |
+| `OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv` | Expression output with sequencing/model metadata and default-entry flags; exclude metadata columns from expression calculations |
+| `OmicsSomaticMutationsMatrixDamaging.csv`, `OmicsSomaticMutationsMatrixHotspot.csv` | Distinct mutation annotations; damaging and hotspot calls answer different biological questions |
+| `OmicsCNGeneWGS.csv`, `OmicsCNGeneMC_WES.csv` | Separate WGS/WES copy-number products; do not concatenate as one uniformly processed cohort |
+| `PortalOmicsCNGeneLog2.csv` | Transformed portal copy-number product; establish the exact transform before inversion |
+| `OmicsProfiles.csv`, `Gene.csv` | Omics provenance/mappings and gene annotations |
+| `AchillesScreenQCReport.csv`, `AchillesSequenceQCReport.csv` | Screen/sequence QC; apply documented eligibility rules rather than invented universal cutoffs |
+
+Current model annotations include `CellLineName`, `OncotreeLineage`,
+`OncotreePrimaryDisease`, and `OncotreeSubtype`. Legacy `sample_info.csv` fields
+(`DepMap_ID`, `lineage`, `primary_disease`) require an explicit conversion.
+`Model.csv` includes models without CRISPR measurements: absence from the effect
+matrix is not a nondependency score.
+
+Omics may be indexed by `SequencingID`, `ModelConditionID`, or `ModelID`. For a
+basal model analysis, use the release's `IsDefaultEntryForModel == Yes` flag,
+then require one row per `ModelID`. The condition-level flag
+`IsDefaultEntryForMC` answers a different question. Subset the assay/datatype
+before selecting defaults from a mapping table. Never average repeated conditions
+or count them as independent models without an explicit scientific design.
+
+See the [mapping guide source](https://github.com/broadinstitute/depmap-portal/blob/master/frontend/packages/portal-frontend/src/dataPage/components/MapSection.tsx)
+and [metadata definitions](https://forum.depmap.org/t/depmap-metadata/3694).
+
+## 3. Interpret Chronos and inspect a target
+
+Chronos gene effect is continuous and unbounded. More negative values indicate
+stronger loss of fitness. In the normalized release matrix, approximately 0 is
+the nonessential-control anchor and −1 is the common-essential-control anchor;
+−1 is not a dependency boundary. A filter such as ≤ −0.5 is exploratory, not a
+p-value, FDR, or probability cutoff. Positive effects may reflect growth advantage
+or technical noise and need validation.
+
+For binary calls, inspect the selected file's statistic and direction. A high
+dependency probability and a low FDR are different rules. Do not silently convert
+between them. Use release-matched positive/negative control lists and QC outputs.
+See [score and QC caveats](references/dependency_analysis.md).
+
+The following local-data examples are illustrative until run against your chosen
+files. Helper behavior is tested using synthetic fixtures; current bulk matrices
+were not downloaded during this review.
 
 ```python
-def get_gene_dependency(gene_symbol, dataset="Chronos_Combined"):
-    """Get CRISPR dependency scores for a gene across all cell lines."""
-    url = f"{BASE_URL}/gene"
-    params = {
-        "gene_id": gene_symbol,
-        "dataset": dataset
-    }
-    response = requests.get(url, params=params)
-    return response.json()
+from scripts.depmap_data import load_gene_effect, load_models, gene_profile
 
-# Alternatively, use the /data endpoint:
-def get_dependencies_slice(gene_symbol, dataset_name="CRISPRGeneEffect"):
-    """Get a gene's dependency slice from a dataset."""
-    url = f"{BASE_URL}/data/gene_dependency"
-    params = {"gene_name": gene_symbol, "dataset_name": dataset_name}
-    response = requests.get(url, params=params)
-    data = response.json()
-    return data
+effects = load_gene_effect("CRISPRGeneEffect.csv")
+models = load_models("Model.csv")
+profile = gene_profile(effects, models, "KRAS (3845)")
+print(profile[["CellLineName", "OncotreeLineage", "gene_effect"]].head(20))
+
+# Inspect actual annotation values, then choose an exact cohort.
+print(profile["OncotreeLineage"].value_counts())
+known = profile.dropna(subset=["OncotreeLineage"])
+lung = known.loc[known["OncotreeLineage"].eq("Lung"), "gene_effect"]
+other = known.loc[~known["OncotreeLineage"].eq("Lung"), "gene_effect"]
+if lung.empty or other.empty:
+    raise ValueError("Both cohorts require observed effects and known lineage")
+print({"n_lung": len(lung), "n_other": len(other),
+       "other_minus_lung_mean": other.mean() - lung.mean(),
+       "lung_fraction_below_exploratory_cutoff": (lung <= -0.5).mean()})
 ```
 
-### 3. Download-Based Analysis (Recommended for Large Queries)
+This is a descriptive comparison against other cancer models, not against normal
+tissue. Keep the denominator and missingness counts. Preserve complete gene labels;
+a symbol can be ambiguous, and the helper refuses ambiguous symbol resolution.
 
-For large-scale analysis, download DepMap data files and analyze locally:
+## 4. Test biomarker associations
 
-```python
-import pandas as pd
-import requests, os
-
-def download_depmap_data(url, output_path):
-    """Download a DepMap data file."""
-    response = requests.get(url, stream=True)
-    with open(output_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-
-# DepMap 24Q4 data files (update version as needed)
-FILES = {
-    "crispr_gene_effect": "https://figshare.com/ndownloader/files/...",
-    # OR download from: https://depmap.org/portal/download/all/
-    # Files available:
-    # CRISPRGeneEffect.csv - Chronos gene effect scores
-    # OmicsExpressionProteinCodingGenesTPMLogp1.csv - mRNA expression
-    # OmicsSomaticMutationsMatrixDamaging.csv - mutation binary matrix
-    # OmicsCNGene.csv - copy number
-    # sample_info.csv - cell line metadata
-}
-
-def load_depmap_gene_effect(filepath="CRISPRGeneEffect.csv"):
-    """
-    Load DepMap CRISPR gene effect matrix.
-    Rows = cell lines (DepMap_ID), Columns = genes (Symbol (EntrezID))
-    """
-    df = pd.read_csv(filepath, index_col=0)
-    # Rename columns to gene symbols only
-    df.columns = [col.split(" ")[0] for col in df.columns]
-    return df
-
-def load_cell_line_info(filepath="sample_info.csv"):
-    """Load cell line metadata."""
-    return pd.read_csv(filepath)
-```
-
-### 4. Identifying Selective Dependencies
-
-```python
-import numpy as np
-import pandas as pd
-
-def find_selective_dependencies(gene_effect_df, cell_line_info, target_gene,
-                                 cancer_type=None, threshold=-0.5):
-    """Find cell lines selectively dependent on a gene."""
-
-    # Get scores for target gene
-    if target_gene not in gene_effect_df.columns:
-        return None
-
-    scores = gene_effect_df[target_gene].dropna()
-    dependent = scores[scores <= threshold]
-
-    # Add cell line info
-    result = pd.DataFrame({
-        "DepMap_ID": dependent.index,
-        "gene_effect": dependent.values
-    }).merge(cell_line_info[["DepMap_ID", "cell_line_name", "primary_disease", "lineage"]])
-
-    if cancer_type:
-        result = result[result["primary_disease"].str.contains(cancer_type, case=False, na=False)]
-
-    return result.sort_values("gene_effect")
-
-# Example usage (after loading data)
-# df_effect = load_depmap_gene_effect("CRISPRGeneEffect.csv")
-# cell_info = load_cell_line_info("sample_info.csv")
-# deps = find_selective_dependencies(df_effect, cell_info, "KRAS", cancer_type="Lung")
-```
-
-### 5. Biomarker Analysis (Gene Effect vs. Mutation)
+1. Define the alteration before inspecting target scores. A damaging-call matrix
+   does not establish biallelic loss; activating KRAS hotspots require a different
+   definition from generic damaging mutations.
+2. Map profiles to the correct model/condition. Use `0` only for an assayed negative,
+   `1` for the prespecified biomarker, and missing for unknown status.
+3. Restrict to scientifically comparable models (lineage, culture conditions,
+   screen source and related-patient structure). Inspect confounding before testing.
+4. Test every eligible gene in the planned family, then adjust all its p-values
+   before selecting hits. Report group sizes, effect sizes, p-values, and q-values.
+5. Validate candidate synthetic lethality with matched/isogenic perturbations and
+   rescue or orthogonal evidence; association alone is insufficient.
 
 ```python
 import pandas as pd
-from scipy import stats
+from scripts.depmap_data import biomarker_scan
 
-def biomarker_analysis(gene_effect_df, mutation_df, target_gene, biomarker_gene):
-    """
-    Test if mutation in biomarker_gene predicts dependency on target_gene.
-
-    Args:
-        gene_effect_df: CRISPR gene effect DataFrame
-        mutation_df: Binary mutation DataFrame (1 = mutated)
-        target_gene: Gene to assess dependency of
-        biomarker_gene: Gene whose mutation may predict dependency
-    """
-    if target_gene not in gene_effect_df.columns or biomarker_gene not in mutation_df.columns:
-        return None
-
-    # Align cell lines
-    common_lines = gene_effect_df.index.intersection(mutation_df.index)
-    scores = gene_effect_df.loc[common_lines, target_gene].dropna()
-    mutations = mutation_df.loc[scores.index, biomarker_gene]
-
-    mutated = scores[mutations == 1]
-    wt = scores[mutations == 0]
-
-    stat, pval = stats.mannwhitneyu(mutated, wt, alternative='less')
-
-    return {
-        "target_gene": target_gene,
-        "biomarker_gene": biomarker_gene,
-        "n_mutated": len(mutated),
-        "n_wt": len(wt),
-        "mean_effect_mutated": mutated.mean(),
-        "mean_effect_wt": wt.mean(),
-        "pval": pval,
-        "significant": pval < 0.05
-    }
+# User-prepared, release-matched annotation after the mapping and curation above.
+status = pd.read_csv("curated_biomarker_status.csv", index_col="ModelID")["status"]
+results = biomarker_scan(effects, status, min_n=5)
+# Positive effect_size means stronger dependency in biomarker-positive models.
+candidates = results.loc[(results["qval"] < 0.1) & (results["effect_size"] > 0)]
 ```
 
-### 6. Co-Essentiality Analysis
+This one-sided Mann–Whitney screen is exploratory and does not adjust for
+covariates. `min_n=5` is an explicit example floor, not a power guarantee. For
+inference across lineages, fit an appropriate adjusted model and inspect effect
+stability within lineages; do not report the helper's q-value as confounder-adjusted.
+
+## 5. Co-essentiality and drug sensitivity
 
 ```python
-import pandas as pd
+from scripts.depmap_data import coessentiality
 
-def co_essentiality(gene_effect_df, target_gene, top_n=20):
-    """Find genes with most correlated dependency profiles (co-essential partners)."""
-    if target_gene not in gene_effect_df.columns:
-        return None
-
-    target_scores = gene_effect_df[target_gene].dropna()
-
-    correlations = {}
-    for gene in gene_effect_df.columns:
-        if gene == target_gene:
-            continue
-        other_scores = gene_effect_df[gene].dropna()
-        common = target_scores.index.intersection(other_scores.index)
-        if len(common) < 50:
-            continue
-        r = target_scores[common].corr(other_scores[common])
-        if not pd.isna(r):
-            correlations[gene] = r
-
-    corr_series = pd.Series(correlations).sort_values(ascending=False)
-    return corr_series.head(top_n)
-
-# Co-essential genes often share biological complexes or pathways
+correlates = coessentiality(effects, "KRAS (3845)", min_n=500)
+print(correlates[["gene", "n", "r", "pval", "qval"]].head(20))
 ```
 
-## Query Workflows
+`min_n` is configurable and should be prespecified for the analysis. Sparse genes
+can dominate rankings with spurious correlations; always retain the pairwise
+sample count. The helper uses pairwise complete observations and skips constant
+genes. Pearson/BH output still needs lineage, library, and screen-quality checks;
+co-essentiality is not proof of a physical interaction or shared pathway.
+The [DepMap team's discussion](https://forum.depmap.org/t/crispr-co-depency-top-hits-obscured-by-newly-added-screens/4503)
+documents this specific sparse-coverage failure mode.
 
-### Workflow 1: Target Validation for a Cancer Type
+For PRISM, first select the exact screen/release and endpoint. Treatment-info CSVs
+are annotations, not sensitivity values. The original primary screen's
+`primary-screen-replicate-collapsed-logfold-change.csv` has response rows keyed by
+cell-line `row_name` and columns keyed by treatment `column_name`. Join the
+corresponding cell-line and treatment-info files; retain compound, dose, and
+screen identity. Lower log2 fold change indicates greater loss of viability.
+Secondary-screen AUC comes from dose-response curve parameters and is not the
+same quantity as single-dose log fold change. See the
+[PRISM workflow](references/dependency_analysis.md) before loading these files.
 
-1. Download `CRISPRGeneEffect.csv` and `sample_info.csv`
-2. Filter cell lines by cancer type
-3. Compute mean gene effect for target gene in cancer vs. all others
-4. Calculate selectivity: how specific is the dependency to your cancer type?
-5. Cross-reference with mutation, expression, or CNA data as biomarkers
+## Validation and sources
 
-### Workflow 2: Synthetic Lethality Screen
+Before reporting: verify release/file identity, unique joins, identifier level,
+complete gene labels, cohort membership, missingness, screen eligibility, score
+units/direction, multiple-testing family, and whether evidence is observational.
+Expression, copy number, and CRISPR can share technical confounders; low expression
+does not guarantee a measured score of zero. Broad essentiality motivates normal
+cell/selectivity studies; it does not by itself prove a target is undruggable.
 
-1. Identify cell lines with mutation/deletion in gene of interest (e.g., BRCA1-mutant)
-2. Compute gene effect scores for all genes in mutant vs. WT lines
-3. Identify candidate associations with more negative effect in mutant lines; control lineage/confounding and multiple testing before calling significance
-4. Filter by selectivity and effect size; validate candidate synthetic lethality with controlled perturbation experiments
+- [26Q1 release notes](https://forum.depmap.org/t/announcing-the-26q1-release/4606): library correction and updated annotations.
+- [25Q2 release notes](https://forum.depmap.org/t/announcing-the-25q2-release/4257): omics/default mapping and WGS/WES changes.
+- [Chronos upstream](https://github.com/broadinstitute/chronos): normalization, copy-number correction, and hit-calling definitions.
+- [Dempster et al., Genome Biology 22:343 (2021)](https://doi.org/10.1186/s13059-021-02540-7): Chronos method, PMID 34930405.
+- [Original PRISM Repurposing resource](https://depmap.org/repurposing/): release-specific data and READMEs.
 
-### Workflow 3: Compound Sensitivity Analysis
-
-1. Download PRISM compound sensitivity data (`primary-screen-replicate-treatment-info.csv`)
-2. Correlate compound AUC/log2(fold-change) with genomic features
-3. Identify predictive biomarkers for compound sensitivity
-
-## DepMap Data Files Reference
-
-| File | Description |
-|------|-------------|
-| `CRISPRGeneEffect.csv` | CRISPR Chronos gene effect (primary dependency data) |
-| `CRISPRGeneEffectUnscaled.csv` | Unscaled CRISPR scores |
-| `RNAi_merged.csv` | DEMETER2 RNAi dependency |
-| `sample_info.csv` | Cell line metadata (lineage, disease, etc.) |
-| `OmicsExpressionProteinCodingGenesTPMLogp1.csv` | mRNA expression |
-| `OmicsSomaticMutationsMatrixDamaging.csv` | Damaging somatic mutations (binary) |
-| `OmicsCNGene.csv` | Copy number per gene |
-| `PRISM_Repurposing_Primary_Screens_Data.csv` | Drug sensitivity (repurposing library) |
-
-Download all files from: https://depmap.org/portal/download/all/
-
-## Best Practices
-
-- **Use Chronos scores** (not DEMETER2) for current CRISPR analyses — better controlled for cutting efficiency
-- **Distinguish pan-essential from cancer-selective**: Target genes with low variance (essential in all lines) are poor drug targets
-- **Validate with expression data**: A gene not expressed in a cell line will score as non-essential regardless of actual function
-- **Use DepMap ID** for cell line identification — cell_line_name can be ambiguous
-- **Account for copy number**: Amplified genes may appear essential due to copy number effect (junk DNA hypothesis)
-- **Multiple testing correction**: When computing biomarker associations genome-wide, apply FDR correction
-
-## Additional Resources
-
-- **DepMap Portal**: https://depmap.org/portal/
-- **Data downloads**: https://depmap.org/portal/download/all/
-- **DepMap paper**: Behan FM et al. (2019) Nature. PMID: 30971826
-- **Chronos paper**: Dempster JM et al. (2021) Nature Methods. PMID: 34349281
-- **GitHub**: https://github.com/broadinstitute/depmap-portal
-- **Figshare**: https://figshare.com/articles/dataset/DepMap_24Q4_Public/27993966
+The live no-captcha catalogue and original PRISM READMEs were fetched successfully.
+The helper uses Python urllib, which succeeded at review; the same public endpoint
+returned HTTP 403 with a default requests client. Surface access failures instead
+of treating an error page as data.
+Protected portal endpoints returned verification pages; authenticated downloads
+and current-matrix end-to-end analysis remain unverified. This review makes no
+claim of a working bearer-token API or undocumented gene-query endpoints.

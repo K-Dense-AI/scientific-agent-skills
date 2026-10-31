@@ -62,8 +62,8 @@ pdbl.retrieve_pdb_file("1CRN", file_format="pdb", pdir="structures/")
 # Download mmCIF file
 pdbl.retrieve_pdb_file("1CRN", file_format="mmCif", pdir="structures/")
 
-# Download obsolete structure
-pdbl.retrieve_pdb_file("1CRN", obsolete=True, pdir="structures/")
+# For an accession confirmed obsolete in the PDB archive only:
+# pdbl.retrieve_pdb_file(obsolete_id, obsolete=True, file_format="mmCif", pdir="structures/")
 ```
 
 ## Navigating Structure Hierarchy
@@ -210,7 +210,7 @@ model = structure[0]
 dssp = DSSP(model, "1crn.pdb")
 
 # Access results
-for residue_key in dssp:
+for residue_key in dssp.keys():
     dssp_data = dssp[residue_key]
     residue_id = residue_key[1]
     ss = dssp_data[2]  # Secondary structure code
@@ -233,7 +233,7 @@ Secondary structure codes:
 
 ```python
 # Get relative solvent accessibility
-for residue_key in dssp:
+for residue_key in dssp.keys():
     acc = dssp[residue_key][3]  # Relative accessibility
     print(f"Residue {residue_key[1]}: {acc:.2f} relative accessibility")
 ```
@@ -302,7 +302,7 @@ def get_phi_psi(structure):
             for poly in polypeptides:
                 angles = poly.get_phi_psi_list()
                 for residue, (phi, psi) in zip(poly, angles):
-                    if phi and psi:  # Skip None values
+                    if phi is not None and psi is not None:  # Keep valid zero angles
                         phi_psi.append((residue.resname, phi, psi))
 
     return phi_psi
@@ -361,18 +361,18 @@ io.save("chain_a.pdb", ChainASelect())
 import numpy as np
 
 # Rotate structure
-from Bio.PDB.vectors import rotaxis
+from Bio.PDB.vectors import Vector, rotaxis
 
 # Define rotation axis and angle
 axis = Vector(1, 0, 0)  # X-axis
 angle = np.pi / 4  # 45 degrees
 
 # Create rotation matrix
-rotation = rotaxis(angle, axis)
+rotation = rotaxis(angle, axis).T  # Atom.transform uses row-vector multiplication
 
 # Apply rotation to all atoms
 for atom in structure.get_atoms():
-    atom.transform(rotation, Vector(0, 0, 0))
+    atom.transform(rotation, np.zeros(3))
 ```
 
 ### Superimpose Structures
@@ -385,9 +385,12 @@ parser = PDBParser()
 structure1 = parser.get_structure("ref", "reference.pdb")
 structure2 = parser.get_structure("mov", "mobile.pdb")
 
-# Get CA atoms from both structures
-ref_atoms = [atom for atom in structure1.get_atoms() if atom.name == "CA"]
-mov_atoms = [atom for atom in structure2.get_atoms() if atom.name == "CA"]
+# Establish homologous residue pairs first (e.g. from a sequence alignment).
+# The order is explicit: reference residue 10 corresponds to mobile residue 12.
+# These IDs are illustrative; replace with the verified map for these inputs.
+residue_pairs = [(10, 12), (11, 13), (12, 14)]
+ref_atoms = [structure1[0]["A"][i]["CA"] for i, j in residue_pairs]
+mov_atoms = [structure2[0]["A"][j]["CA"] for i, j in residue_pairs]
 
 # Superimpose
 super_imposer = Superimposer()
@@ -461,7 +464,7 @@ for model in structure:
         for pp in ppb.build_peptides(chain):
             seq_record = SeqRecord(
                 pp.get_sequence(),
-                id=f"{structure.id}_{chain.id}",
+                id=f"{structure.id}_{model.id}_{chain.id}_{pp[0].id[1]}_{pp[-1].id[1]}",
                 description=f"Chain {chain.id}"
             )
             records.append(seq_record)
@@ -472,7 +475,7 @@ SeqIO.write(records, "structure_sequences.fasta", "fasta")
 ## Best Practices
 
 1. **Use mmCIF** for large structures and modern data
-2. **Set QUIET=True** to suppress parser warnings
+2. **Inspect parser warnings** before using `QUIET=True`; suppression does not repair data
 3. **Check for missing atoms** before analysis
 4. **Use NeighborSearch** for efficient spatial queries
 5. **Validate structure quality** with DSSP or Ramachandran analysis
@@ -493,14 +496,10 @@ parser = PDBParser()
 structure1 = parser.get_structure("s1", "structure1.pdb")
 structure2 = parser.get_structure("s2", "structure2.pdb")
 
-# Get CA atoms
-atoms1 = [atom for atom in structure1[0]["A"].get_atoms() if atom.name == "CA"]
-atoms2 = [atom for atom in structure2[0]["A"].get_atoms() if atom.name == "CA"]
-
-# Ensure same number of atoms
-min_len = min(len(atoms1), len(atoms2))
-atoms1 = atoms1[:min_len]
-atoms2 = atoms2[:min_len]
+# Use a verified residue correspondence; never truncate unmatched atom lists.
+residue_pairs = [(10, 12), (11, 13), (12, 14)]  # illustrative map
+atoms1 = [structure1[0]["A"][i]["CA"] for i, j in residue_pairs]
+atoms2 = [structure2[0]["A"][j]["CA"] for i, j in residue_pairs]
 
 # Calculate RMSD
 sup = Superimposer()
@@ -521,11 +520,10 @@ def find_binding_site(structure, ligand_chain, ligand_res_id, distance=5.0):
 
     # Get all protein atoms
     protein_atoms = []
-    for chain in structure[0]:
-        if chain.id != ligand_chain:
-            for residue in chain:
-                if residue.id[0] == " ":  # Standard residue
-                    protein_atoms.extend(residue.get_atoms())
+    from Bio.PDB.Polypeptide import is_aa
+    for residue in structure[0].get_residues():
+        if residue is not ligand and is_aa(residue):
+            protein_atoms.extend(residue.get_atoms())
 
     # Find nearby atoms
     ns = NeighborSearch(protein_atoms)
@@ -545,20 +543,12 @@ import numpy as np
 
 def center_of_mass(entity):
     """Calculate center of mass for structure entity."""
-    masses = []
-    coords = []
-
-    # Atomic masses (simplified)
-    mass_dict = {"C": 12.0, "N": 14.0, "O": 16.0, "S": 32.0}
-
-    for atom in entity.get_atoms():
-        mass = mass_dict.get(atom.element, 12.0)
-        masses.append(mass)
-        coords.append(atom.coord)
-
-    masses = np.array(masses)
-    coords = np.array(coords)
-
-    com = np.sum(coords * masses[:, np.newaxis], axis=0) / np.sum(masses)
-    return com
+    atoms = list(entity.get_atoms())
+    if not atoms:
+        raise ValueError("Cannot calculate center of mass of an empty entity")
+    masses = np.array([atom.mass for atom in atoms])
+    if not np.all(np.isfinite(masses)) or np.any(masses <= 0):
+        raise ValueError("Check element assignments before calculating masses")
+    coords = np.array([atom.coord for atom in atoms])
+    return np.average(coords, axis=0, weights=masses)
 ```

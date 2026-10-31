@@ -22,7 +22,8 @@ Parameters:
 - `types` — filter by type: `Pathway`, `Reaction`, `Protein`, `Complex`, `SmallMolecule`
 - `cluster` — boolean, cluster results (default true)
 - `rows` — page size
-- `Start row` — offset for pagination
+- `Start row` — zero-based offset (URL-encode the space as `%20`)
+- `Force filters=true` — keep requested filters even when no records match; the default can relax filters to obtain results. Encode this name as `Force%20filters`.
 
 Example:
 ```
@@ -59,7 +60,7 @@ GET /search/suggest?query={partial_term}
 ```
 GET /data/pathways/top/{species}
 ```
-Example: `/data/pathways/top/Homo+sapiens`
+Example: `/data/pathways/top/Homo%20sapiens`
 
 ### Pathway details
 ```
@@ -74,7 +75,7 @@ GET /data/pathway/{id}/containedEvents
 
 ### Participants of a reaction
 ```
-GET /data/event/{id}/participants
+GET /data/participants/{id}
 ```
 
 ### Ancestors of an event

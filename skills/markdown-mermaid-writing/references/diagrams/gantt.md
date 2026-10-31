@@ -15,7 +15,7 @@
 ```mermaid
 gantt
     accTitle: Q1 Product Launch Roadmap
-    accDescr: Eight-week project timeline across discovery, design, build, and launch phases with milestones for design review and go/no-go decision
+    accDescr: Illustrative project timeline across discovery, design, build, and launch phases with milestones for design review and go/no-go decision
 
     title 🚀 Q1 Product Launch Roadmap
     dateFormat YYYY-MM-DD
@@ -48,7 +48,7 @@ gantt
 
 - Use `section` with emoji prefix to group by phase or team
 - Mark milestones with `:milestone` and `0d` duration — prefix with 🏁
-- Status tags: `:done`, `:active`, `:crit` (critical path, highlighted)
+- Status tags: `:done`, `:active`, `:crit` (manually highlighted critical task)
 - Use `after taskId` for dependencies
 - Keep total timeline **under 3 months** for readability
 - Use `axisFormat` to control date display (`%b %d` = "Jan 05", `%m/%d` = "01/05")
@@ -79,12 +79,12 @@ gantt
 
 ## Complex Example
 
-A cross-team platform migration spanning 4 months with 6 sections, 24 tasks, and 3 milestones. Shows dependencies across teams (backend migration blocks frontend migration), critical path items, and the full lifecycle from planning through launch monitoring.
+A cross-team platform migration with 6 sections and 3 milestones. Shows dependencies across teams (backend migration blocks frontend migration), critical path items, and the full lifecycle from planning through launch monitoring.
 
 ```mermaid
 gantt
     accTitle: Multi-Team Platform Migration Roadmap
-    accDescr: Four-month migration project across planning, backend, frontend, data, QA, and launch teams with cross-team dependencies, critical path items, and three milestone gates
+    accDescr: Illustrative migration project across planning, backend, frontend, data, QA, and launch teams with cross-team dependencies, critical path items, and three milestone gates
 
     title 🚀 Platform Migration — Q1/Q2 2026
     dateFormat YYYY-MM-DD
@@ -133,6 +133,11 @@ gantt
 ### Why this works
 
 - **6 sections map to real teams** — each team sees their workstream at a glance. Cross-team dependencies (frontend waits for backend API, QA waits for backend deploy) are explicit via `after taskId`.
-- **`:crit` marks the critical path** — the chain of tasks that determines the total project duration. If any critical task slips, the launch date moves. Mermaid highlights these in red.
+- **`:crit` is a manual status tag** — Mermaid does not compute a critical path. Calculate dependencies, durations, and float separately before describing tasks as critical.
 - **3 milestones are decision gates** — Planning Complete, QA Sign-off, and Go/No-Go. These are the points where stakeholders make decisions, not just status updates.
-- **24 tasks across 4 months** is readable because sections group by team. Without sections, this would be an unreadable wall of bars.
+- **Tasks grouped by team** are readable because sections group by team. Without sections, this would be an unreadable wall of bars.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/gantt.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

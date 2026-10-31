@@ -1,209 +1,160 @@
 # LAPIS API reference
 
-LAPIS (Lightweight API for Sequences) is the query layer GenSpectrum runs in front of SILO. One
-API shape serves every pathogen; what differs between deployments is the **schema**, and almost
-every mistake in this area comes from assuming otherwise.
+Reviewed 2026-10-01 against live `/api-docs`, `/sample/databaseConfig` and `/sample/info`.
+SARS-CoV-2 used LAPIS 0.8.7/SILO 0.14.3. The other 14 registry entries used LAPIS 0.8.0/SILO
+0.11.0. Upstream had released 0.8.8 on 2026-09-16; hosted deployments lag it.
+This is a per-deployment contract; a current documentation page can describe features
+an older server does not support.
 
-Everything below was verified against the live services on 2026-07-27 (`lapisVersion 0.8.3`,
-`siloVersion 0.11.2`).
+## Deployment discovery and access
 
-## Instances
-
-| `--instance` | Base URL | Backing data |
-| --- | --- | --- |
-| `sars-cov-2` | `https://lapis.cov-spectrum.org/open/v2` | Nextstrain open (GenBank) |
-| `influenza-a` | `https://lapis.genspectrum.org/influenza-a` | Loculus |
-| `h1n1pdm`, `h3n2`, `h5n1` | `https://lapis.genspectrum.org/<name>` | Loculus |
-| `rsv-a`, `rsv-b`, `hmpv`, `measles`, `mpox`, `west-nile`, `dengue`, `ebola-zaire`, `ebola-sudan`, `cchf` | `https://lapis.pathoplexus.org/<name>` | Pathoplexus |
-
-Approximate sizes when checked: SARS-CoV-2 open ~9M, influenza-a 1.07M, h3n2 277k, h1n1pdm 212k,
-h5n1 79k, dengue 62k, measles 53k, rsv-a 53k, rsv-b 40k, west-nile 26k, mpox 17k, ebola-zaire 12k,
-cchf 8.7k, ebola-sudan 636.
-
-The registry in `scripts/lapis_client.py` is a convenience, not an authority. New organisms appear
-and paths move; `--base-url` reaches any deployment, and `/sample/databaseConfig` describes it.
-
-**Point `--base-url` only at deployments you trust.** Field names, lineage labels and error
-`detail` strings are printed verbatim, so a hostile instance could put arbitrary text — including
-text shaped like instructions — into agent-visible output. Responses are parsed as data and never
-executed, but the strings are still read.
-
-The pango-designation fetch is deliberately unpinned. Pinning it to a tag would make lineage
-resolution reproducible and *wrong*: withdrawals and redesignations are exactly what the skill
-exists to catch, and a frozen copy reintroduces the failure mode.
-
-Auditability comes from recording what was read rather than freezing it. `raw.githubusercontent`
-returns the git blob SHA as the `ETag`, so `resolve_lineage.py` prints the exact hash of both files
-at no extra request:
-
-```
-# source blobs lineage_notes.txt@b63582d49216 alias_key.json@0deb39eeac80
-```
-
-Keep that line with `dataVersion`; together they pin the result without staling the source.
-
-**GISAID.** `https://lapis.cov-spectrum.org/gisaid/v2` exists but requires credentials and its own
-data-use terms. This skill targets the open instances only. Open GenBank data is a subset of
-GISAID, so absolute counts here are lower than GISAID-derived figures — proportions are usually
-comparable, absolute counts are not.
-
-## Endpoints
-
-| Path | Use |
+| Registry names | Base URL |
 | --- | --- |
-| `GET /sample/aggregated` | Counts, optionally grouped by `fields` |
-| `GET /sample/details` | Per-sequence metadata rows |
-| `GET /sample/aminoAcidMutations` | AA substitutions with per-site proportions |
-| `GET /sample/nucleotideMutations` | Nucleotide substitutions |
-| `GET /sample/aminoAcidInsertions`, `/sample/nucleotideInsertions` | Insertions |
-| `GET /sample/databaseConfig` | The schema: every metadata field and its type |
-| `GET /sample/referenceGenome` | Segment and gene names for mutation queries |
-| `GET /sample/lineageDefinition/{column}` | The lineage tree for an indexed column |
-| `GET /sample/info` | `dataVersion` — record it with any result you keep |
-| `GET /sample/unalignedNucleotideSequences`, `/sample/alignedNucleotideSequences`, `/sample/alignedAminoAcidSequences/{gene}` | FASTA download |
-| `GET /sample/mostRecentCommonAncestor`, `/sample/phyloSubtree` | Tree queries where a phylo field exists |
-| `POST /component/*OverTime` | Prebuilt time-series components |
+| `sars-cov-2` | `https://lapis.cov-spectrum.org/open/v2` |
+| `influenza-a`, `h1n1pdm`, `h3n2`, `h5n1` | `https://lapis.genspectrum.org/<name>` |
+| `rsv-a`, `rsv-b`, `hmpv`, `measles`, `mpox`, `west-nile`, `dengue`, `ebola-zaire`, `ebola-sudan`, `cchf` | `https://lapis.pathoplexus.org/<name>` |
 
-Every endpoint accepts GET and POST. Filters are query parameters; unknown ones are rejected.
+All 15 schema/info endpoints answered without authentication in this review. Pathoplexus and
+GenSpectrum use Loculus records; applicable terms, versions and revocations matter. The helpers
+select latest, nonrevoked and OPEN records when those schema fields exist. Inspect and report
+these filters; do not assume every publicly queryable record permits unrestricted reuse.
 
-## Reading the schema first
+Other deployments can require OAuth bearer tokens or separate access controls. These CLIs do
+not implement authenticated access. Do not put credentials in `--base-url`. GISAID-derived access
+is outside the verified open workflow; do not infer its access method from these deployments.
+Open GenBank/INSDC and GISAID datasets have different coverage and submission processes, so neither
+strict set inclusion nor comparable proportions should be assumed.
 
-`/sample/databaseConfig` returns `schema.metadata[]` with a `name`, a `type`, and
-`generateLineageIndex`. Three things follow from it, and all three differ between instances:
+Official sources: [authentication](https://lapis.cov-spectrum.org/open/v2/docs/concepts/authentication),
+[Pathoplexus API usage](https://pathoplexus.org/docs/how-to/search-download-seqs-api),
+[Pathoplexus terms](https://pathoplexus.org/about/terms-of-use).
 
-**1. Which column holds the lineage.** `schema.metadata[].generateLineageIndex` is true for
-`pangoLineage` and `nextcladePangoLineage` on SARS-CoV-2 and for nothing at all on H5N1, whose
-lineage-like column is a plain string `clade`.
+## Endpoint methods and response shapes
 
-**2. Which date columns accept ranges.** LAPIS derives `<field>From` / `<field>To` from the
-declared type. Only `date`, `int` and `float` get them.
+Use `<base>/api-docs` for the deployment's generated OpenAPI. The introductory documentation's
+statement that every endpoint supports GET and POST is too broad; inspected schemas distinguish:
 
-| Instance | Collection date | Type | Range filter |
+| Path | Methods | Response/purpose |
+| --- | --- | --- |
+| `/sample/aggregated` | GET, POST | `data` rows with `count`, grouped by `fields`; `info` envelope |
+| `/sample/details` | GET, POST | metadata rows; `fields` is a projection |
+| `/sample/aminoAcidMutations`, `/sample/nucleotideMutations` | GET, POST | site-wise mutation count, coverage, proportion |
+| `/sample/aminoAcidInsertions`, `/sample/nucleotideInsertions` | GET, POST | insertion counts; separate from mutations |
+| `/sample/databaseConfig` | GET | raw schema object, including `schema.metadata` |
+| `/sample/referenceGenome` | GET | `nucleotideSequences` and `genes`, each with `name` and reference sequence |
+| `/sample/lineageDefinition/{column}` | GET | raw lineage dictionary for an indexed column |
+| `/sample/info` | GET | raw `dataVersion`, `lapisVersion`, `siloVersion`, request provenance |
+| `/sample/unalignedNucleotideSequences`, `/sample/alignedNucleotideSequences` | GET, POST | nucleotide sequences; FASTA or specified supported format |
+| `/sample/unalignedNucleotideSequences/{segment}`, `/sample/alignedNucleotideSequences/{segment}` | GET, POST | per-segment forms on segmented instances |
+| `/sample/alignedAminoAcidSequences`, `/sample/alignedAminoAcidSequences/{gene}` | GET, POST | all or selected translated sequences |
+| `/sample/mostRecentCommonAncestor`, `/sample/phyloSubtree` | GET, POST | tree queries requiring a supported `phyloTreeField` |
+| `/component/queriesOverTime` | POST | JSON `filters`, `dateField`, `dateRanges`, `queries` |
+| `/component/aminoAcidMutationsOverTime`, `/component/nucleotideMutationsOverTime` | POST | JSON `filters`, `dateField`, `dateRanges`, `includeMutations` |
+
+Component `dateRanges` entries use `dateFrom`/`dateTo`; `dateField` chooses the actual schema
+column. `queries` entries specify `countQuery`, optional `coverageQuery` and `displayLabel`.
+These component/tree/download routes were schema-reviewed, not exercised with large datasets.
+Tree results ignore records absent from the tree; MRCA reports `missingNodeCount` and supports
+`printNodesNotInTree`. Inspect the response schema rather than assume every filtered record has
+an evolutionary placement.
+
+GET uses URL parameters. POST query routes accept JSON with `Content-Type: application/json`;
+arrays are JSON arrays. Form-encoded POST uses repeated keys. For GET, comma-delimited lists are
+documented and repeated keys also work for metadata list filters. Unknown keys fail rather than
+being silently ignored. The bundled CLIs issue GET requests only.
+
+Sources: [SARS-CoV-2 OpenAPI](https://lapis.cov-spectrum.org/open/v2/api-docs),
+[H5N1 OpenAPI](https://lapis.genspectrum.org/h5n1/api-docs),
+[RSV-A OpenAPI](https://lapis.pathoplexus.org/rsv-a/api-docs),
+[request methods](https://lapis.cov-spectrum.org/open/v2/docs/concepts/request-methods).
+
+## Read the schema before filtering
+
+`schema.metadata[]` declares `name`, `type` and optional `generateLineageIndex`. Since LAPIS 0.6,
+that index value can be a string naming the index. Test for an enabled value, not identity with
+boolean `true`. Indexed taxonomic fields such as `hostTaxonId` are not necessarily lineage calls.
+
+`date`, `int`, and `float` fields support inclusive `<field>From`/`<field>To`; the date-analysis
+scripts require `date`, not merely any range-capable field. A string holding a date is still a
+string. In the reviewed schemas:
+
+| Deployment | Collection | Submission/release | Geography |
 | --- | --- | --- | --- |
-| `sars-cov-2` | `date` | date | `dateFrom` / `dateTo` |
-| `h5n1` | `sampleCollectionDate` | **string** | none |
-| `h5n1` | `sampleCollectionDateRangeLower` | date | `sampleCollectionDateRangeLowerFrom` / `...To` |
+| SARS-CoV-2 | `date` | `dateSubmitted` | `country` |
+| GenSpectrum influenza | `sampleCollectionDateRangeLower` / `RangeUpper` | `ncbiReleaseDate` | `country` |
+| Pathoplexus | `sampleCollectionDateRangeLower` / `RangeUpper` | `earliestReleaseDate` or `ncbiReleaseDate` | `geoLocCountry` |
 
-`dateFrom=2025-01-01` against H5N1 is a 400. The error body lists every valid key for that
-instance, which is the fastest way to discover a schema by hand.
+`sampleCollectionDate` in the latter deployments is a string that can encode partial dates.
+Choosing the lower range endpoint as though it were an exact date would put a month/year-only
+sample into one arbitrary week. The bundled date analyses retain only equal lower/upper bounds.
+A submission/release field is a provenance choice: NCBI release and first Pathoplexus release are
+different events; neither guarantees the date the record first became queryable in this LAPIS.
 
-**3. Which submission date exists.** `dateSubmitted` on SARS-CoV-2; `ncbiReleaseDate` on H5N1
-(`submittedDate` and `releasedDate` are there too, but typed string, so they cannot be ranged).
+Null filtering uses `<field>.isNull=true` or `false`; empty strings no longer mean null. The
+scripts' `--where` is a narrow metadata filter interface; it does not expose every advanced
+query feature, and repeated identical keys overwrite, rather than append, in these CLIs.
 
-`scripts/lapis_client.py` does this resolution in `describe_instance()`, `pick_date_field()` and
-`pick_lineage_field()`, and raises rather than guessing.
+Sources: [database config](https://lapis.cov-spectrum.org/open/v2/sample/databaseConfig),
+[LAPIS changelog](https://github.com/GenSpectrum/LAPIS/blob/main/CHANGELOG.md).
 
-## Lineage filters and the wildcard
+## Lineages and mutation rows
 
-On a column with a lineage index, a trailing `*` means "this lineage and all descendants":
+For an indexed column, `pangoLineage=XFG` is exact and `pangoLineage=XFG*` includes descendants.
+Without an index, `*` is a literal string and can silently match zero records. The helper refuses
+that query. An indexed invalid name can produce HTTP 400 while an unindexed typo produces zero.
+The lineage-definition route is queried using the **metadata column name**, not the index ID.
+It describes the query hierarchy; recombinant ancestry must be checked against the nomenclature
+source. The observed Pango tree roots recombinant labels rather than linking their biological
+parents.
 
-```
-pangoLineage=XFG      ->   4 sequences   (sequences named exactly XFG)
-pangoLineage=XFG*     -> 640 sequences   (XFG and every descendant)
-```
+Mutation rows contain `mutation`, `sequenceName`, `position`, `mutationFrom`, `mutationTo`,
+`count`, `coverage`, `proportion`. The denominator is matching sequences with resolvable calls
+at that site, not all matching sequences and not raw read depth. Deletions can occur as `-` in
+mutation results; insertions have separate endpoints.
 
-On a column **without** one, `*` is matched literally and finds nothing:
+`minProportion` defaults to 0.05. Comparisons fetch with zero cutoff, then apply the reporting
+threshold locally. A missing mutation row still does not provide the opposite side's coverage
+or prove a zero frequency; the comparison preserves missing values and labels `not_comparable`.
+AA genes and nucleotide sequence names are distinct namespaces (`HA` versus `seg4`, `S` versus
+`main`). Validate against `referenceGenome`; positions refer to that declared reference.
 
-```
-clade=2.3.4.4b        -> 62413 sequences
-clade=2.3.4.4b*       ->     0 sequences
-```
+Source: [mutation filters](https://lapis.cov-spectrum.org/open/v2/docs/concepts/mutation-filters/).
 
-Same syntax, opposite meaning, no warning either way. `lineage_filter()` refuses to build the
-second query.
+## Aggregation, ordering and pagination
 
-The index also decides how a bad name fails. On an indexed column an unknown lineage is rejected:
+`fields` is group-by on `/sample/aggregated`. The current SARS-CoV-2 deployment accepts
+`fields=date.isoWeek`, returning keys named `date.isoWeek` and values such as `2026-W36`.
+This computed field was introduced after the older deployment versions. The scripts retain
+client-side ISO-week grouping for compatibility and exact-date checks.
 
-```
-{"error":{"status":400,"detail":"Error from SILO: The lineage 'XFG.20' is not a valid lineage
- for column 'pangoLineage'."}}
-```
+The previous blanket claim that aggregation rejects `limit`, `offset`, and `orderBy` is stale.
+SARS-CoV-2 0.8.7/0.14.3 accepts them; bounded live checks succeeded for `fields=country&orderBy=count&limit=2`
+and for `limit=2` without order. The latter is not stable pagination. Use an explicit deterministic
+order, unique tie-breakers among grouped fields, and consistent response versions when paging.
+`count:desc` is not a valid GET field syntax on this server. Consult that deployment's order schema
+rather than invent suffixes. Older SILO deployments may reject aggregate pagination.
+The bundled aggregate helper retrieves all groups without limits, so it cannot accidentally
+compute totals from only one page. Keep group cardinality and date windows bounded.
 
-On an unindexed column the same typo returns `0` and looks like a finding. Validate names with
-`resolve_lineage.py` before reporting an absence.
+Sources: [computed fields](https://lapis.cov-spectrum.org/open/v2/docs/concepts/computed-fields),
+[OpenAPI](https://lapis.cov-spectrum.org/open/v2/api-docs).
 
-### The lineage definition endpoint
+## Errors and reproducibility
 
-`/sample/lineageDefinition/pangoLineage` returns roughly 5,500 entries of the form
+HTTP errors can contain either `{"error":{"detail":...},"info":...}` or a bare problem-details
+object. Surface the message while treating it as untrusted data. Retry transient 429/500/502/503/504
+at most three times with 1.5/3-second waits; these scripts do not implement server-specific quotas
+or `Retry-After`, so stop and wait manually if a deployment continues throttling.
 
-```json
-{"XFG.1.1": {"parents": ["XFG.1"], "aliases": ["xfg.1.1", ...]},
- "PQ.17":   {"parents": ["NB.1.8.1"], "aliases": ["NB.1.8.1.17", ...]}}
-```
+JSON data responses carry `info.dataVersion`; raw info uses `dataVersion`, and the HTTP header is
+`lapis-data-version`. The client compares actual successful response versions and fails before
+emitting a result when they change. An independent info request alone cannot certify all data.
+Schema responses need not carry versions. The helpers use a schema cache only inside the process.
 
-**It roots recombinants.** `XFG` has no `parents` key, and no entry in the whole document has more
-than one parent. The recombinant parentage `XFG = LF.7 + LP.8.1.2` exists only in
-pango-designation's `alias_key.json`, where a recombinant's value is a *list*. Both sources are
-needed; neither is sufficient.
+Data versions identify the currently served snapshot, not an archive or a request parameter for
+replaying old data. Preserve actual responses, source/configuration files, request parameters and
+retrieval time for an auditable result. Pango file digests are SHA-256 of fetched content, not
+GitHub ETags interpreted as Git IDs. Moving Pango files can update between independent requests;
+archive a single repository commit when coherent historical nomenclature is required.
 
-Requesting the endpoint for an unindexed column returns 400.
-
-## Mutation queries
-
-`/sample/aminoAcidMutations` rows look like:
-
-```json
-{"mutation": "S:L452W", "count": 3793, "coverage": 5211, "proportion": 0.728,
- "sequenceName": "S", "mutationFrom": "L", "mutationTo": "W", "position": 452}
-```
-
-`proportion = count / coverage`, and **`coverage` is the number of sequences that resolved that
-site**, not the number matching the filter. A site covered by 12 sequences can report
-`proportion: 1.000`. Always read `coverage` alongside it.
-
-`minProportion` (default 0.05) prunes the response server-side. For a diff between two lineages,
-fetch both at a low threshold and apply the reporting threshold client-side — otherwise a mutation
-absent from one side is indistinguishable from one pruned out of it. `mutation_profile.py` does
-exactly this.
-
-`sequenceName` is the gene on an unsegmented genome (`S`, `ORF1a`, `N`) and the gene or segment on
-a segmented one. Get the valid names from `/sample/referenceGenome`:
-
-- SARS-CoV-2: one sequence `main`; genes `E M N ORF1a ORF1b ORF3a ORF6 ORF7a ORF7b ORF8 ORF9b S`
-- H5N1: segments `seg1`–`seg8`; genes `PB2 PB1 PA PAX HA NP NA M1 M2 NS1 NS2`
-
-Nucleotide mutations on a segmented genome must be qualified by segment (`seg4:A123G`).
-
-## Aggregation
-
-`fields` on `/sample/aggregated` is the **group-by**, not a projection:
-
-```
-GET /sample/aggregated?fields=pangoLineage&country=USA&dateFrom=2026-04-01
--> [{"count": 286, "pangoLineage": "XFG.1.1"}, ...]
-```
-
-`limit`, `offset` and `orderBy` are rejected here — the result has no inherent ordering:
-
-```
-"detail": "Offset and limit can only be applied if the output of the operation has some
- ordering. ... Aggregated however produces unordered results."
-```
-
-Sort client-side. There is no ISO-week grouping; group by the date field and bin weeks yourself
-(`bin_weekly()`). Grouped rows carry nulls for sequences whose date was never reported — count
-them separately rather than dropping them silently.
-
-## Errors, versioning, and etiquette
-
-Two error envelopes are in use, both carrying `detail`:
-
-```json
-{"error": {"type": "about:blank", "title": "Bad request", "status": 400, "detail": "..."},
- "info":  {"dataVersion": null, "requestId": "...", "lapisVersion": "0.8.3"}}
-```
-
-```json
-{"type": "about:blank", "title": "Bad Request", "status": 400, "instance": "/open/v2/query/parse"}
-```
-
-`_error_detail()` reads both. Always surface `detail` — on a bad filter key it enumerates every
-valid key for that instance.
-
-`info.dataVersion` accompanies every successful response and identifies the underlying snapshot.
-**Record it with any figure that will be quoted.** The same query returns different numbers on
-different days, and without the data version a result cannot be reproduced or audited.
-
-These are free public services with no API key. Ask for aggregates rather than per-sequence rows,
-send one query per question instead of paginating through sequences, and retry `429`/`5xx` with
-backoff (`MAX_ATTEMPTS = 3`, 1.5 s linear) rather than hammering.
+Source: [data versions](https://lapis.cov-spectrum.org/open/v2/docs/concepts/data-versions).

@@ -25,38 +25,38 @@ JSON. Most endpoints return paginated results with structure:
 
 ## Pagination Parameters (common to most endpoints)
 - `page` -- 0-indexed page number (default: 0)
-- `itemsPerPage` -- results per page (default: 250, max: 250)
+- `itemsPerPage` -- results per page (default: 250; current schema maximum: 100000, use small pages)
 
 ## Key Endpoints
 
 ### Gene expression (median by tissue)
 ```
-GET /expression/medianGeneExpression?gencodeId=ENSG00000139618.17&datasetId=gtex_v8
+GET /expression/medianGeneExpression?gencodeId=ENSG00000139618.14&datasetId=gtex_v8
 ```
 Parameters:
 - `gencodeId` -- Versioned Ensembl gene ID (required)
-- `datasetId` -- `gtex_v8` (required)
+- `datasetId` -- `gtex_v8` (explicit historical selection; defaults vary by endpoint)
 - `tissueSiteDetailId` -- filter to specific tissue (optional)
 
 Returns median TPM per tissue for the gene.
 
-### Gene expression (all, for a tissue)
+### Highly expressed genes for a tissue
 ```
-GET /expression/medianGeneExpression?tissueSiteDetailId=Liver&datasetId=gtex_v8
+GET /expression/topExpressedGene?tissueSiteDetailId=Liver&datasetId=gtex_v8
 ```
 
 ### Single-tissue eQTLs
 ```
-GET /association/singleTissueEqtl?gencodeId=ENSG00000139618.17&tissueSiteDetailId=Whole_Blood&datasetId=gtex_v8
+GET /association/singleTissueEqtl?gencodeId=ENSG00000139618.14&tissueSiteDetailId=Whole_Blood&datasetId=gtex_v8
 ```
 Parameters:
-- `gencodeId` -- Versioned Ensembl gene ID (required)
-- `tissueSiteDetailId` -- tissue ID (required)
-- `datasetId` -- `gtex_v8` (required)
+- `gencodeId` -- Versioned Ensembl gene ID (optional filter)
+- `tissueSiteDetailId` -- tissue ID (optional filter)
+- `datasetId` -- `gtex_v8` (explicit historical selection; defaults vary by endpoint)
 
 ### Multi-tissue eQTLs
 ```
-GET /association/multiTissueEqtl?gencodeId=ENSG00000139618.17&datasetId=gtex_v8
+GET /association/metasoft?gencodeId=ENSG00000139618.14&datasetId=gtex_v8
 ```
 
 ### Gene search
@@ -76,12 +76,12 @@ Returns all tissue site detail IDs, names, colors, sample counts.
 
 ### Exon expression
 ```
-GET /expression/medianExonExpression?gencodeId=ENSG00000139618.17&datasetId=gtex_v8
+GET /expression/medianExonExpression?gencodeId=ENSG00000139618.14&datasetId=gtex_v8
 ```
 
 ### Transcript expression
 ```
-GET /expression/medianTranscriptExpression?gencodeId=ENSG00000139618.17&datasetId=gtex_v8
+GET /expression/medianTranscriptExpression?gencodeId=ENSG00000139618.14&datasetId=gtex_v8
 ```
 
 ### Top expressed genes in a tissue
@@ -89,9 +89,9 @@ GET /expression/medianTranscriptExpression?gencodeId=ENSG00000139618.17&datasetI
 GET /expression/topExpressedGene?tissueSiteDetailId=Brain_Cortex&datasetId=gtex_v8&filterMtGene=true
 ```
 
-### Variant by location (dyadic)
+### Dynamic eQTL query for a gene–variant–tissue combination
 ```
-GET /association/dyneqtl?variantId=chr1_1000000_A_G_b38&gencodeId=ENSG00000139618.17&tissueSiteDetailId=Whole_Blood&datasetId=gtex_v8
+GET /association/dyneqtl?variantId=chr1_1000000_A_G_b38&gencodeId=ENSG00000139618.14&tissueSiteDetailId=Whole_Blood&datasetId=gtex_v8
 ```
 
 ## Tissue ID examples
@@ -105,7 +105,7 @@ Use the underscore-separated names exactly:
   "data": [
     {
       "datasetId": "gtex_v8",
-      "gencodeId": "ENSG00000139618.17",
+      "gencodeId": "ENSG00000139618.14",
       "geneSymbol": "BRCA2",
       "median": 4.523,
       "tissueSiteDetailId": "Whole_Blood",
@@ -113,7 +113,7 @@ Use the underscore-separated names exactly:
     },
     {
       "datasetId": "gtex_v8",
-      "gencodeId": "ENSG00000139618.17",
+      "gencodeId": "ENSG00000139618.14",
       "geneSymbol": "BRCA2",
       "median": 12.87,
       "tissueSiteDetailId": "Testis",
@@ -130,7 +130,9 @@ Use the underscore-separated names exactly:
 - For bulk analysis, download full datasets from the GTEx Portal downloads page
 
 ## Notes
-- GTEx v8 is the primary dataset; always specify `datasetId=gtex_v8`
-- Gene IDs must be versioned GENCODE IDs (e.g., ENSG00000139618.17)
+- These examples intentionally pin the historical GTEx v8 dataset. Current expression and single-tissue eQTL endpoints default to `gtex_v10`, while metasoft/dyneqtl default to v8. Specify the dataset and resolve gene IDs using its compatible GENCODE release; do not mix gene versions across datasets.
+- Gene IDs must be versioned GENCODE IDs (e.g., ENSG00000139618.14)
 - Use the gene search endpoint to resolve symbols to versioned GENCODE IDs
 - `gencodeVersion=v26` corresponds to GTEx v8
+
+Official schema: https://gtexportal.org/api/v2/openapi.json

@@ -230,6 +230,8 @@ def run_simulation(
     }
 
     if config.solver == "mesolve":
+        # Default output normalization can conceal norm/trace integration drift.
+        options["normalize_output"] = False
         result = qutip.mesolve(
             H,
             psi0,
@@ -298,6 +300,7 @@ def run_simulation(
         "configuration": asdict(config),
         "model": {
             "hilbert_dimension": 2,
+            "basis_labels": "excited=basis(2,0); ground=basis(2,1); fixed sigma_z basis, not dressed energy order",
             "hamiltonian": "0.5 * omega * sigma_z + 0.5 * drive * sigma_x",
             "amplitude_decay": "sqrt(decay_rate) * sigma_minus",
             "pure_dephasing": "sqrt(dephasing_rate / 2) * sigma_z",
@@ -327,6 +330,11 @@ def run_simulation(
             ),
         },
         "trajectory_statistics": {
+            "uncertainty_note": (
+                "Independent-trajectory spread/sqrt(n); one trajectory or no "
+                "observed rare jumps cannot establish sampling precision."
+                if config.solver == "mcsolve" else None
+            ),
             "trajectories_requested": (
                 config.trajectories if config.solver == "mcsolve" else None
             ),

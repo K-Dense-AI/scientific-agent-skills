@@ -14,11 +14,6 @@ curl -s -X POST -H "Content-Type: application/json" \
   https://api.platform.opentargets.org/api/v4/graphql
 ```
 
-**REST API (simpler queries):**
-```
-https://api.platform.opentargets.org/api/v4
-```
-
 ## Authentication
 
 No API key required. All endpoints are public.
@@ -76,10 +71,6 @@ query TargetInfo($ensemblId: String!) {
 
 **Variables:** `{ "ensemblId": "ENSG00000141510" }`
 
-**Example as URL (GET also supported for simple queries):**
-```
-https://api.platform.opentargets.org/api/v4/graphql?query={target(ensemblId:"ENSG00000141510"){id approvedSymbol approvedName biotype functionDescriptions}}
-```
 
 ---
 
@@ -104,10 +95,6 @@ query DiseaseInfo($efoId: String!) {
 
 **Variables:** `{ "efoId": "EFO_0000311" }` (cancer)
 
-**Example as URL:**
-```
-https://api.platform.opentargets.org/api/v4/graphql?query={disease(efoId:"EFO_0000311"){id name description therapeuticAreas{id name}}}
-```
 
 ---
 
@@ -143,10 +130,6 @@ query Associations($ensemblId: String!, $page: Pagination!) {
 }
 ```
 
-**Example as URL:**
-```
-https://api.platform.opentargets.org/api/v4/graphql?query={target(ensemblId:"ENSG00000141510"){approvedSymbol associatedDiseases(page:{index:0,size:5}){count rows{disease{id name}score}}}}
-```
 
 ---
 
@@ -229,8 +212,7 @@ query DrugInfo($chemblId: String!) {
     id
     name
     drugType
-    maximumClinicalTrialPhase
-    hasBeenWithdrawn
+    maximumClinicalStage
     mechanismsOfAction {
       rows {
         mechanismOfAction
@@ -246,33 +228,16 @@ query DrugInfo($chemblId: String!) {
           id
           name
         }
-        maxPhaseForIndication
+        maxClinicalStage
       }
     }
-    linkedDiseases {
-      count
-      rows {
-        id
-        name
-      }
-    }
-    linkedTargets {
-      count
-      rows {
-        id
-        approvedSymbol
-      }
-    }
+
   }
 }
 ```
 
 **Variables:** `{ "chemblId": "CHEMBL25" }` (aspirin)
 
-**Example as URL:**
-```
-https://api.platform.opentargets.org/api/v4/graphql?query={drug(chemblId:"CHEMBL25"){id name drugType maximumClinicalTrialPhase mechanismsOfAction{rows{mechanismOfAction targets{id approvedSymbol}}}}}
-```
 
 ---
 
@@ -302,54 +267,31 @@ query Search($queryString: String!, $entityNames: [String!], $page: Pagination!)
 }
 ```
 
-**Example as URL:**
-```
-https://api.platform.opentargets.org/api/v4/graphql?query={search(queryString:"BRAF",entityNames:["target"],page:{index:0,size:5}){total hits{id entity name description}}}
-```
 
 ---
 
-### 8. Known drugs for a target
+### 8. Drugs and clinical candidates for a target
 
 ```graphql
-query KnownDrugs($ensemblId: String!, $size: Int!) {
+query ClinicalCandidates($ensemblId: String!) {
   target(ensemblId: $ensemblId) {
     approvedSymbol
-    knownDrugs(size: $size) {
+    drugAndClinicalCandidates {
       count
       rows {
-        drug {
-          id
-          name
-          drugType
-          maximumClinicalTrialPhase
-        }
-        disease {
-          id
-          name
-        }
-        phase
-        status
-        mechanismOfAction
-        urls {
-          niceName
-          url
-        }
+        id
+        maxClinicalStage
+        drug { id name drugType maximumClinicalStage }
+        clinicalReports { id source clinicalStage url }
       }
     }
   }
 }
 ```
 
-**Variables:**
-```json
-{
-  "ensemblId": "ENSG00000157764",
-  "size": 10
-}
-```
-
-(ENSG00000157764 = BRAF)
+Variables: `{ "ensemblId": "ENSG00000157764" }` (BRAF).
+The current schema uses clinical-stage strings. Do not parse them as numeric
+trial phases or infer withdrawal from a missing field.
 
 ---
 
@@ -363,39 +305,6 @@ Included in the target query (see endpoint 1 above). Modalities include:
 
 ---
 
-## REST API Endpoints
-
-These are simpler alternatives for common operations.
-
-### Search
-
-```
-GET /api/v4/search?q={query}&page=0&size=10
-```
-
-**Example:**
-```
-https://api.platform.opentargets.org/api/v4/search?q=TP53&size=5
-```
-
-**Response:**
-```json
-{
-  "total": 15,
-  "data": [
-    {
-      "id": "ENSG00000141510",
-      "entity": "target",
-      "name": "TP53",
-      "description": "Cellular tumor antigen p53",
-      "score": 142.5
-    }
-  ]
-}
-```
-
----
-
 ## Key Identifiers
 
 | Entity  | ID Format | Example |
@@ -404,28 +313,19 @@ https://api.platform.opentargets.org/api/v4/search?q=TP53&size=5
 | Disease | EFO/Mondo/HP/Orphanet | `EFO_0000311` (cancer), `MONDO_0007254` |
 | Drug    | ChEMBL ID | `CHEMBL25` (aspirin) |
 
-## Datasource IDs (for filtering evidence)
+## Datasource IDs
 
-- `ot_genetics_portal` -- Open Targets Genetics
-- `eva` -- ClinVar (via EVA)
-- `cancer_gene_census` -- COSMIC Cancer Gene Census
-- `chembl` -- ChEMBL (clinical trials)
-- `europepmc` -- Literature mining
-- `expression_atlas` -- Expression Atlas
-- `gene2phenotype` -- Gene2Phenotype
-- `genomics_england` -- Genomics England PanelApp
-- `intogen` -- IntOGen (cancer drivers)
-- `ot_crispr` -- Open Targets CRISPR screens
-- `progeny` -- PROGENy (pathway activity)
-- `reactome` -- Reactome pathways
-- `slapenrich` -- SLAPenrich
-- `sysbio` -- Systems biology
-- `uniprot_literature` -- UniProt literature
+Datasource membership changes by release. Read `datasourceScores.id` or the
+current Platform data-source documentation before setting evidence filters.
+Do not assume the former Genetics Portal IDs remain current after integration
+into the Platform. Association scores rank evidence support, not causal probability.
 
 ## Pagination
 
 GraphQL uses `page: { index: Int, size: Int }` (0-based index).
-REST uses `page` and `size` query parameters.
+Evidence connections instead use `size` plus an opaque `cursor`; request the
+returned cursor and continue until exhausted. Other connections expose all rows
+without pagination arguments: check the schema for each field.
 
 ## Rate Limits
 
@@ -448,12 +348,15 @@ GraphQL errors:
 }
 ```
 
-REST errors return appropriate HTTP status codes with JSON error bodies.
+Inspect both HTTP status and GraphQL `errors`; an HTTP 200 can contain failed
+fields or partial `data`.
 
 ## Tips
 
 - Use the GraphQL API for maximum flexibility -- request only the fields you need.
-- The GET method for GraphQL works for simple queries but POST is required for complex ones with variables.
+- Send POST with JSON `query` and `variables`; no separate REST search API is documented.
 - Combine target + disease queries to get association scores with evidence breakdown.
 - Use `datasourceScores` in association queries to see which evidence sources contribute most.
 - The Open Targets Platform web UI at `https://platform.opentargets.org` has a GraphQL playground for testing queries.
+
+Current [GraphQL schema](https://api.platform.opentargets.org/api/v4/graphql/schema) and [API guide](https://platform-docs.opentargets.org/data-access/graphql-api).

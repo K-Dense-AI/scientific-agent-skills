@@ -336,7 +336,7 @@ def validate_trial_manifest(data: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
     artifact_kind = data.get("artifact_kind")
-    route = ROUTES.get(artifact_kind)
+    route = ROUTES.get(artifact_kind) if isinstance(artifact_kind, str) else None
     if route is None:
         return {
             "tool": TOOL,
@@ -406,7 +406,7 @@ def validate_trial_manifest(data: dict[str, Any]) -> dict[str, Any]:
             continue
         status = item.get("status")
         coverage[key] = str(status)
-        if status not in ALLOWED_STATUSES:
+        if not isinstance(status, str) or status not in ALLOWED_STATUSES:
             errors.append(f"{container_name}.{key}.status is invalid")
             continue
         try:
@@ -494,7 +494,7 @@ def validate_trial_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "errors": errors,
         "warnings": warnings,
         "limitations": [
-            "Checks item keys, statuses, and provenance references only.",
+            "Checks item keys, statuses, and fact-ID shape; does not check cross-artifact linkage.",
             "Does not validate conduct, analyses, clinical content, compliance, or submission format.",
         ],
         "review_required": True,

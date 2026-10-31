@@ -129,6 +129,8 @@ Preregistration is a plan, not a prison. For every material deviation record:
 
 Do not silently replace the registration. Preserve the original and append amendments.
 
+On OSF, use the documented registration-update workflow when available and retain its change justification. Distinguish an updated registration from an editable project and inspect the version history; a later update does not make a data-informed prediction prospective. Consult the [current OSF registration guide](https://help.osf.io/article/330-welcome-to-registrations) for the selected registry's options.
+
 ## Registered Reports
 
 Registered Reports add journal peer review before results are known:
@@ -174,6 +176,8 @@ Non-replication does not automatically imply misconduct or that the original stu
 
 ## Open-science limits
 
+Use [TOP 2025](https://www.cos.io/initiatives/top-guidelines) for current transparency planning rather than treating the original 2015 policy as the latest framework. For this hypothesis package, record separately whether the registration, protocol, analysis plan, materials, code, data, and reporting checklist are disclosed, shared and cited, or independently certified. Sharing a plan does not establish independent verification or certify its scientific validity. Apply the target journal or funder's actual policy.
+
 “Open” does not override:
 
 - participant consent and privacy;
@@ -199,6 +203,7 @@ python3 scripts/generate_preregistration_scaffold.py \
 The result:
 
 - is marked as an unregistered draft;
+- labels the input record's update date without claiming a generation or registration timestamp;
 - includes every candidate without ranking;
 - carries unresolved placeholders;
 - requires human review and repository-specific completion;

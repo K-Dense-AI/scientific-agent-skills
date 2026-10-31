@@ -48,9 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local regular file; repeat for multiple artifacts.",
     )
     parser.add_argument("--checksum-manifest", help="Local SHA256SUMS-style file.")
-    parser.add_argument("--expected-python-version", default="0.9.2")
-    parser.add_argument("--expected-rust-version", default="0.9.0")
-    parser.add_argument("--expected-cli-version", default="0.9.0")
+    parser.add_argument("--expected-python-version", default="0.10.0")
+    parser.add_argument("--expected-rust-version", default="0.10.0")
+    parser.add_argument("--expected-cli-version", default="0.10.0")
     parser.add_argument(
         "--max-files",
         type=int_type(minimum=1, maximum=HARD_MAX_FILES, label="max-files"),

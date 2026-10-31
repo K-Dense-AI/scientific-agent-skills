@@ -1,6 +1,6 @@
 % NeurIPS Conference Paper Template
 % For submission to Neural Information Processing Systems (NeurIPS)
-% Reviewed: 2026-07-20
+% Reviewed: 2026-10-01
 % Note: Download the complete official NeurIPS 2026 package from:
 % https://neurips.cc/Conferences/2026/CallForPapers
 
@@ -63,7 +63,7 @@
 \maketitle
 
 \begin{abstract}
-Write a concise abstract (150-250 words) summarizing your contributions. The abstract should clearly state: (1) the problem you address, (2) your approach/method, (3) key results/findings, and (4) significance/implications. Make it accessible to a broad machine learning audience.
+Write a concise one-paragraph abstract under the current portal instructions summarizing your contributions. The abstract should clearly state: (1) the problem you address, (2) your approach/method, (3) key results/findings, and (4) significance/implications. Make it accessible to a broad machine learning audience.
 \end{abstract}
 
 \section{Introduction}
@@ -75,11 +75,11 @@ Introduce the problem you're addressing and its significance in machine learning
 Provide necessary background for understanding your work. Explain the gap in current methods or knowledge.
 
 \subsection{Contributions}
-Clearly state your main contributions as a bulleted list:
+State the actual contributions. This optional list is a drafting aid, not a required section or quota:
 \begin{itemize}
-    \item First contribution: e.g., "We propose a novel architecture for..."
-    \item Second contribution: e.g., "We provide theoretical analysis showing..."
-    \item Third contribution: e.g., "We demonstrate state-of-the-art performance on..."
+    \item {[Contribution and supporting evidence.]}
+    \item {[Additional contribution, if supported.]}
+    \item {[Scope and limitations of the contribution.]}
 \end{itemize}
 
 \subsection{Paper Organization}
@@ -116,7 +116,7 @@ where $\mathcal{L}$ is the loss function and $\theta$ are model parameters.
 \section{Method}
 \label{sec:method}
 
-Describe your proposed method in detail. This is the core technical contribution of your paper.
+Adapt these illustrative method and experiment sections to the actual contribution; theoretical and other paper types need different evidence.
 
 \subsection{Model Architecture}
 Describe the architecture of your model with sufficient detail for reproduction. Include figures if helpful.
@@ -129,7 +129,7 @@ Describe the architecture of your model with sufficient detail for reproduction.
 \end{figure}
 
 \subsection{Training Procedure}
-Explain how you train the model, including:
+If relevant, describe the actual training procedure. The following unexecuted SGD pseudocode is illustrative only, not evidence of a trained model:
 \begin{algorithm}[t]
 \caption{Training Algorithm}
 \label{alg:training}
@@ -183,7 +183,7 @@ Present your main experimental results.
 
 \begin{table}[t]
 \centering
-\caption{Performance comparison on benchmark datasets. Bold indicates best performance. Results reported as mean $\pm$ standard deviation over 3 runs.}
+\caption{Illustrative layout only. Replace every numeric cell with actual results and specify the number of independent runs and the meaning of uncertainty. Bold should identify the prespecified comparison criterion.}
 \label{tab:main_results}
 \begin{tabular}{lcccc}
 \toprule
@@ -197,7 +197,7 @@ Baseline 2 & $87.2 \pm 0.4$ & $74.5 \pm 0.6$ & $91.1 \pm 0.5$ & 84.3 \\
 \end{table}
 
 \subsection{Ablation Studies}
-Conduct ablation studies to understand which components contribute to performance.
+When component-effect claims warrant ablations, report fair controlled comparisons and relevant interactions.
 
 \subsection{Analysis}
 Provide deeper analysis of results, failure cases, limitations, etc.
@@ -249,16 +249,16 @@ List all hyperparameters used in experiments for reproducibility.
 
 \begin{table}[h]
 \centering
-\caption{Hyperparameters used in all experiments}
+\caption{Illustrative hyperparameter fields; replace with the actual configuration}
 \begin{tabular}{ll}
 \toprule
 Hyperparameter & Value \\
 \midrule
-Learning rate & 0.001 \\
-Batch size & 64 \\
-Optimizer & Adam \\
-Weight decay & 0.0001 \\
-Epochs & 100 \\
+Learning rate & [value] \\
+Batch size & [value] \\
+Optimizer & [optimizer] \\
+Weight decay & [value] \\
+Epochs & [value] \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -268,8 +268,8 @@ Epochs & 100 \\
 
 Provide links to code repository (anonymized for review, e.g., anonymous GitHub):
 \begin{itemize}
-    \item Code: \url{https://anonymous.4open.science/r/project-XXXX}
-    \item Data: Available upon request / at [repository]
+    \item Code: [verified permitted anonymous artifact or repository]
+    \item Data: [actual access conditions and repository/accession, if applicable]
 \end{itemize}
 
 % Required for NeurIPS 2026. Keep checklist.tex from the official author kit.
@@ -279,8 +279,8 @@ Provide links to code repository (anonymized for review, e.g., anonymous GitHub)
 
 % Notes for Authors:
 % 1. Main content: 9 pages maximum, including figures
-% 2. Acknowledgments, references, checklist, and optional technical appendices
-%    do not count as content pages
+% 2. References, checklist, and optional technical appendices are excluded.
+%    Omit acknowledgments during review; camera-ready main content permits 10 pages.
 % 3. Appendices are optional reading for reviewers
 % 4. Omit final and preprint options for the anonymized initial submission
 % 5. Keep the complete required NeurIPS Paper Checklist

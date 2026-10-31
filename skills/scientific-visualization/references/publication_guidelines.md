@@ -1,6 +1,6 @@
 # Publication Figure Principles
 
-Reviewed 2026-07-23. These are general scientific-communication principles, not publisher requirements. Date-sensitive rules belong in `journal_requirements.md`. Source IDs resolve in `sources.md`.
+Reviewed 2026-10-01. These are general scientific-communication principles, not publisher requirements. Date-sensitive rules belong in `journal_requirements.md`. Source IDs resolve in `sources.md`.
 
 ## Preserve evidence before styling
 
@@ -149,7 +149,7 @@ Passing a palette ratio audit does not prove WCAG conformance; applicability dep
 
 ### Vector
 
-PDF/SVG/EPS are useful for text and line art, but a vector container may include rasterized artists. DPI still controls those raster elements [MPL-SAVE]. Dense scatter plots can be selectively rasterized to control file size while preserving vector text/axes.
+PDF/SVG/EPS are useful for text and line art, but a vector container may include rasterized artists. DPI still controls those raster elements [MPL-SAVE]. EPS/PS cannot preserve partial transparency; choose PDF/SVG or explicitly review an opaque rendering rather than assuming identical appearance. Dense scatter plots can be selectively rasterized to control file size while preserving vector text/axes.
 
 For Matplotlib:
 

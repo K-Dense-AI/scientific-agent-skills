@@ -25,7 +25,7 @@ from _common import (
 
 
 TOOL = "gtars-tokenizer-manifest"
-DEFAULT_GTARS_PYTHON_VERSION = "0.9.2"
+DEFAULT_GTARS_PYTHON_VERSION = "0.10.0"
 SPECIAL_TOKEN_NAMES = {"unk", "pad", "mask", "cls", "bos", "eos", "sep"}
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -217,7 +217,7 @@ def check(args: argparse.Namespace) -> tuple[dict, int]:
         "next_checks": [
             "freeze patient and replicate splits before fitting the universe",
             "instantiate Tokenizer.from_bed only after this local manifest passes",
-            "verify a small fixed set of token IDs with gtars==0.9.2",
+            "verify a small fixed set of token IDs with gtars==0.10.0",
             "do not use from_pretrained until an immutable snapshot is approved locally",
         ],
     }

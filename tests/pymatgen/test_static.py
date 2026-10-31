@@ -24,7 +24,7 @@ class SkillStructureTests(unittest.TestCase):
             r'\nmetadata:\n  version: "\d+\.\d+"\n  skill-author:',
         )
         self.assertNotIn('metadata: {"version"', text)
-        self.assertIn('last-reviewed: "2026-07-23"', text)
+        self.assertRegex(text, r'last-reviewed: "\d{4}-\d{2}-\d{2}"')
 
     def test_exactly_five_dated_references(self) -> None:
         expected = {
@@ -39,7 +39,7 @@ class SkillStructureTests(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path.name):
                 text = path.read_text(encoding="utf-8")
-                self.assertIn("Sources (verified 2026-07-23)", text)
+                self.assertRegex(text, r"Sources \(verified \d{4}-\d{2}-\d{2}\)")
                 self.assertIn("https://", text)
 
     def test_relative_markdown_links_resolve(self) -> None:

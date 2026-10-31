@@ -1,7 +1,9 @@
 # Standard Neuropixels Analysis Workflow
 
 Complete step-by-step guide for analyzing Neuropixels recordings from raw data to curated
-units, using the SpikeInterface API directly.
+units, using SpikeInterface 0.105.0 (reviewed 2026-10-01). Real-data/sorter/model
+examples are illustrative; validate acquisition calibration, probe mapping and
+segment time origins before running them.
 
 ## Overview
 
@@ -26,7 +28,7 @@ si.set_global_job_kwargs(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 stream_names, stream_ids = si.get_neo_streams("spikeglx", "/path/to/run_g0/")
 
 # SpikeGLX (most common)
-recording = si.read_spikeglx("/path/to/run_g0/", stream_name="imec0.ap", load_sync_channel=False)
+recording = si.read_spikeglx("/path/to/run_g0/", stream_name="imec0.ap")
 
 # Open Ephys
 recording = si.read_openephys("/path/to/experiment/")
@@ -47,13 +49,13 @@ locations = recording.get_channel_locations()
 
 ## 2. Preprocessing
 
-### Standard chain (IBL-style)
+### Filter/reference chain (single shank; not full IBL destriping)
 
 ```python
 rec = si.highpass_filter(recording, freq_min=400.0)
 bad_channel_ids, channel_labels = si.detect_bad_channels(rec)
 rec = rec.remove_channels(bad_channel_ids)
-rec = si.phase_shift(rec)                                   # ADC phase (NP 1.0)
+rec = si.phase_shift(rec)                                   # Requires inter_sample_shift metadata
 rec = si.common_reference(rec, operator="median", reference="global")
 ```
 
@@ -91,8 +93,7 @@ from spikeinterface.sortingcomponents.peak_detection import detect_peaks
 from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
 noise_levels = si.get_noise_levels(rec, return_in_uV=False)
-peaks = detect_peaks(rec, method="locally_exclusive", noise_levels=noise_levels,
-                     detect_threshold=5, radius_um=50.0)
+peaks = detect_peaks(rec, method='locally_exclusive', method_kwargs={'noise_levels': noise_levels, 'detect_threshold': 5, 'radius_um': 50.0})
 peak_locations = localize_peaks(rec, peaks, method="center_of_mass")
 
 si.plot_drift_raster_map(peaks=peaks, peak_locations=peak_locations, recording=rec, clim=(-50, 50))
@@ -113,12 +114,12 @@ and DREDge usage.
 ### Recommended: Kilosort4
 
 ```python
-sorting = si.run_sorter("kilosort4", rec_corrected, folder="sorting_KS4/", verbose=True)
+sorting = si.run_sorter("kilosort4", rec_corrected, folder="sorting_KS4/", do_correction=False, verbose=True)
 
 # With custom parameters
 sorting = si.run_sorter(
     "kilosort4", rec_corrected, folder="sorting_KS4/",
-    nblocks=5,           # non-rigid drift blocks
+    do_correction=False,  # Input is already motion-corrected.
     Th_universal=9,      # detection threshold
     Th_learned=8,
     batch_size=60000,
@@ -128,7 +129,7 @@ sorting = si.run_sorter(
 ### Alternative sorters
 
 ```python
-sorting = si.run_sorter("spykingcircus2", rec_corrected, folder="sc2/")   # CPU
+sorting = si.run_sorter("spykingcircus2", rec_corrected, folder="sc2/", apply_motion_correction=False)   # CPU
 sorting = si.run_sorter("tridesclous2", rec_corrected, folder="tdc2/")    # CPU
 sorting = si.run_sorter("mountainsort5", rec_corrected, folder="ms5/")    # CPU
 ```
@@ -136,8 +137,10 @@ sorting = si.run_sorter("mountainsort5", rec_corrected, folder="ms5/")    # CPU
 ### Compare multiple sorters
 
 ```python
-sortings = {s: si.run_sorter(s, rec_corrected, folder=f"{s}/")
-            for s in ["kilosort4", "spykingcircus2"]}
+sortings = {
+    "kilosort4": si.run_sorter("kilosort4", rec_corrected, folder="ks4/", do_correction=False),
+    "spykingcircus2": si.run_sorter("spykingcircus2", rec_corrected, folder="sc2/", apply_motion_correction=False),
+}
 
 comparison = si.compare_multiple_sorters(list(sortings.values()),
                                          name_list=list(sortings.keys()))
@@ -157,6 +160,7 @@ analyzer.compute("waveforms", ms_before=1.0, ms_after=2.0)
 analyzer.compute("templates", operators=["average", "std"])
 analyzer.compute("noise_levels")
 analyzer.compute("spike_amplitudes")
+analyzer.compute("amplitude_scalings")
 analyzer.compute("correlograms", window_ms=50.0, bin_ms=1.0)
 analyzer.compute("unit_locations", method="monopolar_triangulation")
 analyzer.compute("template_similarity")
@@ -191,21 +195,27 @@ query = "(amplitude_cutoff < 0.1) & (isi_violations_ratio < 0.5) & (presence_rat
 good_unit_ids = metrics.query(query).index.values
 ```
 
-For `allen` / `ibl` / `strict` presets in one call, use `scripts/compute_metrics.py`.
+For local `allen` / legacy `ibl` / `strict` screening presets (not IBL standards) in one call, use `scripts/compute_metrics.py`.
 
 ### Model-based (UnitRefine)
+
+First inspect [model compatibility and required features](AUTOMATED_CURATION.md).
+The public models advertise SI 0.102.0/sklearn 1.4.2; this environment is untested
+for their predictions. Compute model features before calling the illustrative code.
 
 ```python
 noise_labels = sc.model_based_label_units(
     sorting_analyzer=analyzer,
     repo_id="SpikeInterface/UnitRefine_noise_neural_classifier",
     trust_model=True,
+    enforce_metric_params=True,
 )
 neural = analyzer.remove_units(noise_labels[noise_labels["prediction"] == "noise"].index)
 sua_mua = sc.model_based_label_units(
     sorting_analyzer=neural,
     repo_id="SpikeInterface/UnitRefine_sua_mua_classifier",
     trust_model=True,
+    enforce_metric_params=True,
 )
 ```
 
@@ -234,10 +244,8 @@ si.export_to_phy(analyzer_clean, output_folder="phy_export/",
 
 ### Export to NWB
 
-```python
-from spikeinterface.exporters import export_to_nwb
-export_to_nwb(analyzer_clean, "results.nwb")
-```
+Use NeuroConv as described in [ANALYSIS.md](ANALYSIS.md); SI 0.105.0 has no
+`export_to_nwb` function.
 
 ### Save quality summary
 
@@ -245,7 +253,7 @@ export_to_nwb(analyzer_clean, "results.nwb")
 metrics.to_csv("quality_metrics.csv")
 
 import json
-labels = {int(uid): ("good" if uid in good_unit_ids else "other") for uid in metrics.index}
+labels = {str(uid): ("good" if uid in good_unit_ids else "other") for uid in metrics.index}
 with open("curation_labels.json", "w") as f:
     json.dump(labels, f, indent=2)
 
@@ -260,7 +268,7 @@ import spikeinterface.full as si
 si.set_global_job_kwargs(n_jobs=-1, chunk_duration="1s", progress_bar=True)
 
 # Load
-recording = si.read_spikeglx("/data/experiment/", stream_name="imec0.ap", load_sync_channel=False)
+recording = si.read_spikeglx("/data/experiment/", stream_name="imec0.ap")
 
 # Preprocess
 rec = si.highpass_filter(recording, freq_min=400.0)
@@ -273,7 +281,7 @@ rec = si.common_reference(rec, operator="median", reference="global")
 rec = si.correct_motion(rec, preset="nonrigid_fast_and_accurate", folder="motion/")
 
 # Sort
-sorting = si.run_sorter("kilosort4", rec, folder="ks4/")
+sorting = si.run_sorter("kilosort4", rec, folder="ks4/", do_correction=False)
 
 # Postprocess + metrics
 analyzer = si.create_sorting_analyzer(sorting, rec, sparse=True, format="binary_folder", folder="analyzer/")
@@ -298,7 +306,7 @@ python scripts/neuropixels_pipeline.py /data/experiment/ output/ --sorter kiloso
 ## Tips for Success
 
 1. **Always visualize drift** before deciding on motion correction.
-2. **Save preprocessed data** to avoid recomputing (and Kilosort needs a binary file).
+2. **Budget caching** to balance disk use and recomputation.
 3. **Compare multiple sorters** for critical experiments.
 4. **Review uncertain units manually** — don't trust automated curation blindly.
 5. **Document parameters and model repo IDs** for reproducibility.

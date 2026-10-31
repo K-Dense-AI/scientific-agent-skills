@@ -20,7 +20,7 @@ typos. It does not check units, physical interpretation, numerical convergence,
 or whether a valid option is appropriate.
 
 The following snapshot was introspected from a pinned
-`fluidsim[fft]==0.9.0`/`fluidfft==0.4.5` NS2D environment on 2026-07-23.
+`fluidsim[fft]==0.9.0`/`fluidfft==0.4.5` NS2D environment on 2026-09-30 and reviewed on 2026-10-01.
 
 ## Top-level controls
 
@@ -282,6 +282,10 @@ python3 scripts/solver_config_validator.py --config config.json
 
 It rejects:
 
+- Options absent from the selected released solver: for example NS3D has no
+  `periods_save.increments`, and `waves2d` has no `periods_save.spectra`.
+  Do not reuse the whole NS2D JSON example after changing only the solver key.
+
 - Unknown keys and old `CFL`.
 - Non-finite numbers and duplicate JSON keys.
 - Unbounded grid/resources/output.
@@ -290,6 +294,11 @@ It rejects:
   resolution/dealiasing, CFL/timestep, budget, refinement, or acceptance
   statements.
 - CPU oversubscription and inconsistent serial/MPI preview modes.
+
+The bundled profile covers a subset of each solver's parameters. Unsupported
+extensions need their own reviewed script. The generator refuses `in_script`
+and `from_simul` initializers, and forcing types requiring callbacks, because
+a JSON plan does not provide their implementations.
 
 It validates a plan mechanically. It explicitly reports that physical validity
 and numerical convergence are not established.
@@ -311,12 +320,12 @@ Preserve:
 Do not rely only on directory names; they are summaries, not canonical
 configuration.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [FluidSim user tutorial](https://fluidsim.readthedocs.io/en/latest/ipynb/tuto_user.html)
   — defaults, mutation behavior, output and loaders.
 - [NS2D generated parameter documentation](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.solvers.ns2d.solver.html).
 - [Pseudospectral time-stepping API](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.base.time_stepping.pseudo_spect.html).
-- [Forcing base source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/forcing/base.py).
-- [Specific forcing source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/forcing/specific.py).
-- [FluidSim 0.9 package source](https://github.com/fluiddyn/fluidsim/blob/branch/default/pyproject.toml).
+- [Forcing base source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/forcing/base.py).
+- [Specific forcing source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/forcing/specific.py).
+- [FluidSim 0.9 package source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/pyproject.toml).

@@ -1,6 +1,8 @@
 # IVT mRNA/circRNA Synthesis, SPRI Purification & qPCR Quantification
 
 **URL:** https://cloud.ginkgo.bio/protocols/ivt-rna-synthesis-qpcr
+**Service terms:** https://cloud.ginkgo.bio/terms/ivt-rna-synthesis-qpcr
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $99/sample
 **Turnaround:** up to 12 business days (extended: up to 17 business days for longer or clonal DNA constructs)
@@ -11,6 +13,7 @@
 End-to-end automated RNA production and quantification pipeline ("data in / data out"). Submit DNA sequences via CSV; Ginkgo sources DNA synthesis from commercial providers (e.g., Twist), then runs PCR template prep, in vitro transcription (linear mRNA or circRNA), SPRI bead purification, and qPCR quantification.
 
 **Note:** The circRNA pipeline is limited to Permuted Intron-Exon (PIE) with group I introns.
+Other RNA classes such as guide RNA, siRNA, and tRNA are outside this service scope.
 
 ## Input
 
@@ -19,7 +22,12 @@ End-to-end automated RNA production and quantification pipeline ("data in / data
 ## Output
 
 - Purified RNA samples in 384-well format with qPCR quantification readout
-- Absolute yield is available only when the customer supplies a calibration standard
+- Spectrophotometric concentration and purity ratios (A260/A280, A260/A230) are available without a customer calibration standard
+- RT-qPCR is relative by default; absolute **qPCR** quantification requires a customer-supplied standard with identity and concentration
+- RNA integrity/fragmentation (including RIN-type assessment) is not measured
+
+The turnaround clock begins at order acceptance after usable input is received;
+commercial DNA synthesis lead time and shipping are excluded by the service terms.
 
 ## Automated Workflow
 

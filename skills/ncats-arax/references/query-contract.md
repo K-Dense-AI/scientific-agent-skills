@@ -13,8 +13,22 @@
 ## Service boundary
 
 Use `https://arax.transltr.io/api/arax/v1.4` by default. A networked command first retrieves
-`/openapi.json`, verifies an ARAX title and `/query`, and records the advertised ARAX and TRAPI
-versions. Normalization uses `/entity`; graph lookup uses `/query`.
+`/openapi.json`, verifies an ARAX title, `POST /query`, and `GET /entity`, and records the advertised
+ARAX and TRAPI versions. Normalization uses `/entity`; graph lookup uses `/query`.
+
+| Endpoint | Request and response contract |
+| --- | --- |
+| `GET /openapi.json` | OpenAPI object; ARAX version is `info.version`, TRAPI version is `info.x-trapi.version` (title fallback). No biomedical term is submitted. |
+| `GET /entity?q=<term>` | URL-encoded `q`; the API permits repeated `q` but this client submits one. Response is keyed by input term, with `id.identifier`, `id.name`, `id.category`, `categories`, `nodes`, and `total_synonyms`. Unknown terms may have no usable record. |
+| `POST /query` | JSON `message.query_graph`, ARAX-specific `operations.actions`, `stream_progress: false`, and `submitter`. Response is a TRAPI envelope with `message`, optional `status`, `description`, `logs`, and version fields. |
+
+Entity synonym entries use `label` for their display name; the client also accepts older `name`
+entries. The canonical display name remains `id.name`. This is ARAX's entity response contract,
+not the SRI Node Normalizer's direct response schema.
+
+These routes require no API key in the deployed OpenAPI. The fixed result limit is an ARAXi
+filter, not pagination: the client does not follow pages or promise a complete enumeration of
+all matching graph paths. The API's broader pagination and asynchronous fields are not used.
 
 Every normalization or graph request requires `--acknowledge-public-query`. This is an explicit
 acknowledgment that query and caller metadata may be visible through service facilities. The
@@ -108,18 +122,24 @@ Retry OpenAPI and entity GET requests once after HTTP 429, 502, 503, 504, or a t
 Honor `Retry-After` for at most 10 seconds; otherwise wait one second. Never retry POST `/query`.
 A failed POST may have been processed and must be rerun only by an explicit user decision.
 
+The client requires strict JSON. On 2026-09-30, `/entity?q=primary+myelofibrosis` returned `NaN`
+inside auxiliary knowledge-graph attributes and was correctly retained as a malformed response
+(exit 6). The worked example uses a successfully tested entity. If this happens for another
+term, inspect the raw artifact and curate the CURIE independently; do not treat it as no match.
+
 Use these headers:
 
 ```text
 Accept: application/json
 Accept-Encoding: identity
 Content-Type: application/json        # POST only
-User-Agent: scientific-agent-skills-ncats-arax/1.0
+User-Agent: scientific-agent-skills-ncats-arax/1.1
 ```
 
 ## Version and endpoint policy
 
-The tested target is ARAX 1.5.4 with TRAPI 1.5.0. Parse the common response fields for TRAPI 1.5
+Production OpenAPI and all eight live smoke tests were verified on 2026-09-30 against ARAX 1.5.4
+with TRAPI 1.5.0. The `/v1.4` URL component is not the advertised TRAPI version. Parse the common response fields for TRAPI 1.5
 and 1.6, warning whenever the version is not the tested value. Refuse an unknown or missing TRAPI
 series unless `--allow-untested-version` is explicit. Record `biolink_version` from each query
 response rather than assuming it.
@@ -129,6 +149,15 @@ literal private, loopback, link-local, or reserved addresses. A URL other than t
 requires `--allow-nonproduction-endpoint`, must still identify ARAX through OpenAPI, and receives a
 warning. Reject cross-origin and protocol-downgrade redirects. Never fall back automatically to
 `arax.ncats.io` or another ARA.
+
+The operations were checked against the [deployed OpenAPI](https://arax.transltr.io/api/arax/v1.4/openapi.json),
+[ARAX query execution](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/ARAX_query.py),
+[expander](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/ARAX_expander.py), and
+[result filter](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/ARAX_filter_results.py).
+`scoreless_resultify` is supported by the query dispatcher even though the DSL guide documents
+`resultify` more prominently; `resultify` additionally triggers ranking and is not interchangeable.
+Provider availability is chosen from ARAX's current registry by version and maturity; the
+MolePro example is a tested selection, not a permanently available provider list.
 
 ## Excluded escape hatches
 

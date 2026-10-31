@@ -269,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
             "guidance": (
                 "This is metadata only, not full text. Do not present it as the article. "
                 "Try Europe PMC /{PMCID}/fullTextXML (returns 404 rather than a bodyless 200), "
-                "check the PMC OA Web Service for a downloadable package, or fall back to "
+                "consult PMC Article Datasets for supported bulk access, or fall back to "
                 "Unpaywall/CORE for an open-access copy."
             ),
         }

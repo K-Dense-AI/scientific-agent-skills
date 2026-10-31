@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Framework catalogue for analytical method validation.
 
-Content sourced 2026-07-27 from the freely published ICH guidelines, which ICH
+Content sourced 2026-09-30 from the freely published ICH guidelines, which ICH
 licenses for reuse with acknowledgement. Compendial (USP) and CLSI documents are
 copyrighted and paywalled: they are referenced here by designation, title, and
 scope only. No proprietary text is reproduced.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-RESEARCH_DATE = "2026-07-27"
+RESEARCH_DATE = "2026-09-30"
 
 # --------------------------------------------------------------------------
 # Frameworks
@@ -57,14 +57,14 @@ FRAMEWORKS: dict[str, dict[str, Any]] = {
             "Bioanalytical methods quantifying drug/metabolite concentrations in biological "
             "matrices supporting nonclinical and clinical studies, plus study sample analysis."
         ),
-        "governs": ["pk-concentration", "toxicokinetics", "bioequivalence", "biomarker-selected"],
+        "governs": ["pk-concentration", "toxicokinetics", "bioequivalence"],
         "companion": "Distinct criteria for chromatographic methods vs ligand binding assays",
     },
     "usp-1220": {
         "title": "USP General Chapter <1220> Analytical Procedure Life Cycle",
         "adopted": "official 2022-05-01",
         "effective_note": (
-            "Incorporated into USP-NF 2022 Issue 1 (1 Nov 2021), official 1 May 2022. "
+            "Official 1 May 2022 (USP Council of Experts report). "
             "Confirm the current official text and any revision in the USP-NF."
         ),
         "supersedes": "integrates the concepts of <1224>, <1225>, and <1226> into a lifecycle",
@@ -81,7 +81,7 @@ FRAMEWORKS: dict[str, dict[str, Any]] = {
     "usp-1225": {
         "title": "USP General Chapter <1225> Validation of Compendial Procedures",
         "adopted": "see current USP-NF",
-        "effective_note": "Confirm the current official text and revision in the USP-NF.",
+        "effective_note": "The linked 2025 page is a revision proposal, not proof of official status; confirm the effective controlled text in USP-NF.",
         "supersedes": "",
         "url": "https://doi.usp.org/USPNF/USPNF_M99945_40101_01.html",
         "reproducible": False,
@@ -111,12 +111,12 @@ FRAMEWORKS: dict[str, dict[str, Any]] = {
         "title": "CLSI EP series (clinical laboratory measurement procedures)",
         "adopted": "per document",
         "effective_note": (
-            "Editions change; the designations below were taken from clsi.org listings and "
-            "secondary sources on the research date and are marked [confirm on clsi.org]. "
+            "Publisher listings checked 30 Sep 2026; EP05 is fourth edition, other editions "
+            "are recorded in references/compendial-and-clsi.md. "
             "Verify the current edition before designing a study."
         ),
         "supersedes": "",
-        "url": "https://clsi.org/standards/products/method-evaluation/",
+        "url": "https://clsi.org/shop/standards/",
         "reproducible": False,
         "scope": (
             "Establishment and user verification of performance for clinical laboratory "
@@ -217,7 +217,7 @@ Q2R2_REPORTABLE_RANGE: dict[str, dict[str, str]] = {
     },
     "dissolution-ir-one-point": {
         "low": "Q - 45% of the lowest strength specification",
-        "high": "(per specification; see ICH Q2(R2) Table 2)",
+        "high": "130% of declared content of the highest strength",
     },
     "dissolution-ir-multi-point": {
         "low": "lower limit of reportable range as justified by the specification, or QL",
@@ -225,7 +225,7 @@ Q2R2_REPORTABLE_RANGE: dict[str, dict[str, str]] = {
     },
     "dissolution-modified-release": {
         "low": "lower limit of reportable range as justified by the specification, or QL",
-        "high": "(per specification; see ICH Q2(R2) Table 2)",
+        "high": "130% of declared content of the highest strength",
     },
     "impurity-quantitative": {
         "low": "reporting threshold",
@@ -411,15 +411,15 @@ M10_CRITERIA: dict[str, dict[str, Any]] = {
         "isr_pass_fraction": 2.0 / 3.0,
         "carryover_blank_pct_of_lloq": None,
         "carryover_blank_pct_of_is": None,
-        "selectivity_min_sources": 6,
+        "selectivity_min_sources": 10,
         "dilution_tolerance_pct": 20.0,
         "stability_tolerance_pct": 20.0,
         "notes": (
             "Anchor points outside the quantitation range are excluded from the calibration "
             "pass count. Accuracy and precision are evaluated at 5 QC levels (LLOQ, low, "
-            "medium, high, ULOQ) with at least 3 replicates per level per run in at least 6 "
+            "medium (geometric mean of the range), high, ULOQ) with at least 3 replicates per level per run in at least 6 "
             "runs over 2 or more days. LBAs carry an additional total-error criterion: the "
-            "sum of absolute accuracy (%) and precision (%) must not exceed 30%, or 40% at "
+            "sum of absolute bias (%) and precision CV (%) must not exceed 30%, or 40% at "
             "the LLOQ and ULOQ. Chromatographic assays have no such criterion."
         ),
     },

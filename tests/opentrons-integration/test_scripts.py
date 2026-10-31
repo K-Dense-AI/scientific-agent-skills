@@ -17,7 +17,7 @@ the documented method:
 A template that silently changes its volume budget, reuses the master-mix tube as
 a template source, or exceeds a tip's capacity fails those assertions.
 
-The OT-2 template cannot be simulated by the Flex-line package: opentrons 9.1
+The OT-2 template cannot be simulated by the Flex-line package: opentrons 10.0
 rejects OT-2 protocols outright, which `SKILL.md` documents and one test pins.
 Its robot-specific declarations -- numeric deck slots, GEN2 pipettes, no
 `load_trash_bin()` for the fixed slot-12 trash -- are checked by parsing the
@@ -33,7 +33,6 @@ import ast
 import importlib
 import sys
 import unittest
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -457,14 +456,17 @@ class SerialDilutionTests(unittest.TestCase):
         )
         self.assertIn("12 mL", declarations(self.NAME).__doc__)
 
-    def test_the_final_column_is_equalised_into_the_trash(self) -> None:
-        # Without this the last column holds 200 uL and the series is not 1:2.
+    def test_the_final_column_is_equalised_into_separate_liquid_waste(self) -> None:
+        # Equalization changes final volume, not the established concentration.
+        # Eight channels put 800 uL into initially empty reservoir A12.
         discards = [
             line
             for line in self.log
-            if line.startswith("Dispensing 100.0") and "Trash" in line
+            if line.startswith("Dispensing 100.0")
+            and "into A12 of Diluent and Liquid Waste Reservoir" in line
         ]
         self.assertEqual(len(discards), 1)
+        self.assertFalse(any("Dispensing" in line and "Trash" in line for line in self.log))
 
     def test_the_stock_column_is_never_diluted_from_the_reservoir(self) -> None:
         # Diluent goes into columns 2-12 only; column 1 holds the stock.
@@ -550,6 +552,15 @@ class PcrSetupTests(unittest.TestCase):
         # Pipetting happens between the first open and the close.
         self.assertLess(opens[0], closes[0])
         self.assertLess(closes[0], opens[1])
+
+    def test_operator_seals_after_pipetting_and_before_heating(self) -> None:
+        sealing = next(i for i, line in enumerate(self.log) if "Verify the PCR sealing setup" in line)
+        last_dispense = max(i for i, line in enumerate(self.log) if line.startswith("Dispensing"))
+        closing = self.log.index("Closing Thermocycler lid")
+        heating = next(i for i, line in enumerate(self.log) if "lid temperature to" in line)
+        self.assertLess(last_dispense, sealing)
+        self.assertLess(sealing, closing)
+        self.assertLess(closing, heating)
 
     def test_every_thermocycler_step_declares_the_reaction_volume(self) -> None:
         # block_max_volume drives the ramp: understating it under-heats the mix.

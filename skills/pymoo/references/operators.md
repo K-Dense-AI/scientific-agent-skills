@@ -1,345 +1,117 @@
-# Pymoo Genetic Operators Reference
+# Genetic operators (pymoo 0.6.2)
 
-Comprehensive reference for genetic operators in pymoo.
+Use instantiated operators. Historical strings such as `"real_sbx"`,
+`"real_random"`, and `"real_pm"` are not accepted by current GA execution.
 
-## Sampling Operators
-
-Sampling operators initialize populations at the start of optimization.
-
-### Random Sampling
-**Purpose:** Generate random initial solutions
-**Types:**
-- `FloatRandomSampling`: Continuous variables
-- `BinaryRandomSampling`: Binary variables
-- `IntegerRandomSampling`: Integer variables
-- `PermutationRandomSampling`: Permutation-based problems
-
-**Usage:**
-```python
-from pymoo.operators.sampling.rnd import FloatRandomSampling
-sampling = FloatRandomSampling()
-```
-
-### Latin Hypercube Sampling (LHS)
-**Purpose:** Space-filling initial population
-**Benefit:** Better coverage of search space than random
-**Types:**
-- `LHS`: Standard Latin Hypercube
-
-**Usage:**
-```python
-from pymoo.operators.sampling.lhs import LHS
-sampling = LHS()
-```
-
-### Custom Sampling
-Provide initial population through Population object or NumPy array
-
-## Selection Operators
-
-Selection operators choose parents for reproduction.
-
-### Tournament Selection
-**Purpose:** Select parents through tournament competition
-**Mechanism:** Randomly select k individuals, choose best
-**Parameters:**
-- `pressure`: Tournament size (default: 2)
-- `func_comp`: Comparison function
-
-**Usage:**
-```python
-from pymoo.operators.selection.tournament import TournamentSelection
-selection = TournamentSelection(pressure=2)
-```
-
-### Random Selection
-**Purpose:** Uniform random parent selection
-**Use case:** Baseline or exploration-focused algorithms
-
-**Usage:**
-```python
-from pymoo.operators.selection.rnd import RandomSelection
-selection = RandomSelection()
-```
-
-## Crossover Operators
-
-Crossover operators recombine parent solutions to create offspring.
-
-### For Continuous Variables
-
-#### Simulated Binary Crossover (SBX)
-**Purpose:** Primary crossover for continuous optimization
-**Mechanism:** Simulates single-point crossover of binary-encoded variables
-**Parameters:**
-- `prob`: Crossover probability (default: 0.9)
-- `eta`: Distribution index (default: 15)
-  - Higher eta → offspring closer to parents
-  - Lower eta → more exploration
-
-**Usage:**
-```python
-from pymoo.operators.crossover.sbx import SBX
-crossover = SBX(prob=0.9, eta=15)
-```
-
-**String shorthand:** `"real_sbx"`
-
-#### Differential Evolution Crossover
-**Purpose:** DE-specific recombination
-**Variants:**
-- `DE/rand/1/bin`
-- `DE/best/1/bin`
-- `DE/current-to-best/1/bin`
-
-**Parameters:**
-- `CR`: Crossover rate
-- `F`: Scaling factor
-
-### For Binary Variables
-
-#### Single Point Crossover
-**Purpose:** Cut and swap at one point
-**Usage:**
-```python
-from pymoo.operators.crossover.pntx import SinglePointCrossover
-crossover = SinglePointCrossover()
-```
-
-#### Two Point Crossover
-**Purpose:** Cut and swap between two points
-**Usage:**
-```python
-from pymoo.operators.crossover.pntx import TwoPointCrossover
-crossover = TwoPointCrossover()
-```
-
-#### K-Point Crossover
-**Purpose:** Multiple cut points
-**Parameters:**
-- `n_points`: Number of crossover points
-
-#### Uniform Crossover
-**Purpose:** Each gene independently from either parent
-**Parameters:**
-- `prob`: Per-gene swap probability (default: 0.5)
-
-**Usage:**
-```python
-from pymoo.operators.crossover.ux import UniformCrossover
-crossover = UniformCrossover(prob=0.5)
-```
-
-#### Half Uniform Crossover (HUX)
-**Purpose:** Exchange exactly half of differing genes
-**Benefit:** Maintains genetic diversity
-
-### For Permutations
-
-#### Order Crossover (OX)
-**Purpose:** Preserve relative order from parents
-**Use case:** Traveling salesman, scheduling problems
-
-**Usage:**
-```python
-from pymoo.operators.crossover.ox import OrderCrossover
-crossover = OrderCrossover()
-```
-
-#### Edge Recombination Crossover (ERX)
-**Purpose:** Preserve edge information from parents
-**Use case:** Routing problems where edge connectivity matters
-
-#### Partially Mapped Crossover (PMX)
-**Purpose:** Exchange segments while maintaining permutation validity
-
-## Mutation Operators
-
-Mutation operators introduce variation to maintain diversity.
-
-### For Continuous Variables
-
-#### Polynomial Mutation (PM)
-**Purpose:** Primary mutation for continuous optimization
-**Mechanism:** Polynomial probability distribution
-**Parameters:**
-- `prob`: Per-variable mutation probability
-- `eta`: Distribution index (default: 20)
-  - Higher eta → smaller perturbations
-  - Lower eta → larger perturbations
-
-**Usage:**
-```python
-from pymoo.operators.mutation.pm import PM
-mutation = PM(prob=None, eta=20)  # prob=None means 1/n_var
-```
-
-**String shorthand:** `"real_pm"`
-
-**Probability guidelines:**
-- `None` or `1/n_var`: Standard recommendation
-- Higher for more exploration
-- Lower for more exploitation
-
-### For Binary Variables
-
-#### Bitflip Mutation
-**Purpose:** Flip bits with specified probability
-**Parameters:**
-- `prob`: Per-bit flip probability
-
-**Usage:**
-```python
-from pymoo.operators.mutation.bitflip import BitflipMutation
-mutation = BitflipMutation(prob=0.05)
-```
-
-### For Integer Variables
-
-#### Integer Polynomial Mutation
-**Purpose:** PM adapted for integers
-**Ensures:** Valid integer values after mutation
-
-### For Permutations
-
-#### Inversion Mutation
-**Purpose:** Reverse a segment of the permutation
-**Use case:** Maintains some order structure
-
-**Usage:**
-```python
-from pymoo.operators.mutation.inversion import InversionMutation
-mutation = InversionMutation()
-```
-
-#### Scramble Mutation
-**Purpose:** Randomly shuffle a segment
-
-### Custom Mutation
-Define custom mutation by extending `Mutation` class
-
-## Repair Operators
-
-Repair operators fix constraint violations or ensure solution feasibility.
-
-### Rounding Repair
-**Purpose:** Round to nearest valid value
-**Use case:** Integer/discrete variables with bound constraints
-
-### Bounce Back Repair
-**Purpose:** Reflect out-of-bounds values back into feasible region
-**Use case:** Box-constrained continuous problems
-
-### Projection Repair
-**Purpose:** Project infeasible solutions onto feasible region
-**Use case:** Linear constraints
-
-### Custom Repair
-**Purpose:** Domain-specific constraint handling
-**Implementation:** Extend `Repair` class
-
-**Example:**
-```python
-from pymoo.core.repair import Repair
-
-class MyRepair(Repair):
-    def _do(self, problem, X, **kwargs):
-        # Modify X to satisfy constraints
-        # Return repaired X
-        return X
-```
-
-## Operator Configuration Guidelines
-
-### Parameter Tuning
-
-**Crossover probability:**
-- High (0.8-0.95): Standard for most problems
-- Lower: More emphasis on mutation
-
-**Mutation probability:**
-- `1/n_var`: Standard recommendation
-- Higher: More exploration, slower convergence
-- Lower: Faster convergence, risk of premature convergence
-
-**Distribution indices (eta):**
-- Crossover eta (15-30): Higher for local search
-- Mutation eta (20-50): Higher for exploitation
-
-### Problem-Specific Selection
-
-**Continuous problems:**
-- Crossover: SBX
-- Mutation: Polynomial Mutation
-- Selection: Tournament
-
-**Binary problems:**
-- Crossover: Two-point or Uniform
-- Mutation: Bitflip
-- Selection: Tournament
-
-**Permutation problems:**
-- Crossover: Order Crossover (OX)
-- Mutation: Inversion or Scramble
-- Selection: Tournament
-
-**Mixed-variable problems:**
-- Use appropriate operators per variable type
-- Ensure operator compatibility
-
-### String-Based Configuration
-
-Pymoo supports convenient string-based operator specification:
+## Continuous variables
 
 ```python
 from pymoo.algorithms.soo.nonconvex.ga import GA
-
-algorithm = GA(
-    pop_size=100,
-    sampling="real_random",
-    crossover="real_sbx",
-    mutation="real_pm"
-)
-```
-
-**Available strings:**
-- Sampling: `"real_random"`, `"real_lhs"`, `"bin_random"`, `"perm_random"`
-- Crossover: `"real_sbx"`, `"real_de"`, `"int_sbx"`, `"bin_ux"`, `"bin_hux"`
-- Mutation: `"real_pm"`, `"int_pm"`, `"bin_bitflip"`, `"perm_inv"`
-
-## Operator Combination Examples
-
-### Standard Continuous GA:
-```python
-from pymoo.operators.sampling.rnd import FloatRandomSampling
+from pymoo.operators.sampling.lhs import LHS
 from pymoo.operators.crossover.sbx import SBX
 from pymoo.operators.mutation.pm import PM
-from pymoo.operators.selection.tournament import TournamentSelection
 
-sampling = FloatRandomSampling()
-crossover = SBX(prob=0.9, eta=15)
-mutation = PM(eta=20)
-selection = TournamentSelection()
+algorithm = GA(pop_size=40, sampling=LHS(),
+               crossover=SBX(prob=0.9, eta=15),
+               mutation=PM(prob=0.9, prob_var=None, eta=20),
+               eliminate_duplicates=True)
 ```
 
-### Binary GA:
+- Sampling: `FloatRandomSampling()` or `LHS()`. LHS stratifies marginal samples;
+  it does not guarantee superior optimizer performance.
+- SBX `prob` is the probability of applying crossover to a mating. Its separate
+  `prob_var` controls variable exchange (default 0.5). Larger `eta` tends to
+  produce offspring closer to their parents.
+- PM `prob` is the probability of mutating an **individual**, default 0.9.
+  `prob_var` is the per-variable mutation probability. `None` gives
+  `min(0.5, 1/problem.n_var)` in 0.6.2. `PM(prob=None)` is not the default-rate
+  recipe and can fail during mutation. Larger `eta` concentrates perturbations.
+- DE uses its own variation. Configure `DE(variant="DE/rand/1/bin", CR=0.7, F=0.5)`
+  from `pymoo.algorithms.soo.nonconvex.de`; do not substitute a string for GA's
+  crossover object.
+
+## Binary variables
+
 ```python
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
 from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
 
-sampling = BinaryRandomSampling()
-crossover = TwoPointCrossover()
-mutation = BitflipMutation(prob=0.05)
+binary_ga = GA(pop_size=40, sampling=BinaryRandomSampling(),
+               crossover=TwoPointCrossover(),
+               mutation=BitflipMutation(prob=1.0, prob_var=0.05))
 ```
 
-### Permutation GA (TSP):
+`SinglePointCrossover`, `TwoPointCrossover`, `PointCrossover(n_points=...)`,
+`UniformCrossover`, and `HalfUniformCrossover` cover common binary recombination.
+`UniformCrossover(prob=0.9)` applies crossover to 90% of matings; the internal
+per-gene swap probability is fixed at 0.5. `BitflipMutation.prob_var`, not `prob`,
+is the per-bit probability. Bitflip expects Boolean decision arrays.
+
+## Integers and mixed variables
+
+```python
+from pymoo.operators.sampling.rnd import IntegerRandomSampling
+from pymoo.operators.repair.rounding import RoundingRepair
+
+integer_ga = GA(pop_size=40, sampling=IntegerRandomSampling(),
+    crossover=SBX(prob=0.9, eta=15, vtype=float, repair=RoundingRepair()),
+    mutation=PM(eta=20, vtype=float, repair=RoundingRepair()))
+```
+
+Use integral bounds; rounding alone does not impose nonlinear constraints.
+For heterogeneous variables, define `vars` using `Real`, `Integer`, `Choice`,
+`Binary` and use `MixedVariableGA` or explicit mixed mating. Merely setting a
+problem's type does not replace incompatible continuous operators.
+
+## Permutations
+
 ```python
 from pymoo.operators.sampling.rnd import PermutationRandomSampling
 from pymoo.operators.crossover.ox import OrderCrossover
 from pymoo.operators.mutation.inversion import InversionMutation
 
-sampling = PermutationRandomSampling()
-crossover = OrderCrossover()
-mutation = InversionMutation()
+permutation_ga = GA(pop_size=40, sampling=PermutationRandomSampling(),
+                    crossover=OrderCrossover(), mutation=InversionMutation())
 ```
+
+`EdgeRecombinationCrossover` is also available in
+`pymoo.operators.crossover.erx`. PMX and scramble mutation are not shipped
+operators in 0.6.2; implement and validate a custom operator if required. Preserve
+one occurrence of each item, and separately repair domain constraints such as
+route precedence.
+
+## Selection and repair
+
+GA and NSGA-II supply algorithm-specific tournament comparators. A bare
+`TournamentSelection()` raises an error; a custom instance requires `func_comp`.
+For the standard single-objective comparator:
+
+```python
+from pymoo.algorithms.soo.nonconvex.ga import comp_by_cv_and_fitness
+from pymoo.operators.selection.tournament import TournamentSelection
+selection = TournamentSelection(func_comp=comp_by_cv_and_fitness, pressure=2)
+```
+
+Use a multi-objective comparator for multi-objective survival/ranking.
+`RandomSelection()` from `pymoo.operators.selection.rnd` selects uniformly.
+
+```python
+import numpy as np
+from pymoo.core.repair import Repair
+
+class BoxRepair(Repair):
+    def _do(self, problem, X, **kwargs):
+        return np.clip(X, problem.xl, problem.xu)
+```
+
+This repairs bounds only. A custom operator should accept `**kwargs`; randomized
+operators should use the supplied `random_state` (a NumPy Generator in 0.6.2),
+not an unseeded global RNG. Validate bounds, types, and problem-specific invariants
+after operator changes, then compare matched budgets over multiple seeds.
+
+Sources reviewed 2026-10-01: [selection](https://pymoo.org/operators/selection.html),
+[crossover](https://pymoo.org/operators/crossover.html),
+[mutation](https://pymoo.org/operators/mutation.html),
+[discrete variables](https://pymoo.org/customization/discrete.html), and released
+0.6.2 operator source. Code recipes were instantiated and exercised on toy inputs.

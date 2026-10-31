@@ -9,6 +9,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -91,6 +92,16 @@ class IntakeTests(unittest.TestCase):
         self.assertIn("EXTERNAL_SERVICE_NOT_SUPPORTED", codes)
         self.assertIn("DATA_REUSE_PROHIBITED", codes)
 
+    def test_disclosed_conflict_requires_actual_editor_clearance(self) -> None:
+        intake = ready_intake()
+        intake["reviewer"]["conflict_status"] = "disclosed_to_editor"
+        intake["reviewer"]["conflicts"] = ["Synthetic declared competing interest"]
+        report = validate_intake(intake)
+        self.assertFalse(report["valid"])
+        self.assertIn("EDITOR_CONFLICT_CLEARANCE_REQUIRED", {e["code"] for e in report["errors"]})
+        intake["reviewer"]["conflict_status"] = "editor_cleared"
+        self.assertTrue(validate_intake(intake)["valid"])
+
 
 class ReportingGuidelineTests(unittest.TestCase):
     def test_rct_profile_selects_current_consort(self) -> None:
@@ -106,6 +117,25 @@ class ReportingGuidelineTests(unittest.TestCase):
         report = assess_reporting(load_profile(raw_profile), load_catalog())
         selected = {item["id"] for item in report["selected_guidelines"]}
         self.assertEqual(selected, {"CONSORT-2025", "CONSORT-AI-2020"})
+
+    def test_ai_protocol_selects_protocol_base_and_extension(self) -> None:
+        profile = load_asset_json("study_profile_template.json")
+        profile.update(report_kind="protocol", features=["ai_intervention"])
+        report = assess_reporting(load_profile(profile), load_catalog())
+        self.assertEqual({g["id"] for g in report["selected_guidelines"]}, {"SPIRIT-2025", "SPIRIT-AI-2020"})
+
+    def test_non_prediction_llm_study_selects_llm_guideline_only(self) -> None:
+        profile = load_asset_json("study_profile_template.json")
+        profile.update(study_types=["llm_study"], features=["large_language_model"])
+        report = assess_reporting(load_profile(profile), load_catalog())
+        self.assertEqual({g["id"] for g in report["selected_guidelines"]}, {"TRIPOD-LLM-2025"})
+
+    def test_abstract_does_not_reuse_full_report_item_counts(self) -> None:
+        profile = load_asset_json("study_profile_template.json")
+        profile["report_kind"] = "abstract"
+        report = assess_reporting(load_profile(profile), load_catalog())
+        self.assertEqual(report["selected_guidelines"], [])
+        self.assertIn("NO_BUNDLED_GUIDELINE_MATCH", {w["code"] for w in report["warnings"]})
 
     def test_coverage_is_complete_record_but_not_quality_score(self) -> None:
         profile = load_profile(load_asset_json("study_profile_template.json"))
@@ -367,7 +397,11 @@ class FileSafetyAndStaticTests(unittest.TestCase):
         ) as handle:
             rows = list(csv.DictReader(handle))
         self.assertGreaterEqual(len(rows), 25)
-        self.assertTrue(all(row["verified_on"] == "2026-07-23" for row in rows))
+        for row in rows:
+            verified = date.fromisoformat(row["verified_on"])
+            checked = date.fromisoformat(row["checked_on"])
+            self.assertLessEqual(verified, checked)
+            self.assertLessEqual(checked, date.today())
         self.assertTrue(all(row["url"].startswith("https://") for row in rows))
 
     def test_skill_frontmatter_and_progressive_disclosure(self) -> None:

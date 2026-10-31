@@ -20,7 +20,7 @@ https://api.clue.io/api
 | `GET /genes` | Query genes (L1000 landmark + inferred) |
 | `GET /cells` | Query cell lines used in L1000 |
 | `GET /sigs` | Query connectivity signatures |
-| `GET /profiles` | Access expression profiles (level 5 z-scores) |
+| `GET /profiles` | Profile metadata (not the full level 5 expression matrix) |
 | `GET /pcls` | Perturbagen classes |
 
 ## Query Parameters
@@ -32,21 +32,16 @@ All endpoints support a `filter` parameter using Loopback-style JSON:
 ## Example Calls
 
 ```bash
-# Search for a compound perturbagen by name
-curl -H "user_key: YOUR_API_KEY" \
-  "https://api.clue.io/api/perts?filter={\"where\":{\"pert_iname\":\"vorinostat\"}}"
-
-# Get landmark genes
-curl -H "user_key: YOUR_API_KEY" \
-  "https://api.clue.io/api/genes?filter={\"where\":{\"is_lm\":true},\"limit\":10}"
-
-# Query cell lines
-curl -H "user_key: YOUR_API_KEY" \
-  "https://api.clue.io/api/cells?filter={\"where\":{\"cell_iname\":\"MCF7\"}}"
-
-# Get connectivity signatures for a compound
-curl -H "user_key: YOUR_API_KEY" \
-  "https://api.clue.io/api/sigs?filter={\"where\":{\"pert_iname\":\"vorinostat\"},\"limit\":5}"
+# Illustrative authenticated queries; JSON is encoded as one query parameter.
+curl --fail-with-body --get 'https://api.clue.io/api/perts' \
+  -H "user_key: $CLUE_API_KEY" \
+  --data-urlencode 'filter={"where":{"pert_iname":"vorinostat"},"limit":5}'
+curl --fail-with-body --get 'https://api.clue.io/api/genes' \
+  -H "user_key: $CLUE_API_KEY" \
+  --data-urlencode 'filter={"where":{"l1000_type":"landmark"},"limit":10}'
+curl --fail-with-body --get 'https://api.clue.io/api/sigs' \
+  -H "user_key: $CLUE_API_KEY" \
+  --data-urlencode 'filter={"where":{"pert_iname":"vorinostat"},"limit":5}'
 ```
 
 ## Response Format
@@ -66,3 +61,7 @@ JSON. Example (perturbagen):
 ## Rate Limits
 - Free tier: moderate rate limiting (exact numbers not publicly documented)
 - Bulk data downloads available separately via clue.io data portal
+
+For expression matrices, obtain the versioned data release and join on signature
+and gene identifiers. Level 5 contains replicate-collapsed differential-expression
+signatures; it is not raw abundance. Official contract: https://clue.io/developer-resources

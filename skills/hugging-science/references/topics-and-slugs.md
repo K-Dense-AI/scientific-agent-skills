@@ -1,6 +1,6 @@
 # Topic slugs and entry schema
 
-The Hugging Science catalog organizes scientific resources across **17 topics**. Each has a markdown file at `https://huggingscience.co/topics/<slug>.md`. Slugs are lowercase and hyphenated.
+The Hugging Science catalog organizes scientific resources across **17 topics** in the 2026-10-01 public index (recheck when discovering resources). Each has a markdown file at `https://huggingscience.co/topics/<slug>.md`. Slugs are lowercase and hyphenated.
 
 ## Topic slugs and what each covers
 
@@ -79,4 +79,4 @@ Each catalog entry is an H3 block with bulleted metadata followed by a descripti
 - `https://huggingscience.co/topics/<slug>.md` — one domain
 - `https://huggingscience.co/feed.xml` — RSS for new entries
 
-The `fetch_catalog.py` script wraps these and adds parsing, filtering, and JSON output. Prefer the script for structured access; use raw `WebFetch`/`curl` only if the script fails.
+These are public unauthenticated GET resources, returning Markdown or RSS XML, without request bodies or pagination. The fetcher wraps the three Markdown routes; it does not parse the feed. `llms-full.txt` repeats resources across overlapping topic sections; `all` and `search` collapse repeated section/URL pairs after filtering. JSON output is a list of entry records (all fields are strings except `tags`, a string list), not an instruction channel. The index also includes compact bullet listings; structured parsing uses the H3 blocks in topic/full documents. The `fetch_catalog.py` script adds parsing, filtering, and JSON output. Prefer the script for structured access; use raw `WebFetch`/`curl` only if the script fails.

@@ -11,10 +11,12 @@ Rows are samples. Two aligned list-columns, plus whatever labels you need.
 | `Split` | `str` — `train` / `validation` / `test` | only when using `split_column` |
 | *(any)* | scalar targets and covariates | as needed |
 
-The DataFrame index holds the sample ID and is preserved through `embed`.
+The parquet DataFrame index holds the sample ID and is preserved through `embed`.
+The upstream CSV/TSV reader does not restore that index.
 
-Use `.parquet`. CSV/TSV works but stores each list as its Python `repr`, parsed back with
-`ast.literal_eval` — brittle and large.
+Use `.parquet`. Upstream CSV/TSV list parsing checks `dtype == object`, so pandas 3
+string columns remain strings and produce degenerate or omitted samples. The bundled coverage
+reader parses them correctly; convert to parquet before passing data to the upstream CLI.
 
 ```python
 import pandas as pd
@@ -65,7 +67,7 @@ Consequences that bite:
 - **Separator is `;`, not `|`.** A `|`-joined MetaPhlAn lineage is one unsplittable segment. Its
   first three characters are `k__`, so it matches at kingdom rank and the *entire pipe-joined
   string* is returned as a single token — which is not in the vocabulary, so it becomes `<unk>`.
-  Verified against `TaxonomicTokenizer` 1.0.2:
+  Verified natively against `TaxonomicTokenizer` 1.0.2 with Transformers 4.57.6:
   `k__Bacteria|p__Firmicutes|g__Lactobacillus` extracts to itself, while the `;`-separated form
   extracts to `g__Lactobacillus`.
 - **Bare names never tokenise.** `Lactobacillus` has no prefix. Use `prepare-dataset
@@ -80,9 +82,16 @@ Ordering is by **descending abundance z-score** — `(ra - mean) / std` per toke
 taxon* first, rather than merely abundant. Without that file, ordering falls back to raw descending
 abundance.
 
-Because truncation is applied after ordering, a sample with more than 510 in-vocabulary taxa loses
-its least distinctive ones. That is the intended behaviour, but it means `max_length` interacts with
-how deeply you profiled.
+Truncation keeps at most `max_length - 2` in-vocabulary entries. Discarded entries have lower
+ordering scores; this is not evidence they are biologically uninformative. Upstream does not
+aggregate repeated genus tokens from different species/lineages. Count encoded entries (including
+duplicates) when reporting truncation, and keep rank/aggregation conventions fixed.
+
+`compute_token_std_means` computes moments over observed entries, not across all samples with
+absent taxa filled as zeros. Duplicate mapped tokens each contribute an observation. For a new
+model, estimate preprocessing statistics on training data only; the upstream `pretrain` command
+computes vocabulary/statistics before its random validation split, so that validation loss is not
+an independent assessment of preprocessing generalization.
 
 ## Out-of-vocabulary taxa
 
@@ -119,8 +128,9 @@ python scripts/profiler_to_waypoint.py \
 
 The converter drops `#` comment lines and the `NCBI_tax_id` / `clade_taxid` column, keeps only rows
 whose deepest rank equals `--rank` (default `species`, which avoids double-counting parents),
-rewrites `|` to `; `, and renormalises each sample to sum to 1. Strain rows (`t__`) are always
-excluded.
+rewrites `|` to `; `, and renormalises each sample to sum to 1. Strain/SGB rows ending below species (`t__`) are excluded before normalization, preventing
+double-counting their species parents. A profile containing only SGB rows is unsupported by this
+rank-selection mode; aggregate with the profiler's documented taxonomy mapping first.
 
 ### Kraken2 / Bracken
 
@@ -140,11 +150,18 @@ rank, and normalises. Sample IDs come from the filenames. Both the 6-column and 
 (`--report-minimizer-data`) layouts are handled.
 
 Bracken's own `.bracken` output carries no lineage at all — use the Kraken-style report Bracken
-writes with `-o`/`--report`, not the tabular abundance file.
+writes with `-w` (`-o` selects the tabular abundance file). Verify that the report was actually
+produced: the reviewed current Bracken shell script's explicit `-w` branch prints the underlying
+Python command instead of executing it. If affected, run its documented `est_abundance.py`
+interface with `--out-report`, then use the report at the same estimated rank.
 
 ### QIIME 2 / biom TSV
 
-Exported feature tables with a `taxonomy` column (or `#OTU ID` rows already labelled by lineage):
+The converter reads TSV, not `.qza` or binary BIOM. Export the feature table, convert BIOM to TSV,
+and join taxonomy by feature ID first; a normal QIIME feature-table export contains feature IDs,
+not lineages. If taxonomy is already present as BIOM observation metadata, `biom convert` with
+`--to-tsv --header-key taxonomy` includes it. Pass that column explicitly (or supply `#OTU ID`
+rows already labelled by lineage):
 
 ```bash
 python scripts/profiler_to_waypoint.py \
@@ -158,9 +175,10 @@ taxonomy is `Unassigned` are dropped.
 
 ### MGnify
 
-MGnify amplicon abundance TSVs are taxa-as-rows with a `taxonomy` first column and `;`-separated
-lineages — the native layout. `waypoint prepare-dataset --orientation auto` reads them directly; no
-conversion needed. This is the format Atlas itself was built from.
+For MGnify-style taxonomy matrices with a `taxonomy` first column, `;`-separated lineages and
+only numeric sample columns, use `waypoint prepare-dataset --orientation taxa_as_rows`. This
+describes the bundled example layout, not every MGnify export or pipeline. Inspect the actual
+header, taxonomy database and rank; adapt any extra metadata columns before conversion.
 
 ### Anything else
 
@@ -183,8 +201,15 @@ python scripts/profiler_to_waypoint.py --input ... --metadata labels.csv --outpu
 ```
 
 — where `labels.csv` is indexed by sample ID, or join afterwards in pandas. Sample IDs must match
-exactly; the converters do an inner-style alignment and will silently produce `NaN` targets for
-unmatched rows, which then fail at fine-tuning time.
+exactly. These are left joins: unmatched samples remain with missing labels. The bundled helper
+warns about unmatched IDs and rejects duplicate IDs; upstream may omit missing targets in
+`finetune`. Check sample counts and missingness explicitly before splitting. Parquet metadata
+must preserve a sample-ID index. The bundled converter rejects non-finite/negative abundances
+and malformed numeric cells; zeros/missing numeric cells are treated as absent taxa.
+
+`--min-abundance` filters after normalization without renormalizing the retained values. Record
+the retained mass; do not describe the filtered lists as summing to one unless you explicitly
+renormalize and record that additional transformation.
 
 ## Splits
 
@@ -198,3 +223,10 @@ unmatched rows, which then fail at fine-tuning time.
 
 Grouping by subject or study when you build `Split` is the difference between a generalisation
 estimate and a memorisation estimate.
+
+## Format sources reviewed 2026-10-01
+
+- [MetaPhlAn 4 formats](https://github.com/biobakery/MetaPhlAn/wiki/MetaPhlAn-4).
+- [Kraken 2 report columns and rank codes](https://github.com/DerrickWood/kraken2/wiki/Manual).
+- [Bracken command implementation](https://github.com/jenniferlu717/Bracken/blob/master/bracken).
+- [BIOM conversion and taxonomy metadata](https://biom-format.org/documentation/biom_conversion.html).

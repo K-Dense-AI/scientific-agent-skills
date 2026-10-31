@@ -1,6 +1,6 @@
 # Documentation Package Workflow
 
-Last reviewed: **2026-07-23**
+Last reviewed: **2026-10-01**
 
 ## Package contract
 
@@ -110,6 +110,8 @@ python3 scripts/check_consistency.py PACKAGE_DIRECTORY
 python3 scripts/timeline_generator.py PACKAGE_DIRECTORY --output SCHEDULE.json
 ```
 
+Run these commands from the skill directory. New empty templates pass structural validation but intentionally fail completeness and schedule generation until supplied records and dates exist.
+
 The checks answer different questions:
 
 - structural validator — are document types, fields, types, enums, bounds, and dates valid?
@@ -117,13 +119,15 @@ The checks answer different questions:
 - completeness checker — are required records, reviews, routes, acknowledgments, sign-off, and release declarations complete?
 - privacy/process checker — are local authorization, minimization, external-tool prohibition, qualified review, retention, and direct-identifier safeguards documented?
 - consistency checker — do package IDs, statuses, classifications, references, and explicit date order agree?
-- timeline generator — what events occur on dates already supplied?
+- timeline generator — after structural and cross-record consistency checks, what events occur on dates already supplied?
 
-Run every check again after any change.
+Run every check again after any change. A pass evaluates declarations, not their authenticity. The completeness output is `documentation_declarations_complete`; `handoff_authorized_by_script` is always false. The fixed completeness profile requires at least one intervention, goal, monitoring item, checkpoint, shared-decision entry, and handoff item. These are package constraints, not universal care requirements. If the supplied workflow does not have such records, leave it blocked and retain the authorized source workflow; never invent care or consent documentation merely to pass.
+
+Dates use full `YYYY-MM-DD` form. Timestamps use `YYYY-MM-DDTHH:MM:SS`, optional 1-6 fractional digits, and `Z` or `±HH:MM`. A schedule keeps the calendar date in the supplied offset, without converting timezones. It omits clinical text and subject IDs but is still sensitive when derived from patient data.
 
 ## 8. Minimized issue handling
 
-Reports use field paths, not values. For example, a report may identify `interventions[0].verification.status` without printing the action text.
+Reports use known field paths, not values; unknown field names and unrecognized document-type values are suppressed. For example, a report may identify `interventions[0].verification.status` without printing the action text.
 
 Resolve each issue in the authoritative local record:
 

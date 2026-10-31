@@ -136,7 +136,8 @@ term=("2024/01/01"[Publication Date] : "2024/12/31"[Publication Date])
 term=GENOMIC[Source] AND ChIP-Seq[Strategy] AND cancer[Text Word]
 
 # By read count range
-term=10000000:100000000[ReadLength]
+# Download run metadata, then filter the reported read_count field locally.
+# Read length and number of reads are different quantities.
 
 # Combined complex query
 term=(RNA-Seq[Strategy] AND paired[Layout] AND Homo sapiens[Organism] AND Illumina[Platform])

@@ -266,7 +266,7 @@ class ValidatorPdfTests(TemporaryDirectoryTestCase):
     def test_the_slide_dimensions_are_reported_in_inches(self) -> None:
         # 1280 x 720 points at 72 points per inch is 17.8" x 10.0".
         result = validated(self.deck(pages=1, size=(1280, 720)))
-        self.assertIn('17.8" × 10.0"', "\n".join(result["info"]))
+        self.assertIn('17.8" x 10.0"', "\n".join(result["info"]))
 
     def test_the_page_count_is_measured_against_the_duration(self) -> None:
         result = validated(self.deck(pages=2, size=(1280, 720)), duration=15)
@@ -380,7 +380,7 @@ class ValidatorPptxTests(TemporaryDirectoryTestCase):
     def test_the_slide_geometry_is_reported(self) -> None:
         result = validated(self.build(font_pt=24, bullets=1))
         # python-pptx's default template is 10" x 7.5", i.e. 4:3.
-        self.assertIn('10.0" × 7.5"', "\n".join(result["info"]))
+        self.assertIn('10.0" x 7.5"', "\n".join(result["info"]))
 
 
 class PdfToImagesTests(TemporaryDirectoryTestCase):
@@ -628,14 +628,14 @@ class SlideImageInvocationTests(TemporaryDirectoryTestCase):
         self.assertLess(forwarded.index("before.png"), forwarded.index("after.png"))
 
     def test_the_iteration_ceiling_is_enforced_by_the_wrapper(self) -> None:
-        # Two is the documented maximum; a larger request is clamped, and the
-        # default is left implicit rather than passed through.
-        self.assertNotIn("--iterations", self.invoke("s", "-o", "s.png").args[0])
-        self.assertNotIn(
-            "--iterations", self.invoke("s", "-o", "s.png", "--iterations", "5").args[0]
-        )
-        clamped = self.invoke("s", "-o", "s.png", "--iterations", "1").args[0]
-        self.assertEqual(clamped[clamped.index("--iterations") + 1], "1")
+        for n in (1, 2):
+            command = self.invoke("s", "-o", "s.png", "--iterations", str(n)).args[0]
+            self.assertEqual(command[command.index("--iterations") + 1], str(n))
+        with mock.patch.object(sys, "argv", ["generate_slide_image.py", "s", "-o", "s.png", "--iterations", "5"]), mock.patch("subprocess.run") as run:
+            with self.assertRaises(SystemExit) as raised:
+                generate_slide_image.main()
+            self.assertEqual(raised.exception.code, 2)
+            run.assert_not_called()
 
     def test_without_a_key_nothing_is_spawned(self) -> None:
         # The wrapper also resolves a credential from any .env file at or above the
@@ -733,64 +733,18 @@ class GuidelineTests(SlideGeneratorTestCase):
 class ImageExtractionTests(SlideGeneratorTestCase):
     PAYLOAD = b"\x89PNG\r\n\x1a\n-pretend-this-is-an-image"
 
-    def response(self, message: dict) -> dict:
-        return {"choices": [{"message": message}]}
+    def test_dedicated_image_api_response_is_decoded(self):
+        for media_type in (None, "image/png"):
+            response = {"data": [{"b64_json": base64.b64encode(self.PAYLOAD).decode(), "media_type": media_type}]}
+            self.assertEqual(self.generator._extract_image_from_response(response), self.PAYLOAD)
 
-    def test_an_image_in_the_images_field_is_decoded(self) -> None:
-        response = self.response(
-            {"images": [{"type": "image_url",
-                         "image_url": {"url": self.data_url(self.PAYLOAD)}}]}
-        )
-        self.assertEqual(
-            self.generator._extract_image_from_response(response), self.PAYLOAD
-        )
-
-    def test_wrapped_base64_is_reassembled(self) -> None:
-        # Some responses arrive hard-wrapped; the newlines are not data.
-        encoded = base64.b64encode(self.PAYLOAD).decode()
-        wrapped = "\n".join(encoded[index:index + 8] for index in range(0, len(encoded), 8))
-        response = self.response(
-            {"images": [{"type": "image_url",
-                         "image_url": {"url": f"data:image/png;base64,{wrapped}"}}]}
-        )
-        self.assertEqual(
-            self.generator._extract_image_from_response(response), self.PAYLOAD
-        )
-
-    def test_an_image_embedded_in_the_content_string_is_found(self) -> None:
-        response = self.response(
-            {"content": f"Here you go: {self.data_url(self.PAYLOAD)} enjoy"}
-        )
-        self.assertEqual(
-            self.generator._extract_image_from_response(response), self.PAYLOAD
-        )
-
-    def test_an_image_in_a_content_block_is_found(self) -> None:
-        response = self.response(
-            {"content": [
-                {"type": "text", "text": "here"},
-                {"type": "image_url", "image_url": {"url": self.data_url(self.PAYLOAD)}},
-            ]}
-        )
-        self.assertEqual(
-            self.generator._extract_image_from_response(response), self.PAYLOAD
-        )
-
-    def test_a_response_with_no_image_yields_none(self) -> None:
-        for message in ({}, {"content": "I cannot draw that"}, {"images": []}):
-            with self.subTest(message=message):
-                self.assertIsNone(
-                    self.generator._extract_image_from_response(self.response(message))
-                )
-
-    def test_a_refusal_with_no_choices_yields_none(self) -> None:
-        self.assertIsNone(self.generator._extract_image_from_response({"choices": []}))
-
-    def test_a_truncated_data_url_yields_none_rather_than_raising(self) -> None:
-        response = self.response(
-            {"images": [{"type": "image_url", "image_url": {"url": "data:image/png"}}]}
-        )
-        self.assertIsNone(self.generator._extract_image_from_response(response))
+    def test_invalid_response_or_image_is_rejected(self):
+        cases = [{}, {"data": []}, {"data": [{}]}, {"data": [{"b64_json": "bad base64"}]},
+                 {"data": [{"b64_json": "YWJj", "media_type": "image/png"}]},
+                 {"data": [{"b64_json": "YWJj", "media_type": "image/jpeg"}]}]
+        for response in cases:
+            with self.subTest(response=response), self.assertRaises(RuntimeError):
+                self.generator._extract_image_from_response(response)
 
 
 class AttachmentEncodingTests(SlideGeneratorTestCase):
@@ -812,12 +766,11 @@ class AttachmentEncodingTests(SlideGeneratorTestCase):
                     )
                 )
 
-    def test_an_unknown_extension_falls_back_to_png(self) -> None:
+    def test_an_unknown_extension_is_rejected(self) -> None:
         path = self.root / "figure.tiff"
         path.write_bytes(b"bytes")
-        self.assertTrue(
-            self.generator._image_to_base64(str(path)).startswith("data:image/png")
-        )
+        with self.assertRaisesRegex(ValueError, "Unsupported attachment format"):
+            self.generator._image_to_base64(str(path))
 
     def test_the_encoded_payload_round_trips(self) -> None:
         path = self.root / "chart.png"

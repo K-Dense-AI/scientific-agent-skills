@@ -70,8 +70,10 @@ FlowData(
 - DATA mode: list mode (`$MODE=L`)
 - Event types used in practice: integer (`I`), single precision (`F`), and
   double precision (`D`)
-- Correlated and uncorrelated histogram modes (`C` and `U`) raise
-  `NotImplementedError`
+- Correlated and uncorrelated histogram modes (`C` and `U`) are unsupported.
+  The released parser only explicitly rejects lowercase `c`/`u`; uppercase
+  values can be interpreted as list data. Validate `flow.text["mode"].upper() == "L"`
+  before downstream use. The bundled inspector enforces this.
 
 The FCS standard defines ASCII (`A`) DATA, but FlowIO 1.4.0 does not provide a
 reliable ASCII parser path. Do not claim ASCII event-data support without a
@@ -89,7 +91,7 @@ fixture-specific test.
 - `data_type`: `$DATATYPE` value from the file.
 - `channel_count`: Number of parameters/channels (`$PAR`).
 - `event_count`: Number of events (`$TOT`).
-- `events`: Flattened one-dimensional sequence of encoded event values, usually
+- `events`: Flattened one-dimensional sequence of decoded event values, usually
   `array.array`. Mixed-width integer channels use a Python `list`.
   `events` is `None` when `only_text=True`.
 - `channels`: Mapping whose keys are one-based FCS parameter numbers. Each value
@@ -97,7 +99,8 @@ fixture-specific test.
   - `pnn`: required PnN label
   - `pns`: optional PnS label, or `""`
   - `pne`: `(decades, log_zero)` tuple
-  - `png`: gain as `float`, defaulting to `1.0`
+  - `png`: gain as `float`, defaulting to `1.0`; forced to `1.0` for a
+    recognized, non-null `Time` channel regardless of the TEXT PnG value
   - `pnr`: range as `float`
 - `pnn_labels`: Required channel labels in array-column order.
 - `pns_labels`: Optional channel labels in array-column order; missing values
@@ -134,20 +137,28 @@ metadata round-trip fidelity matters.
 flow.as_array(preprocess=True)
 ```
 
-Returns a two-dimensional NumPy `float64` array with shape:
+Returns a two-dimensional NumPy `float64` array. For valid input its shape is:
 
 ```python
 (flow.event_count, flow.channel_count)
 ```
 
-With `preprocess=False`, FlowIO reshapes the encoded values without applying
-metadata-driven scaling.
+FlowIO actually reshapes to `(-1, channel_count)` and does not compare DATA
+length with `$TOT`. Validate the resulting shape or check
+`len(flow.events) == flow.event_count * flow.channel_count` first.
+
+With `preprocess=False`, FlowIO reshapes decoded values without applying
+metadata-driven scaling. Integer decoding has already applied PnR bit masks,
+so this does not recover the original binary words.
 
 With `preprocess=True`, FlowIO:
 
 1. Multiplies the time channel by the `timestep` keyword when available.
 2. Converts logarithmically stored channels to linear values from PnE and PnR.
 3. Divides channel values by PnG when gain is neither zero nor one.
+   FlowIO forces the recognized `Time` channel gain to one.
+
+For logarithmic PnE with `log_zero == 0`, channel extraction substitutes `1.0`.
 
 It does not perform spillover compensation, logicle/biexponential/asinh
 transformation, gating, or quality control.
@@ -263,7 +274,7 @@ with Path("created.fcs").open("xb") as handle:
         handle,
         events_2d.ravel(order="C"),
         labels,
-        metadata_dict={"date": "23-JUL-2026", "src": "Example"},
+        metadata_dict={"date": "30-SEP-2026", "src": "Example"},
     )
 ```
 

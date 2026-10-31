@@ -52,7 +52,7 @@ Set `OPENALEX_API_KEY` for your account budget; it is sent in the Authorization 
 Search Google Scholar and export results.
 
 **Features**:
-- Automated searching with rate limiting
+- Optional unofficial `scholarly` scraper; Google offers no bulk API
 - Pagination support
 - Year range filtering
 - Export to JSON or BibTeX
@@ -77,6 +77,10 @@ python scripts/search_google_scholar.py "machine learning" \
   --format bibtex \
   --output ml_papers.bib
 ```
+
+`--sort-by citations` sorts only the retrieved sample; it is not a global
+Google Scholar sort. Year bounds are passed to `scholarly.search_pubs`.
+Blocked/failed searches return no bibliography.
 
 ### search_pubmed.py
 
@@ -112,14 +116,15 @@ python scripts/search_pubmed.py "Alzheimer's disease" \
 
 ### extract_metadata.py
 
-Extract complete metadata from paper identifiers.
+Extract available metadata from paper identifiers. Search JSON records need a
+DOI, PMID, PMCID, arXiv ID, or article URL; raw OpenAlex IDs are not supported.
 
 **Features**:
-- Supports DOI, PMID, arXiv ID, URL
+- Supports DOI, PMID, PMCID, arXiv ID, URL; identifier flags are repeatable
 - Queries CrossRef, PubMed, arXiv APIs
 - Handles multiple identifier types
-- Batch processing
-- Multiple output formats
+- Batch processing from newline identifiers or bundled search JSON (`results`/`entries`)
+- Outputs BibTeX or JSON; partial extraction exits 2 after explicitly reporting failures
 
 **Usage**:
 ```bash
@@ -144,7 +149,7 @@ python scripts/extract_metadata.py \
 # Different output formats
 python scripts/extract_metadata.py \
   --doi 10.1038/nature12345 \
-  --format json  # or bibtex, yaml
+  --format json  # or bibtex
 ```
 
 ### validate_citations.py
@@ -152,11 +157,11 @@ python scripts/extract_metadata.py \
 Validate BibTeX entries for accuracy, completeness, citation count standard compliance, and manuscript integration.
 
 **Features**:
-- DOI verification via doi.org and CrossRef
+- DOI registration checks via Crossref, DataCite, and resolver fallback; inconclusive lookups are warnings
 - Required field checking
 - Duplicate detection
 - Format validation
-- **Publication standard citation count checks** against specified venues (Nature, NeurIPS, review, etc.) or custom thresholds.
+- **Heuristic citation-count warnings** for named venues; only an explicit `--min-count` is enforced.
 - **Mandatory post-writing checks** matching manuscript citations (Markdown or LaTeX) with defined BibTeX entries to detect unresolved/missing or unused references.
 - Detailed reporting
 
@@ -226,9 +231,9 @@ Quick DOI to BibTeX conversion.
 
 **Features**:
 - Fast single DOI conversion
-- Batch processing
-- Multiple output formats
-- Clipboard support
+- Batch processing from newline identifiers or bundled search JSON (`results`/`entries`)
+- Outputs BibTeX or JSON; partial extraction exits 2 after explicitly reporting failures
+- Clipboard piping using a separate OS utility (for example `pbcopy`)
 
 **Usage**:
 ```bash

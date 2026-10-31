@@ -1,80 +1,59 @@
-# Pymoo Parallelization Reference
+# Parallel evaluation (pymoo 0.6.2)
 
-Reference for parallel evaluation of expensive `ElementwiseProblem` instances.
+Use a runner when individual evaluations dominate overhead. `ElementwiseProblem`
+sets `elementwise=True`; no `elementwise_evaluation` argument is needed. Its
+`_evaluate` receives one candidate, while the runner schedules multiple candidates.
+Vectorized `Problem` evaluates a matrix directly and may be faster for NumPy models.
 
-## When to Use
-
-Use parallelization when `_evaluate` is the bottleneck (simulations, ML inference, external solvers). Pymoo evaluates one solution per `_evaluate` call for `ElementwiseProblem`; pass a runner to evaluate multiple solutions concurrently.
-
-**Requirements:**
-- Subclass `ElementwiseProblem` (not vectorized `Problem`)
-- Set `elementwise_evaluation=True` (default for `ElementwiseProblem`)
-- Pass `elementwise_runner` to the problem constructor
-
-## Starmap Interface (Threads or Processes)
-
-Uses Python's `multiprocessing.Pool.starmap` interface via `StarmapParallelization`.
+## Threads or processes
 
 ```python
-import multiprocessing
 from multiprocessing.pool import ThreadPool
-
 from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from pymoo.parallelization.starmap import StarmapParallelization
 
-
 class MyProblem(ElementwiseProblem):
-    def __init__(self, elementwise_runner=None, **kwargs):
-        super().__init__(
-            n_var=10, n_obj=1, xl=-5, xu=5,
-            elementwise_runner=elementwise_runner,
-            **kwargs,
-        )
+    def __init__(self, **kwargs):
+        super().__init__(n_var=3, n_obj=1, xl=-5, xu=5, **kwargs)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        out["F"] = (x ** 2).sum()
+        out["F"] = (x**2).sum()
 
-
-# Thread pool (shared memory; good for I/O-bound evaluation)
-n_threads = 4
-pool = ThreadPool(n_threads)
-runner = StarmapParallelization(pool.starmap)
-problem = MyProblem(elementwise_runner=runner)
-
-result = minimize(problem, GA(), ("n_gen", 50), seed=1)
-pool.close()
-
-# Process pool (separate memory; good for CPU-bound evaluation)
-n_processes = 4
-pool = multiprocessing.Pool(n_processes)
-runner = StarmapParallelization(pool.starmap)
-problem = MyProblem(elementwise_runner=runner)
-
-result = minimize(problem, GA(), ("n_gen", 50), seed=1)
-pool.close()
+if __name__ == "__main__":
+    with ThreadPool(2) as pool:
+        problem = MyProblem(elementwise_runner=StarmapParallelization(pool.starmap))
+        result = minimize(problem, GA(pop_size=20), ("n_gen", 5), seed=1)
 ```
 
-## Joblib Interface
+The native test checks serial/thread equality on deterministic evaluations.
+For CPU-bound Python functions, substitute `multiprocessing.get_context("spawn").Pool(2)`
+inside the main guard. Keep worker classes/functions at importable module scope.
+That process-pool variant is illustrative; it was not executed in this refresh.
+Threads suit I/O and native code that releases the GIL. Avoid nested oversubscription
+from BLAS or model runtimes. Context managers release workers on exceptions.
 
-Alternative using the joblib library:
+## Joblib
 
 ```python
-from joblib import Parallel, delayed
 from pymoo.parallelization.joblib import JoblibParallelization
-
-runner = JoblibParallelization(lambda func, X: Parallel(n_jobs=4)(delayed(func)(x) for x in X))
+runner = JoblibParallelization(n_jobs=2, backend="threading")
 problem = MyProblem(elementwise_runner=runner)
+result = minimize(problem, GA(pop_size=20), ("n_gen", 5), seed=1)
 ```
 
-Install joblib if needed: `uv pip install joblib`
+Install `joblib` separately. The constructor accepts `n_jobs` and joblib keyword
+arguments; it does not take a lambda that manually wraps `Parallel`. The default
+backend is joblib's process-based `loky`. Threading was executed here; distributed
+and GPU evaluation require separate validation for the user's model and resources.
 
-## Notes
+Optimizer seeds do not automatically seed stochastic external simulations or
+worker-local RNGs. Supply deterministic per-evaluation seeds when appropriate and
+record the evaluation protocol. Serialization of an algorithm does not preserve
+live pools, remote clients, or external simulator state; recreate those resources
+when resuming a checkpoint.
 
-- Always close the pool after `minimize()` completes
-- Process pools require picklable problem definitions (avoid lambdas in class bodies)
-- Parallelization speedup depends on evaluation cost vs. overhead
-- For vectorized problems (`Problem` subclass evaluating batches), implement batching inside `_evaluate` instead
-
-**Documentation:** https://pymoo.org/parallelization/starmap.html
+Sources: [Starmap](https://pymoo.org/parallelization/starmap.html),
+[Joblib](https://pymoo.org/parallelization/joblib.html), and released 0.6.2 source;
+reviewed 2026-10-01.

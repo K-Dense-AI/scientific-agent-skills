@@ -1,13 +1,13 @@
 ---
 name: fluidsim
-description: Plan, configure, inspect, restart, and analyze bounded FluidSim computational-fluid-dynamics simulations with explicit numerical-validity and HPC safety checks. Use for FluidSim solver selection, parameter review, FFT/MPI setup, output diagnostics, or restart compatibility.
+description: Plans, configures, inspects, restarts, and analyzes bounded FluidSim computational-fluid-dynamics simulations with explicit numerical-validity and HPC safety checks. Use for FluidSim solver selection, parameter review, FFT/MPI setup, output diagnostics, or restart compatibility.
 license: MIT
 compatibility: Bundled CLIs require Python 3.11+ and use the standard library; HDF5/netCDF4 metadata tools lazily use h5py when available. Simulation examples target fluidsim 0.9.0, fluidfft 0.4.5, and pyFFTW 0.15.1. MPI/native FFT use requires a site-compatible MPI implementation, development headers, FFTW/PFFT/P3DFFT libraries, compilers, and an approved scheduler workflow. No GPU backend is assumed.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: "K-Dense Inc."
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-10-01"
 ---
 
 # FluidSim
@@ -44,7 +44,7 @@ resolution criteria, resource limits, or acceptance criteria are missing.
 
 ## Version and installation
 
-As verified on 2026-07-23:
+As verified on 2026-10-01:
 
 - Latest stable PyPI release: `fluidsim==0.9.0` (2025-12-04).
 - Package metadata requires Python `>=3.11` and lists Python 3.11–3.14.
@@ -57,7 +57,7 @@ As verified on 2026-07-23:
 Prefer a project lock:
 
 ```bash
-uv init --python 3.11
+uv init --python 3.12
 uv add "fluidsim[fft]==0.9.0" "fluidfft==0.4.5" "pyFFTW==0.15.1"
 uv lock
 uv sync --frozen
@@ -66,7 +66,7 @@ uv sync --frozen
 For an isolated disposable environment:
 
 ```bash
-uv venv --python 3.11
+uv venv --python 3.12
 uv pip install "fluidsim[fft]==0.9.0" "fluidfft==0.4.5" "pyFFTW==0.15.1"
 ```
 
@@ -194,7 +194,7 @@ from fluidsim import load_sim_for_plot
 
 sim = load_sim_for_plot("run-directory", hide_stdout=True)
 sim.output.spatial_means.plot()
-sim.output.spectra.plot1d()
+sim.output.spectra.plot1d(coef_compensate=0)
 sim.output.phys_fields.plot(time=1.0)
 ```
 
@@ -245,7 +245,7 @@ correct” from parameter values or plots alone.
 
 ## Bundled local tools
 
-All tools emit strict JSON, reject URLs/traversal/symlinks, enforce hard bounds,
+All tools emit strict JSON, reject URLs/traversal/symlinks, bound input sizes/counts,
 use no network or subprocess, and never launch a simulation:
 
 ```bash
@@ -270,9 +270,26 @@ never follow external links or load full field arrays.
 - [Output, plotting, and budget analysis](references/output_analysis.md)
 - [Forcing, operators, MPI, and migrations](references/advanced_features.md)
 
+## Verification coverage
+
+Checks on 2026-09-30 and 2026-10-01 used Python 3.12/3.13, the pinned
+solver/FFT versions, and NumPy 2.5.3,
+h5py 3.16.0, and h5netcdf 1.8.1. They passed a `16x16` NS2D analytical viscous-decay
+check, output/load/restart/plot round-trip, and time-correlated forcing-state
+round-trip. A `16x16` to `20x20` resolution change also preserved the analytical
+state to floating-point tolerance. All twelve Cartesian profiles were checked against generated
+defaults. This does not validate other solvers physically or verify MPI/GPU.
+MPI/native-plugin installation and cluster examples are illustrative.
+
+The estimator is approximate; declared RAM, disk, file, and CPU limits are not
+OS-enforced quotas. It refuses a resource-fit result for enabled outputs it
+does not model or iteration-only termination. The generator checks installed
+FluidSim/FluidFFT versions and checkpoint hashes at execution. Custom in-script
+initialization/forcing needs a separately implemented scientific script.
+
 ## Dated upstream basis
 
-Verified 2026-07-23 against
+Verified 2026-10-01 against
 [PyPI 0.9.0](https://pypi.org/project/fluidsim/),
 [FluidSim 0.9 docs](https://fluidsim.readthedocs.io/en/latest/),
 [release notes](https://fluidsim.readthedocs.io/en/latest/changes.html),

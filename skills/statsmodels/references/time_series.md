@@ -11,6 +11,8 @@ Statsmodels offers extensive time series capabilities:
 - **Diagnostic tools**: ACF, PACF, stationarity tests, residual analysis
 - **Forecasting**: Point forecasts and prediction intervals
 
+Use a sorted, unique regular time grid with a recorded frequency; do not drop interior missing dates and silently compress time. State-space models can handle missing responses, but exogenous data must be finite/aligned, and ADF/KPSS reject missing values. For date-labeled forecasting, preserve the frequency and provide future exogenous rows in exact model-column order.
+
 ## Univariate Time Series Models
 
 ### AutoReg (AR Model)
@@ -44,8 +46,8 @@ results = model.fit()
 
 **Seasonal AR:**
 ```python
-# Seasonal lags (e.g., monthly data with yearly seasonality)
-model = AutoReg(y, lags=12, seasonal=True)
+# Lags 1..12 plus seasonal dummies; use lags=[1, 12] for sparse seasonal lags
+model = AutoReg(y, lags=12, seasonal=True, period=12)
 results = model.fit()
 ```
 
@@ -81,24 +83,22 @@ from statsmodels.tsa.stattools import adfuller
 
 # ADF test for stationarity
 def check_stationarity(series):
-    result = adfuller(series)
-    print(f"ADF Statistic: {result[0]:.4f}")
-    print(f"p-value: {result[1]:.4f}")
-    if result[1] <= 0.05:
-        print("Series is stationary")
+    result = adfuller(series, result_object=True)
+    print(f"ADF Statistic: {result.statistic:.4f}")
+    print(f"p-value: {result.pvalue:.4f}")
+    if result.pvalue <= 0.05:
+        print("Reject unit-root null under the chosen deterministic specification")
         return True
     else:
-        print("Series is non-stationary, needs differencing")
+        print("Do not reject unit root; this does not prove nonstationarity")
         return False
 
-# Test original series
-if not check_stationarity(y):
-    # Difference once
-    y_diff = y.diff().dropna()
-    if not check_stationarity(y_diff):
-        # Difference again
-        y_diff2 = y_diff.diff().dropna()
-        check_stationarity(y_diff2)
+# Combine the test with trend/seasonal plots, sampling frequency and domain knowledge.
+check_stationarity(y)
+# Compare a prespecified candidate difference; do not repeatedly difference
+# until a p-value crosses a threshold. ARIMA(y, order=(p,d,q)) uses original y.
+y_diff = y.diff().dropna()
+check_stationarity(y_diff)
 ```
 
 2. **Determine p and q (ACF/PACF)**:
@@ -133,18 +133,27 @@ import numpy as np
 
 best_aic = np.inf
 best_order = None
+best_result = None
+candidates = []
 
 for p in range(5):
     for q in range(5):
         try:
             model = ARIMA(y, order=(p, d, q))
             results = model.fit()
-            if results.aic < best_aic:
+            converged = results.mle_retvals.get("converged", False)
+            candidates.append({"order": (p, d, q), "converged": converged, "aic": results.aic})
+            if converged and np.isfinite(results.aic) and results.aic < best_aic:
                 best_aic = results.aic
                 best_order = (p, d, q)
-        except (ValueError, np.linalg.LinAlgError):
-            continue
+                best_result = results
+        except (ValueError, np.linalg.LinAlgError) as exc:
+            candidates.append({"order": (p, d, q), "error": str(exc)})
 
+if best_order is None:
+    raise RuntimeError("No converged finite-likelihood candidate; inspect failures")
+results = best_result  # Keep the selected fit, not the last grid candidate
+print(pd.DataFrame(candidates))
 print(f"Best order: {best_order} with AIC: {best_aic:.2f}")
 ```
 
@@ -248,7 +257,7 @@ print(results.summary())
 ```python
 from statsmodels.tsa.exponential_smoothing.ets import ETSModel
 
-# More robust, state space formulation
+# Innovations state-space ETS, with an explicit error model
 model = ETSModel(y,
                 error='add',           # 'add' or 'mul'
                 trend='add',           # 'add', 'mul', or None
@@ -302,13 +311,15 @@ test_data = df_multivariate[['series2', 'series1']]
 
 # Test up to max_lag
 max_lag = 5
-results = grangercausalitytests(test_data, max_lag, verbose=True)
+granger_tests = grangercausalitytests(test_data, max_lag)
 
 # P-values for each lag
 for lag in range(1, max_lag + 1):
-    p_value = results[lag][0]['ssr_ftest'][1]
+    p_value = granger_tests[lag][0]['ssr_ftest'][1]
     print(f"Lag {lag}: p-value = {p_value:.4f}")
 ```
+
+Granger predictability does not identify an intervention effect. Prespecify lags or correct for searching across them. Orthogonalized IRFs depend on Cholesky variable ordering and structural assumptions. Forecast intervals condition on the fitted parameters/model and are not guarantees of out-of-sample coverage.
 
 **Impulse Response Functions (IRF):**
 ```python
@@ -346,7 +357,7 @@ from statsmodels.tsa.statespace.varmax import VARMAX
 
 # VARMAX(p, q) with exogenous variables
 model = VARMAX(df_multivariate,
-               order=(1, 1),        # (p, q)
+               order=(1, 0),        # VAR example; unrestricted VARMA(p>0,q>0) is not identified
                exog=X_exog)
 results = model.fit()
 
@@ -408,8 +419,8 @@ forecast = results.forecast(steps=h, exog=X_future)
 ### Prediction Intervals
 
 ```python
-# Get forecast with confidence intervals
-forecast_obj = results.get_forecast(steps=h)
+# Continuing the SARIMAX fit with exogenous regressors above:
+forecast_obj = results.get_forecast(steps=h, exog=X_future)
 forecast_df = forecast_obj.summary_frame()
 
 print(forecast_df)
@@ -429,11 +440,13 @@ plt.plot(forecast_df.index, forecast_mean, label='Forecast', color='red')
 plt.fill_between(forecast_df.index,
                  forecast_ci_lower,
                  forecast_ci_upper,
-                 alpha=0.3, color='red', label='95% CI')
+                 alpha=0.3, color='red', label='95% prediction interval')
 plt.legend()
 plt.title('Forecast with Prediction Intervals')
 plt.show()
 ```
+
+The state-space summary uses `mean_ci_*` labels for forecast uncertainty. By default, forecast-error variance includes future observation uncertainty conditional on fitted parameters; it is not the same target as a GLM mean confidence interval.
 
 ### Dynamic vs Static Forecasts
 
@@ -464,23 +477,23 @@ from statsmodels.tsa.stattools import adfuller, kpss
 
 # Augmented Dickey-Fuller (ADF) test
 # H0: unit root (non-stationary)
-adf_result = adfuller(y, autolag='AIC')
-print(f"ADF Statistic: {adf_result[0]:.4f}")
-print(f"p-value: {adf_result[1]:.4f}")
-if adf_result[1] <= 0.05:
-    print("Reject H0: Series is stationary")
+adf_result = adfuller(y, autolag='AIC', result_object=True)
+print(f"ADF Statistic: {adf_result.statistic:.4f}")
+print(f"p-value: {adf_result.pvalue:.4f}")
+if adf_result.pvalue <= 0.05:
+    print("Reject the unit-root null for this specification")
 else:
-    print("Fail to reject H0: Series is non-stationary")
+    print("Unit-root null not rejected; stationarity remains unresolved")
 
 # KPSS test
 # H0: stationary (opposite of ADF)
-kpss_result = kpss(y, regression='c', nlags='auto')
-print(f"KPSS Statistic: {kpss_result[0]:.4f}")
-print(f"p-value: {kpss_result[1]:.4f}")
-if kpss_result[1] <= 0.05:
-    print("Reject H0: Series is non-stationary")
+kpss_result = kpss(y, regression='c', nlags='auto', result_object=True)
+print(f"KPSS Statistic: {kpss_result.statistic:.4f}")
+print(f"p-value: {kpss_result.pvalue:.4f}")
+if kpss_result.pvalue <= 0.05:
+    print("Reject level-stationarity null for this specification")
 else:
-    print("Fail to reject H0: Series is stationary")
+    print("Level-stationarity null not rejected; not proof of stationarity")
 ```
 
 ### Residual Diagnostics
@@ -489,9 +502,14 @@ else:
 # Ljung-Box test for autocorrelation in residuals
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
-lb_test = acorr_ljungbox(results.resid, lags=10, return_df=True)
+# For the ARIMA(1,1,1) example, p+q=2 fitted dynamic parameters.
+# Use standardized one-step forecast errors after initialization burn-in.
+innov = results.filter_results.standardized_forecasts_error[0]
+innov = innov[results.loglikelihood_burn:]
+lb_test = acorr_ljungbox(innov, lags=[10], model_df=2, return_df=True)
 print(lb_test)
-# P-values > 0.05 indicate no significant autocorrelation (good)
+# A large p-value is failure to reject, not evidence that the model is correct.
+# Adjust model_df to the fitted dynamic structure; lags must exceed model_df.
 
 # Plot residual diagnostics
 results.plot_diagnostics(figsize=(12, 8))
@@ -510,9 +528,9 @@ plt.show()
 from statsmodels.stats.diagnostic import het_arch
 
 # ARCH test for heteroskedasticity
-arch_test = het_arch(results.resid, nlags=10)
-print(f"ARCH test statistic: {arch_test[0]:.4f}")
-print(f"p-value: {arch_test[1]:.4f}")
+arch_test = het_arch(innov, nlags=10, ddof=2, result_object=True)
+print(f"ARCH test statistic: {arch_test.lm:.4f}")
+print(f"p-value: {arch_test.lmpval:.4f}")
 
 # If significant, consider GARCH model
 ```
@@ -540,7 +558,7 @@ residual = decomposition.resid
 # STL decomposition (more robust)
 from statsmodels.tsa.seasonal import STL
 
-stl = STL(y, seasonal=13)  # seasonal must be odd
+stl = STL(y, period=12, seasonal=13, robust=True)  # seasonal smoother length is odd
 stl_result = stl.fit()
 
 fig = stl_result.plot()
@@ -582,8 +600,8 @@ print(f"MAE: {mae:.4f}")
 ```python
 # Train-test split for time series (no shuffle!)
 train_size = int(0.8 * len(y))
-y_train = y[:train_size]
-y_test = y[train_size:]
+y_train = y.iloc[:train_size]
+y_test = y.iloc[train_size:]
 
 # Fit on training data
 model = ARIMA(y_train, order=(1, 1, 1))
@@ -597,7 +615,8 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 rmse = np.sqrt(mean_squared_error(y_test, forecast))
 mae = mean_absolute_error(y_test, forecast)
-mape = np.mean(np.abs((y_test - forecast) / y_test)) * 100
+mape = (np.mean(np.abs((y_test - forecast) / y_test)) * 100
+        if np.all(np.asarray(y_test) > 0) else np.nan)
 
 print(f"Test RMSE: {rmse:.4f}")
 print(f"Test MAE: {mae:.4f}")
@@ -612,12 +631,12 @@ forecasts = []
 
 for t in range(len(y_test)):
     # Refit or update with new observation
-    y_current = y[:train_size + t]
+    y_current = y.iloc[:train_size + t]
     model = ARIMA(y_current, order=(1, 1, 1))
     fit = model.fit()
 
     # One-step forecast
-    fc = fit.forecast(steps=1)[0]
+    fc = np.asarray(fit.forecast(steps=1))[0]
     forecasts.append(fc)
 
 forecasts = np.array(forecasts)
@@ -688,8 +707,9 @@ For structural breaks and regime changes.
 ```python
 from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
 
-# Markov switching model
-model = MarkovRegression(y, k_regimes=2, order=1)
+# Switching intercept/variance; MarkovRegression.order does not add AR terms.
+# Use MarkovAutoregression for regime-switching autoregressive coefficients.
+model = MarkovRegression(y, k_regimes=2, switching_variance=True)
 results = model.fit()
 
 # Smoothed probabilities of regimes
@@ -711,7 +731,7 @@ regime_probs = results.smoothed_marginal_probabilities
 
 ## Common Pitfalls
 
-1. **Not checking stationarity**: Fit ARIMA on non-stationary data
+1. **Misusing stationarity tests**: ADF/KPSS have different nulls and deterministic specifications; ARIMA can model integration through d
 2. **Data leakage**: Using future data in transformations
 3. **Wrong seasonal period**: S=4 for quarterly, S=12 for monthly
 4. **Overfitting**: Too many parameters relative to data

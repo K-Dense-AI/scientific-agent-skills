@@ -2,7 +2,7 @@
 
 This is a task-oriented reference for **ETE 4.4.0**. It was checked against the
 official ETE 4 documentation and an installed `ete4==4.4.0` package on
-July 23, 2026. Use the upstream API reference for less common parameters.
+September 30, 2026. Use the upstream API reference for less common parameters.
 
 ## Imports and Public Classes
 
@@ -247,8 +247,12 @@ For inspection without immediately modifying the tree:
 
 ```python
 midpoint_node = tree.get_midpoint_outgroup()
-tree.set_outgroup(midpoint_node)
+print(midpoint_node.id)
+tree.set_midpoint_outgroup()  # exact midpoint placement
 ```
+
+`set_outgroup(get_midpoint_outgroup())` cuts the selected edge at its default
+position, which need not be the diameter midpoint. Prefer the direct method.
 
 ### Other operations
 
@@ -279,8 +283,14 @@ ETE 4.4 adds `distance_matrix()` and supersedes the older
 `cophenetic_matrix()` for new code:
 
 ```python
+names = list(tree.leaf_names())  # same order as the matrix rows/columns
 matrix = tree.distance_matrix(squared=True)
+distance_a_b = matrix[names.index("A")][names.index("B")]
 ```
+
+`distance_matrix()` returns a list of lists, without labels. `squared=True`
+means a square symmetric matrix, not squared distances. The default returns
+only the ragged upper triangle. Preserve leaf order alongside the matrix.
 
 For repeated descendant lookups:
 
@@ -434,8 +444,12 @@ Alignment:
 ```python
 tree.link_to_alignment("alignment.fasta", alg_format="fasta")
 for leaf in tree.leaves():
-    print(leaf.name, leaf.sequence)
+    print(leaf.name, leaf.props.get("sequence"))
 ```
+
+Alignment sequences are stored in `props["sequence"]`, not a `leaf.sequence`
+attribute. Missing alignment names leave that property unset; verify coverage
+and equal sequence lengths before downstream alignment analysis.
 
 Species handling:
 

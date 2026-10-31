@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import math
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -54,6 +55,7 @@ class Rating:
     score: float
     low: float
     high: float
+    bounds_supplied: bool = True
 
 
 @dataclass(frozen=True)
@@ -100,12 +102,14 @@ def load_criteria(raw_path: str) -> list[Criterion]:
         if weight <= 0 or weight > 1_000_000:
             raise CliError(f"{label}.weight must be greater than 0 and at most 1000000")
         direction = raw.get("direction")
-        if direction not in {"higher", "lower"}:
+        if not isinstance(direction, str) or direction not in {"higher", "lower"}:
             raise CliError(f"{label}.direction must be 'higher' or 'lower'")
         minimum = finite_number(raw.get("minimum"), f"{label}.minimum")
         maximum = finite_number(raw.get("maximum"), f"{label}.maximum")
         if minimum >= maximum:
             raise CliError(f"{label}.minimum must be less than maximum")
+        if not math.isfinite(maximum - minimum):
+            raise CliError(f"{label} scale width must be finite; rescale the anchors")
         result.append(
             Criterion(
                 name=name,
@@ -116,6 +120,17 @@ def load_criteria(raw_path: str) -> list[Criterion]:
                 maximum=maximum,
             )
         )
+    column_owners = {name: "reserved column" for name in (
+        "idea_id", "qualitative_review", "uncertainties"
+    )}
+    for criterion in result:
+        for name in (criterion.name, f"{criterion.name}_low", f"{criterion.name}_high"):
+            if name in column_owners:
+                raise CliError(
+                    f"criterion {criterion.name!r} creates ambiguous CSV column "
+                    f"{name!r}, already used by {column_owners[name]}"
+                )
+            column_owners[name] = f"criterion {criterion.name!r}"
     return result
 
 
@@ -202,6 +217,7 @@ def load_scores(raw_path: str, criteria: Sequence[Criterion]) -> list[IdeaRow]:
             )
             low_name = f"{criterion.name}_low"
             high_name = f"{criterion.name}_high"
+            bounds_supplied = False
             if low_name in interval_columns:
                 raw_low = raw_row.get(low_name)
                 raw_high = raw_row.get(high_name)
@@ -215,6 +231,7 @@ def load_scores(raw_path: str, criteria: Sequence[Criterion]) -> list[IdeaRow]:
                 if low_blank:
                     low = high = score
                 else:
+                    bounds_supplied = True
                     low = _parse_bounded_score(
                         raw_low,
                         label=f"row {row_index}.{low_name}",
@@ -231,7 +248,9 @@ def load_scores(raw_path: str, criteria: Sequence[Criterion]) -> list[IdeaRow]:
                 raise CliError(
                     f"row {row_index}.{criterion.name} requires low <= score <= high"
                 )
-            ratings[criterion.name] = Rating(score=score, low=low, high=high)
+            ratings[criterion.name] = Rating(
+                score=score, low=low, high=high, bounds_supplied=bounds_supplied
+            )
 
         qualitative: dict[str, str] = {}
         for name in qualitative_columns:
@@ -334,8 +353,11 @@ def calculate_matrix(
         interval_low = 0.0
         interval_high = 0.0
         criterion_details: dict[str, Any] = {}
+        missing_bounds: list[str] = []
         for criterion in criteria:
             rating = row.ratings[criterion.name]
+            if not rating.bounds_supplied:
+                missing_bounds.append(criterion.name)
             normalized_score = criterion.normalize(rating.score)
             if criterion.direction == "higher":
                 normalized_low = criterion.normalize(rating.low)
@@ -349,6 +371,7 @@ def calculate_matrix(
             criterion_details[criterion.name] = {
                 "raw_score": rating.score,
                 "raw_interval": [rating.low, rating.high],
+                "bounds_supplied": rating.bounds_supplied,
                 "normalized_score": rounded(normalized_score),
                 "normalized_interval": [
                     rounded(normalized_low),
@@ -357,6 +380,13 @@ def calculate_matrix(
                 "normalized_weight": rounded(weight),
                 "contribution_to_score": rounded(100.0 * weight * normalized_score),
             }
+
+        if missing_bounds:
+            warnings.append(
+                f"{row.idea_id} has no supplied uncertainty bounds for "
+                f"{', '.join(missing_bounds)}; those ratings are held at their "
+                "central values for calculation, not known to be certain"
+            )
 
         sensitivity_scores = [scores[row.idea_id] for scores in scenario_scores] or [
             base_scores[row.idea_id]
@@ -380,6 +410,7 @@ def calculate_matrix(
                     rounded(interval_low),
                     rounded(interval_high),
                 ],
+                "criteria_without_uncertainty_bounds": missing_bounds,
                 "weight_sensitivity_score_range": [
                     rounded(min(sensitivity_scores)),
                     rounded(max(sensitivity_scores)),
@@ -446,6 +477,10 @@ def calculate_matrix(
                 "bounds and are not calibrated probability intervals."
             ),
             (
+                "Omitted or blank bounds hold the corresponding central rating "
+                "fixed for calculation; they do not establish zero uncertainty."
+            ),
+            (
                 "Weight sensitivity changes one weight at a time and does not "
                 "cover all plausible weights, criterion dependence, scale "
                 "uncertainty, or model-form uncertainty."
@@ -508,7 +543,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             weight_delta=args.weight_delta,
         )
         emit_json(result, args.output, force=args.force)
-    except CliError as exc:
+    except (CliError, csv.Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

@@ -11,6 +11,7 @@ from _common import (
     Issue,
     emit_report,
     is_nonempty_string,
+    is_iso_date,
     is_placeholder,
     issue,
     read_json,
@@ -22,7 +23,6 @@ from _common import (
 TOOL = "validate_manifest"
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{1,63}$")
 EVIDENCE_ID_RE = re.compile(r"^E[0-9]{3,8}$")
-DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 SOURCE_TYPES = {
     "journal_article",
     "book",
@@ -110,7 +110,7 @@ def _validate_human_gate(
     if completed:
         _missing_or_placeholder(gate, "verified_by", location=location, issues=issues)
         verified_on = gate.get("verified_on")
-        if not isinstance(verified_on, str) or not DATE_RE.fullmatch(verified_on):
+        if not is_iso_date(verified_on):
             issues.append(
                 issue("error", "INVALID_VERIFICATION_DATE", location=location)
             )
@@ -383,7 +383,7 @@ def validate_source_manifest(
                 issues=issues,
             )
             verified_on = verification.get("verified_on")
-            if not isinstance(verified_on, str) or not DATE_RE.fullmatch(verified_on):
+            if not is_iso_date(verified_on):
                 issues.append(
                     issue(
                         "error",

@@ -62,6 +62,20 @@ Place `market_research.sty` next to the report and use:
 \usepackage{market_research}
 ```
 
+Compile from that directory with a TeX Live or MiKTeX installation containing
+`fontspec`, TeX Gyre Heros, and the packages required by the style. Use XeLaTeX or
+LuaLaTeX; the Unicode font setup does not target pdfLaTeX. Run twice for the contents:
+
+```bash
+xelatex -no-shell-escape -halt-on-error -interaction=nonstopmode market_report_template.tex
+xelatex -no-shell-escape -halt-on-error -interaction=nonstopmode market_report_template.tex
+```
+
+The template and snippets contain placeholders and synthetic examples, not current
+market findings. Inspect every rendered page for clipping, table overflow, font
+substitution, and unresolved references. Bracketed placeholder text after `\item`
+must be braced (`\item {[Finding]}`); otherwise LaTeX treats it as the list label.
+
 The package provides:
 
 ```latex
@@ -117,13 +131,16 @@ Figures are optional and should be created only when they improve
 understanding. A figure caption must identify:
 
 ```latex
-\caption{Scenario range by year. Nominal 2025 USD/year; Exampleland;
+\caption{Scenario range by year. USD/year at current prices; Exampleland;
 historical through 2025 and conditional scenarios thereafter.
 Sources: S-001, S-004. Calculation: CALC-FCST-002.}
 ```
 
 Never use decorative imagery as evidence. Never infer market share from logo
 size, search rank, or an unlabelled generated graphic.
+For nominal forecasts, the historical anchor year is not a constant-price base:
+label each year's current-price currency. Use "constant 2025 USD" only after an
+explicit inflation adjustment.
 
 ## Citations
 

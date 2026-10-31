@@ -1,103 +1,51 @@
-# Physiologically based pharmacokinetics: when it earns its cost
+# PBPK: context of use and verification
 
-PBPK divides the body into anatomical compartments with literature blood flows and volumes, and
-represents the drug through physicochemical and in vitro properties. Nothing about the *system* is
-fitted; the drug parameters are.
-
-## When PBPK is the right tool
-
-It earns its cost where the question requires extrapolating **outside** the observed data in a way
-a population model cannot:
-
-- **Drug interactions** — the most common regulatory use by a wide margin. Predicting an
-  untested combination, an untested dose of a perpetrator, or a staggered dosing schedule. ICH M12
-  points to PBPK when a basic model signals a possible interaction and a refined estimate is needed.
-- **Paediatric first-dose selection**, where enzyme ontogeny and organ maturation are represented
-  mechanistically instead of by an empirical maturation function.
-- **Organ impairment** — predicting exposure in hepatic or renal impairment without a dedicated
-  study.
-- **Food effect and formulation**, using absorption models (ACAT, ADAM) that represent transit,
-  dissolution and regional permeability.
-- **Tissue concentrations** that cannot be measured — brain, tumour, lung.
-
-It is the wrong tool when the question is "what is the exposure in the population I studied" — a
-population PK model answers that better, with the variability estimated rather than assumed.
+PBPK links physiology, drug properties and mechanistic disposition. System parameters can be
+fixed, population-distributed, calibrated or uncertain; they are not inherently known. Use it when
+the intended extrapolation benefits from mechanisms such as enzyme/transporter DDI, absorption,
+organ function, maturation or tissue distribution. Population PK and PBPK can complement each
+other; neither is automatically superior for every in-range or out-of-range question.
 
 ## Platforms
 
-| Platform | Nature | Notes |
-| --- | --- | --- |
-| **Simcyp** | Commercial (Certara) | The de facto regulatory standard for DDI; extensive validated population libraries |
-| **GastroPlus** | Commercial (Simulations Plus) | Strong oral absorption modelling (ACAT) |
-| **PK-Sim / MoBi** | **Open source** (Open Systems Pharmacology Suite, v12) | Free, credible, scriptable. `ospsuite` R package requires .NET 8 and Windows or Ubuntu |
-| **Certara PBPK / Phoenix** | Commercial | |
+PK-Sim/MoBi in Open Systems Pharmacology Suite 12 Update 3 (PK-Sim/MoBi 12.3) provide an open
+platform with an R interface. Vendor suites include Simcyp and GastroPlus. Select according to
+required mechanisms, population/model availability, qualification evidence and reproducibility;
+no platform name alone establishes regulatory acceptance. The current `ospsuite` 12.3.2 release
+notes should be checked for matching runtime and platform requirements before installation.
+[OSP releases](https://github.com/Open-Systems-Pharmacology/Suite/releases),
+[OSPSuite-R news](https://github.com/Open-Systems-Pharmacology/OSPSuite-R/blob/main/NEWS.md).
+These platforms and interfaces were documentation-reviewed, not run in this refresh.
 
-There is no mature open-source PBPK library in Python. PK-Sim/MoBi with the R toolchain is the
-realistic open route; the Python ecosystem is limited to building the ODE system yourself.
+## Construction checks
 
-## Structure
+1. Specify blood/plasma basis, unbound fractions, amount/concentration units, organ volumes/flows,
+   partition model and elimination routes. Do not mix plasma fu and whole-blood clearance without
+   the blood/plasma conversion.
+2. For perfusion-limited distribution, use a consistent partition basis in
+   `Vt*dCt/dt=Qt*(Ca-Ct/Kt)`. Permeability-limited systems need separate vascular/extravascular
+   states and transfer terms; a tissue name alone does not choose the correct approximation.
+3. Scale intrinsic clearance with traceable protein/cell abundance and organ-size inputs.
+   Well-stirred hepatic blood clearance is `Qh*fu_b*CLint/(Qh+fu_b*CLint)` under its assumptions.
+4. Distinguish measured, predicted, fixed and fitted parameters. Tissue partition methods and
+   empirical IVIVE scaling factors are modeling choices, not direct observations.
+5. Check mass balance, numerical tolerance, dose/input events and sensitivity to uncertain binding,
+   fm, Ki, CLint, permeability and physiological inputs.
 
-Perfusion-limited tissue (the default for most tissues and small molecules):
+## Credibility for the intended decision
 
-```
-V_t * dC_t/dt = Q_t * (C_arterial - C_t / Kp_t)
-```
+Separate calibration data from verification evidence where feasible. Evaluate relevant routes,
+doses, temporal profiles and challenging conditions; agreement with one AUC does not validate a
+mechanism. For DDI, interrogate both perpetrator and substrate components and alternatives.
+Predicted tissue exposure can remain uncertain despite agreement with plasma concentrations.
 
-Permeability-limited tissue splits into vascular and extravascular subcompartments and adds a
-permeability-surface-area product. Use it for tissues with tight barriers (brain), for large
-molecules, and for transporter-mediated distribution.
+There is no universal twofold acceptance rule. Prespecify context-appropriate criteria and quantify
+parameter, structural and population uncertainty. An organ-impairment prediction does not
+automatically replace a clinical study. Explain why verification supports the specific extrapolation.
+[ICH M15 FDA guidance](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/m15-general-principles-model-informed-drug-development)
+and [ICH M12](https://www.ema.europa.eu/en/scientific-guidelines/ich-m12-drug-interaction-studies)
+provide relevant decision frameworks.
 
-**Tissue-to-plasma partition coefficients (Kp)** are predicted from physicochemistry rather than
-measured, most often via:
-
-- **Rodgers & Rowland** — accounts for ionisation and binding to acidic phospholipids; the usual
-  choice for bases
-- **Poulin & Theil** — lipophilicity- and composition-based; better for neutrals and acids
-- **Berezhkovskiy** — a correction to Poulin & Theil's volume terms
-- **Schmitt**
-
-Different methods can give Kp values differing several-fold, which propagates directly into Vss.
-Choosing the method that reproduces the observed Vss is a legitimate calibration step, but it must
-be reported as such.
-
-## In vitro to in vivo extrapolation
-
-Hepatic clearance is built up from intrinsic clearance measured in microsomes or hepatocytes:
-
-```
-CLint,in vivo = CLint,in vitro * MPPGL (or HPGL) * liver weight
-CL_hepatic    = Q_h * fu_b * CLint / (Q_h + fu_b * CLint)      (well-stirred model)
-```
-
-Scaling factors: microsomal protein per gram of liver ≈ 40 mg/g; hepatocytes ≈ 99-120 × 10⁶ cells/g;
-liver weight ≈ 1500-1800 g in an adult. The well-stirred model is standard; parallel-tube and
-dispersion models give different answers for high-extraction drugs.
-
-**IVIVE routinely under-predicts clearance**, often 2-5 fold, especially for low-clearance
-compounds. Empirical scaling factors are widely applied and must be declared. This is the weakest
-link in a PBPK model and the first place to look when predictions are off.
-
-## Verification and credibility
-
-A PBPK model used for a regulatory decision must be *verified* against observed clinical data
-before being applied to the untested scenario, and the standard of verification scales with how
-much the decision rests on it:
-
-- **Predict the observed data first.** A model that cannot reproduce single-dose and multiple-dose
-  plasma profiles in healthy adults should not be used to predict a DDI.
-- **Verify the perpetrator model independently** using a known index substrate before predicting a
-  novel victim, and vice versa.
-- Acceptance is usually judged on predicted-to-observed AUC and Cmax ratios within 2-fold, with a
-  tighter criterion where the decision is more consequential.
-- **Sensitivity analysis** on the uncertain inputs — fu, fm, Ki, CLint, Kp method — is expected,
-  not optional. Report the range of predictions, not a single number.
-- Software version, model file, and every parameter with its source must be reportable. Regulators
-  ask for the model files.
-
-## Reporting
-
-State: the platform and version, the population library used, every drug-specific parameter with
-its source (measured, predicted, or optimised — and if optimised, against what), the Kp prediction
-method, the absorption model, the verification datasets and their outcome, and the sensitivity
-analysis. A PBPK prediction whose inputs are not individually traceable cannot be evaluated by
-anyone else, and will not be accepted.
+Archive the model, software/library versions, population definition, calibration/verification data,
+parameter sources, sensitivity design and simulation seeds. The bundled one-to-three-compartment
+models are empirical PK, not PBPK implementations.

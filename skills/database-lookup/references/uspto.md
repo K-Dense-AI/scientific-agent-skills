@@ -51,45 +51,35 @@ search URL.
 - The Elasticsearch PatentSearch base URL `https://search.patentsview.org/api/v1/`
   must not be used until USPTO republishes an ODP-hosted replacement.
 
-## 2. PEDS — Patent Examination Data System
+## 2. Patent File Wrapper (replacement for PEDS)
 
-**URL**: `https://ped.uspto.gov/api/queries`
-
-**Method**: POST
-
-For patent prosecution data (application status, filing dates, examiner info).
-
-```json
-{
-  "searchText": "applicationNumberText:16123456",
-  "fl": "*",
-  "mm": "100%",
-  "df": "patentTitle",
-  "facet": "false",
-  "sort": "applId asc",
-  "start": 0
-}
-```
-
-No API key required but heavily rate limited. Availability can be unreliable.
+PEDS has migrated to ODP. Use the current
+[transition guide](https://data.uspto.gov/support/transition-guide/peds) and
+[Patent File Wrapper search documentation](https://data.uspto.gov/apis/patent-file-wrapper/search).
+The search endpoint is `https://api.uspto.gov/api/v1/patent/applications/search`;
+obtain an ODP API key and use the current documented request schema. This is a
+patent-application/file-wrapper service, distinct from the paused PatentsView
+PatentSearch API. The former unauthenticated `ped.uspto.gov/api/queries` recipe
+is not a current integration. ODP's stated coverage begins in 2001, unlike PEDS.
+Authenticated calls were not executed in this review.
 
 ## 3. TSDR — Trademark Status & Document Retrieval
 
-For trademark lookup by serial or registration number (not full-text search).
+Use TSDR by application serial or registration number. The official
+[TSDR FAQ](https://tsdr.uspto.gov/faqview) now shows the API host
+`https://tsdrapi.uspto.gov`, for example
+`/ts/cd/casestatus/sn78787878/content.html` for an HTML status report.
 
-```
-GET https://tsdr.uspto.gov/documentxml/status/{serial_number}
-GET https://tsdr.uspto.gov/documentxml/status/rn{registration_number}
-```
-
-Returns XML with mark details, status, owner, goods/services, prosecution history.
-
-No API key. Rate limited. No JSON endpoint — responses are XML.
+TSDR API access is key-based, with a documented 60 requests/minute per key and
+4 PDF/ZIP downloads/minute per key. Obtain the current key/header instructions
+from USPTO's ODP documentation before automating; the older Developer Hub links
+redirected during this review. The former no-key `/documentxml/status/...`
+recipe has been removed. Do not assume that the example HTML URL returns XML.
 
 ## 4. Limitations
 
-- **No public REST API for trademark full-text search** (TESS is web-only)
+- Use current USPTO Trademark Search for interactive trademark searching; TESS is retired.
 - **PatentsView PatentSearch API is paused** during the ODP migration; use ODP
   bulk datasets for PatentsView tables until USPTO republishes search APIs
-- PEDS availability is inconsistent
+- PEDS has migrated to ODP Patent File Wrapper; authentication and coverage differ.
 - TSDR requires knowing the serial/registration number already

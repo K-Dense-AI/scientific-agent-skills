@@ -37,7 +37,7 @@ It never displays credential values.
 
 Examples of failures:
 
-- host contains `http://`, a path, whitespace, or shell syntax;
+- host contains `http://`, a path, whitespace, or a leading hyphen;
 - port is not in `1..65535`;
 - `OMERO_SECURE` is not a recognized boolean;
 - only one of `OMERO_USER`/`OMERO_PASSWORD` is present;
@@ -118,7 +118,9 @@ FileAnnotation bytes. It uses the currently documented `IRoi.findByImage`
 pattern and records that `IRoi` is deprecated.
 
 Because `findByImage` has no page argument, the ROI caps bound serialization
-but may not bound server-side assembly. Do not run it on a known extreme image
+but not server-side assembly. `listAnnotations()` likewise loads annotations
+and values before local caps/redaction. ROI mask payloads can arrive in the
+service response even though their bytes are excluded from JSON. Do not run it on a known extreme image
 without reviewing the ROI count or using a site-approved paginated API.
 
 ## Import/Export Planner
@@ -136,8 +138,11 @@ python -B scripts/plan_transfer.py import \
 ```
 
 It walks only explicit paths, does not follow directory symlinks, caps depth
-and file count, and proposes `omero import -f` plus a future scoped import
-command. It does not invoke either.
+and file count, and proposes `omero import --depth N -f` plus a future import
+using the same depth. A depth cutoff or skipped symlink prevents marking the
+plan ready. Bio-Formats may discover related files beyond the local scan, so
+review the actual `-f` fileset list before importing. Local file counts are
+estimates, not an importer file limit. The planner invokes neither command.
 
 Per-image export plan:
 
@@ -167,10 +172,8 @@ No proposed command includes `-w`, `--password`, `-k`, or a session value.
 No real OMERO server is needed:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 \
-  python -B -m unittest discover \
-  -s tests/omero-integration \
-  -p "test_*.py"
+uv run --with pytest python -m pytest tests/omero-integration -q
+python tests/run_all.py --isolated omero-integration
 ```
 
 The tests use temporary directories and fake gateway objects.

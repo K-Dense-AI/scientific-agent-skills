@@ -53,10 +53,13 @@ def split_version(arxiv_id: str) -> tuple[str, str | None]:
 def id_from_url(url: str) -> str:
     """The arXiv ID from an `<id>` URL, scheme-agnostically.
 
-    Historically `http://arxiv.org/abs/...`, now `https://`. Taking the last path
-    segment survives the change; string-matching the scheme does not.
+    Preserve the entire path after `/abs/`: old identifiers such as
+    `hep-th/9901001` contain a slash.
     """
-    return url.rstrip("/").rsplit("/", 1)[-1]
+    from urllib.parse import urlsplit
+
+    path = urlsplit(url).path.rstrip("/")
+    return path.split("/abs/", 1)[1] if "/abs/" in path else path.rsplit("/", 1)[-1]
 
 
 def link_for(entry: ET.Element, *, rel: str, mime: str | None = None) -> str | None:
@@ -156,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
             "throttling and some gateway errors."
         )
 
+    if feed.tag != f"{{{NS['atom']}}}feed":
+        fail("not an arXiv Atom feed; check for an HTML/XML error response")
     entries = feed.findall("atom:entry", NS)
 
     # The error check must precede any other interpretation: the error feed is a

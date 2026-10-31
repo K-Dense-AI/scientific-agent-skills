@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Simulate dosing regimens, with or without between-subject variability.
 
-Deterministic simulation answers "what does the typical patient look like".
-That is almost never the question. The question is what fraction of patients
-stay inside the therapeutic window, and the two answers differ by a lot: a
-regimen whose typical trough sits exactly at the target leaves roughly half the
-population below it.
+Deterministic and population simulations answer different questions. Target
+attainment depends on the supplied population, target, omitted correlations
+and uncertainty; a typical profile is not a distribution of patient outcomes.
 
     python3 simulate_regimen.py --cl 5 --v 40 --dose 500 --interval 12 --n-doses 10
     python3 simulate_regimen.py --cl 5 --v 40 --q 8 --v2 60 --dose 500 --interval 8 \\
-        --route oral --ka 1.2 --f 0.7 --steady-state
+        --route oral --ka 1.2 --f 0.7 --n-doses 10
     python3 simulate_regimen.py --cl 5 --v 40 --dose 500 --interval 12 --simulate 2000 \\
         --omega-cl 0.35 --omega-v 0.25 --target-trough 2.0
     python3 simulate_regimen.py --vmax 200 --km 5 --v 40 --dose 300 --interval 24 \\
@@ -116,6 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     if len(args.q) != len(args.v2):
         raise InputError(f"{len(args.q)} --q values but {len(args.v2)} --v2 values; they pair up")
     if args.route == "oral" and args.ka is None:
@@ -128,6 +128,30 @@ def run(argv: Sequence[str] | None = None) -> int:
         raise InputError("--cl is required for a linear model")
 
     report = Report()
+    if any(x <= 0 for x in args.q + args.v2) or (args.loading is not None and args.loading < 0) or args.profile_points < 2:
+        raise InputError("peripheral Q/V must be positive, loading non-negative and profile-points >= 2")
+    if args.nonlinear and (args.vmax <= 0 or args.km <= 0):
+        raise InputError("Vmax and Km must be positive")
+    if args.v <= 0 or (args.cl is not None and args.cl <= 0) or not 0 < args.f <= 1:
+        raise InputError("CL, V must be positive; F must be in (0,1]")
+    if args.n_doses < 1 or (args.dose is not None and args.dose <= 0) or (args.interval is not None and args.interval <= 0):
+        raise InputError("dose count, dose and interval must be positive")
+    if args.tlag < 0 or args.tinf < 0 or (args.ka is not None and args.ka <= 0):
+        raise InputError("lag and infusion must be non-negative; ka positive")
+    if args.route != "oral" and args.f != 1:
+        raise InputError("IV bioavailability is 1; --f applies only to oral dosing")
+    if args.route != "iv-infusion" and args.tinf:
+        raise InputError("--tinf applies only to iv-infusion")
+    if args.nonlinear and (args.tlag or args.steady_state):
+        raise InputError("nonlinear lag/steady-state calculations are not implemented")
+    if (args.compare or args.steady_state) and args.route != "iv-bolus":
+        raise InputError("closed-form --compare/--steady-state supports iv-bolus only; simulate the actual oral/infusion regimen without those flags")
+    if args.steady_state and args.interval is None:
+        raise InputError("--steady-state needs --interval")
+    if args.simulate is not None and args.simulate <= 0:
+        raise InputError("--simulate must be positive")
+    if args.omega_cl < 0 or args.omega_v < 0:
+        raise InputError("variability CVs must be non-negative")
 
     # ---- regimen comparison
     if args.compare:
@@ -304,9 +328,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                         "subjects attain this target"
                     )
         report.note(
-            "Between-subject variability only. Residual/assay variability and between-occasion "
-            "variability would widen these intervals further, so the attainment fractions here are "
-            "optimistic."
+            "Between-subject variability only, with independent CL/V draws and fixed population parameters. Between-occasion variability and parameter uncertainty may raise or lower attainment. Assay noise belongs to observed-level predictions, not latent true exposure."
         )
 
     if args.profile:

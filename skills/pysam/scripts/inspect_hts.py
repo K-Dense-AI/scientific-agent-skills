@@ -233,7 +233,12 @@ def inspect_alignment(
                 limited(read_group_ids, max_items)
             )
 
-        if has_index:
+        if has_index and alignments.is_cram:
+            report["index_statistics"] = None
+            report["index_statistics_note"] = (
+                "CRAI has no mapped/unmapped counts; use a sequential QC scan."
+            )
+        elif has_index:
             try:
                 statistics = alignments.get_index_statistics()
                 report["index_statistics"] = {
@@ -317,9 +322,13 @@ def inspect_fasta(
     index: Optional[Path],
     max_items: int,
 ) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {}
-    if index is not None:
-        kwargs["filepath_index"] = str(index)
+    # An implicit FastaFile index can be created on open. An explicit index
+    # disables that write and preserves this inspector's read-only contract.
+    fasta_index = require_local_file(
+        index if index is not None else Path(str(path) + ".fai"),
+        "FASTA index (create explicitly with pysam.faidx first)",
+    )
+    kwargs: dict[str, Any] = {"filepath_index": str(fasta_index)}
 
     with pysam.FastaFile(str(path), **kwargs) as fasta:
         contigs, contigs_truncated = contig_records(
@@ -357,9 +366,12 @@ def inspect_tabix(
     threads: int,
     max_items: int,
 ) -> dict[str, Any]:
+    # TabixFile defaults to .tbi only; CSI requires an explicit index path.
     kwargs: dict[str, Any] = {"threads": threads}
     if index is not None:
         kwargs["index"] = str(index)
+    elif not Path(str(path) + ".tbi").exists() and Path(str(path) + ".csi").is_file():
+        kwargs["index"] = str(path) + ".csi"
 
     with pysam.TabixFile(str(path), **kwargs) as table:
         contigs, contigs_truncated = limited(

@@ -1,6 +1,6 @@
 # Privacy and Data Governance
 
-Last reviewed: **2026-07-23**
+Last reviewed: **2026-10-01**
 
 ## No compliance claim
 
@@ -87,7 +87,7 @@ Bundled scripts must not echo clinical values. Reports are limited to:
 - document types;
 - field paths;
 - counts;
-- nonclinical dates already needed for a schedule;
+- explicit dates in the separate schedule output, which can be identifying when derived from patient records;
 - local filenames without parent-directory expansion.
 
 Do not run scripts with shell tracing. Do not redirect reports to shared logs. Review local command history policies before working with sensitive paths.
@@ -97,13 +97,15 @@ Do not run scripts with shell tracing. Do not redirect reports to shared logs. R
 The scripts:
 
 - reject URL-like input paths and network-share syntax;
-- reject symlink inputs and outputs;
+- reject leaf symlink inputs and outputs (ancestor directories and mounted volumes require local verification);
 - accept only bounded regular UTF-8 JSON files;
 - reject duplicate keys, excessive nesting, oversized text, excessive records, and unknown fields;
 - create private outputs without implicit overwrite;
 - do not inspect environment variables or credential files.
 
-These are defense-in-depth controls, not privacy determinations.
+These are defense-in-depth controls, not privacy determinations. A local-looking path can still be network-mounted or cloud-synchronized. Verify the resolved storage, access controls, backups, and telemetry in the authorized environment; these helpers do not create a sandbox. POSIX file modes do not establish Windows ACL protections.
+
+The schedule is not de-identified merely because names and clinical text are omitted. Under HIPAA Safe Harbor, dates directly related to an individual generally require removal of all elements except year. This schema requires full calendar dates for checkpoints and some review fields, so it cannot represent every Safe Harbor-derived record. Do not invent dates or relabel the data to satisfy the schema: keep incompatible records in the approved source workflow and have qualified reviewers determine any permitted method and context.
 
 ## Incident routing
 

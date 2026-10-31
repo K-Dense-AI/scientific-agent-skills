@@ -1,8 +1,8 @@
 # Machine learning, inference batching, and model trust
 
-This reference targets **PathML 3.0.5 from PyPI**. GitHub v3.0.7 changes Torch
-dependencies and ONNX export behavior but is not published on PyPI as of
-2026-07-23; do not mix v3.0.7 source instructions into a 3.0.5 environment.
+This reference targets **PathML 3.0.8 from PyPI**, reviewed 2026-10-01.
+The architecture/inference examples are illustrative and checked against the
+released source; no model weights or native inference stack were run.
 
 ## Stable ML exports
 
@@ -78,6 +78,11 @@ HV maps:   (batch, 2, height, width)
 NC logits: (batch, n_classes, height, width)
 ```
 
+For `n_classes=6`, `nucleus_mask` above is a six-channel target with background
+in the **last** channel, matching PathML's PanNuke representation. A single
+binary mask is only appropriate when `n_classes=None`. Preserve the label
+ordering; the loss derives foreground by inverting the final target channel.
+
 `post_process_batch_hovernet` returns instance maps with 0 as background and
 positive object IDs. The classification output uses one channel per class with
 instance IDs in the selected class channel.
@@ -144,7 +149,7 @@ model = HACTNet(
 
 HACTNet consumes a batched `HACTPairData` object with cell and tissue features,
 their edge indices, a cell-to-tissue assignment, and a target. Parameter
-dictionaries configure PathML `GNNLayer` and its classifier; use the v3.0.5
+dictionaries configure PathML `GNNLayer` and its classifier; use the v3.0.8
 tutorial/API rather than copying a configuration from another PyG release.
 
 Before training, validate:
@@ -195,9 +200,8 @@ from pathml.inference import (
 For a reviewed local model:
 
 ```python
-from pathml.core import SlideData
+import numpy as np
 from pathml.inference import Inference
-from pathml.preprocessing import Pipeline
 
 inference = Inference(
     model_path="models/reviewed_model.onnx",
@@ -206,20 +210,11 @@ inference = Inference(
     model_type="segmentation",
     local=True,
 )
-pipeline = Pipeline([inference])
-
-slide = SlideData(
-    "data/slide-001.ome.tiff",
-    backend="bioformats",
-    stain="Fluor",
-)
-slide.run(
-    pipeline,
-    distributed=False,
-    tile_size=256,
-    tile_stride=256,
-    level=0,
-)
+# Illustrative: supply a reviewed model expecting [1, 3, 256, 256] float32.
+# Real preprocessing/range must come from that model's card.
+image_hwc = np.zeros((256, 256, 3), dtype=np.float32)
+prediction = inference.F(image_hwc)
+assert prediction.shape == (1, 4, 256, 256)
 ```
 
 Stable `Inference.apply()` replaces `tile.image` with model output. If the raw
@@ -230,30 +225,38 @@ predictions separately or use a separate inference loop.
 
 - checks a local ONNX model for initializers also exposed as inputs;
 - verifies the model with ONNX;
-- creates an ONNX Runtime session;
-- expects input name/shape to match;
+- reloads the model and creates an ONNX Runtime session on every call;
+- requires the named input and fixed spatial dimensions (symbolic dimensions
+  appear as zero in its check), and casts inputs to float32;
 - reshapes 3-D HWC to a batch of NCHW;
 - concatenates multiple same-spatial-size outputs along channels.
+
+It does not normalize intensities, apply softmax, select a device provider, or
+check the entire channel/batch schema for you. Validate all inputs and outputs
+against the model card. Generic `Inference.apply()` can leave NCHW output in
+`tile.image`; do not feed that into HWC preprocessing, masks, or a tile dataset
+without an explicit adapter. For throughput, use a reviewed ONNX Runtime loop
+with one reused session and separately stored predictions/coordinates.
 
 `remove_initializer_from_input(source, destination)` rewrites the model. Do not
 overwrite the original; verify the destination hash and outputs. ONNX parsing is
 not a guarantee of safety—malformed models can exploit parser/runtime bugs or
 request excessive resources.
 
-## Source-only ONNX difference after 3.0.5
+## Current ONNX export/runtime boundary
 
-GitHub v3.0.7 release notes report:
+PyPI 3.0.8 declares Torch 2.12.0, torch-geometric 2.8.0, ONNX 1.22.0 and
+onnxscript 0.7.1, while retaining ONNX Runtime `>=1.17,<1.18`. TorchVision is not
+a declared wheel dependency; provision a compatible version separately if a
+chosen feature requires it.
 
-- Torch 2.12.0;
-- TorchVision 0.27.0;
-- torch-geometric 2.8.0;
-- `onnxscript==0.7.1`; and
-- adjustments to the ONNX export method.
-
-PyPI `pathml==3.0.5` instead declares Torch 2.8.0, torch-geometric 2.3.1,
-ONNX 1.17.0, and ONNX Runtime `>=1.17,<1.18`. An ONNX file exported with newer
-source may use operators unsupported by the stable runtime. Validate opset and
-runtime compatibility explicitly.
+`convert_pytorch_onnx(model, dummy_tensor, model_name, opset_version=10,
+input_name="data")` explicitly sets `dynamo=False` and supplies no dynamic axes.
+Put the model in evaluation mode before export. The helper does not establish
+compatibility with the older runtime: ONNX Runtime 1.17 supports ONNX opset up to
+20 and IR up to 9 per its official table. Check **both** the emitted IR/opset and
+operators, then compare outputs against the source framework on synthetic
+inputs. Do not merely edit the IR number to bypass an incompatible model.
 
 ## Remote model classes
 
@@ -354,7 +357,7 @@ weighted options from unrelated examples.
 
 ## Evaluation
 
-PathML 3.0.5 does not export the broad
+PathML 3.0.8 does not export the broad
 `pathml.ml.metrics.dice_coefficient`/`panoptic_quality` API shown in older
 references. Implement or import metrics from a pinned, validated package and
 record the exact definition.
@@ -388,18 +391,22 @@ Record:
 Never include direct patient identifiers or sensitive example tiles in a model
 card.
 
-## Sources, accessed 2026-07-23
+## Sources and further reading
+
+API baseline reviewed 2026-10-01 using the released wheel/tag; hosted docs may lag.
 
 - Stable ML API:
   https://pathml.readthedocs.io/en/stable/api_ml_reference.html
 - Stable inference API:
   https://pathml.readthedocs.io/en/stable/api_inference_reference.html
 - Stable HoVer-Net source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/ml/models/hovernet.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/ml/models/hovernet.py
 - Stable HACTNet source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/ml/models/hactnet.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/ml/models/hactnet.py
 - Stable inference source:
-  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.5/pathml/inference/inference.py
+  https://github.com/Dana-Farber-AIOS/pathml/blob/v3.0.8/pathml/inference/inference.py
+- ONNX Runtime compatibility table:
+  https://onnxruntime.ai/docs/reference/compatibility.html
 - GitHub v3.0.7 release:
   https://github.com/Dana-Farber-AIOS/pathml/releases/tag/v3.0.7
 - Graham et al. (2019), HoVer-Net:

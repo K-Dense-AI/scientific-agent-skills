@@ -73,8 +73,9 @@ run from starting unless the expected connected module is available.
 Load labware through the module:
 
 ```python
-plate = heater_shaker.load_labware(
-    "corning_96_wellplate_360ul_flat",
+hs_adapter = heater_shaker.load_adapter("opentrons_96_flat_bottom_adapter")
+plate = hs_adapter.load_labware(
+    "nest_96_wellplate_200ul_flat",
     label="Mixing Plate",
 )
 ```
@@ -129,8 +130,7 @@ heater_shaker.deactivate_shaker()
 heater_shaker.deactivate_heater()
 ```
 
-The exact temperature method name depends on API behavior. Current context
-methods include `set_target_temperature()`,
+Current context methods include `set_target_temperature()`,
 `set_and_wait_for_temperature()`, `wait_for_temperature()`,
 `set_and_wait_for_shake_speed()`, `deactivate_shaker()`, and
 `deactivate_heater()`.
@@ -183,6 +183,11 @@ API 2.28 adds an optional `ramp_rate` to block-temperature commands.
 Checks:
 
 - Correct plate and seal for the thermocycler.
+- Before cycling, pause to confirm the compatible sealing setup. A reusable
+  GEN2 automation seal attaches to the module lid, while a disposable Tough
+  auto-sealing lid covers a compatible PCR plate. Never combine those two;
+  follow the [lid-seal instructions](https://docs.opentrons.com/thermocycler/lid-seals/).
+  Closing the heated lid does not itself establish correct seal installation.
 - Lid closed before heating and cycling.
 - `block_max_volume` matches the actual per-well reaction volume.
 - Final hold behavior is intentional.
@@ -327,11 +332,11 @@ protocol.move_labware(
 )
 ```
 
-Store:
+Return the same configured type to storage (with its required lid restored):
 
 ```python
 protocol.move_labware(
-    labware=plate,
+    labware=tip_rack,
     new_location=stacker,
     use_gripper=True,
 )
@@ -345,6 +350,8 @@ Constraints:
 - Configure stored labware before `retrieve()` or `store()`.
 - Only one labware type per Stacker at a time.
 - Flex tip racks need compatible lids to stack.
+- Remove the tip-rack lid with a validated lid move before pipetting; restore
+  it before storage. A retrieved lidded rack is not yet ready for tip pickup.
 - The Stacker does not identify what an operator physically loaded.
 - Reserve the corresponding row's shuttle path and check column-3 conflicts.
 - Use capacity helper methods for the exact labware height.
@@ -382,7 +389,7 @@ compatibility, orientation, stack quantity, and disposal location.
 Concurrent methods can overlap long module actions with independent pipetting:
 
 - Temperature: `start_set_temperature()`.
-- Heater-Shaker: nonblocking temperature or shake-speed methods.
+- Heater-Shaker: `set_target_temperature()` and `set_shake_speed()`.
 - Thermocycler: `start_set_block_temperature()`,
   `start_set_lid_temperature()`, and `start_execute_profile()`.
 
@@ -391,6 +398,19 @@ Pattern:
 1. Start the operation and keep the returned task.
 2. Perform only physically independent commands.
 3. Wait for the task before any step that assumes completion.
+
+```python
+heat_task = heater_shaker.set_target_temperature(celsius=37)
+# Independent work can run here.
+protocol.wait_for_tasks([heat_task])
+incubation = protocol.create_timer(seconds=60)
+protocol.wait_for_tasks([incubation])
+heater_shaker.deactivate_heater()
+```
+
+Use `set_target_temperature()` for the Heater-Shaker; it does not have the
+Temperature Module's `start_set_temperature()` method. Wait through the protocol
+context with `wait_for_tasks([task])`, not an invented `task.wait()` method.
 
 Do not create concurrency merely to shorten runtime. Check deck access,
 vibration, thermal dependencies, and collision risk.

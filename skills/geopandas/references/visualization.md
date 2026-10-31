@@ -46,7 +46,17 @@ fig.savefig("derived/map.png", dpi=300, bbox_inches="tight")
 ```
 
 Pin Matplotlib and optional mapping dependencies in the project lock. The
-GeoPandas 1.1 tagged source tests Matplotlib >=3.7 and mapclassify >=2.5.
+GeoPandas 1.2 tagged source requires Matplotlib >=3.9 for plotting and
+mapclassify >=2.7 for classifications. Static examples were exercised with
+Matplotlib 3.11.2; the optional classification, interactive, and tile examples
+are illustrative unless those dependencies are installed and tested.
+
+GeoPandas 1.2 rewrote static plotting: categorical palettes/styles accept
+dictionaries, legends reflect geometry types, and layered maps can use
+`ax.legend()`. CRS-based axis labels are enabled by default (`add_labels=False`
+disables them). `scheme=` supports `vmin`/`vmax` and can use
+`legend_kwds={"colorbar": True}` for a classified colorbar. Inspect existing
+figures after migration; Matplotlib collection layout is not a stable contract.
 
 ### Choropleth correctness
 
@@ -100,8 +110,18 @@ Do not coerce missing values to zero for visual convenience.
 
 Use `categorical=True` for categories and a qualitative palette. Verify category
 order and legend labels; do not imply magnitude with a sequential palette.
-GeoPandas 1.1.4 fixed custom categorical/boolean `legend_kwds={"labels": ...}`
-being ignored by `explore()`.
+For example, the following explicit palette is supported in 1.2:
+
+```python
+ax = gdf.plot(
+    column="category", categorical=True,
+    cmap={"A": "#4477AA", "B": "#EE6677"},
+    legend=True, tiles=False,
+)
+```
+
+Keep the palette complete for the data's categories. The earlier 1.1.4 fix for
+custom categorical/boolean `explore()` legend labels is included.
 
 ### Layering
 
@@ -136,11 +156,12 @@ axis limits does not repair a line drawn across the map.
 
 ## Basemaps are network and licensing dependencies
 
-Tile helpers such as contextily and `explore(tiles=...)` can send viewport,
+GeoPandas 1.2 static `plot(tiles=...)`, contextily, and `explore(tiles=...)` can send viewport,
 zoom, IP, and timing information to a provider and can disclose the study area.
 They also introduce attribution, terms-of-use, caching, availability, and
 reproducibility requirements.
 
+Static plots default to `tiles=False`; interactive drafts use `tiles=None`.
 Do not fetch tiles automatically. If a user explicitly approves a provider:
 
 - verify its official URL, license, attribution, and usage limits;
@@ -220,7 +241,7 @@ Record:
 Raster PNG reduces direct coordinate extraction compared with SVG/HTML but is
 not anonymization. Check metadata and visual landmarks before release.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [GeoPandas mapping and plotting guide](https://geopandas.org/en/stable/docs/user_guide/mapping.html).
 - [GeoPandas interactive mapping guide](https://geopandas.org/en/stable/docs/user_guide/interactive_mapping.html).
@@ -228,3 +249,5 @@ not anonymization. Check metadata and visual landmarks before release.
 - [GeoDataFrame.explore API](https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.explore.html).
 - [GeoPandas 1.1.4 release notes](https://github.com/geopandas/geopandas/releases/tag/v1.1.4) — released 2026-06-26.
 - [GeoPandas 1.1.0 release notes](https://github.com/geopandas/geopandas/releases/tag/v1.1.0) — plotting and dependency changes.
+
+- [GeoPandas 1.2.0 plotting implementation](https://github.com/geopandas/geopandas/blob/v1.2.0/geopandas/plotting.py).

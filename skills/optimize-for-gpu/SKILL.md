@@ -2,9 +2,10 @@
 name: optimize-for-gpu
 description: GPU-accelerates scientific Python on NVIDIA hardware and verifies that the result is correct and faster. Use for CUDA/GPU optimization; CPU-bound NumPy, SciPy, pandas, scikit-learn, NetworkX, scikit-image, vector-search, image-processing, graph, simulation, or file-I/O workloads; CuPy, cuDF, cuML, cuGraph, cuVS, cuCIM, KvikIO, Warp, Newton, Numba-CUDA, or RAFT questions; and profiling, memory-transfer, kernel, or multi-GPU bottlenecks. Also use when large data-parallel Python code is slow and GPU acceleration is a plausible option, even if the user does not name CUDA.
 license: MIT
-compatibility: Requires an NVIDIA CUDA-capable GPU for GPU execution. RAPIDS 26.06 requires Python 3.11+ on Linux or WSL2 and matching CUDA 12 or 13 wheels. Package installation needs network access.
+compatibility: Requires an NVIDIA CUDA-capable GPU for GPU execution. RAPIDS 26.08 requires Python 3.11-3.14 on Linux or WSL2, NumPy 2, CuPy 14, and compatible CUDA 12 or 13 wheels. Package installation needs network access.
 metadata:
-  version: "1.5"
+  version: "1.6"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense, Inc.
 ---
 
@@ -13,6 +14,11 @@ metadata:
 Treat GPU acceleration as an evidence-driven optimization, not an automatic rewrite. Preserve the
 user's numerical and algorithmic contract, measure with representative data, and keep the GPU
 version only when synchronized end-to-end benchmarks show a useful improvement.
+
+Reviewed against RAPIDS 26.08, CuPy 14.2, Numba-CUDA 0.30.4, and Warp 1.17.
+The references contain illustrative GPU examples: source/API review is not execution on CUDA
+hardware. Validate them on the user's target GPU before reporting correctness or speedup.
+Do not use a moving `latest` documentation page to infer compatibility with a pinned release.
 
 ## When This Skill Applies
 
@@ -156,7 +162,8 @@ transfers, unsupported fallback, memory pressure, launch granularity, or the alg
 
 - Provide a CPU fallback when the application requires portability; otherwise fail early with a
   clear hardware and dependency error.
-- Test numerical correctness against CPU results (GPU floating point may differ slightly due to operation ordering)
+- Test against a trusted reference with problem-specific tolerances; changed algorithms,
+  precision, reduction order, and random streams can produce more than roundoff differences.
 - GPU memory is limited — for datasets larger than GPU memory, consider chunking or using RAPIDS Dask for multi-GPU
 - Prefer the CUDA Array Interface or DLPack for supported zero-copy interchange, but verify device,
   dtype, contiguity, ownership, and stream semantics rather than assuming every conversion is free.

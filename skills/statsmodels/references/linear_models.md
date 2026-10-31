@@ -6,7 +6,7 @@ This document provides detailed guidance on linear regression models in statsmod
 
 ### OLS (Ordinary Least Squares)
 
-Assumes independent, identically distributed errors (Σ=I). Best for standard regression with homoscedastic errors.
+OLS estimates a linear conditional mean. Conventional covariance assumes homoscedastic, uncorrelated errors; normal errors support exact small-sample t/F inference. Robust covariance changes uncertainty, not an omitted-variable or endogeneity bias.
 
 **When to use:**
 - Standard regression analysis
@@ -19,7 +19,7 @@ Assumes independent, identically distributed errors (Σ=I). Best for standard re
 import statsmodels.api as sm
 import numpy as np
 
-# Prepare data - ALWAYS add constant for intercept
+# Array interface: add a constant if an intercept is intended
 X = sm.add_constant(X_data)  # Adds column of 1s for intercept
 
 # Fit model
@@ -51,7 +51,7 @@ pred_summary = pred.summary_frame()
 print(pred_summary)  # Contains mean, std, confidence intervals
 
 # For out-of-sample predictions
-X_new = sm.add_constant(X_new_data)
+X_new = sm.add_constant(X_new_data, has_constant="add")
 pred_new = results.get_prediction(X_new)
 pred_summary = pred_new.summary_frame()
 
@@ -100,7 +100,7 @@ ols_results = sm.OLS(y, X).fit()
 
 # Step 2: Model squared residuals to estimate variance
 abs_resid = np.abs(ols_results.resid)
-variance_model = sm.OLS(np.log(abs_resid**2), X).fit()
+variance_model = sm.OLS(np.log(np.maximum(abs_resid**2, np.finfo(float).tiny)), X).fit()
 
 # Step 3: Use estimated variance as weights
 weights = 1 / np.exp(variance_model.fittedvalues)
@@ -137,7 +137,7 @@ Feasible generalized least squares with AR(p) errors for time series data.
 ```python
 # AR(1) errors
 model = sm.GLSAR(y, X, rho=1)  # rho=1 for AR(1), rho=2 for AR(2), etc.
-results = model.iterative_fit()  # Iteratively estimates AR parameters
+results = model.iterative_fit(maxiter=20)  # Default maxiter=3 may be insufficient
 
 print(results.summary())
 print(f"Estimated rho: {results.model.rho}")
@@ -145,12 +145,12 @@ print(f"Estimated rho: {results.model.rho}")
 
 ### RLS (Recursive Least Squares)
 
-Sequential parameter estimation, useful for adaptive or online learning.
+Expanding-window estimates of a fixed-coefficient regression, plus stability diagnostics; this is not a stochastic time-varying-coefficient model.
 
 **When to use:**
-- Parameters change over time
-- Online/streaming data
-- Want to see parameter evolution
+- Assess coefficient stability as observations accumulate
+- Inspect recursive residuals and CUSUM
+- Refit with additional data; do not assume a streaming update interface
 
 **Usage:**
 ```python
@@ -159,8 +159,8 @@ from statsmodels.regression.recursive_ls import RecursiveLS
 model = RecursiveLS(y, X)
 results = model.fit()
 
-# Access time-varying parameters
-params_over_time = results.recursive_coefficients
+# Expanding-window filtered/smoothed coefficient estimates
+params_over_time = results.recursive_coefficients.filtered
 cusum = results.cusum  # CUSUM statistic for structural breaks
 ```
 
@@ -182,7 +182,7 @@ rolling_model = RollingOLS(y, X, window=60)
 rolling_results = rolling_model.fit()
 
 # Extract time-varying parameters
-rolling_params = rolling_results.params  # DataFrame with parameters over time
+rolling_params = pd.DataFrame(rolling_results.params)  # Also handles NumPy inputs
 rolling_rsquared = rolling_results.rsquared
 
 # Plot parameter evolution
@@ -250,7 +250,11 @@ results = model.fit()
 print(results.summary())
 ```
 
+Use ML (`fit(reml=False)`) when comparing mixed models with different fixed effects; REML likelihoods are not comparable across those designs. Check convergence, singular random-effect covariance and boundary variance estimates before inference.
+
 ## Diagnostics and Model Assessment
+
+The following diagnostics use an OLS result with its original full-rank design. VIF, Cook's distance and condition-number thresholds are screening heuristics, not automatic exclusion rules; conditioning also depends on predictor units. Robust SEs do not validate classical OLS observation intervals under heteroskedasticity.
 
 ### Residual Analysis
 
@@ -381,7 +385,7 @@ print(wald_test)
 ## Model Comparison
 
 ```python
-# Compare nested models using likelihood ratio test (if using MLE)
+# Classical nested OLS F-test: same observations, larger model second
 from statsmodels.stats.anova import anova_lm
 
 # Fit restricted and unrestricted models
@@ -407,7 +411,7 @@ Handle heteroscedasticity or clustering without reweighting.
 results_hc = results.get_robustcov_results(cov_type='HC0')  # White's
 results_hc1 = results.get_robustcov_results(cov_type='HC1')
 results_hc2 = results.get_robustcov_results(cov_type='HC2')
-results_hc3 = results.get_robustcov_results(cov_type='HC3')  # Most conservative
+results_hc3 = results.get_robustcov_results(cov_type='HC3')  # Leverage-adjusted
 
 # Newey-West HAC (Heteroscedasticity and Autocorrelation Consistent)
 results_hac = results.get_robustcov_results(cov_type='HAC', maxlags=4)
@@ -422,7 +426,7 @@ print(results_hc3.summary())
 
 ## Best Practices
 
-1. **Always add constant**: Use `sm.add_constant()` unless you specifically want to exclude the intercept
+1. **Specify intercept once**: Array models need it explicitly; formulas include it by default. Keep prediction columns in the training order.
 2. **Check assumptions**: Run diagnostic tests (heteroscedasticity, autocorrelation, normality)
 3. **Use formula API for categorical variables**: `smf.ols()` handles categorical variables automatically
 4. **Robust standard errors**: Use when heteroscedasticity detected but model specification is correct
@@ -440,7 +444,7 @@ print(results_hc3.summary())
 3. **Using OLS with autocorrelated errors**: Use GLSAR or HAC standard errors
 4. **Over-interpreting with multicollinearity**: Check VIF first
 5. **Not checking residuals**: Always plot residuals vs fitted values
-6. **Using t-SNE/PCA residuals**: Residuals should be from original space
+6. **Rank deficiency**: Check design rank and singular values; a pseudoinverse fit can return coefficients for a non-identifiable design
 7. **Confusing prediction vs confidence intervals**: Prediction intervals are wider
 8. **Not handling categorical variables properly**: Use formula API or manual dummy coding
 9. **Comparing models with different sample sizes**: Ensure same observations used

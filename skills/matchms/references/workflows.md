@@ -70,6 +70,9 @@ The script:
 - supports cosine, exact/greedy modified cosine, neutral-loss, BLINK, and Flash
   modes;
 - handles both scalar and structured matchms score records;
+- rejects non-finite numeric settings and invalid/nonpositive precursors when
+  the selected operation needs them;
+- applies the requested relative-intensity cutoff inside Flash as well;
 - records identifiers, precursor m/z, rank, score, and matched peaks;
 - refuses pickle inputs;
 - refuses to overwrite output unless `--force`; and
@@ -136,6 +139,8 @@ scores.filter_by_range(
     low=0.5,
     above_operator=">=",
 )
+if len(scores.scores.row) == 0:
+    raise ValueError("No candidates passed the precursor gate")
 scores.calculate(
     ModifiedCosineGreedy(tolerance=0.02),
     array_type="sparse",
@@ -143,9 +148,11 @@ scores.calculate(
 )
 ```
 
-This pattern calculates the second metric on retained coordinates. It is
-inappropriate when the scientific goal is broad analog discovery across
-precursor shifts or adducts.
+This restricts computation to retained coordinates only when fewer than half
+of all pairs remain and the join is left/inner. Otherwise matchms 0.33.1
+computes the full matrix before joining; a 1-by-1 input always uses `pair()`.
+Stop when no candidates remain. This gate is inappropriate for broad analog
+discovery across precursor shifts or adducts.
 
 ## 5. Reproducible `Pipeline` Workflow
 
@@ -251,7 +258,8 @@ scores = calculate_scores(
 )
 ```
 
-`is_symmetric=True` avoids redundant calculation for symmetric methods. The
+`is_symmetric=True` permits implementations to avoid redundant calculation;
+Flash 0.33.1 does not exploit this flag for runtime savings. The
 logical pair count still grows quadratically. Estimate size before launching:
 
 ```python
@@ -305,7 +313,7 @@ scores = calculate_scores(
 
 Flash outputs a scalar `FlashSimilarity` field without a matched-peak count.
 Validate ranking agreement against a transparent baseline on representative
-data.
+data. Flash allocates a dense matrix even when sparse output is requested.
 
 ## 8. Mirror-Plot Validation
 
@@ -313,8 +321,8 @@ data.
 from pathlib import Path
 
 output = Path("top-hit-mirror.png")
-axis = query.plot_against(reference, figsize=(10, 6), dpi=200)
-axis.figure.savefig(output, bbox_inches="tight")
+figure, axis = query.plot_against(reference, figsize=(10, 6), dpi=200)
+figure.savefig(output, bbox_inches="tight")
 ```
 
 Inspect:
@@ -343,6 +351,10 @@ scores = calculate_scores(
     is_symmetric=True,
 )
 
+ids = [s.get("spectrum_id") for s in spectra]
+assert all(isinstance(value, str) and value for value in ids)
+assert len(ids) == len(set(ids))
+
 network = SimilarityNetwork(
     identifier_key="spectrum_id",
     top_n=20,
@@ -359,7 +371,10 @@ network.export_to_file("spectral-network.graphml", graph_format="graphml")
 ```
 
 Supported export formats include GraphML, GEXF, GML, Cytoscape JSON, and JSON.
-`top_n` must be at least `max_links`. Equal scores near the strict link limit
+`top_n` must be at least `max_links`. `max_links` limits outgoing additions per
+iteration, not total node degree (incoming links can increase it). Use unique
+nonempty string IDs: numeric IDs can become mixed integer/string nodes.
+Equal scores near the strict link limit
 can make tie selection order-dependent; use deterministic identifiers and
 document parameters.
 
@@ -382,6 +397,7 @@ spectral identification method; that leaks the answer.
 
 ```python
 from matchms.importing import load_from_usi
+from matchms.filtering import default_filters, normalize_intensities
 from matchms.similarity import CosineGreedy
 
 reference = load_from_usi(
@@ -390,6 +406,10 @@ reference = load_from_usi(
 query = load_from_usi(
     "mzspec:MSV000086109:BD5_dil2x_BD5_01_57213:scan:760"
 )
+if reference is None or query is None:
+    raise ValueError("The USI resolver returned no usable spectrum")
+reference = normalize_intensities(default_filters(reference))
+query = normalize_intensities(default_filters(query))
 result = CosineGreedy(tolerance=0.02).pair(reference, query)
 ```
 
@@ -447,5 +467,5 @@ code/configuration, and any manual curation decisions.
 - **Fingerprint warnings:** migrate from `add_fingerprint()` to `Fingerprints`
   and bridge to the current `FingerprintSimilarity` only when required.
 - **Output already exists:** matchms intentionally refuses overwrite in generic
-  writers and pipeline outputs; choose a new path or remove only after explicit
-  confirmation.
+  writers and pipeline outputs; choose a new path or replace the intended output
+  when the user has authorized it.

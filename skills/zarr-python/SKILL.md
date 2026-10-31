@@ -1,248 +1,174 @@
 ---
 name: zarr-python
-description: Chunked N-D arrays for cloud storage (Zarr-Python 3). Compressed arrays, parallel I/O, S3/GCS via fsspec, NumPy/Dask/Xarray compatible, for large-scale scientific computing pipelines.
+description: Stores and queries chunked N-D scientific arrays with Zarr-Python 3, including codecs, sharding, S3/GCS storage, and NumPy/Dask/Xarray integration. Use for array layout, bounded I/O, format migration, or scientific metadata preservation.
 allowed-tools: Read Write Edit Bash
 license: MIT license
-compatibility: Requires Python 3.12+ and zarr 3.x. Cloud I/O needs zarr[remote] plus pinned s3fs or gcsfs. Legacy Zarr v2 workflows need exact 2.x pins on older Python.
+compatibility: Requires Python 3.12+ and zarr 3.4.0 with NumPy 2+. Remote I/O needs network access, zarr[remote] and the protocol backend; private stores need provider credentials. CLI migration needs zarr[cli].
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
+  upstream-version: "3.4.0"
 ---
 
 # Zarr Python
 
-## Overview
+## When to use
 
-Zarr is a Python library for storing large N-dimensional arrays with chunking and compression. Apply this skill for efficient parallel I/O, cloud-native workflows, and seamless integration with NumPy, Dask, and Xarray.
+Use for chunked scientific arrays, hierarchical stores, codecs, sharding, partial reads,
+cloud object storage, and NumPy/Dask/Xarray interoperability. This community guide targets
+**Zarr-Python 3.4.0**, released **2026-09-15**, with Python 3.12+. The package version and
+on-disk format are separate: this release reads/writes formats 2 and 3; new arrays default
+to format 3. Keep downstream packages that require `zarr<3` in their own environments.
 
-**Current upstream:** zarr **3.2.1** (released 2026-05-05). Docs: [zarr.readthedocs.io](https://zarr.readthedocs.io/en/stable/). New arrays default to **Zarr format 3**; set `zarr_format=2` for legacy interop. Zarr 3.2 adds rectilinear chunks and continues to refine the v3 codec pipeline. This skill is a **community guide** maintained by K-Dense Inc., not an official zarr-developers package.
-
-## Quick Start
-
-### Installation
-
-```bash
-uv pip install "zarr==3.2.1"
-```
-
-Requires **Python 3.12+** and NumPy 2.0+ for current stable Zarr-Python. For remote stores (S3, GCS, HTTP), pin the optional extras/backends in your project lockfile:
+## Install
 
 ```bash
-uv pip install "zarr[remote]==3.2.1" "s3fs==2026.4.0" "gcsfs==2026.5.0"
+uv pip install "zarr==3.4.0" "numpy==2.5.3"
+# Optional remote backends and migration CLI:
+uv pip install "zarr[remote,cli]==3.4.0" "fsspec==2026.9.0" "s3fs==2026.9.0" "gcsfs==2026.8.1"
 ```
 
-Use a version range such as `zarr>=3,<4` only when your project has a committed lockfile and compatibility tests. For Zarr-Python 2 / Python 3.10–3.11 workflows, choose an exact `zarr==2.x.y` patch version from the support-v2 release notes and commit the resulting lockfile.
+Commit the project's resolved lockfile. Optional integration versions exercised here:
+Dask 2026.8.0, Xarray 2026.9.0, h5py 3.16.0, NumCodecs 0.17.0, obstore 0.11.1.
+Local examples below and in the references use tiny synthetic arrays; remote snippets
+are illustrative and require a real authorized store. This does not establish cloud
+permissions, production throughput, or compatibility of every downstream reader.
 
-### Basic Array Creation
+## Workflow
+
+1. Inspect shape, dtype, axis names, coordinates, units, missing-value convention, format,
+   codec availability, and intended readers. Preserve sample IDs and axis order.
+2. Choose chunks for actual selections and a memory budget. For sharding, choose shard
+   dimensions that are multiples of chunk dimensions. Benchmark representative data.
+3. Create a new destination (`overwrite=False` or `mode="w-"`). Use `mode="r"` for
+   inspection; `"a"` can create a missing store and `"w"` destroys existing content.
+4. Write bounded blocks. Assign one writer per stored chunk, or per **shard** when
+   sharded; serialize metadata, append, and resize operations.
+5. Reopen read-only and compare values, dtype, shape, coordinates, units, masks and
+   metadata. An unwritten or missing chunk normally reads as `fill_value`; a successful
+   open alone does not prove data completeness.
+6. For a completed group hierarchy, optionally consolidate metadata. Format-3
+   consolidation is experimental; refresh it after metadata changes and verify the
+   actual consumers. Publish a completed store only after validation.
+
+## Basic array roundtrip
 
 ```python
-import zarr
 import numpy as np
+import zarr
+from zarr.codecs import BloscCodec
 
-# Create a 2D array with chunking and compression
+expected = np.arange(96, dtype="float32").reshape(12, 8)
 z = zarr.create_array(
-    store="data/my_array.zarr",
-    shape=(10000, 10000),
-    chunks=(1000, 1000),
-    dtype="f4"
+    "array.zarr", shape=expected.shape, dtype=expected.dtype,
+    chunks=(4, 4), zarr_format=3,
+    compressors=BloscCodec(cname="zstd", clevel=5, shuffle="bitshuffle"),
+    dimension_names=("sample", "feature"),
+    attributes={"units": "arbitrary", "source": "synthetic example"},
 )
+for start in range(0, z.shape[0], 4):
+    z[start:start + 4] = expected[start:start + 4]
 
-# Write data using NumPy-style indexing
-z[:, :] = np.random.random((10000, 10000))
-
-# Read data
-data = z[0:100, 0:100]  # Returns NumPy array
+reopened = zarr.open_array("array.zarr", mode="r")
+np.testing.assert_array_equal(reopened[:], expected)
+assert reopened.dtype == expected.dtype
+assert reopened.metadata.dimension_names == ("sample", "feature")
+assert reopened.attrs["units"] == "arbitrary"
+subset = reopened[2:6, 1:4]  # Only this selection is materialized.
 ```
 
-## Core Operations
+`create_array` takes either `data=` or `shape=` plus `dtype=`; do not combine `data=`
+with explicit shape/dtype. The format-3 numeric default is a bytes serializer followed
+by **ZstdCodec**, not Blosc. Set a codec explicitly for reproducibility.
 
-### Creating Arrays
-
-Zarr provides multiple convenience functions for array creation:
+## Creation and indexing
 
 ```python
-# Create empty array
-z = zarr.zeros(shape=(10000, 10000), chunks=(1000, 1000), dtype='f4',
-               store='data.zarr')
+import numpy as np
+import zarr
 
-# Create filled arrays
-z = zarr.ones((5000, 5000), chunks=(500, 500))
-z = zarr.full((1000, 1000), fill_value=42, chunks=(100, 100))
+z = zarr.create_array(None, data=np.arange(80).reshape(10, 8), chunks=(2, 4))
+zeros = zarr.zeros((10, 8), chunks=(2, 4), dtype="f4")
+ones = zarr.ones((10, 8), chunks=(2, 4), dtype="f4")
+filled = zarr.full((10, 8), fill_value=42, chunks=(2, 4), dtype="i4")
+like = zarr.zeros_like(z)
+np.testing.assert_array_equal(filled[:], np.full((10, 8), 42))
 
-# Create from existing data
-data = np.arange(10000).reshape(100, 100)
-z = zarr.array(data, chunks=(10, 10), store='data.zarr')
-
-# Create like another array
-z2 = zarr.zeros_like(z)  # Matches shape, chunks, dtype of z
+# Coordinate indexing pairs corresponding coordinates; orthogonal indexing is a product.
+np.testing.assert_array_equal(z.vindex[[0, 5], [2, 7]], [2, 47])
+np.testing.assert_array_equal(z.get_coordinate_selection(([0, 5], [2, 7])), [2, 47])
+assert z.oindex[[0, 5], [2, 7]].shape == (2, 2)
+assert z.blocks[0, 0].shape == (2, 4)
+z[0, :] = np.arange(8)
 ```
 
-### Opening Existing Arrays
+Negative-step slices are unsupported. Array reads return NumPy data in the default CPU
+configuration. `np.asarray(z)`, `np.sum(z)`, `z[:]`, or a Dask `.compute()` of a full array
+can materialize the entire logical dataset; use bounded selections or lazy reductions.
+
+## Resize and append
 
 ```python
-# Open array (read/write mode by default)
-z = zarr.open_array('data.zarr', mode='r+')
+import numpy as np
+import zarr
 
-# Read-only mode
-z = zarr.open_array('data.zarr', mode='r')
-
-# The open() function auto-detects arrays vs groups
-z = zarr.open('data.zarr')  # Returns Array or Group
+series = zarr.create_array(None, shape=(0, 8), chunks=(2, 8), dtype="f4")
+series.append(np.ones((2, 8), dtype="f4"), axis=0)
+series.resize((4, 8))  # A tuple; append must match all non-appended dimensions.
+assert series.shape == (4, 8)
+np.testing.assert_array_equal(series[2:], np.zeros((2, 8)))
 ```
 
-### Reading and Writing Data
+Coordinate resize/append centrally. Shrinking removes chunks outside the new shape,
+but values in retained boundary chunks can reappear on re-expansion; resize is not
+secure erasure or a missingness policy. Record time/sample coordinates alongside data.
 
-Zarr arrays support NumPy-like indexing:
-
-```python
-# Write entire array
-z[:] = 42
-
-# Write slices
-z[0, :] = np.arange(100)
-z[10:20, 50:60] = np.random.random((10, 10))
-
-# Read data (returns NumPy array)
-data = z[0:100, 0:100]
-row = z[5, :]
-
-# Advanced indexing
-z.vindex[[0, 5, 10], [2, 8, 15]]  # Coordinate indexing
-z.oindex[0:10, [5, 10, 15]]       # Orthogonal indexing
-z.blocks[0, 0]                     # Block/chunk indexing
-```
-
-### Resizing and Appending
+## Groups and attributes
 
 ```python
-# Resize array (v3: pass shape as a tuple)
-z.resize((15000, 15000))
+import numpy as np
+import zarr
 
-# Append data along an axis
-z.append(np.random.random((1000, 10000)), axis=0)  # Adds rows
-```
-
-## Groups and Hierarchies
-
-Groups organize multiple arrays hierarchically, similar to directories or HDF5 groups.
-
-### Creating and Using Groups
-
-```python
-# Create root group
-root = zarr.group(store='data/hierarchy.zarr')
-
-# Create sub-groups
-temperature = root.create_group('temperature')
-precipitation = root.create_group('precipitation')
-
-# Create arrays within groups
-temp_array = temperature.create_array(
-    name='t2m',
-    shape=(365, 720, 1440),
-    chunks=(1, 720, 1440),
-    dtype='f4'
+root = zarr.open_group("hierarchy.zarr", mode="w-", zarr_format=3)
+temperature = root.create_group("temperature")
+temp = temperature.create_array(
+    "t2m", data=np.full((3, 4, 6), 280, dtype="f4"), chunks=(1, 4, 6),
+    dimension_names=("time", "lat", "lon"), attributes={"units": "K"},
 )
-
-precip_array = precipitation.create_array(
-    name='prcp',
-    shape=(365, 720, 1440),
-    chunks=(1, 720, 1440),
-    dtype='f4'
-)
-
-# Access using paths
-array = root['temperature/t2m']
-
-# Visualize hierarchy
-print(root.tree())
-# Output:
-# /
-#  ├── temperature
-#  │   └── t2m (365, 720, 1440) f4
-#  └── precipitation
-#      └── prcp (365, 720, 1440) f4
+root.require_group("quality")
+root.require_array("count", shape=(3,), chunks=(3,), dtype="i4")
+root.attrs.update({"project": "synthetic climate example", "processing_version": "1.0"})
+loaded = zarr.open_group("hierarchy.zarr", mode="r")
+assert loaded["temperature/t2m"].attrs["units"] == "K"
+assert loaded.attrs["processing_version"] == "1.0"
+print(loaded.tree())  # Logical group/array tree, not physical metadata files.
 ```
 
-### Group API (v3)
+Use `create_array` / `require_array`; `create_dataset` / `require_dataset` are removed.
+Attributes belong to the specific node on which they are set and must be JSON-compatible.
+Names/units are declarations, not unit conversion or scientific validation.
+`require_array` checks an existing array's compatibility; it does not rechunk it.
 
-Use `create_array` / `require_array` (h5py-style `create_dataset` / `require_dataset` were removed in v3):
+## References
 
-```python
-root = zarr.group('data.zarr')
-arr = root.create_array('my_data', shape=(1000, 1000), chunks=(100, 100), dtype='f4')
+- [Chunking and compression](references/chunking_and_compression.md): measured layout
+  decisions, default codecs, sharding, experimental rectilinear grids.
+- [Storage backends](references/storage_backends.md): local, memory, ZIP, ObjectStore,
+  fsspec, S3/GCS/HTTP paths and credentials.
+- [Integration](references/integration.md): bounded NumPy/Dask operations, Xarray
+  dimensions and masks, concurrent writes, consolidation.
+- [Performance and patterns](references/performance_and_patterns.md): storage sizing,
+  appendable data, bounded HDF5/NumPy conversion, validation.
+- [API reference](references/api_reference.md): current callable forms and exceptions.
+- [Migration](references/v3_migration.md): API versus format migration, metadata-only
+  CLI behavior and a copied-store verification workflow.
+- [Review evidence](references/review.md): release sources and execution boundaries.
 
-grp = root.require_group('subgroup')
-arr2 = grp.require_array('array', shape=(500, 500), chunks=(50, 50), dtype='i4')
-```
-
-## Attributes and Metadata
-
-Attach custom metadata to arrays and groups using attributes:
-
-```python
-# Add attributes to array
-z = zarr.zeros((1000, 1000), chunks=(100, 100))
-z.attrs['description'] = 'Temperature data in Kelvin'
-z.attrs['units'] = 'K'
-z.attrs['created'] = '2024-01-15'
-z.attrs['processing_version'] = 2.1
-
-# Attributes are stored as JSON
-print(z.attrs['units'])  # Output: K
-
-# Add attributes to groups
-root = zarr.group('data.zarr')
-root.attrs['project'] = 'Climate Analysis'
-root.attrs['institution'] = 'Research Institute'
-
-# Attributes persist with the array/group
-z2 = zarr.open('data.zarr')
-print(z2.attrs['description'])
-```
-
-**Important**: Attributes must be JSON-serializable (strings, numbers, lists, dicts, booleans, null).
-
-## Parallel write ownership
-
-Partition writers by stored object: disjoint **chunks** for an unsharded array, or disjoint **shards** for a sharded array. Different inner chunks can share one shard, so distinct element slices alone do not establish safe concurrent writes. Assign a single writer per shard or coordinate updates externally, and serialize resize/append and metadata changes. Reopen and verify written regions after workers finish.
-
-## Chunking, Compression, Storage, and Performance
-
-- [references/chunking_and_compression.md](references/chunking_and_compression.md):
-  sizing chunks to the access pattern (aim for ~1 MB, 5-100 MB on cloud), sharding, and
-  codec choice.
-- [references/storage_backends.md](references/storage_backends.md): local, memory, ZIP,
-  and fsspec remote stores (S3, GCS), with credential guidance — prefer IAM roles or
-  workload identity, and never print credential values.
-- [references/integration.md](references/integration.md): NumPy, Dask, and Xarray
-  integration, thread safety, and consolidated metadata.
-- [references/performance_and_patterns.md](references/performance_and_patterns.md):
-  optimization, appendable time-series and large-matrix patterns, format conversion, and
-  troubleshooting.
-- [references/api_reference.md](references/api_reference.md) and
-  [references/v3_migration.md](references/v3_migration.md): full API and the v2-to-v3
-  migration notes.
-
-## Additional Resources
-
-### Bundled references
-
-| File | Contents |
-|------|----------|
-| `references/api_reference.md` | Function signatures, stores, codecs, indexing |
-| `references/v3_migration.md` | Zarr-Python 2→3 breaking changes and WIP features |
-
-### Official upstream
-
-- **Documentation**: https://zarr.readthedocs.io/en/stable/
-- **3.0 migration guide**: https://zarr.readthedocs.io/en/stable/user-guide/v3_migration/
-- **Storage backends**: https://zarr.readthedocs.io/en/stable/user-guide/storage/
-- **Zarr specifications**: https://zarr-specs.readthedocs.io/
-- **GitHub**: https://github.com/zarr-developers/zarr-python
-- **Developer chat**: https://ossci.zulipchat.com/#narrow/channel/423692-Zarr-Python
-
-**Related libraries:** [Xarray](https://docs.xarray.dev/), [Dask](https://docs.dask.org/), [NumCodecs](https://numcodecs.readthedocs.io/)
+Official sources: [release notes](https://zarr.readthedocs.io/en/stable/release-notes/),
+[documentation](https://zarr.readthedocs.io/en/stable/),
+[format specification](https://zarr-specs.readthedocs.io/),
+[released source](https://github.com/zarr-developers/zarr-python/tree/v3.4.0).
 
 ## Citing Scientific Agent Skills
 

@@ -316,9 +316,10 @@ def resolve_local_asset(
     if any(part in {"", ".", ".."} for part in relative.parts):
         raise CliError(f"asset.path contains an unsafe segment: {raw!r}")
     root = manifest_path.parent.resolve()
-    candidate = (root / relative).resolve()
+    candidate = root / relative
+    resolved = candidate.resolve()
     try:
-        candidate.relative_to(root)
+        resolved.relative_to(root)
     except ValueError as exc:
         raise CliError(f"asset.path escapes the manifest directory: {raw!r}") from exc
     return checked_input_file(

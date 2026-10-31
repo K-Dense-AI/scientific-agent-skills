@@ -1,10 +1,12 @@
 # Shared Decisions, Informed Preferences, and Handoffs
 
-Last reviewed: **2026-07-23**
+Last reviewed: **2026-10-01**
 
 ## Documentation-only role
 
 AHRQ describes shared decision-making as a clinician-led process that explores options, benefits, harms, risks, and what matters to the person. NICE similarly describes healthcare professionals and people working together on treatment and care decisions and communicating risks, benefits, and consequences.
+
+NICE NG197 addresses adults and excludes unexpected emergencies requiring immediate life-saving care and decisions when an adult lacks capacity at the relevant time; separate local processes apply.
 
 This skill records that process after it occurred. It does not conduct the conversation, generate options, quantify risks, assess capacity, obtain consent, or decide the outcome.
 
@@ -86,7 +88,7 @@ This package may record:
 
 - source-list fact IDs;
 - destination-list fact IDs;
-- `pending_authorized_review`, `completed_by_authorized_clinician`, or `not_applicable`;
+- `pending_authorized_review`, `completed_by_authorized_clinician`, or `not_applicable_by_authorized_clinician`;
 - discrepancy status;
 - reviewer role and completion time.
 

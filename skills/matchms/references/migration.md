@@ -1,7 +1,9 @@
 # Migration to matchms 0.33.1
 
 Use this guide when adapting code written for older matchms releases or the
-official tutorial notebooks last revised in 2024.
+official tutorial notebooks last revised in 2024. The stable release and
+public symbols were rechecked on 2026-10-01; development-branch changes are
+not automatically supported by the pinned release.
 
 ## Release Timeline That Affects This Skill
 
@@ -225,7 +227,7 @@ For global peak-count reduction, use
 Old:
 
 ```python
-require_precursor_below_mz(spectrum, maximum_accepted_mz=1000)
+require_precursor_below_mz(spectrum, max_mz=1000)
 ```
 
 Current:

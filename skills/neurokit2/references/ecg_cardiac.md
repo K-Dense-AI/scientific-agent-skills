@@ -1,6 +1,6 @@
 # ECG and cardiac processing
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable source/runtime,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable source/runtime,
 the live ECG API, and current psychophysiology measurement guidance.
 
 ## Acquisition contract
@@ -61,6 +61,10 @@ High-level methods documented for `ecg_process()` include `neurokit`,
 `ecg_clean()` and lower-level peak detection expose additional methods. A cleaning
 method and detector encode different assumptions; do not select whichever produces
 the expected group effect.
+
+In stable `ecg_process()`, `**kwargs` are forwarded only to `ecg_clean()`. They do not
+configure the R-peak detector, correction, quality method, or delineation. Use the
+lower-level functions when those settings matter, and preserve their parameters.
 
 For custom control:
 
@@ -183,7 +187,7 @@ python skills/neurokit2/scripts/ecg_hrv_pipeline.py \
 The helper rejects missing/non-finite samples instead of silently interpolating them,
 reports observed schemas and correction categories, and gates longer HRV domains.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official ECG API](https://neuropsychology.github.io/NeuroKit/functions/ecg.html)
 - [Stable v0.2.13 `ecg_process` source](https://github.com/neuropsychology/NeuroKit/blob/v0.2.13/neurokit2/ecg/ecg_process.py)

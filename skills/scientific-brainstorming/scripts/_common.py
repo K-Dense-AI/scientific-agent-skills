@@ -111,7 +111,7 @@ def finite_number(value: Any, label: str) -> float:
         raise CliError(f"{label} must be numeric, not boolean")
     try:
         result = float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise CliError(f"{label} must be numeric") from exc
     if not math.isfinite(result):
         raise CliError(f"{label} must be finite")
@@ -174,8 +174,18 @@ def read_json(raw_path: str, *, label: str = "JSON input") -> tuple[Path, Any]:
     def reject_constant(value: str) -> None:
         raise CliError(f"non-standard JSON constant is not allowed: {value}")
 
+    def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise CliError(f"duplicate JSON key is not allowed: {key!r}")
+            result[key] = value
+        return result
+
     try:
-        return path, json.loads(text, parse_constant=reject_constant)
+        return path, json.loads(
+            text, parse_constant=reject_constant, object_pairs_hook=unique_object
+        )
     except (json.JSONDecodeError, RecursionError) as exc:
         raise CliError(f"invalid JSON in {path}: {exc}") from exc
 

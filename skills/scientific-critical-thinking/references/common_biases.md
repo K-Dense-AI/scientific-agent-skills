@@ -1,5 +1,9 @@
 # Common Biases in Scientific Research
 
+These are prompts to examine mechanisms, not evidence of misconduct. Connect a concern
+to the particular result and its likely consequences; use the matching formal tool when
+needed. Sources and current tool scopes are in [review_sources.md](review_sources.md).
+
 ## Cognitive Biases Affecting Researchers
 
 ### 1. Confirmation Bias
@@ -42,7 +46,8 @@
 - Publish null results
 - Use preregistration and registered reports
 - Conduct systematic reviews with grey literature
-- Check for funnel plot asymmetry in meta-analyses
+- When appropriate, examine funnel asymmetry as a small-study-effects diagnostic;
+  asymmetry does not uniquely diagnose publication bias
 
 ### 4. Anchoring Bias
 **Description:** Over-reliance on the first piece of information encountered.
@@ -112,13 +117,17 @@
 ## Experimental and Methodological Biases
 
 ### 9. Selection Bias
-**Description:** Systematic differences between those selected for study and those not selected.
+**Description:** Selection can impair representativeness or create biased exposure-outcome
+associations by conditioning on participation, survival, or another common effect. These
+are related but distinct problems; a nonrepresentative sample is not automatically biased
+for every within-sample contrast.
 
 **Types:**
 - **Sampling bias:** Non-random sample
 - **Attrition bias:** Systematic dropout
 - **Volunteer bias:** Self-selected participants differ
-- **Berkson's bias:** Hospital patients differ from general population
+- **Berkson's bias:** Conditioning on hospitalization influenced by both exposure and
+  disease can create an association (collider bias)
 - **Survivorship bias:** Only examining "survivors"
 
 **Detection:**
@@ -190,6 +199,10 @@
 - Stratification
 - Restriction
 
+Choose adjustment using the causal question and temporal structure. Adjusting every
+measured variable can induce collider bias or remove part of the effect through a mediator;
+matching and regression do not eliminate unmeasured confounding by themselves.
+
 ### 14. Reporting Bias
 **Description:** Selective reporting of results.
 
@@ -215,7 +228,8 @@
 **Mitigation:**
 - Test in representative samples
 - Report performance across disease spectrum
-- Avoid case-control designs for diagnostic studies
+- Avoid unrepresentative two-gate diagnostic samples of extreme cases and healthy controls
+  when the target is accuracy among patients presenting for testing
 
 ### 16. Lead-Time Bias
 **Description:** Apparent survival benefit due to earlier detection, not improved outcomes.
@@ -266,7 +280,7 @@
 - Subgroup analyses until finding significance
 
 **Detection:**
-- Suspiciously perfect p-values (just below .05)
+- Clustering just below .05 can motivate further checks; it is not proof of p-hacking
 - Many researcher degrees of freedom
 - Undisclosed analyses
 - Fishing expeditions
@@ -294,7 +308,10 @@
 **Description:** Ignoring prior probability when evaluating evidence.
 
 **Example:**
-- Test with 95% accuracy in rare disease (1% prevalence): positive result only 16% likely to indicate disease
+- With prevalence 1%, sensitivity 95%, and specificity 95%, the positive predictive value
+  is `0.95*0.01 / (0.95*0.01 + 0.05*0.99) = 0.1610` (16.1%). Overall "accuracy"
+  alone is insufficient; this teaching calculation assumes these quantities apply to
+  the tested population.
 
 **Mitigation:**
 - Always consider base rates/prior probability
@@ -330,7 +347,7 @@
 
 ### Study Design
 1. Randomization
-2. Blinding (single, double, triple)
+2. Blinding specified by role and information concealed
 3. Control groups
 4. Adequate sample size
 5. Preregistration
@@ -343,7 +360,7 @@
 5. Complete data collection
 
 ### Analysis
-1. Intention-to-treat analysis
+1. Analysis aligned to assignment/adherence estimand, with explicit missing-data assumptions
 2. Prespecified analyses
 3. Appropriate statistical tests
 4. Multiple comparison corrections

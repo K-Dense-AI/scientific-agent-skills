@@ -163,7 +163,12 @@ For NS2D 0.9.0, the pinned smoke test found:
   `in_script`, `in_script_coarse`, `pseudo_spectral`, `proportional`,
   `tcrandom`, `tcrandom_anisotropic`.
 
-Do not generalize that list to other solvers.
+Do not generalize that list to other solvers. The bundled validator now uses
+per-solver initialization, forcing, physics-parameter, and output profiles
+checked against all twelve Cartesian solver defaults. For example, NS3D does
+not register `jet`, `increments`, or `spectra_multidim`; SW1L and `waves2d`
+have different forcing/output surfaces. These checks establish API availability,
+not physical validation of every solver.
 
 ## Evidence required before interpretation
 
@@ -179,9 +184,9 @@ For any solver:
 - Repeat at refined grid and time step.
 - Compare with a suitable independent benchmark.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
-- [FluidSim 0.9.0 package entry points](https://github.com/fluiddyn/fluidsim/blob/branch/default/pyproject.toml).
+- [FluidSim 0.9.0 package entry points](https://github.com/fluiddyn/fluidsim/blob/0.9.0/pyproject.toml).
 - [FluidSim solver API index](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.solvers.html).
 - [NS2D solver API](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.solvers.ns2d.solver.html).
 - [NS3D solver API](https://fluidsim.readthedocs.io/en/latest/generated/fluidsim.solvers.ns3d.solver.html).

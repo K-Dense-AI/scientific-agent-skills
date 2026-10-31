@@ -1,5 +1,7 @@
 # Dask Bags
 
+Reviewed with Dask/distributed 2026.8.0. File paths, deployment settings, and undefined application functions are illustrative; executed local checks and current official sources are in [review.md](review.md).
+
 ## Overview
 
 Dask Bag implements functional operations including `map`, `filter`, `fold`, and `groupby` on generic Python objects. It processes data in parallel while maintaining a small memory footprint through Python iterators. Bags function as "a parallel version of PyToolz or a Pythonic version of the PySpark RDD."
@@ -47,7 +49,7 @@ A Dask Bag is a collection of Python objects distributed across partitions:
 ## Important Limitations
 
 Bags sacrifice performance for generality:
-- Rely on multiprocessing scheduling (not threads)
+- Default to the processes scheduler when no distributed client/config overrides it; threads are supported
 - Remain immutable (create new bags for changes)
 - Operate slower than array/DataFrame equivalents
 - Handle `groupby` inefficiently (use `foldby` when possible)
@@ -97,15 +99,17 @@ bag = db.from_delayed(partitions)
 
 ### From Custom Sources
 ```python
-# From any iterable-producing function
-def read_json_files():
-    import json
-    for filename in glob.glob('data/*.json'):
-        with open(filename) as f:
-            yield json.load(f)
+import glob
+import json
 
-# Create bag from generator
-bag = db.from_sequence(read_json_files(), partition_size=10)
+def read_json_file(filename):
+    with open(filename, encoding='utf-8') as f:
+        return json.load(f)  # One complete JSON object per file
+
+# Pass only filenames locally; loading occurs in worker tasks.
+# from_sequence eagerly materializes an iterable, so do not pass a data loader.
+bag = db.from_sequence(sorted(glob.glob('data/*.json')), partition_size=10)
+bag = bag.map(read_json_file)
 ```
 
 ## Common Operations
@@ -208,7 +212,7 @@ count = bag.count().compute()
 distinct = bag.distinct().compute()
 
 # Take first n elements
-first_ten = bag.take(10)
+first_ten = bag.take(10, npartitions=-1)  # Default inspects only first partition
 
 # Fold/reduce
 total = bag.fold(
@@ -219,6 +223,8 @@ total = bag.fold(
 ```
 
 ## Converting to Other Collections
+
+Supply explicit `meta` when possible: without it `to_dataframe()` computes a sample, can miss rare types, and fails on an empty bag. Validate/cast each record; meta is not a general data-cleaning policy.
 
 ### To DataFrame
 ```python
@@ -241,7 +247,7 @@ ddf = bag.to_dataframe(meta={'id': int, 'value': float, 'category': str})
 result = bag.compute()
 
 # Take sample
-sample = bag.take(100)
+sample = bag.take(100, npartitions=-1)
 ```
 
 ## Common Patterns
@@ -251,7 +257,7 @@ sample = bag.take(100)
 import dask.bag as db
 import json
 
-# Read and parse JSON files
+# Read and parse JSON Lines (one complete JSON object per line)
 bag = db.read_text('logs/*.json')
 parsed = bag.map(json.loads)
 
@@ -372,7 +378,7 @@ ddf.to_parquet('cleaned_data/')
 - Map, filter, pluck: Very efficient (streaming)
 - Flatten: Efficient
 - FoldBy with good key distribution: Reasonable
-- Take and head: Efficient (only processes needed partitions)
+- take: eager sample; default only scans the first partition (Bag has no head method)
 
 ### Expensive Operations
 - GroupBy: Requires shuffle, can be slow
@@ -384,10 +390,12 @@ ddf.to_parquet('cleaned_data/')
 **1. Use FoldBy Instead of GroupBy**
 ```python
 # Better: Use foldby for aggregations
-result = bag.foldby(key='category', binop=add, initial=0, combine=sum)
+result = bag.foldby(key='category', binop=add, initial=0,
+                    combine=lambda a, b: a + b)
 
 # Worse: GroupBy then reduce
-result = bag.groupby('category').map(lambda x: (x[0], sum(x[1])))
+result = bag.groupby('category').map(
+    lambda x: (x[0], sum(item['value'] for item in x[1])))
 ```
 
 **2. Convert to DataFrame Early**
@@ -453,7 +461,7 @@ Bags are designed for memory-efficient processing:
 # Streaming processing - doesn't load all in memory
 bag = db.read_text('huge_file.txt')  # Lazy
 processed = bag.map(process_line)     # Still lazy
-result = processed.compute()          # Processes in chunks
+result = processed.compute()          # Collects ALL results in client memory
 ```
 
 For very large results, avoid computing to memory:

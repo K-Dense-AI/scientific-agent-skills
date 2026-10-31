@@ -9,7 +9,7 @@
 **Best for:** Multi-dimensional comparisons, skill assessments, performance profiles, competitive analysis
 **When NOT to use:** Time series data (use [XY Chart](xy_chart.md)), simple proportions (use [Pie](pie.md))
 
-> ⚠️ **Accessibility:** Radar charts do **not** support `accTitle`/`accDescr`. Always place a descriptive _italic_ Markdown paragraph directly above the code block.
+> **Accessibility:** Mermaid 12.0.0 emits `accTitle`/`accDescr` for this type. Keep a visible description and verify older destination renderers.
 
 ---
 
@@ -19,6 +19,8 @@ _Radar chart comparing two engineering candidates across six core competency are
 
 ```mermaid
 radar-beta
+    accTitle: Radar Example
+    accDescr: Illustrative radar diagram; the surrounding text describes its data and relationships.
     title Team Skill Assessment
     axis sys["System Design"], algo["Algorithms"], comms["Communication"], team["Teamwork"], ops["DevOps"], acq["Domain Knowledge"]
     curve candidate_a["Candidate A"]{4, 3, 5, 5, 2, 3}
@@ -35,7 +37,7 @@ radar-beta
 
 - Define axes with `axis id["Label"]` — use short labels (1–2 words)
 - Define curves with `curve id["Label"]{val1, val2, ...}` matching axis order
-- Set `max` to normalize all values to the same scale
+- `max` sets the displayed radial limit; it does not normalize data. Convert unlike units to a justified common scale before plotting, declare direction (higher/lower is better), and provide the exact data table
 - `graticule` options: `circle` (default) or `polygon`
 - `ticks` controls the number of concentric rings (default 5)
 - `showLegend true` adds a legend for multiple curves
@@ -50,6 +52,8 @@ _Description of what dimensions are being compared across which entities:_
 
 ```mermaid
 radar-beta
+    accTitle: Radar Example
+    accDescr: Illustrative radar diagram; the surrounding text describes its data and relationships.
     title Your Radar Title
     axis dim1["Dimension 1"], dim2["Dimension 2"], dim3["Dimension 3"], dim4["Dimension 4"], dim5["Dimension 5"]
     curve series_a["Series A"]{3, 4, 2, 5, 3}
@@ -57,3 +61,8 @@ radar-beta
     max 5
     showLegend true
 ```
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/radar.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

@@ -1,6 +1,6 @@
 # Publisher and Journal Figure Snapshots
 
-Accessed 2026-07-23 from current official pages. Requirements are date-sensitive and often depend on the journal, article type, figure type, and submission phase. Verify the live target-journal page before submission. Source IDs resolve in `sources.md`.
+Reviewed 2026-10-01 against official pages, except the explicitly historical Science snapshot below. Requirements are date-sensitive and often depend on the journal, article type, figure type, and submission phase. Verify the live target-journal page before submission. Source IDs resolve in `sources.md`.
 
 The machine-readable subset in `assets/publisher_profiles.json` is for planning and deterministic screening only. `scripts/export_plan.py` never claims compliance.
 
@@ -25,7 +25,7 @@ Do not apply these flagship rules automatically to Nature Communications, Scient
 
 ## Science (AAAS flagship journal)
 
-**Scope:** `Science`, with separate initial and revised-manuscript stages [SCIENCE-INITIAL] [SCIENCE-REVISED].
+**Scope:** historical `Science` snapshot accessed 2026-07-23, with separate initial and revised stages [SCIENCE-INITIAL] [SCIENCE-REVISED]. Both pages blocked direct and fresh extraction on 2026-10-01. The numbers below remain provisional until live instructions are checked.
 
 ### Initial submission
 
@@ -48,7 +48,7 @@ Do not apply these flagship rules automatically to Nature Communications, Scient
 - Upsampling is not permitted.
 - PowerPoint and figures embedded in Word are not accepted at this stage.
 
-The current official page does **not** state the older blanket “1,000 dpi line art / 600 dpi combination” numbers that this skill previously claimed.
+The 2026-07-23 snapshot did **not** state the older blanket “1,000 dpi line art / 600 dpi combination” numbers that this skill previously claimed.
 
 Science Advances and other AAAS journals publish separate figure guides; do not reuse the flagship profile without checking.
 
@@ -87,10 +87,11 @@ Cell Press requires minimal image processing, original unprocessed data on reque
 - Text-column alignment recommendation: no wider than 13.2 cm.
 - Maximum height: 2625 px at 300 dpi, equivalent to 22.23 cm.
 - Resolution: 300-600 dpi at final dimensions. The page warns that above 600 may trigger resizing and below 300 will degrade output.
-- Maximum file size: less than 10 MB.
+- The summary table says less than 10 MB; the detailed section says 10 MB or less. The planner conservatively uses the stricter boundary and flags the inconsistency.
 - Text: Arial, Times, or Symbol, 8-12 pt.
 - Color mode: RGB 8-bit/channel or grayscale.
-- Put all panels of one figure in one single-page file.
+- Put all panels of one figure in one single-page file. TIFF must have no alpha channel and must use LZW compression.
+- The pixel bounds are expressed at 300 dpi: a 600 dpi raster at the same physical size contains twice as many pixels per axis. The screen compares physical size via its 300 dpi equivalent, not an absolute 2250-pixel cap.
 - Captions remain in the manuscript; filenames are `Fig1.tif`, `Fig2.eps`, and so on.
 - Do not increase pixel count and present that as improved resolution.
 
@@ -134,11 +135,11 @@ Conference and magazine instructions can differ; use their separate Author Cente
 - Accepted formats include EPS, PDF, Word, PowerPoint, TIFF, JPEG, PNG, BMP, and CDX; JPEG is described as less suitable for graphical images.
 - One composite file per multi-panel figure; individual file maximum 10 MB.
 
-BMC journals are migrating onto Springer Nature Link and may publish updated journal-specific instructions. Verify the selected journal rather than assuming this profile.
+BMC Bioinformatics now redirects to Springer Nature Link. The approximate DPI target has no numeric tolerance and the height includes the legend; the planner reports these as review items rather than unconditional passes.
 
 ## ACS Publications
 
-**Scope:** the current general “Preparing Manuscript Graphics” page. It does not provide a complete modern universal digital-export profile [ACS-GRAPHICS].
+**Scope:** legacy “Preparing Manuscript Graphics,” currently hosted on the official ACS Paragon Plus site with an explicit update date of 2006-01-21 [ACS-GRAPHICS]. It is not a current universal digital-export profile; use the selected journal’s Author Guidelines.
 
 - Listed maximum dimensions: 3.25 in single column, 7 in double column, 9.5 in length.
 - Lettering should be no smaller than 5 pt after reduction; Helvetica/Arial are suggested.

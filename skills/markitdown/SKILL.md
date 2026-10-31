@@ -1,10 +1,11 @@
 ---
 name: markitdown
-description: Convert heterogeneous documents and selected URIs to Markdown with Microsoft MarkItDown for text analysis, search, and LLM/RAG ingestion. Covers safe local conversion, streams, Office/PDF/data formats, batch workflows, plugins, vision OCR, Azure extraction, and the official MCP server.
+description: Converts heterogeneous documents and selected URIs to Markdown with Microsoft MarkItDown for text analysis, search, and LLM/RAG ingestion. Covers safe local conversion, streams, Office/PDF/data formats, batch workflows, plugins, vision OCR, Azure extraction, and the official MCP server.
 license: MIT
-compatibility: Python 3.10+ and uv. Examples target MarkItDown 0.1.6. Core local conversion can run offline; URL, YouTube, audio transcription, LLM, Azure, and MCP workflows may use network or external services.
+compatibility: Python >=3.10,<3.15 and uv. Examples target MarkItDown 0.1.8. Core local conversion can run offline; URL, YouTube, audio transcription, LLM, Azure, and MCP workflows may use network or external services.
 metadata:
-  version: "2.3"
+  version: "2.5"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -14,7 +15,7 @@ metadata:
 
 MarkItDown is Microsoft's lightweight Python utility for turning common documents into structure-preserving Markdown. Its output is designed primarily for indexing, text analysis, search, and LLM ingestion—not high-fidelity visual reproduction.
 
-This skill targets **MarkItDown 0.1.6**, released May 26, 2026. New code should use `result.markdown`; `result.text_content` remains only as a soft-deprecated compatibility alias.
+This skill targets **MarkItDown 0.1.8**, released September 21, 2026. New code should use `result.markdown`; `result.text_content` remains only as a soft-deprecated compatibility alias.
 
 ## Choose the Right Path
 
@@ -27,7 +28,7 @@ This skill targets **MarkItDown 0.1.6**, released May 26, 2026. New code should 
 | Video, structured fields, or custom multimodal extraction | Azure Content Understanding |
 | Local agent integration | Official `markitdown-mcp` server over STDIO or localhost |
 | Bounding boxes, page coordinates, or screenshots | Use a layout-aware parser such as LiteParse instead |
-| PDF merge/split/forms/watermarks | Use the `pdf` skill instead |
+| PDF merge/split/forms/watermarks | Use a PDF manipulation library such as `pypdf` instead |
 
 ## Installation
 
@@ -41,16 +42,16 @@ source .venv/bin/activate
 Install every built-in feature:
 
 ```bash
-uv pip install "markitdown[all]==0.1.6"
+uv pip install "markitdown[all]==0.1.8"
 ```
 
 Or install only the converters required by the task:
 
 ```bash
-uv pip install "markitdown[pdf,docx,pptx,xlsx]==0.1.6"
+uv pip install "markitdown[pdf,docx,pptx,xlsx]==0.1.8"
 ```
 
-Available extras in 0.1.6 are:
+Available extras in 0.1.8 are:
 
 - `pptx`, `docx`, `xlsx`, `xls`, `pdf`, and `outlook`
 - `audio-transcription` and `youtube-transcription`
@@ -158,7 +159,7 @@ These features send content outside the local process:
 - LLM image descriptions and the `markitdown-ocr` plugin
 - Azure Document Intelligence and Azure Content Understanding
 
-Obtain user approval before transmitting private, regulated, unpublished, or proprietary material. See `references/security.md`.
+Confirm the task authorizes the selected provider before transmitting private, regulated, unpublished, or proprietary material; existing explicit authorization applies. See `references/security.md`.
 
 ### 4. Keep plugins opt-in
 
@@ -177,7 +178,7 @@ python scripts/batch_convert.py documents/ markdown/ \
   --manifest markdown/manifest.json
 ```
 
-Existing outputs are skipped unless `--overwrite` is supplied. Plugins remain disabled unless `--plugins` is explicitly set, and audio formats that can invoke external transcription require `--allow-external-services`.
+Existing outputs are skipped unless `--overwrite` is supplied. Plugins remain disabled unless `--plugins` is explicitly set, and audio formats that can invoke external transcription require `--allow-external-services`. This is an extension check, not an offline sandbox: content detection or archive members can select audio converters. Use network isolation when offline processing is required.
 
 ### Convert a literature collection
 
@@ -197,18 +198,20 @@ MarkItDown's built-in PDF converter extracts existing text; it does not locally 
 
 Choose among:
 
-- **`markitdown-ocr==0.1.0`**: official plugin using a vision-capable, OpenAI-compatible client for PDF/DOCX/PPTX/XLSX images and scanned-PDF fallback.
+- **`markitdown-ocr==0.1.1`**: official plugin using a vision-capable, OpenAI-compatible client for PDF/DOCX/PPTX/XLSX images and scanned-PDF fallback.
 - **Azure Document Intelligence**: cloud layout/OCR for documents and images.
 - **Azure Content Understanding**: cloud multimodal analysis, structured fields in YAML front matter, custom analyzers, audio, and video.
 
-The 0.1.6 core CLI does not expose LLM-client/model flags for the OCR plugin. Configure OCR through the Python API. See `references/cloud_and_ocr.md`.
+OCR 0.1.1 requires core 0.1.8 and reuses its Office conversion hooks. Hosted examples are illustrative; local fixtures and mocked request contracts were tested, without authenticated provider calls.
+
+The 0.1.8 core CLI does not expose LLM-client/model flags for the OCR plugin. Configure OCR through the Python API. See `references/cloud_and_ocr.md`.
 
 ## MCP Server
 
 The official MCP package exposes one tool, `convert_to_markdown(uri)`.
 
 ```bash
-uv pip install "markitdown==0.1.6" "markitdown-mcp==0.0.1a4"
+uv pip install "markitdown==0.1.8" "markitdown-mcp==0.0.1a7"
 markitdown-mcp
 ```
 
@@ -252,16 +255,16 @@ Do not infer that a successful conversion is complete. MarkItDown intentionally 
 | `references/mcp_and_plugins.md` | MCP transports/security and custom plugin authoring |
 | `references/security.md` | Trust boundaries, URI/SSRF controls, archives, plugins, prompt injection |
 | `references/workflows.md` | Batch, literature, RAG, streams, and validation recipes |
-| `references/migration.md` | Changes from 0.0.x through 0.1.6 and stale-pattern replacements |
+| `references/migration.md` | Changes from 0.0.x through 0.1.8 and stale-pattern replacements |
 
 ## Authoritative Sources
 
 - Project and current user guide: https://github.com/microsoft/markitdown
-- Release 0.1.6: https://github.com/microsoft/markitdown/releases/tag/v0.1.6
+- Release 0.1.8: https://github.com/microsoft/markitdown/releases/tag/v0.1.8
 - PyPI: https://pypi.org/project/markitdown/
-- Official OCR plugin: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-ocr
-- Official MCP server: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-mcp
-- Official sample plugin: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-sample-plugin
+- Official OCR plugin: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-ocr
+- Official MCP server: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-mcp
+- Official sample plugin: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-sample-plugin
 
 ## Citing Scientific Agent Skills
 

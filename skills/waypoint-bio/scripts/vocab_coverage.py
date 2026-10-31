@@ -12,8 +12,8 @@ Two coverage figures are reported per sample:
 
 * **taxon coverage** -- fraction of a sample's taxa that map to a real token.
 * **abundance coverage** -- fraction of a sample's *relative abundance* carried
-  by those taxa. This is the one that matters: losing 40% of taxa that together
-  account for 2% of the community is fine; losing the dominant genus is not.
+  by those taxa. This measures retained mass, not biological importance:
+  low-abundance taxa can still matter for a particular research question.
 
 Examples
 --------
@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -60,6 +61,10 @@ def load_dataframe(path: Path) -> pd.DataFrame:
     elif suffix in {".csv", ".tsv", ".tab"}:
         sep = "\t" if suffix in {".tsv", ".tab"} else ","
         frame = pd.read_csv(path, sep=sep)
+        # Our converter writes the sample-ID index as its first CSV column.
+        if frame.columns[0] == "sample_id" or str(frame.columns[0]).startswith("Unnamed:"):
+            id_column = frame.columns[0]
+            frame = pd.read_csv(path, sep=sep, dtype={id_column: str}).set_index(id_column)
         # Lists round-trip through CSV as their repr. Check each value rather
         # than the column dtype: pandas 3 uses a dedicated string dtype, so a
         # ``dtype == object`` guard silently skips the parse.
@@ -75,7 +80,7 @@ def load_dataframe(path: Path) -> pd.DataFrame:
     return frame
 
 
-def load_tokenizer(model: str):
+def load_tokenizer(model: str, revision: str | None = None):
     """Load a Waypoint tokenizer from a Hub id or local checkpoint directory.
 
     Imported lazily so ``--help`` works without transformers installed.
@@ -85,6 +90,9 @@ def load_tokenizer(model: str):
     except ImportError:
         pass
     else:
+        if revision is not None:
+            from transformers import AutoTokenizer
+            return AutoTokenizer.from_pretrained(model, revision=revision, trust_remote_code=True)
         return _load(model)
 
     try:
@@ -94,7 +102,7 @@ def load_tokenizer(model: str):
             "Neither waypoint-bio nor transformers is installed. "
             "Install with: pip install waypoint-bio"
         ) from exc
-    return AutoTokenizer.from_pretrained(model, trust_remote_code=True)
+    return AutoTokenizer.from_pretrained(model, revision=revision, trust_remote_code=True)
 
 
 def coverage_report(
@@ -102,14 +110,21 @@ def coverage_report(
 ) -> tuple[pd.DataFrame, Counter[str]]:
     """Per-sample taxon and abundance coverage, plus a missing-taxon counter."""
     unk_id = tokenizer.unk_token_id
+    if frame.empty:
+        raise ValueError("dataset has no samples")
+    if not frame.index.is_unique:
+        raise ValueError("sample IDs must be unique")
     missing: Counter[str] = Counter()
     rows = []
 
     for sample_id, row in frame.iterrows():
         taxa = row["Taxa"]
         abundances = row["Relative Abundances"]
-        if not hasattr(taxa, "__iter__") or isinstance(taxa, str):
-            taxa, abundances = [], []
+        if any(isinstance(values, (str, bytes, dict)) or not hasattr(values, "__len__")
+               for values in (taxa, abundances)):
+            raise ValueError(f"sample {sample_id!r}: taxa and abundances must be lists")
+        if len(taxa) != len(abundances):
+            raise ValueError(f"sample {sample_id!r}: taxa and abundance lengths differ")
 
         n_total = len(taxa)
         n_known = 0
@@ -118,6 +133,8 @@ def coverage_report(
 
         for taxon, abundance in zip(taxa, abundances):
             value = float(abundance)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"sample {sample_id!r}: abundances must be finite and nonnegative")
             abundance_total += value
             if tokenizer.convert_tokens_to_ids(str(taxon)) == unk_id:
                 missing[str(taxon)] += 1
@@ -146,6 +163,9 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--revision", help="Reviewed full Hub commit SHA for the remote tokenizer code."
+    )
+    parser.add_argument(
         "--model",
         default="outpost-bio/Waypoint-6m",
         help="Hub id or local checkpoint directory (gated repos need HF_TOKEN).",
@@ -169,13 +189,15 @@ def main(argv: list[str] | None = None) -> int:
         "--output", default=None, help="Optional path to write the per-sample table."
     )
     args = parser.parse_args(argv)
+    if not 0 <= args.threshold <= 1:
+        parser.error("threshold must be between 0 and 1")
 
     data_path = Path(args.data)
     if not data_path.exists():
         parser.error(f"data not found: {data_path}")
 
     frame = load_dataframe(data_path)
-    tokenizer = load_tokenizer(args.model)
+    tokenizer = load_tokenizer(args.model, revision=args.revision)
     report, missing = coverage_report(frame, tokenizer)
 
     taxon = report["taxon_coverage"]

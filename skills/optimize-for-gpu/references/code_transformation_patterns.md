@@ -6,6 +6,10 @@ file IO to KvikIO, maintained GPU-backed dashboards, scikit-image to cuCIM, lega
 GeoPandas-to-cuSpatial point-in-polygon, exact Faiss to exact cuVS search, and
 `scipy.sparse.linalg` to RAFT.
 
+These are illustrative patterns, not executed GPU benchmarks. Reuse the same inputs and
+validate outputs before timing; independently generated CPU/GPU random arrays are not
+a correctness comparison. Installation targets and hardware limits are in `installation.md`.
+
 When converting existing CPU code, apply these patterns:
 
 ### NumPy to CuPy
@@ -96,7 +100,7 @@ X_train = scaler.fit_transform(X_train)
 model = RandomForestClassifier(n_estimators=100)
 model.fit(X_train, y_train)
 
-# After (GPU) — change the imports
+# After (GPU) — match parameters and held-out quality; algorithms need not be identical
 from cuml.ensemble import RandomForestClassifier
 from cuml.preprocessing import StandardScaler
 from cuml.model_selection import train_test_split
@@ -117,7 +121,7 @@ import numpy as np
 
 def integrate(positions, velocities, forces, dt):
     for i in range(len(positions)):
-        velocities[i] += forces[i] * dt
+        velocities[i] += forces[i] * dt  # Unit mass, or forces stores accelerations
         positions[i] += velocities[i] * dt
 
 # After (GPU) — Warp kernel, JIT-compiled to CUDA
@@ -145,13 +149,13 @@ import cupy as cp
 data = np.fromfile("data.bin", dtype=np.float32)
 gpu_data = cp.asarray(data)  # Extra copy through CPU memory
 
-# After — direct to GPU (disk → GPU via GDS)
+# After — device destination (local GDS only when configured and eligible)
 import cupy as cp
 import kvikio
 
 gpu_data = cp.empty(1_000_000, dtype=cp.float32)
 with kvikio.CuFile("data.bin", "r") as f:
-    f.read(gpu_data)  # Bypasses CPU memory with GPUDirect Storage
+    f.read(gpu_data)  # May use host staging in compatibility mode
 
 # Reading from S3 directly to GPU
 with kvikio.RemoteFile.open_s3_url("s3://bucket/data.bin") as f:
@@ -240,11 +244,14 @@ from shapely.geometry import Point
 
 points = gpd.GeoSeries([Point(x, y) for x, y in coords], crs="EPSG:4326")
 polygons = gpd.read_file("regions.geojson").geometry.iloc[:31]
+polygons = polygons.to_crs(points.crs)
+if any(points.intersects(polygon.boundary).any() for polygon in polygons):
+    raise ValueError("Validate a boundary predicate explicitly before this port")
 membership_cpu = np.column_stack(
     [points.within(polygon).to_numpy() for polygon in polygons]
 )
 
-# After (GPU, legacy) — same point-by-polygon membership semantics
+# After (GPU, legacy) — point-by-polygon membership on these non-boundary inputs
 import cuspatial
 
 points_gpu = cuspatial.from_geopandas(points)

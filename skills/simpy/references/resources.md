@@ -1,6 +1,6 @@
 # Shared resources
 
-Verified 2026-07-23 against SimPy 4.1.2.
+Reviewed 2026-10-01 against SimPy 4.1.2.
 
 All resource operations return Events. An operation that cannot complete waits in
 the corresponding queue; yielding the Event suspends the process. Resource events
@@ -70,8 +70,9 @@ manager.
 ## PriorityResource
 
 `PriorityResource` orders pending `PriorityRequest`s by smaller numeric priority,
-then request time. Equal-priority, equal-time ties use deterministic scheduler/queue
-ordering.
+then request time, then `not preempt` (preempting first). Exact key ties retain
+insertion order in the stable sorted queue. `PriorityResource` itself never
+preempts current users; the shared request key still includes the flag.
 
 ```python
 def prioritized(env, resource, name, priority):
@@ -237,9 +238,11 @@ env.process(schedule(env))
 env.run()
 ```
 
-Equal-priority payloads preserve the wrapper's comparison behavior; if business
-policy requires a specific tie-breaker, include one explicitly in a comparable
-dataclass/tuple and test it.
+Equal-priority `PriorityItem` objects do not guarantee FIFO order: the heap compares
+priorities without a stable insertion tie-breaker. If policy requires FIFO ties,
+use `simpy.PriorityItem((priority, sequence_number), payload)` with a unique
+monotonically increasing sequence number and test it. PriorityStore's `items` is a
+heap, not a fully sorted list; retrieve through `get()`.
 
 ## Waiting, cancellation, and reneging
 

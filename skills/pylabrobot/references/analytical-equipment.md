@@ -1,6 +1,6 @@
 # Analytical equipment
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**. This reference describes
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**. This reference describes
 APIs without connecting to or commanding instruments.
 
 ## Plate-reader frontend
@@ -41,14 +41,20 @@ read_luminescence(focal_height, wells=None, use_new_return_type=False,
                   **backend_kwargs)
 ```
 
-The old examples in this skill incorrectly treated return values as a guaranteed
-NumPy `8x12` array and omitted required focal height. In 0.2.1 the annotated
-return is `List[Dict]`; backend and `use_new_return_type` affect the concrete
-shape. Record the exact method arguments, plate/well mapping, instrument
-settings, raw response, and package/backend version before analysis.
+In 0.2.2 `use_new_return_type=False` returns the first measurement's nested
+`data` matrix, despite the annotated `List[Dict]` return type. Set
+`use_new_return_type=True` to retain measurement dictionaries, timestamps,
+wavelengths and temperature. Chatterbox returns synthetic zero measurements,
+`None` for unselected wells and a `NaN` temperature; strict JSON exporters must
+represent missing temperature explicitly. An empty `wells=[]` means all wells
+because the frontend uses `wells or plate.get_all_items()`.
+
+Record exact arguments, plate/well mapping, settings, raw response, and package
+version. Wavelengths are nm and focal height is mm. The legacy default discards
+additional measurement records; do not use it for kinetics or multi-read data.
 
 `PlateReader` does not expose a universal `set_temperature` method in the
-verified 0.2.1 frontend. Temperature, shaking, injectors, kinetics, pathlength,
+verified 0.2.2 frontend. Temperature, shaking, injectors, kinetics, pathlength,
 read mode, and optics are backend/model-specific; do not infer them from another
 reader.
 
@@ -63,36 +69,24 @@ For import and method-presence checks without backend construction:
 
 ```bash
 python3 skills/pylabrobot/scripts/inspect_backends.py \
-  --expected-version 0.2.1 --strict
+  --expected-version 0.2.2 --strict
 ```
 
 The inspector does not call `setup()` and makes no transport connection.
 
-## Stable plate-reader inventory
+## Released plate-reader inventory
 
-The stable 0.2.1 supported-machines page lists:
+The 0.2.2 module exports `CLARIOstarBackend`, `Cytation5Backend`,
+`SynergyH1Backend`, Byonoy and SpectraMax drivers, plus
+`ExperimentalTecanInfinite200ProBackend` and `ExperimentalSparkBackend`.
+The `Experimental` names remain significant. Verify the exact import and
+required serial/FTDI/USB/SiLA/microscopy extra without constructing a device.
 
-- **BMG Labtech CLARIOstar (Plus): Full** — absorbance, fluorescence,
-  luminescence.
-- **Agilent/BioTek Cytation 1 and Cytation 5: Full** — absorbance,
-  fluorescence, luminescence, microscopy.
-- **Agilent/BioTek Synergy H1: Full**.
-- **Byonoy Absorbance 96 Automate: Full**.
-- **Byonoy Luminescence 96 and Luminescence 96 Automate: Full**.
-- **Molecular Devices SpectraMax M5e: Full**.
-- **Molecular Devices SpectraMax 384plus: Full**.
-- **Molecular Devices ImageXpress Pico: Basics**.
-- **Tecan Infinite 200 PRO: Mostly**.
-
-The installed 0.2.1 package also exports
-`ExperimentalTecanInfinite200ProBackend` and `ExperimentalSparkBackend`; the
-`Experimental` prefix is meaningful. The 0.2.1 changelog records Infinite 200
-PRO and Spark backend additions, but do not upgrade that to a generic/full
-support claim.
-
-Support is model-specific. Confirm serial/FTDI/USB/SiLA/microscopy extras,
-firmware, instrument options, plate types, optics, and methods on the exact
-stable page.
+The current hosted machine table describes development drivers, including
+Cytation 1 microscopy and Cytation 5 multi-mode reading. Its model labels do
+not establish matching modalities or firmware compatibility for every 0.2.2
+backend. Avoid copying the old blanket Cytation 1 absorbance/fluorescence/
+luminescence claim; check the exact model, optics, plate and implementation.
 
 ## Plate-reader live-run checklist
 
@@ -125,19 +119,25 @@ from pylabrobot.scales import Scale
 Verified methods are:
 
 ```text
-get_weight(**backend_kwargs) -> float
+read_weight(**backend_kwargs) -> float
 tare(**backend_kwargs)
 zero(**backend_kwargs)
 ```
 
-The stable README shows the model-specific backend:
+`get_weight()` is a deprecated alias. `read_weight()` reports grams; stability
+and timeout semantics depend on the selected backend. The scale constructor
+requires a name, dimensions, and backend.
+
+The released package provides the model-specific backend:
 
 ```python
-from pylabrobot.scales.mettler_toledo import MettlerToledoWXS205SDU
+from pylabrobot.scales import MettlerToledoWXS205SDUBackend
 ```
 
-Do not instantiate it or call `setup()` during planning. Stable supported
-machines lists the **Mettler Toledo WXS205SDU: Full**.
+The old `pylabrobot.scales.mettler_toledo` module is absent in 0.2.2.
+`MettlerToledoWXS205SDU` is a deprecated class that raises on construction; use
+the `Backend`-suffixed class. Do not instantiate it or call `setup()` during planning. The current inventory distinguishes models and suffixes; its Full entry is
+WXS205SDU/15, not a claim about every WXS205 variant.
 
 Before live weighing, verify:
 
@@ -184,17 +184,8 @@ metadata.
 
 ## Sources
 
-Checked **2026-07-23**:
-
-- [Stable supported machines](https://docs.pylabrobot.org/stable/user_guide/machines.html)
-  — analytical inventory and support labels (page metadata surfaced
-  2025-01-01; docs version 0.2.1).
-- [Stable plate-reading guide](https://docs.pylabrobot.org/stable/user_guide/02_analytical/plate-reading/plate-reading.html)
-  and [plate-reading API](https://docs.pylabrobot.org/stable/api/pylabrobot.plate_reading.html).
-- [Stable scales guide](https://docs.pylabrobot.org/stable/user_guide/02_analytical/scales/scales.html)
-  and [scales API](https://docs.pylabrobot.org/stable/api/pylabrobot.scales.html).
-- [`v0.2.1` plate-reading source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/plate_reading)
-  and [scale source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/scales)
-  — exact constructors/methods; tag dated 2026-03-23.
-- [0.2.1 changelog](https://github.com/PyLabRobot/pylabrobot/blob/main/CHANGELOG.md#021)
-  — Tecan Infinite 200 PRO/Spark additions.
+Reviewed **2026-10-01**: [0.2.2 released source files](https://pypi.org/project/PyLabRobot/0.2.2/#files)
+(`plate_reading/plate_reader.py`, `plate_reading/chatterbox.py`, `scales/scale.py`),
+[current machine inventory](https://docs.pylabrobot.org/stable/user_guide/machines.html),
+and [release review](review.md). Native chatterbox tests cover selected-well
+masking and both return contracts; no reader, microscope or scale was connected.

@@ -1,6 +1,8 @@
 # Cell Free Protein Expression Optimization
 
 **URL:** https://cloud.ginkgo.bio/protocols/cell-free-protein-expression-optimization
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-optimization
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $199/sample
 **Turnaround:** up to 11 days
@@ -11,13 +13,14 @@ Design of Experiment (DoE) approach to expressing protein targets in a proprieta
 
 ## Input
 
-- **DNA sequence** in `.fasta` format
+- **Sequence:** The protocol page currently links a CFPS `.xlsx` template for linear DNA; service terms request protein or DNA in FASTA. Confirm the current intake format before submitting.
+- Specify replicates, linear DNA versus clonal plasmid synthesis, known expression difficulties, and desired additives.
 
 ## Output
 
 - **Comparative Yield:** Titer data mapped across all tested variables (lysates, temps, additives)
 - **Purity Profiling:** Target protein vs. background impurities to find highest quality yield
-- **Optimal Conditions:** Overlaid electropherograms pinpointing the exact formulation for a given sequence
+- **Best tested conditions:** Compare electropherograms and yield across the submitted matrix; this identifies candidates among the tested conditions, not a global optimum.
 
 ## Automated Workflow
 
@@ -67,13 +70,6 @@ The DoE matrix can span up to 24 conditions per protein, varying:
 - **Number of Replicates:** configurable
 - **File Upload:** CSV, Excel, FASTA, TXT, PDF, ZIP
 - **Additional Details:** free-text field for special requirements
-
-## Certification Milestones
-
-- Dry Run Complete
-- Wet Run Complete
-- Biovalidation Complete
-- App Note Complete
 
 ## Use Cases
 

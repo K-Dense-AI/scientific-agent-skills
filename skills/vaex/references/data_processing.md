@@ -1,555 +1,154 @@
-# Data Processing and Manipulation
+# Processing, statistics and joins
 
-This reference covers filtering, selections, virtual columns, expressions, aggregations, groupby operations, and data transformations in Vaex.
+Targets core 4.19.0. Sources: [API](https://vaex.io/docs/api.html),
+[missing-data guide](https://vaex.io/docs/guides/missing_or_invalid_data.html), and released
+`expression.py`, `functions.py`, `agg.py`, `groupby.py`, and `join.py`.
 
-## Filtering and Selections
-
-Vaex uses boolean expressions to filter data efficiently without copying:
-
-### Basic Filtering
+## Filters, selections and missing values
 
 ```python
-# Simple filter
-df_filtered = df[df.age > 25]
-
-# Multiple conditions
-df_filtered = df[(df.age > 25) & (df.salary > 50000)]
-df_filtered = df[(df.category == 'A') | (df.category == 'B')]
-
-# Negation
-df_filtered = df[~(df.age < 18)]
-```
-
-### Selection Objects
-
-Vaex can maintain multiple named selections simultaneously:
-
-```python
-# Create named selection
-df.select(df.age > 30, name='adults')
-df.select(df.salary > 100000, name='high_earners')
-
-# Use selection in operations
-mean_age_adults = df.mean(df.age, selection='adults')
-count_high_earners = df.count(selection='high_earners')
-
-# Combine selections
-df.select((df.age > 30) & (df.salary > 100000), name='adult_high_earners')
-
-# List all selections
-print(df.selection_names())
-
-# Drop selection
-df.select_drop('adults')
-```
-
-### Advanced Filtering
-
-```python
-# String matching
-df_filtered = df[df.name.str.contains('John')]
-df_filtered = df[df.name.str.startswith('A')]
-df_filtered = df[df.email.str.endswith('@gmail.com')]
-
-# Null/missing value filtering
-df_filtered = df[df.age.isna()]      # Keep missing
-df_filtered = df[df.age.notna()]     # Remove missing
-
-# Value membership
-df_filtered = df[df.category.isin(['A', 'B', 'C'])]
-
-# Range filtering
-df_filtered = df[df.age.between(25, 65)]
-```
-
-## Virtual Columns and Expressions
-
-Virtual columns are computed on-the-fly with zero memory overhead:
-
-### Creating Virtual Columns
-
-```python
-# Arithmetic operations
-df['total'] = df.price * df.quantity
-df['price_squared'] = df.price ** 2
-
-# Mathematical functions
-df['log_price'] = df.price.log()
-df['sqrt_value'] = df.value.sqrt()
-df['abs_diff'] = (df.x - df.y).abs()
-
-# Conditional logic
-df['is_adult'] = df.age >= 18
-df['category'] = (df.score > 80).where('A', 'B')  # If-then-else
-```
-
-### Expression Methods
-
-```python
-# Mathematical
-df.x.abs()          # Absolute value
-df.x.sqrt()         # Square root
-df.x.log()          # Natural log
-df.x.log10()        # Base-10 log
-df.x.exp()          # Exponential
-
-# Trigonometric
-df.angle.sin()
-df.angle.cos()
-df.angle.tan()
-df.angle.arcsin()
-
-# Rounding
-df.x.round(2)       # Round to 2 decimals
-df.x.floor()        # Round down
-df.x.ceil()         # Round up
-
-# Type conversion
-df.x.astype('int64')
-df.x.astype('float32')
-df.x.astype('str')
-```
-
-### Conditional Expressions
-
-```python
-# where() method: condition.where(true_value, false_value)
-df['status'] = (df.age >= 18).where('adult', 'minor')
-
-# Multiple conditions with nested where
-df['grade'] = (df.score >= 90).where('A',
-              (df.score >= 80).where('B',
-              (df.score >= 70).where('C', 'F')))
-
-# Using searchsorted for binning
-bins = [0, 18, 65, 100]
-labels = ['minor', 'adult', 'senior']
-df['age_group'] = df.age.searchsorted(bins).where(...)
-```
-
-## String Operations
-
-Access string methods via the `.str` accessor:
-
-### Basic String Methods
-
-```python
-# Case conversion
-df['upper_name'] = df.name.str.upper()
-df['lower_name'] = df.name.str.lower()
-df['title_name'] = df.name.str.title()
-
-# Trimming
-df['trimmed'] = df.text.str.strip()
-df['ltrimmed'] = df.text.str.lstrip()
-df['rtrimmed'] = df.text.str.rstrip()
-
-# Searching
-df['has_john'] = df.name.str.contains('John')
-df['starts_with_a'] = df.name.str.startswith('A')
-df['ends_with_com'] = df.email.str.endswith('.com')
-
-# Slicing
-df['first_char'] = df.name.str.slice(0, 1)
-df['last_three'] = df.name.str.slice(-3, None)
-
-# Length
-df['name_length'] = df.name.str.len()
-```
-
-### Advanced String Operations
-
-```python
-# Replacing
-df['clean_text'] = df.text.str.replace('bad', 'good')
-
-# Splitting (returns first part)
-df['first_name'] = df.full_name.str.split(' ')[0]
-
-# Concatenation
-df['full_name'] = df.first_name + ' ' + df.last_name
-
-# Padding
-df['padded'] = df.code.str.pad(10, '0', 'left')  # Zero-padding
-```
-
-## DateTime Operations
-
-Access datetime methods via the `.dt` accessor:
-
-### DateTime Properties
-
-```python
-# Parsing strings to datetime
-df['date_parsed'] = df.date_string.astype('datetime64')
-
-# Extracting components
-df['year'] = df.timestamp.dt.year
-df['month'] = df.timestamp.dt.month
-df['day'] = df.timestamp.dt.day
-df['hour'] = df.timestamp.dt.hour
-df['minute'] = df.timestamp.dt.minute
-df['second'] = df.timestamp.dt.second
-
-# Day of week
-df['weekday'] = df.timestamp.dt.dayofweek  # 0=Monday
-df['day_name'] = df.timestamp.dt.day_name  # 'Monday', 'Tuesday', ...
-
-# Date arithmetic
-df['tomorrow'] = df.date + pd.Timedelta(days=1)
-df['next_week'] = df.date + pd.Timedelta(weeks=1)
-```
-
-## Aggregations
-
-Vaex performs aggregations efficiently across billions of rows:
-
-### Basic Aggregations
-
-```python
-# Single column
-mean_age = df.age.mean()
-std_age = df.age.std()
-min_age = df.age.min()
-max_age = df.age.max()
-sum_sales = df.sales.sum()
-count_rows = df.count()
-
-# With selections
-mean_adult_age = df.age.mean(selection='adults')
-
-# Multiple at once with delay
-mean = df.age.mean(delay=True)
-std = df.age.std(delay=True)
-results = vaex.execute([mean, std])
-```
-
-### Available Aggregation Functions
-
-```python
-# Central tendency
-df.x.mean()
-df.x.median_approx()  # Approximate median (fast)
-
-# Dispersion
-df.x.std()           # Standard deviation
-df.x.var()           # Variance
-df.x.min()
-df.x.max()
-df.x.minmax()        # Both min and max
-
-# Count
-df.count()           # Total rows
-df.x.count()         # Non-missing values
-
-# Sum and product
-df.x.sum()
-df.x.prod()
-
-# Percentiles
-df.x.quantile(0.5)           # Median
-df.x.quantile([0.25, 0.75])  # Quartiles
-
-# Correlation
-df.correlation(df.x, df.y)
-df.covar(df.x, df.y)
-
-# Higher moments
-df.x.kurtosis()
-df.x.skew()
-
-# Unique values
-df.x.nunique()       # Count unique
-df.x.unique()        # Get unique values (returns array)
-```
-
-## GroupBy Operations
-
-Group data and compute aggregations per group:
-
-### Basic GroupBy
-
-```python
-# Single column groupby
-grouped = df.groupby('category')
-
-# Aggregation
-result = grouped.agg({'sales': 'sum'})
-result = grouped.agg({'sales': 'sum', 'quantity': 'mean'})
-
-# Multiple aggregations on same column
-result = grouped.agg({
-    'sales': ['sum', 'mean', 'std'],
-    'quantity': 'sum'
-})
-```
-
-### Advanced GroupBy
-
-```python
-# Multiple grouping columns
-result = df.groupby(['category', 'region']).agg({
-    'sales': 'sum',
-    'quantity': 'mean'
-})
-
-# Custom aggregation functions
-result = df.groupby('category').agg({
-    'sales': lambda x: x.max() - x.min()
-})
-
-# Available aggregation functions
-# 'sum', 'mean', 'std', 'min', 'max', 'count', 'first', 'last'
-```
-
-### GroupBy with Binning
-
-```python
-# Bin continuous variable and aggregate
-result = df.groupby(vaex.vrange(0, 100, 10)).agg({
-    'sales': 'sum'
-})
-
-# Datetime binning
-result = df.groupby(df.timestamp.dt.year).agg({
-    'sales': 'sum'
-})
-```
-
-## Binning and Discretization
-
-Create bins from continuous variables:
-
-### Simple Binning
-
-```python
-# Create bins
-df['age_bin'] = df.age.digitize([18, 30, 50, 65, 100])
-
-# Labeled bins
-bins = [0, 18, 30, 50, 65, 100]
-labels = ['child', 'young_adult', 'adult', 'middle_age', 'senior']
-df['age_group'] = df.age.digitize(bins)
-# Note: Apply labels using where() or mapping
-```
-
-### Statistical Binning
-
-```python
-# Equal-width bins
-df['value_bin'] = df.value.digitize(
-    vaex.vrange(df.value.min(), df.value.max(), 10)
-)
-
-# Quantile-based bins
-quantiles = df.value.quantile([0.25, 0.5, 0.75])
-df['value_quartile'] = df.value.digitize(quantiles)
-```
-
-## Multi-dimensional Aggregations
-
-Compute statistics on grids:
-
-```python
-# 2D histogram/heatmap data
-counts = df.count(binby=[df.x, df.y], limits=[[0, 10], [0, 10]], shape=(100, 100))
-
-# Mean on a grid
-mean_z = df.mean(df.z, binby=[df.x, df.y], limits=[[0, 10], [0, 10]], shape=(50, 50))
-
-# Multiple statistics on grid
-stats = df.mean(df.z, binby=[df.x, df.y], shape=(50, 50), delay=True)
-counts = df.count(binby=[df.x, df.y], shape=(50, 50), delay=True)
-results = vaex.execute([stats, counts])
-```
-
-## Handling Missing Data
-
-Work with missing, null, and NaN values:
-
-### Detecting Missing Data
-
-```python
-# Check for missing
-df['age_missing'] = df.age.isna()
-df['age_present'] = df.age.notna()
-
-# Count missing
-missing_count = df.age.isna().sum()
-missing_pct = df.age.isna().mean() * 100
-```
-
-### Handling Missing Data
-
-```python
-# Filter out missing
-df_clean = df[df.age.notna()]
-
-# Fill missing with value
-df['age_filled'] = df.age.fillna(0)
-df['age_filled'] = df.age.fillna(df.age.mean())
-
-# Forward/backward fill (for time series)
-df['age_ffill'] = df.age.fillna(method='ffill')
-df['age_bfill'] = df.age.fillna(method='bfill')
-```
-
-### Missing Data Types in Vaex
-
-Vaex distinguishes between:
-- **NaN** - IEEE floating point Not-a-Number
-- **NA** - Arrow null type
-- **Missing** - General term for absent data
-
-```python
-# Check which missing type
-df.is_masked('column_name')  # True if uses Arrow null (NA)
-
-# Convert between types
-df['col_masked'] = df.col.as_masked()  # Convert to NA representation
-```
-
-## Sorting
-
-```python
-# Sort by single column
-df_sorted = df.sort('age')
-df_sorted = df.sort('age', ascending=False)
-
-# Sort by multiple columns
-df_sorted = df.sort(['category', 'age'])
-
-# Note: Sorting materializes a new column with indices
-# For very large datasets, consider if sorting is necessary
-```
-
-## Joining DataFrames
-
-Combine DataFrames based on keys:
-
-```python
-# Inner join
-df_joined = df1.join(df2, on='key_column')
-
-# Left join
-df_joined = df1.join(df2, on='key_column', how='left')
-
-# Join on different column names
-df_joined = df1.join(
-    df2,
-    left_on='id',
-    right_on='user_id',
-    how='left'
-)
-
-# Multiple key columns
-df_joined = df1.join(df2, on=['key1', 'key2'])
-```
-
-## Adding and Removing Columns
-
-### Adding Columns
-
-```python
-# Virtual column (no memory)
-df['new_col'] = df.x + df.y
-
-# From external array (must match length)
 import numpy as np
-new_data = np.random.rand(len(df))
-df['random'] = new_data
+import pyarrow as pa
+import vaex
 
-# Constant value
-df['constant'] = 42
+df = vaex.from_arrays(
+    x=np.array([1., 2., 3., 4., 5., 6.]),
+    y=np.array([1., 4., 9., 16., 25., 36.]),
+    group=np.array(['A', 'B', 'A', 'B', 'A', 'B']),
+    value=pa.array([1., None, float('nan'), 4., 5., 6.]),
+    text=np.array([' Alice ', 'Bob', 'Cara', 'Dan', 'Eve', 'Frank']),
+    timestamp=np.array(['2024-01-01', '2024-01-02', '2024-02-01',
+                        '2024-02-02', '2024-03-01', '2024-03-02'], dtype='datetime64[ns]'),
+)
+filtered = df[(df.x >= 2) & (df.x < 5)]
+assert filtered.x.tolist() == [2., 3., 4.]
+df.select(df.x >= 4, name='high')
+assert df.count(selection='high') == 3
+assert df.mean('x', selection='high') == 5
+assert df[df.group.isin(['A'])].count() == 3
+assert df.value.isna().sum() == 2       # null/masked or NaN
+assert df.value.ismissing().sum() == 1  # null/masked
+assert df.value.isnan().sum() == 1      # IEEE NaN
+df['filled'] = df.value.fillna(0)
+assert df.filled.tolist() == [1., 0., 0., 4., 5., 6.]
 ```
 
-### Removing Columns
+Named selections affect operations using `selection=...`; creating one does not
+remove rows from the frame. Boolean expressions need `&`, `|`, `~` and parentheses.
+Use explicit inequalities for intervals; there is no `Expression.between` method.
+`fillna(value)` does not accept pandas `method='ffill'`. Forward/backward filling
+requires explicit ordering, group boundaries and time-gap policy outside that API.
+Never silently impute scientific measurements to zero; the value above is a mechanics example.
+
+## Virtual numeric, text and date transformations
 
 ```python
-# Drop single column
-df = df.drop('column_name')
-
-# Drop multiple columns
-df = df.drop(['col1', 'col2', 'col3'])
-
-# Select specific columns (drop others)
-df = df[['col1', 'col2', 'col3']]
-```
-
-### Renaming Columns
-
-```python
-# Rename single column
-df = df.rename('old_name', 'new_name')
-
-# Rename multiple columns
-df = df.rename({
-    'old_name1': 'new_name1',
-    'old_name2': 'new_name2'
-})
-```
-
-## Common Patterns
-
-### Pattern: Complex Feature Engineering
-
-```python
-# Multiple derived features
-df['log_price'] = df.price.log()
-df['price_per_unit'] = df.price / df.quantity
-df['is_discount'] = df.discount > 0
-df['price_category'] = (df.price > 100).where('expensive', 'affordable')
-df['revenue'] = df.price * df.quantity * (1 - df.discount)
-```
-
-### Pattern: Text Cleaning
-
-```python
-# Clean and standardize text
-df['email_clean'] = df.email.str.lower().str.strip()
-df['has_valid_email'] = df.email_clean.str.contains('@')
-df['domain'] = df.email_clean.str.split('@')[1]
-```
-
-### Pattern: Time-based Analysis
-
-```python
-# Extract temporal features
+df['squared'] = df.x ** 2
+df['log_x'] = df.x.log()  # x is strictly positive in this fixture
+df['radius'] = (df.x ** 2 + df.y ** 2).sqrt()
+df['band'] = (df.x >= 4).where('high', 'low')
+df['clean_name'] = df.text.str.strip().str.lower()
+df['starts_a'] = df.clean_name.str.startswith('a')
+df['padded'] = df.group.str.pad(width=4, side='left', fillchar='0')
 df['year'] = df.timestamp.dt.year
 df['month'] = df.timestamp.dt.month
-df['day_of_week'] = df.timestamp.dt.dayofweek
-df['is_weekend'] = df.day_of_week >= 5
-df['quarter'] = ((df.month - 1) // 3) + 1
+df['weekday'] = df.timestamp.dt.dayofweek
+df['next_day'] = df.timestamp + np.timedelta64(1, 'D')
+df['bin'] = df.x.digitize([2., 4., 6.])
+assert df.bin.tolist() == [0, 1, 1, 2, 2, 3]
+assert df.band.tolist() == ['low'] * 3 + ['high'] * 3
+assert df.clean_name.tolist()[0] == 'alice'
+assert df.month.tolist() == [1, 1, 2, 2, 3, 3]
 ```
 
-### Pattern: Grouped Statistics
+`str.replace(pat, repl, regex=False)` defaults to literal replacement. `str.split`
+returns list-valued rows; indexing the resulting expression with `[0]` selects a row,
+not the first token in every row. Do not treat it as pandas `.str` list indexing.
+For token extraction prefer a verified regex/extraction path or a bounded Arrow operation.
+Datetime casting is not a general free-form parser: normalize format/time zone first,
+preserve the original field, and verify timezone/DST and invalid-date handling.
+`digitize` returns bin indices including underflow/overflow; define labels and edges
+explicitly instead of discarding these rows. `vaex.vrange` generates virtual numeric
+values; it is not a groupby binning instruction.
+
+## Reductions and approximate percentiles
 
 ```python
-# Compute statistics by group
-monthly_sales = df.groupby(df.timestamp.dt.month).agg({
-    'revenue': ['sum', 'mean', 'count'],
-    'quantity': 'sum'
-})
-
-# Multiple grouping levels
-category_region_sales = df.groupby(['category', 'region']).agg({
-    'sales': 'sum',
-    'profit': 'mean'
-})
+assert df.x.sum() == 21
+assert np.isclose(df.x.var(), np.var(np.arange(1., 7.), ddof=0))
+assert np.isclose(df.x.std(), np.std(np.arange(1., 7.), ddof=0))
+assert df.count() == 6
+assert df.value.count() == 4
+assert df.x.minmax().tolist() == [1., 6.]
+assert df.group.nunique() == 2
+correlation = df.correlation('x', 'y')
+assert 0.9 < correlation <= 1
+# Histogram-based approximation, not NumPy's exact linear-interpolation quantile:
+quartiles = df.percentile_approx('x', percentage=[25, 50, 75], percentile_shape=4096)
+assert np.all(np.diff(quartiles) >= 0)
+assert 1 <= quartiles[0] <= quartiles[-1] <= 6
+pending = [df.x.mean(delay=True), df.y.sum(delay=True)]
+df.execute()
+assert [p.get().item() for p in pending] == [3.5, 91.0]
 ```
 
-## Performance Tips
+`std`/`var` use the population denominator here (ddof=0), despite an imprecise
+"sample variance" docstring. For an unbiased sample variance, compute the valid
+count and multiply population variance by `n/(n-1)` only when `n>1`; this does not
+address weights, clustering or dependence. NaNs/nulls are skipped by many reductions;
+report the valid count for the exact expression and selection. Infinity is a separate
+case. `unique()` and high-cardinality groups allocate outputs proportional to cardinality.
+There is no `.quantile()` or `.prod()` expression method in this release.
 
-1. **Use virtual columns** - They're computed on-the-fly with no memory cost
-2. **Batch operations with delay=True** - Compute multiple aggregations at once
-3. **Avoid `.values` or `.to_pandas_df()`** - Keep operations lazy when possible
-4. **Use selections** - Multiple named selections are more efficient than creating new DataFrames
-5. **Leverage expressions** - They enable query optimization
-6. **Minimize sorting** - Sorting is expensive on large datasets
+## Grouped and binned statistics
 
-## Related Resources
+```python
+summary = df.groupby('group', agg={
+    'rows': vaex.agg.count(),
+    'valid': vaex.agg.count('value'),
+    'sum_x': vaex.agg.sum('x'),
+    'mean_x': vaex.agg.mean('x'),
+    'range_x': vaex.agg.max('x') - vaex.agg.min('x'),
+}).sort('group')
+assert summary.rows.tolist() == [3, 3]
+assert summary.sum_x.tolist() == [9., 12.]
+assert summary.range_x.tolist() == [4., 4.]
+monthly = df.groupby(['year', 'month'], agg={'sum_x': vaex.agg.sum('x')})
+assert monthly.sum_x.sum() == 21
+counts = df.count(binby=['x', 'y'], limits=[[0., 7.], [0., 37.]], shape=(7, 4))
+means = df.mean('x', binby=['x', 'y'], limits=[[0., 7.], [0., 37.]], shape=(7, 4))
+assert counts.shape == (7, 4)
+assert counts.sum() == 6
+assert np.all(np.isnan(means[counts == 0]))
+```
 
-- For DataFrame creation: See `core_dataframes.md`
-- For performance optimization: See `performance.md`
-- For visualization: See `visualization.md`
-- For ML pipelines: See `machine_learning.md`
+Keys in the aggregation dictionary name output columns; explicit aggregator objects
+bind each expression. Do not pass pandas-style `lambda group:` functions. Group
+order is not observation order. Sort a small summary by the real time coordinate,
+and represent missing time bins explicitly before drawing connecting lines.
+For grids, limits are intervals, not bin centers, and the last upper edge is excluded.
+Validate retained counts, including missing and out-of-range rows.
+
+## Joins, duplicates and filters
+
+```python
+lookup = vaex.from_arrays(group=np.array(['A', 'B']), offset=np.array([10., 20.]))
+assert lookup.group.nunique() == len(lookup)
+# extract fixes the row membership of the filtered view before joining.
+left = df[df.x >= 4].extract()
+joined = left.join(lookup, on='group', how='left')
+assert len(joined) == 3
+assert joined.offset.tolist() == [20., 10., 20.]
+inner = left.join(lookup[lookup.group == 'A'].extract(), on='group', how='inner')
+assert inner.x.tolist() == [5.]
+```
+
+Vaex `join` defaults to `how='left'`, supports left/right/inner, and uses one key
+expression per side (`on`, or `left_on`/`right_on`). Lists of key names are not a
+composite-key API. Use a documented upstream database/Arrow join for real composite
+keys, or a collision-free encoding with an explicit validation contract; concatenating
+strings with a separator can collide. Filter semantics are subtle: released docs warn
+that underlying rows may participate, so extract the intended populations first.
+Right-side duplicates can raise unless `allow_duplication=True`; enabling it can expand
+rows. Check row counts, unmatched/null keys, duplicates and scientific identity afterwards.
+Sorting and join indices consume RAM, even with memory-mapped source columns.

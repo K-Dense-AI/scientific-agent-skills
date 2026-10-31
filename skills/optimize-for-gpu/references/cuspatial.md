@@ -1,10 +1,13 @@
 # cuSpatial Reference
 
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
 cuSpatial is a GPU-accelerated GIS library that provides spatial indexing, spatial joins, distance calculations, trajectory analysis, and GeoPandas-compatible geometry types. It integrates with cuDF for tabular data and GeoPandas for geometry interoperability, enabling you to accelerate geospatial workflows by moving the compute-heavy parts to GPU.
 
 > **Full documentation:** https://docs.rapids.ai/api/cuspatial/stable/
 
-> **⚠️ Project status: archived.** cuSpatial development is paused and the GitHub repository was archived (read-only) on July 28, 2025. The **final release is v25.04** — no packages are published for RAPIDS v25.06 or later (see [RSN 45](https://docs.rapids.ai/notices/rsn0045/)). The package still installs and works, but it pins RAPIDS 25.04-era dependencies (e.g., `cudf-cu12==25.4.*`), so it cannot be combined with current RAPIDS releases in the same environment. RAPIDS names no official successor; for actively maintained geospatial work use GeoPandas/Shapely (CPU), and reserve cuSpatial for existing pipelines that can stay on the 25.04 dependency stack.
+> **⚠️ Project status: archived.** cuSpatial development is paused and the GitHub repository was archived (read-only) on July 28, 2025. The **final release is v25.04** — no packages are published for RAPIDS v25.06 or later (see [RSN 45](https://docs.rapids.ai/notices/rsn0045/)). The archived package can still be installed on its supported legacy platforms, but it pins RAPIDS 25.04-era dependencies (e.g., `cudf-cu12==25.4.*`), so it cannot be combined with current RAPIDS releases in the same environment. RAPIDS names no official successor; for actively maintained geospatial work use GeoPandas/Shapely (CPU), and reserve cuSpatial for existing pipelines that can stay on the 25.04 dependency stack.
 
 ## Table of Contents
 
@@ -132,7 +135,7 @@ The most common operation: test which points are inside which polygons.
 from shapely.geometry import Point, Polygon
 import cuspatial
 
-points = cuspatial.GeoSeries([Point(0, 0), Point(-8, -8), Point(6, 6)])
+points = cuspatial.GeoSeries([Point(1, 1), Point(-8, -8), Point(6, 6)])
 polygons = cuspatial.GeoSeries([
     Polygon([(-10, -10), (5, -10), (5, 5), (-10, 5), (-10, -10)]),
     Polygon([(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)])
@@ -141,7 +144,7 @@ polygons = cuspatial.GeoSeries([
 result = cuspatial.point_in_polygon(points, polygons)
 # Returns a DataFrame of booleans: rows=points, columns=polygons
 #   polygon_0  polygon_1
-# 0     True      True     <- (0,0) is in both
+# 0     True      True     <- (1,1) is strictly inside both
 # 1     True     False     <- (-8,-8) is in first only
 # 2    False      True     <- (6,6) is in second only
 ```
@@ -176,7 +179,9 @@ intersections = cuspatial.join_quadtree_and_bounding_boxes(
 result = cuspatial.quadtree_point_in_polygon(
     intersections, quadtree, key_to_point, points, polygons
 )
-# Returns DataFrame with polygon_index and point_index columns
+# point_index indexes key_to_point, not the original input row!
+result["original_point_index"] = key_to_point.take(result["point_index"]).reset_index(drop=True)
+# polygon_index identifies the input polygon; preserve external IDs separately.
 ```
 
 ---
@@ -334,8 +339,9 @@ Identify, reconstruct, and analyze trajectories from timestamped point data (e.g
 objects, traj_offsets = cuspatial.derive_trajectories(
     object_ids=[0, 1, 0, 1],     # e.g., vehicle IDs
     points=cuspatial.GeoSeries([Point(0,0), Point(0,0), Point(1,1), Point(1,1)]),
-    timestamps=[0, 0, 10000, 10000]
+    timestamps=cudf.Series([0, 0, 10000, 10000], dtype="datetime64[ms]")
 )
+# Coordinates in this trajectory example are Cartesian kilometers.
 # objects: DataFrame sorted by (object_id, timestamp) with x, y, timestamp
 # traj_offsets: Series of offsets marking each trajectory's start
 ```
@@ -343,13 +349,17 @@ objects, traj_offsets = cuspatial.derive_trajectories(
 ### Distances and speeds
 
 ```python
+objects_points = cuspatial.GeoSeries.from_points_xy(
+    objects[["x", "y"]].interleave_columns()
+)
 dist_speed = cuspatial.trajectory_distances_and_speeds(
     len(traj_offsets),
     objects['object_id'],
     objects_points,        # GeoSeries
     objects['timestamp']
 )
-# Returns DataFrame with 'distance' (km) and 'speed' (m/s) per trajectory
+# Returns 'distance' in METERS and 'speed' in m/s for input coordinates in km.
+# The archived Python docstring mislabels distance; upstream one-meter tests verify this.
 ```
 
 ### Trajectory bounding boxes
@@ -416,5 +426,7 @@ result = polygons.contains(points, allpairs=True)
 - **Quadtree max_depth < 16.** Morton codes are represented as uint32, so max_depth must be less than 16.
 
 - **Haversine expects lon/lat, not lat/lon.** cuSpatial follows the (longitude, latitude) convention, matching shapely/GeoJSON — not the (lat, lon) convention used by some mapping APIs.
+
+- **Boundary and index semantics.** Test polygon-edge/vertex/hole cases against the chosen CPU predicate. Quadtree result point indices must be mapped through `key_to_point`; they are not original row positions.
 
 - **No CRS transformations.** cuSpatial doesn't handle coordinate reference system conversions. Project your data to the correct CRS using GeoPandas/pyproj before moving to GPU.

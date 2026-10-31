@@ -1,6 +1,6 @@
 # After the order: tracking, documents, changes, returns, reorders, Library, Teams, account
 
-The order-detail pages here come from Fictiv's Help Center (Sep 2026). The test account had no orders, so these screens weren't seen live. Match on the label text and adapt if the UI differs.
+The order-detail workflows were checked against the official Help Center on 2026-09-30; this refresh did not inspect an authenticated order. The prior test account had no orders either. Match visible labels and confirm the current state rather than assuming the retained route/selector snapshot is current.
 
 ## Contents
 1. Order lifecycle
@@ -43,27 +43,26 @@ On the order detail page:
 - **Inspection report data** (top of the order): the standard inspection report, CoC and material certs if ordered, and high-resolution photos. Per part there is **View inspection** or "Part Status → View Quality Docs".
 - Drawings (under the part name), the 3D viewer, DFM feedback and thread callouts.
 
-Downloading saves a file to the user's machine, so ask first and say which file(s).
+Download requested order documents within the task scope and report which files were saved.
 
 ## 4. Changing or cancelling an order
 
 - **Terms of Service:** orders can't be cancelled once placed.
 - **In practice:**
-  - An afternoon order placed before the cutoff gets about a 5–10 minute window.
-  - An evening or early-morning order can be cancelled by contacting Fictiv before about 10 am PT.
+  - The Help Center gives 5–10 minutes after an afternoon order, or before 10 am PT after an overnight order, as examples of a chance to cancel before production. These are not guaranteed windows.
   - Once production starts, cancellation is difficult and may carry fees.
 - **How:** contact the **program manager** named on the order, or hello@fictiv.com, *immediately*. Say the order number and what you want.
 - **Design, material or quantity changes** usually mean cancel and re-order. There is an **ECO** (engineering change order) process, usually with fees and lead-time impact. Fictiv doesn't guarantee to honor CAD or PDF updates sent after ordering.
 - **Address or shipping method** can be changed before the ship date via the PM or hello@fictiv.com.
 
-Sending these messages is outward-facing, so draft the message and get the user's OK before sending.
+Prepare the concrete message and send only when the user has authorized contacting that recipient about the requested change.
 
 ## 5. Quality problems, returns, remakes
 
-- **Report non-conformances within 72 hours of delivery.** After that, all sales are deemed final.
-- **What counts:** anything measurable that misses the requirements given at order time. Examples: a dimension out of tolerance, missing threads, wrong color, sink, a wrong finish.
+- **Inspect immediately and contact Fictiv promptly for an RMA.** [Terms §§11 and 13](https://www.fictiv.com/terms) state a standard 72-hour warranty unless the quote says otherwise, and §11 also requires return with an RMA within 72 hours. Do not promise that notification alone preserves a claim or ship a return without Fictiv instructions. Review the actual quote/contract and obtain return instructions immediately.
+- **What the Help Center treats as a non-conformance:** a measurable dimension or defined feature missing the agreed requirements at ordering or during fulfillment. Examples: a dimension out of tolerance, missing threads, wrong color, sink, a wrong finish.
 - **Not covered:** requirements that were never specified. Examples: a tolerance tighter than ISO 2768-m with no drawing, or threads not configured.
-- **How to report:** contact the order's program manager with the order number, part, photos, measurements vs. requirements, and quantity affected. Fictiv then offers **rework** (ship parts back) or **remanufacture**. Fictiv pays if the fault is theirs.
+- **How to report:** contact the order's program manager with the order number, part, photos, measurements vs. requirements, and quantity affected. Fictiv assesses whether repair/remanufacture or refund applies. Do not guarantee a free remedy: the Terms contain exclusions including designated High Risk Products and first-article/prototype/pre-production/test products; inspection costs can apply if Fictiv finds the part conforming.
 - Help the user by assembling the evidence (photos, measurements, the relevant drawing callout or config line from the order) into a clear, factual message.
 
 ## 6. Reordering
@@ -86,10 +85,10 @@ Sending these messages is outward-facing, so draft the message and get the user'
 - Library → **Molds** tab → **Reorder parts** or **Request modification**.
   - Add notes under "Reorder requirements".
   - Change material, color, finish or drawing under "Modify part".
-  - For family molds, "Exclude from production" leaves a cavity's part out.
-- There's no instant checkout. A Fictiv team member follows up within 1–3 business days by email.
-- Only one active reorder or modification per mold at a time. Molds still being built can't be reordered.
-- Customer-owned molds are stored free for 2 years after the last order, then $500/year or scrapped with approval.
+  - For family molds **with a runner shut-off**, "Exclude from production" leaves a cavity's part out.
+- The [Mold Library guide](https://www.fictiv.com/help/parts-library/how-to-use-fictivs-mold-library-to-place-reorders-and-request-modifications) says direct platform checkout is not supported for these quotes. Submit the authorized request and follow the team's email/phone review and order instructions; the guide does not promise a 1–3 day turnaround.
+- The guide allows only one active reorder/modification request at a time; one request can include parts from multiple molds. Molds still being built can't be reordered.
+- The current [injection-molding service page](https://www.fictiv.com/capabilities/injection-molding-services) describes storage without inventory fees while ordered from within two years, then shipping/destruction at the customer's direction after inactivity. Confirm the tooling agreement; do not assume a universal $500/year extension.
 
 ## 9. Teams and workspaces
 
@@ -101,8 +100,8 @@ Sending these messages is outward-facing, so draft the message and get the user'
   - Everything in a workspace is visible to its members, and any member can check out a team quote.
   - A workspace that contains quotes or orders can't be deleted.
 - **Lead Time Optimizer** (Teams accounts): the blue "Optimize lead time" banner. Enter a target date and it proposes removing secondary processes or certs, updating threads, drawing or quantity. Exit with "Save and exit Lead Time Optimizer".
-- **Punchout** (Ariba, Coupa, Dynamics 365) is set up with the account team. From inside the P2P system, "Send to Punchout" moves a *fully configured instant* quote into the requisition cart. Manual or RFQ quotes can't go through Punchout.
-- Inviting people ("Invite to Fictiv", workspace invites) sends emails, so confirm first.
+- **Punchout** (Ariba, Coupa, Dynamics 365) is set up with the account team. From inside the P2P system, "Send to Punchout" moves a *fully configured, platform-priced* quote into the requisition cart. The [Punchout guide](https://www.fictiv.com/help/fictiv-teams/setting-up-your-punchout-integration-with-procure-to-pay-p2p-systems) excludes customized quotes whose line-item configuration/prices are not known to the platform; it does not exclude all manual/RFQ pricing. Company setup may restrict allowed processes.
+- Inviting people ("Invite to Fictiv", workspace invites) sends emails; ensure the recipients and scope are authorized.
 
 ## 10. Account settings (`/pages/my-account`)
 
@@ -127,4 +126,4 @@ Sending these messages is outward-facing, so draft the message and get the user'
 | NDA | fictiv.com/contact-us (NDA form) |
 | Phone | (415) 580-2509 |
 
-Any email, chat message, meeting booking or form you send on the user's behalf needs their OK on the actual content first.
+Send emails, chats, meeting bookings or forms only within the user's explicit instructions. Existing authorization in the conversation counts; prepare concrete content before requesting any missing approval.

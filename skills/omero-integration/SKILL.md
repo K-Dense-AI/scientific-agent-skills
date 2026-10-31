@@ -1,15 +1,16 @@
 ---
 name: omero-integration
-description: Securely inspect and automate microscopy data workflows against OMERO.server with omero-py, BlitzGateway, OMERO CLI, tables, annotations, ROIs, rendering, and documented OMERO.web APIs. Use for scoped OMERO inventory, metadata export, import/export planning, or reviewed write workflows.
+description: Inspects and automates microscopy data workflows against OMERO.server with omero-py, BlitzGateway, OMERO CLI, tables, annotations, ROIs, rendering, and documented OMERO.web APIs. Use this skill for scoped OMERO inventory, metadata export, import/export planning, or reviewed write workflows.
 license: MIT
 compatibility: >-
   Requires network access to a user-selected OMERO.server for remote operations.
-  The 2026-07-23 snapshot uses OMERO.py 5.22.1 with ZeroC IcePy 3.6.5;
+  The server-tested snapshot uses OMERO.py 5.22.1 with ZeroC IcePy 3.6.5;
   OMERO supports Python 3.10-3.12 (3.12 recommended) while 3.13-3.14 remain
   upcoming in its support matrix. Bundled local planners require Python 3.10+
   and read only named OMERO_* variables; they never load .env files.
 metadata:
-  version: "1.5"
+  version: "1.6"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
@@ -41,7 +42,7 @@ derived measurements.
 
 ## Verified Baseline
 
-This skill was refreshed on **2026-07-23**:
+This skill was refreshed on **2026-09-30**:
 
 - **OMERO.server 5.6.18** (May 2026) is the current documented stable server.
 - It was tested by OME with **OMERO.py/omero-py 5.22.1** and
@@ -51,6 +52,13 @@ This skill was refreshed on **2026-07-23**:
   “upcoming.”
 - OMERO 5.6 uses **IcePy 3.6**, with 3.6.5 prebuilt client wheels documented
   for Python versions through 3.12.
+
+**Latest client releases:** OMERO.py **5.23.0** (2026-07-30) and OMERO.web
+**5.33.2** are newer than the server history’s tested pairing. The bundled
+helpers were checked locally with OMERO.py 5.22.1 and 5.23.0, IcePy 3.6.5,
+and Python 3.12; this did not connect to an OMERO server. Remote snippets in this skill
+and its references are illustrative, verified against official docs/source,
+and require adaptation to an authorized server and its object IDs.
 
 The pin above is a reproducible skill snapshot, not a promise that every
 OMERO.server release accepts that client. For another server version, consult

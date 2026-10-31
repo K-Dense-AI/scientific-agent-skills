@@ -1,7 +1,7 @@
 # PyTDC datasets and data access
 
 This reference targets the **PyTDC 1.1.15** source distribution, verified
-2026-07-23. Dataset registries evolve independently of this skill, so query the
+2026-10-01. Dataset registries evolve independently of this skill, so query the
 installed package instead of copying a historical catalog.
 
 ## Discovery is not download
@@ -10,10 +10,10 @@ installed package instead of copying a historical catalog.
 loader, contact Harvard Dataverse, or download a dataset:
 
 ```bash
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind tasks --limit 100
 
-uv run --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
+uv run --no-project --isolated --python 3.11 --with "setuptools==80.9.0" --with "PyTDC==1.1.15" \
   python scripts/discover_metadata.py --kind datasets --task DTI --limit 100
 ```
 
@@ -110,6 +110,22 @@ Many datasets are associated with the Harvard Dataverse collection
 <https://doi.org/10.7910/DVN/21LKWG>. Newer resources may instead use CELLxGENE,
 Hugging Face, or task-specific APIs; inspect the resource class before approval.
 
+The core contract is a public HTTPS `GET` to
+`https://dataverse.harvard.edu/api/access/datafile/{numeric_file_id}`. The release
+registries supply file IDs; there is no request body, pagination, or API key in
+this public-file path. The response is the file bytes (possibly after redirects),
+not JSON. Restricted provider files would need a separate access workflow; the
+core helper has no credential interface.
+
+In 1.1.15 `dataverse_download` sets neither a timeout nor `raise_for_status`, writes
+directly to the final filename, and verifies no checksum. HTTP error bodies or
+interrupted transfers can therefore leave a cache file that future calls accept.
+Check status/size/checksum against public file metadata when available and inspect
+a suspect file before reusing it. Initial Python-HTTP metadata probes received 403; bounded curl probes then
+returned public metadata for the three example datasets, three supported benchmark
+groups, MOSES and PrimeKG. Separate 512-byte range responses confirmed the Caco2
+and grouped PrimeKG headers. No full hosted dataset or archive was downloaded.
+
 PyTDC checks for expected filenames, not a complete content-addressed cache with
 documented checksums. An interrupted or stale local file may therefore need manual
 review. Never delete or redownload a user's cache without confirmation.
@@ -151,7 +167,8 @@ Before constructing any loader, present:
 - split method, fractions, seed, and rationale;
 - any sensitive/proprietary inputs that must not leave the environment.
 
-Ask for explicit approval before the first download or any large redownload. The
+Use the user-authorized scope for downloads; ask only when the intended dataset,
+transfer, or disclosure is outside that scope. The
 bundled scripts make planning the default and reserve construction for `--execute`;
 MolGen additionally requires `--download`.
 
@@ -240,3 +257,21 @@ These are used only as API checks; run package discovery before use:
 Names such as `PairMolGen`, generic `Prodrug`, or arbitrary `GuacaMol` datasets do
 not appear in the PyTDC 1.1.15 public generation imports/registry and must not be
 presented as supported loaders.
+
+## PrimeKG is a distinct resource contract
+
+The released API is `from tdc.resource import PrimeKG`, then
+`PrimeKG(path=".pytdc-data")`; construction can download a large graph.
+PyTDC 1.1.15 maps `primekg` to Dataverse file **6180626**, the grouped
+`kg_grouped.csv` artifact, cached as comma-separated `primekg.tab`. This is not the separate
+`kg.csv` file 6180620. Record which artifact was used.
+
+`get_data()` returns the edge dataframe; `get_node_list(node_type="drug")` uses
+the **node_type** keyword. `get_features(feature_type="drug")` or `"disease"` can
+fetch additional tab-separated files. `to_nx()` constructs an undirected
+`networkx.Graph` keyed by **display names** and can merge distinct typed IDs and
+overwrite parallel relations. Preserve the edge table, `(id, type, source)` node
+identities and all relation rows when preparing scientific graphs. Reverse
+storage rows are not independent evidence, and contraindication edges are not
+treatment evidence. These resource semantics were checked against released
+source and a tiny local CSV, not a full PrimeKG download.

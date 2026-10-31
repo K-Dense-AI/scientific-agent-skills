@@ -1,6 +1,6 @@
 # LabArchives Authentication and Regions
 
-Verified against official public sources on **2026-07-23**. LabArchives may
+Verified against official public sources on **2026-09-30**. LabArchives may
 provide additional institution-specific development documentation with API
 credentials; that documentation controls when it differs from this summary.
 
@@ -8,7 +8,7 @@ credentials; that documentation controls when it differs from this summary.
 
 ### ELN
 
-The official ELN subscription guide (updated 2025-09-24) lists developer API
+The official ELN subscription guide (updated 2026-08-27) lists developer API
 access as an Enterprise capability. An Access Key ID and Access Password are
 issued by LabArchives for a specific organization/vendor and intended purpose.
 They are not ordinary account credentials.
@@ -46,7 +46,8 @@ Keep these values distinct:
 - **Temporary password token** — user-generated alternative accepted as the
   `password` parameter by `users::user_access_info`.
 - **Inventory Lab ID** — identifies the current Inventory lab and is documented
-  as `X-LabArchives-LabId`.
+  as `X-LabArchives-LabId`; the `/public/v1/users/me` bootstrap endpoint does
+  not require this header and ignores it if supplied.
 
 Do not use a normal LabArchives account password in API scripts.
 
@@ -75,11 +76,24 @@ validator intentionally pins the five hosts documented at this refresh date.
 
 ### Inventory absolute base URLs
 
-The public Inventory authentication and endpoint pages reviewed here document
-relative `/public/v1/...` paths and required headers. They did **not** establish
-a complete regional absolute API base-URL table. Inventory browser hosts are not
-proof of API hosts. Use the base URL supplied with the institution/vendor API
-documentation; do not derive one from a login URL.
+The official notebook's **Inventory > Overview** publishes
+`https://iapi.labarchives.com` as the base URL for current endpoints. Append the
+exact `/public/v1/...` route. It specifies `Content-Type: application/json` for
+requests; responses can be JSON or ZIP depending on the method. A regional
+absolute base-URL table is not provided. Confirm any region-specific deployment
+with LabArchives rather than deriving a host from a browser login URL.
+
+### Inventory lab discovery
+
+`GET /public/v1/users/me` explicitly does not require `X-LabArchives-LabId`
+(and ignores it if supplied). Sign `/public/v1/users/me` and send the UID,
+Access Key ID, signature, and expires headers. The JSON response contains
+`userId`, `userName`, `status`, and `labs` entries with `labId` and `name`. Select
+an authorized lab before issuing lab-scoped requests. The numeric Inventory
+`userId` is not the Access-Key-scoped ELN UID used for authentication.
+
+Official method page:
+https://mynotebook.labarchives.com/share/LabArchives%20API/MTQ4LjIwMDAwMDAwMDAwMDAyfDI3LzExNC9UcmVlTm9kZS8zODc0Mjc0OTI5fDM3Ni4y
 
 ## Named environment variables
 
@@ -126,9 +140,13 @@ document generic OAuth 2.0 client credentials, `/oauth/authorize`, or
 4. LabArchives performs account/SSO login and redirects back with `auth_code`
    and `email`.
 5. Promptly call the documented `users::user_access_info`, passing the
-   authorization code as its `password` parameter and the returned email.
+   authorization code as its `password` parameter and the returned email as
+   `login_or_email`. The method uses GET query parameters, so redact the whole
+   query and any echoed authentication fields in the XML response.
 6. Store the resulting UID only in approved secure state. It remains bound to
-   the Access Key ID and can be revoked.
+   the Access Key ID and can be revoked. Respect `<auto-login-allowed>` and
+   institutional restrictions; `user_info_via_id` documents `authenticated=true`
+   only for an explicit user request to extend the session.
 
 If redirects cannot be used, the official flow allows a user-generated
 temporary password token in the same `password` parameter. Handle it with
@@ -159,6 +177,10 @@ best-practices page recommends `utilities::epoch_time` for unreliable clocks.
 
 Official signing page:
 https://mynotebook.labarchives.com/share/LabArchives%20API/Ny44fDI3LzYvVHJlZU5vZGUvMTE1MzU5MTAyNXwxOS44
+
+`GET /api/utilities/epoch_time` takes `akid` but does not require `sig` or
+`expires`. Its XML `<epoch-time>` is epoch milliseconds. Cache a session clock
+offset instead of calling this utility before every signature.
 
 Use `scripts/entry_operations.py self-test` to check the implementation against
 the official published test vector without credentials or network access.

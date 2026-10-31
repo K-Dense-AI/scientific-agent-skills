@@ -19,7 +19,7 @@ def build_preview(style_name: str, palette_name: str) -> tuple[Any, dict[str, An
     except ImportError as exc:
         raise CliError(
             "Matplotlib is required for previews; "
-            "run with --with 'matplotlib==3.11.1'"
+            "run with --with 'matplotlib==3.11.2'"
         ) from exc
     from palette_audit import audit_palette
     from style_presets import available_palettes, style_context

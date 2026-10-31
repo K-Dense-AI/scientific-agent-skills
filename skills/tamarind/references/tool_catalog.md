@@ -1,66 +1,61 @@
-# Tamarind Bio tool catalog
+# Tamarind Bio tool discovery and schemas
 
-Tamarind exposes hundreds of tools through one uniform job API. The catalog changes frequently — **always enumerate at runtime** with `GET /tools` (or MCP `getAvailableTools`) rather than hardcoding names. This file is a map for interpreting what you get back.
+Reviewed 2026-09-30 against the [public catalog](https://app.tamarind.bio/tools.json)
+and [OpenAPI](https://app.tamarind.bio/api/openapi.json). Catalog presence is not
+proof of account entitlement or of a model's suitability for a scientific task.
 
-## How to discover
+## Three distinct discovery shapes
 
-**REST** `GET /tools` returns the **full list** (it does not filter server-side). Filter client-side:
+1. **Public** `https://app.tamarind.bio/tools.json` (or `/api/tools-catalog`): object
+   containing `tools`, counts, and tags. Entries use **`type`**, `displayName`,
+   `description`, `tags`, and `requiredSettings`. Filter with `?type=` or `?tag=`.
+   Required settings may carry `tasks`, `conditionals`, and a `taskSetting`
+   selector: alternative branches are not one combined required-field list.
+2. **Authenticated** `GET /api/tools`: array of entries keyed by **`name`**, with
+   trimmed `settings` parameters. Filter name/description client-side.
+   `?custom=true` lists legacy custom tools, not all current custom deployments.
+3. **Authenticated** `GET /api/tools/{name}/schema`: standard **JSON Schema** for
+   settings, with requiredness, supported properties, enums, bounds, and domain
+   hints such as `x-tamarind-type`. Optional `version` pins a custom build.
 
-```python
-tools = requests.get(f"{BASE}/tools", headers=HEADERS).json()      # a list
-docking = [t for t in tools if "vina" in t["name"].lower()]
-```
+Do not confuse public `requiredSettings`, REST `settings`, and the JSON Schema
+object. The public catalog is useful before obtaining credentials but omits
+optional settings and restricted/custom tools. A known current custom tool can
+be submittable even if `/tools` does not list it; check its schema directly.
 
-Each REST tool entry carries: `name` (the `type` you submit), `displayName`, `description`, `github`, `paper`, and `settings` (the inline parameter schema). REST entries do **not** include `categories`/`tags`.
+In trimmed REST parameters, only `name` and `required` are guaranteed. Read
+`type`, `default`, `description`, `options`, `extension`, and `list` defensively.
+A type such as `pdb` need not mean only PDB files: `extension` may include `cif`.
+A `list: true` parameter takes an array. Consult JSON Schema and domain validation
+instead of reimplementing all UI gating from a trimmed parameter list.
 
-**MCP** `getAvailableTools(search=..., modality=..., function=...)` filters server-side and returns entries with `categories` and `tags` (`category`/`tag` are deprecated aliases of `modality`/`function`, still honored).
+## Task anchors
 
-## Modalities and functions (the two filter axes)
+| Goal | Example catalog types | Modeling distinction |
+|---|---|---|
+| Protein/complex folding | `alphafold`, `boltz`, `chai`, `protenix`, `esmfold`, `esmfold2` | AF2, cofolding, single-sequence, and complex-capable models have different inputs and assumptions. ESMFold2 is not simply an alias for single-sequence ESMFold. |
+| De novo binder/design | `rfdiffusion`, `boltzgen`, `bindcraft` | Motif scaffolding, target type, and available target structures determine fit. |
+| Inverse folding | `proteinmpnn`, `ligandmpnn` | Structure to designed sequence; re-fold and assess the result. |
+| Docking | `autodock-vina`, `diffdock`, `boltz`, `chai` | Fixed-receptor docking and cofolding answer different modeling questions. |
+| Antibody/developability | Search descriptions/tags for antibody, nanobody, stability, solubility | Check sequence versus structure input and applicable molecule types. |
+| MSA, MD, scoring | Search the relevant operation | Read required upstream inputs and compute settings. |
 
-Don't hardcode the filter vocabulary — it drifts as tools are added. Fetch it live: `listModalities()` returns the molecule-type axis (protein, antibody, enzyme, peptide, nucleic-acid, small-molecule, small-molecule-binding-protein, cryoem, …); `listTags()` returns the function axis (structure-prediction, protein-design, binder-design, protein-ligand-docking, binding-affinity, inverse-folding, developability, molecular-dynamics, finetuning, …). Each entry carries `value`, `label`, `description`, and a live `toolCount`. Every `getAvailableTools` response also includes `availableCategories` / `availableTags` arrays computed from the current catalog. Filter with `getAvailableTools(modality=..., function=...)`.
+## Outputs and chaining
 
-## Representative tool families
+Current `/tools` can publish `taskType`, `outputTypes`, `filterMetrics`, and an
+`outputs` block with `mainCSV`, `produces`, and `columns`. Missing declarations
+mean unknown output, not no output. `outputs.byTask` overrides the cross-task
+summary for a task-dependent tool; use the selected task's contract.
 
-Verify exact names and availability with `/tools` — these are common anchors, not an exhaustive or guaranteed list.
+Distinguish a molecule generated by a tool from input data echoed into a scores
+CSV. Use `filterMetrics` for allowed pipeline filter names; not every output
+column is filterable. Read `lowIsGood` and units when present, then verify the
+actual downloaded output. Avoid ranking all metric fields in the same direction.
 
-**Structure prediction / folding**
-- `alphafold` — AlphaFold; monomer + multimer, MSA + templates, recycles, relaxation.
-- `boltz` — Boltz-2; structure + affinity, biomolecular complexes incl. ligands.
-- `chai` — Chai-1; complex structure prediction with optional MSA.
-- `esmfold` / `esmfold2` — fast single-sequence folding.
+## MCP discovery
 
-**Protein / binder design**
-- `rfdiffusion` — protein/binder design and motif scaffolding.
-- `boltzgen` — generative design.
-- `bindcraft` — binder design.
-- `proteinmpnn` / `ligandmpnn` — inverse folding (sequence given backbone; ligand-aware variant).
-
-**Docking / affinity**
-- `boltz` / `chai` — co-fold the ligand into the complex (predict the bound structure); the default for protein-small-molecule docking.
-- `autodock-vina` — classical docking into a known pocket; the pick for fast, large-scale screening.
-- Boltz/affinity tools — binding-affinity prediction.
-
-**Antibody**
-- Antibody language models and generators, humanization, developability, immunogenicity scoring.
-
-**MSA / utilities**
-- MSA generation tools feed downstream folding; utilities cover format conversion, scoring, and analysis.
-
-## Reading a tool schema
-
-`getJobSchema(jobType)` (MCP) or the `/tools` entry returns a `parameters` list. Each parameter has:
-
-- `name`, `type` (`sequence`, `number`, `boolean`, `dropdown`, file types like `pdb`/`cif`/`sdf`, …)
-- `descr`, `displayName`
-- `required`, `default`
-- `options` / `optionsDescr` (for dropdowns), `lowerBound` / `upperBound` / `lengthLimit`
-- `conditionals` — applies only when another field has a given value
-- `exclude` (`["api"]` / `["batch"]`) — omit on that surface
-- `list: true` — accepts multiple values/files
-- `example` — a sample value
-
-(Org-gated parameters are filtered server-side: `getJobSchema` drops a param your account isn't authorized for and never returns the old `restrictOrgs` key.)
-
-Top-level tool metadata also includes a `hint`, and `getJobSchema` returns an `exampleJob` built from each parameter's example/default — start from that (then `validateJob` it) rather than hand-building `settings`.
-
-Always read the schema before constructing `settings`, and run `validateJob` to confirm before `submitJob`.
+The public [MCP guide](https://docs.tamarind.bio/tamarind/mcp-server.md) does not
+specify the complete live tool schemas. If the connected server advertises
+`getAvailableTools`, `getJobSchema`, modality/tag helpers, or `exampleJob`, read
+those live definitions. Do not infer MCP envelopes/parameter names from REST.
+Authenticated MCP tool discovery was not tested during this review.

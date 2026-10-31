@@ -9,13 +9,13 @@ https://api.census.gov/data
 ```
 
 ## Authentication
-- **API Key: REQUIRED (free).** Register at https://api.census.gov/data/key_signup.html
+- **API key optional for up to 500 queries per IP per day; required above that allowance (free).** Register at https://api.census.gov/data/key_signup.html
 - Pass as query parameter: `&key=YOUR_KEY`
 - Requests without a key are throttled to ~500/day. With a key, limits are much higher.
 
 ## Rate Limits
 - Without key: approximately 500 requests per day.
-- With key: up to 500 requests per day per IP is the documented soft limit, but in practice the key grants significantly more.
+- Use a key when exceeding the anonymous 500-query daily allowance; do not infer an unlimited service guarantee.
 - No formal per-minute rate limit documented; keep automated requests to a few per second.
 
 ---
@@ -58,7 +58,7 @@ GET /data/{year}/acs/acs5?get={variables}&for={geography}&key=YOUR_KEY
 | `get`     | Yes      | Comma-separated variable names (e.g., `NAME,B01001_001E`) |
 | `for`     | Yes      | Target geography (e.g., `state:*`, `county:*`, `tract:*`) |
 | `in`      | Sometimes | Parent geography for sub-state levels |
-| `key`     | Yes      | Your API key |
+| `key`     | For higher volume | Your API key |
 
 **Example (total population for all states, 2022 ACS 5-year):**
 ```
@@ -229,7 +229,7 @@ Variable naming: `B{table}_{seq}E` for estimates, `B{table}_{seq}M` for margins 
 ---
 
 ## Response Format
-All data responses are **JSON arrays of arrays**. The first array is always the column headers; subsequent arrays are data rows.
+Tabular dataset query responses are **JSON arrays of arrays**; discovery endpoints such as `variables.json` return objects. The first array is always the column headers; subsequent arrays are data rows.
 
 ```json
 [
@@ -240,10 +240,11 @@ All data responses are **JSON arrays of arrays**. The first array is always the 
 ```
 
 - Values are strings (even numeric ones).
-- Missing or unavailable data may appear as `null`, `"-"`, or `"N"`.
+- Missing or unavailable data may appear as null or dataset-specific numeric sentinel codes (for example ACS `-666666666`). Read the variable annotations and special-value documentation; never treat sentinels as measured values.
 - Annotation values: `"-"` (too few sample cases), `"N"` (not available), `"(X)"` (not applicable).
 
 ## Notes
+- Dataset paths and available geographies are vintage-specific (especially Population Estimates); discover them in `data.json` before changing a year.
 - Always include `NAME` in your `get` parameter to get human-readable geography labels.
 - The `E` suffix means "Estimate"; use `M` suffix for Margin of Error (e.g., `B19013_001M`).
 - Variable discovery: browse https://api.census.gov/data/{year}/acs/acs5/variables.html for a searchable table.

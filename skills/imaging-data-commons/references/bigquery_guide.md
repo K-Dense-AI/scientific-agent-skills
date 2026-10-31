@@ -1,6 +1,8 @@
 # BigQuery Guide for IDC
 
-**Tested with:** `bigquery-public-data.idc_current` and idc-index 0.12.5 (IDC data version v24)
+**Reviewed 2026-09-30:** current IDC table documentation and Google BigQuery API/cost guidance.
+The GoogleSQL examples below are illustrative; no authenticated BigQuery jobs were run.
+Use a dry run against your pinned dataset before executing them.
 
 For most queries and downloads, use `idc-index` (see main SKILL.md). This guide covers BigQuery for advanced use cases requiring full DICOM metadata or complex joins.
 
@@ -8,8 +10,8 @@ For most queries and downloads, use `idc-index` (see main SKILL.md). This guide 
 
 **Requirements:**
 1. Google account
-2. Google Cloud project with billing enabled (first 1 TB/month free)
-3. `google-cloud-bigquery` Python package or BigQuery console access
+2. Google Cloud project with BigQuery access ([sandbox](https://docs.cloud.google.com/bigquery/docs/sandbox) supports limited public queries without a billing account; billing applies beyond applicable limits)
+3. `google-cloud-bigquery[pandas]` Python package for `.to_dataframe()`, or BigQuery console access
 
 **Authentication setup:**
 ```bash
@@ -20,16 +22,20 @@ gcloud auth application-default login
 ## When to Use BigQuery
 
 Use BigQuery instead of `idc-index` when you need:
-- Full DICOM metadata (all 4000+ tags, not just the ~50 in idc-index)
-- Complex joins across clinical data tables
+- Instance-level DICOM metadata beyond the compact series-level index; extraction has depth/size limits
+- Hosted queries across large clinical/imaging tables (local DuckDB and REST also support clinical joins)
 - DICOM sequence attributes (nested structures)
 - Queries on fields not in the idc-index mini-index
 - Private DICOM elements (vendor-specific tags in OtherElements column)
-- **Per-segment detail from DICOM Segmentation objects** — `idc-index` `seg_index` gives series-level metadata, but not individual segment anatomy codes; use `segmentations` BigQuery table to query by structure name
+- **Per-segment detail from DICOM Segmentation objects** — `idc-index` `seg_index` gives series-level metadata, but not per-segment rows/number associations; use the `segmentations` table when those details are needed
 - **Quantitative measurements from DICOM SR** — radiomics features (volume, diameter, shape descriptors) without downloading and parsing SR files; no idc-index equivalent
 - **Qualitative measurements from DICOM SR** — coded evaluations (malignancy rating, texture, margin) without parsing SR files; no idc-index equivalent
 
 ## Accessing IDC in BigQuery
+
+The same metadata is also exported as public Parquet in `idc-open-metadata`, including
+clinical tables and SR measurements. For an unauthenticated alternative see
+`references/parquet_access_guide.md`; large instance-level joins may still favor BigQuery.
 
 ### Dataset Structure
 
@@ -49,7 +55,7 @@ Always use versioned datasets for reproducible research!
 ## Key Tables
 
 ### dicom_all
-Primary table joining complete DICOM metadata with IDC-specific columns (collection_id, gcs_url, license). Contains all DICOM tags from `dicom_metadata` plus collection and administrative metadata. See [dicom_all.sql](https://github.com/ImagingDataCommons/etl_flow/blob/master/bq/generate_tables_and_views/derived_tables/BQ_Table_Building/derived_data_views/sql/dicom_all.sql) for the exact derivation.
+Primary table joining complete DICOM metadata with IDC-specific columns (collection_id, gcs_url, license). Contains exported DICOM fields plus collection and administrative metadata, one row per instance. See [dicom_all.sql](https://github.com/ImagingDataCommons/etl_flow/blob/master/bq/generate_tables_and_views/derived_tables/BQ_Table_Building/derived_data_views/sql/dicom_all.sql) for the exact derivation.
 
 ```sql
 SELECT 
@@ -89,15 +95,15 @@ See the [Derived Tables: Detailed Documentation](#derived-tables-detailed-docume
 ```sql
 SELECT
   collection_id,
-  CancerTypes,
-  TumorLocations,
-  Subjects,
+  cancer_types,
+  tumor_locations,
+  subjects,
   src.source_doi,
-  src.ImageTypes,
+  src.modalities,
   src.license.license_short_name
 FROM `bigquery-public-data.idc_current.original_collections_metadata`,
-UNNEST(Sources) AS src
-WHERE CancerTypes LIKE '%Lung%'
+UNNEST(sources) AS src
+WHERE cancer_types LIKE '%Lung%'
 ```
 
 ## Common Query Patterns
@@ -163,13 +169,19 @@ SELECT
   src.SeriesInstanceUID as source_series,
   src.Modality as source_modality
 FROM `bigquery-public-data.idc_current.segmentations` seg
-JOIN `bigquery-public-data.idc_current.dicom_all` src
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) src
   ON seg.segmented_SeriesInstanceUID = src.SeriesInstanceUID
 WHERE src.collection_id = 'qin_prostate_repeatability'
 LIMIT 10
 ```
 
 ## Derived Tables: Detailed Documentation
+
+`dicom_all` is instance-level. The examples below project distinct series metadata before
+joining it to segment/measurement rows, preventing one measurement from being duplicated
+for every image slice. Retain SOPInstanceUID plus measurementGroup_number as measurement
+keys, and inspect units and derivation modifiers before comparing quantities.
 
 ### segmentations
 
@@ -188,7 +200,7 @@ One row per segment within a DICOM Segmentation (SEG) object. Unlike `idc-index`
 | `SegmentedPropertyType` | RECORD | Specific structure (e.g., "Liver", "Kidney", "Neoplasm") |
 | `AnatomicRegion` | RECORD | Optional anatomic region modifier |
 | `SegmentAlgorithmType` | STRING | AUTOMATIC, SEMIAUTOMATIC, or MANUAL |
-| `SegmentAlgorithmName` | STRING (REPEATED) | Algorithm name array (e.g., ["TotalSegmentator"]) |
+| `SegmentAlgorithmName` | STRING | Algorithm name (e.g., "TotalSegmentator") |
 | `TrackingUID` | STRING | Links segment to SR measurements |
 | `TrackingID` | STRING | Human-readable tracking label |
 | `segmented_SeriesInstanceUID` | STRING | Source image series UID — join to `dicom_all` to get collection/modality |
@@ -196,7 +208,7 @@ One row per segment within a DICOM Segmentation (SEG) object. Unlike `idc-index`
 
 `SegmentedPropertyCategory` and `SegmentedPropertyType` are RECORD types with sub-fields `CodeValue`, `CodingSchemeDesignator`, and `CodeMeaning`. Use `.CodeMeaning` for human-readable filtering.
 
-**idc-index gap:** `seg_index` in idc-index has `total_segments`, `AlgorithmName`, and aggregated codes, but does not expose individual segment anatomy per row. Use this BigQuery table when you need to find SEG series that contain a specific structure (e.g., all series with a "Liver" segment).
+**idc-index gap:** `seg_index` in idc-index has `total_segments`, `AlgorithmName`, and aggregated codes, but does not expose individual segment anatomy per row. Use this table when segment-level details are required. For screening series that contain a structure, the aggregated `SegmentedPropertyType_CodeMeanings` array in `seg_index` can suffice.
 
 **Discover what structures are segmented across IDC:**
 
@@ -226,7 +238,8 @@ SELECT
   img.Modality,
   seg.viewer_url
 FROM `bigquery-public-data.idc_current.segmentations` seg
-JOIN `bigquery-public-data.idc_current.dicom_all` img
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) img
   ON seg.segmented_SeriesInstanceUID = img.SeriesInstanceUID
 WHERE seg.SegmentedPropertyType.CodeMeaning = 'Liver'
   AND seg.SegmentAlgorithmType = 'AUTOMATIC'
@@ -241,14 +254,15 @@ SELECT
   seg.SegmentAlgorithmType,
   COUNT(DISTINCT seg.SeriesInstanceUID) AS seg_series_count
 FROM `bigquery-public-data.idc_current.segmentations` seg
-JOIN `bigquery-public-data.idc_current.dicom_all` img
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) img
   ON seg.segmented_SeriesInstanceUID = img.SeriesInstanceUID
 WHERE img.collection_id = 'nlst'
 GROUP BY 1, 2
 ORDER BY seg_series_count DESC
 ```
 
-**Link segments to SR measurements using TrackingUID:**
+**Link segments to SR measurements using the referenced SEG instance and segment number:**
 
 ```sql
 -- Find segments that have corresponding SR measurements
@@ -261,7 +275,7 @@ SELECT
   qm.Units.CodeMeaning AS units
 FROM `bigquery-public-data.idc_current.segmentations` seg
 JOIN `bigquery-public-data.idc_current.quantitative_measurements` qm
-  ON seg.SeriesInstanceUID = qm.segmentationSeriesUID
+  ON seg.SOPInstanceUID = qm.segmentationInstanceUID
   AND seg.SegmentNumber = qm.segmentationSegmentNumber
 WHERE seg.SegmentedPropertyType.CodeMeaning = 'Neoplasm'
   AND qm.Quantity.CodeMeaning = 'Volume from Voxel Summation'
@@ -274,7 +288,7 @@ LIMIT 10
 
 One row per numeric measurement in a DICOM SR TID1500 Measurement Report. Contains radiomics features (shape, intensity, texture) and clinical measurements (volume, diameter, SUV). These measurements are pre-extracted from SR — no download or DICOM parsing needed.
 
-**No idc-index equivalent.** This table is only accessible via BigQuery.
+**No compact idc-index equivalent.** Available in BigQuery and its public Parquet export.
 
 **Key columns:**
 
@@ -322,10 +336,13 @@ SELECT
   img.collection_id,
   qm.segmentationSeriesUID
 FROM `bigquery-public-data.idc_current.quantitative_measurements` qm
-JOIN `bigquery-public-data.idc_current.dicom_all` img
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) img
   ON qm.sourceSegmentedSeriesUID = img.SeriesInstanceUID
 WHERE qm.Quantity.CodeMeaning = 'Volume from Voxel Summation'
   AND qm.findingSite.CodeMeaning = 'Liver'
+  AND qm.Units.CodingSchemeDesignator = 'UCUM'
+  AND qm.Units.CodeValue = 'mm3'
 ORDER BY volume_cm3 DESC
 LIMIT 20
 ```
@@ -353,7 +370,7 @@ ORDER BY qm.measurementGroup_number, qm.Quantity.CodeMeaning
 
 One row per coded evaluation in a DICOM SR TID1500 Measurement Report. Instead of numeric values, these record assessed characteristics using coded concept pairs (e.g., Quantity="Malignancy", Value="4 out of 5 (Moderately Suspicious for Cancer)").
 
-**No idc-index equivalent.** This table is only accessible via BigQuery.
+**No compact idc-index equivalent.** Available in BigQuery and its public Parquet export.
 
 **Key columns:**
 
@@ -396,7 +413,8 @@ SELECT
   qm.Value.CodeMeaning AS malignancy_rating,
   img.collection_id
 FROM `bigquery-public-data.idc_current.qualitative_measurements` qm
-JOIN `bigquery-public-data.idc_current.dicom_all` img
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) img
   ON qm.SeriesInstanceUID = img.SeriesInstanceUID
 WHERE qm.Quantity.CodeMeaning = 'Malignancy'
   AND qm.Value.CodeMeaning LIKE '%Suspicious%'
@@ -456,12 +474,13 @@ SELECT
   img.collection_id
 FROM `bigquery-public-data.idc_current.segmentations` seg
 JOIN `bigquery-public-data.idc_current.qualitative_measurements` qual
-  ON seg.SeriesInstanceUID = qual.segmentationSeriesUID
+  ON seg.SOPInstanceUID = qual.segmentationInstanceUID
   AND seg.SegmentNumber = qual.segmentationSegmentNumber
 JOIN `bigquery-public-data.idc_current.quantitative_measurements` qm
   ON qual.SOPInstanceUID = qm.SOPInstanceUID
   AND qual.measurementGroup_number = qm.measurementGroup_number
-JOIN `bigquery-public-data.idc_current.dicom_all` img
+JOIN (SELECT DISTINCT SeriesInstanceUID, collection_id, PatientID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) img
   ON seg.segmented_SeriesInstanceUID = img.SeriesInstanceUID
 WHERE seg.SegmentedPropertyType.CodeMeaning = 'Neoplasm'
 LIMIT 10
@@ -482,7 +501,7 @@ Private DICOM elements are vendor-specific attributes not defined in the DICOM s
 | Parameter | Standard Tag | GE | Siemens | Philips |
 |-----------|--------------|-----|---------|---------|
 | Diffusion b-value | (0018,9087) | (0043,1039) | (0019,100C) | (2001,1003) |
-| Private Creator | - | GEMS_PARM_01 | SIEMENS CSA HEADER | Philips Imaging |
+| Private Creator | - | Verify block reservation in the object | Verify block reservation in the object | Verify block reservation in the object |
 
 Older scanners typically populate only private tags; newer scanners may use standard tags. Always check both.
 
@@ -631,10 +650,10 @@ ORDER BY collection_id
 
 ### Data Quality Notes
 
-- Some collections show unrealistic values (e.g., b-value "1000000600") indicating encoding issues or different conventions
+- Some private tags encode packed values (e.g., GE diffusion fields); values such as "1000000600" are not directly interpretable as b-values without the vendor convention
 - IDC data is de-identified; private tags containing PHI may have been removed or modified
 - The same tag may have different meanings across software versions
-- Always verify query results visually using the [IDC Viewer](https://viewer.imaging.datacommons.cancer.gov/) before large-scale analysis
+- Inspect source headers and vendor documentation to validate private-tag interpretation; the [IDC Viewer](https://viewer.imaging.datacommons.cancer.gov/) provides complementary image QA
 
 ### Private Element Resources
 
@@ -660,9 +679,9 @@ from google.cloud import bigquery
 from idc_index import IDCClient
 
 # Initialize BigQuery client
-# Requires: the Python google-cloud-bigquery package
+# Requires: the Python google-cloud-bigquery[pandas] package
 # Auth: gcloud auth application-default login
-# Project: needed for billing even on public datasets (free tier applies)
+# Project: executes the query and supplies its quota/billing context
 bq_client = bigquery.Client(project="your-gcp-project-id")
 
 # Query for series with specific criteria
@@ -688,20 +707,28 @@ idc_client.download_from_selection(
 
 ## Cost and Optimization
 
-**Pricing:** $5 per TB scanned (first 1 TB/month free). Most users stay within free tier.
+**Pricing:** On-demand analysis is priced per TiB scanned; the reviewed US rate is $6.25/TiB
+with the first 1 TiB/month free. Verify the region and current
+[BigQuery pricing](https://cloud.google.com/bigquery/pricing) before estimating a job.
 
 **Minimize data scanned:**
 - Select only needed columns (not `SELECT *`)
-- Filter early with `WHERE` clauses
-- Use `LIMIT` when testing
-- Use `dicom_all` instead of `dicom_metadata` when possible (smaller)
+- Use partition/cluster filters when the table layout supports them
+- Use `LIMIT` to bound returned rows; it generally does not bound scanned bytes
+- Do not assume `dicom_all` is smaller than `dicom_metadata`; compare dry-run estimates
 - Preview queries in BQ console (free, shows bytes to scan)
 
 **Check cost before running:**
 ```python
-query_job = client.query(query, job_config=bigquery.QueryJobConfig(dry_run=True))
+query_job = bq_client.query(
+    query, job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+)
 print(f"Query will scan {query_job.total_bytes_processed / 1e9:.2f} GB")
 ```
+
+For execution, set `maximum_bytes_billed` in `QueryJobConfig` to your budget in bytes;
+BigQuery refuses a job estimated to exceed it. See
+[estimate and control costs](https://docs.cloud.google.com/bigquery/docs/best-practices-costs).
 
 **Use materialized tables:** IDC provides both views (`table_name_view`) and materialized tables (`table_name`). Always use the materialized tables (faster, lower cost).
 
@@ -713,7 +740,7 @@ Clinical data is in separate datasets with collection-specific tables. All clini
 - `bigquery-public-data.idc_current_clinical` - current release (for exploration)
 - `bigquery-public-data.idc_v{version}_clinical` - versioned datasets (for reproducibility)
 
-Currently there are ~130 clinical tables representing ~70 collections. Not all collections have clinical data (started in IDC v11).
+Discover the current clinical table inventory rather than relying on a fixed count. Not all collections have clinical data (started in IDC v11).
 
 ### Clinical Table Naming
 
@@ -788,7 +815,8 @@ SELECT
   d.Modality,
   c.clinical_stag,
   c.path_stag
-FROM `bigquery-public-data.idc_current.dicom_all` d
+FROM (SELECT DISTINCT collection_id, PatientID, StudyInstanceUID, Modality
+      FROM `bigquery-public-data.idc_current.dicom_all`) d
 JOIN `bigquery-public-data.idc_current_clinical.nlst_canc` c
   ON d.PatientID = c.dicom_patient_id
 WHERE d.collection_id = 'nlst'
@@ -835,12 +863,12 @@ See `references/clinical_data_guide.md` for detailed workflows using `idc-index`
 ## Common Errors
 
 **Issue: Billing must be enabled**
-- Cause: BigQuery requires a billing-enabled GCP project
-- Solution: Enable billing in Google Cloud Console or use idc-index mini-index instead
+- Cause: The requested operation exceeds sandbox capabilities or needs billing configuration
+- Solution: Check sandbox limits and project configuration, enable billing when needed, or use idc-index/public Parquet exports
 
 **Issue: Query exceeds resource limits**
 - Cause: Query scans too much data or is too complex
-- Solution: Add more specific WHERE filters, use LIMIT, break into smaller queries
+- Solution: Inspect dry-run bytes and the plan, use applicable partition/cluster filters, and break into smaller queries; LIMIT alone is not a scan-cost control
 
 **Issue: Column not found**
 - Cause: Field name typo or not in selected table

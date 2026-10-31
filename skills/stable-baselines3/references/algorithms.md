@@ -1,19 +1,23 @@
 # Stable Baselines3 Algorithm Reference
 
-This document provides detailed characteristics of all RL algorithms in Stable Baselines3 to help select the right algorithm for specific tasks.
+Targets SB3/SB3-Contrib 2.9.0. Algorithm performance and tuning suggestions below
+are task-dependent starting points, not guarantees or benchmark results.
+Sources: [action support](https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/algos.html),
+[algorithm APIs](https://stable-baselines3.readthedocs.io/en/v2.9.0/modules/ppo.html),
+[RL experiment guidance](https://stable-baselines3.readthedocs.io/en/v2.9.0/guide/rl_tips.html).
 
 ## Algorithm Comparison Table
 
 | Algorithm | Type | Action Space | Sample Efficiency | Training Speed | Use Case |
 |-----------|------|--------------|-------------------|----------------|----------|
-| **PPO** | On-Policy | All | Medium | Fast | General-purpose, stable |
-| **A2C** | On-Policy | All | Low | Very Fast | Quick prototyping, multiprocessing |
+| **PPO** | On-Policy | Box/Discrete/MultiDiscrete/MultiBinary | Medium | Fast | General-purpose, stable |
+| **A2C** | On-Policy | Box/Discrete/MultiDiscrete/MultiBinary | Low | Very Fast | Quick prototyping, multiprocessing |
 | **SAC** | Off-Policy | Continuous | High | Medium | Continuous control, sample-efficient |
 | **TD3** | Off-Policy | Continuous | High | Medium | Continuous control, deterministic |
 | **DDPG** | Off-Policy | Continuous | High | Medium | Continuous control (use TD3 instead) |
 | **DQN** | Off-Policy | Discrete | Medium | Medium | Discrete actions, Atari games |
-| **HER** | Off-Policy | All | Very High | Medium | Goal-conditioned tasks |
-| **RecurrentPPO** | On-Policy | All | Medium | Slow | Partial observability (POMDP) |
+| **HER** | Replay buffer | Box or Discrete, per underlying algorithm | Task-dependent | Task-dependent | Goal-conditioned tasks |
+| **RecurrentPPO** | On-Policy | Box/Discrete/MultiDiscrete/MultiBinary | Medium | Slow | Partial observability (POMDP) |
 
 ## Detailed Algorithm Characteristics
 
@@ -23,7 +27,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 
 **Strengths:**
 - Stable and reliable training
-- Works with all action space types (Discrete, Box, MultiDiscrete, MultiBinary)
+- Works with supported action space types (Discrete, Box, MultiDiscrete, MultiBinary)
 - Good balance between sample efficiency and training speed
 - Excellent for multiprocessing with vectorized environments
 - Easy to tune
@@ -51,7 +55,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 
 **Strengths:**
 - Very fast training (simpler than PPO)
-- Works with all action space types
+- Works with supported action space types
 - Good for quick prototyping
 - Memory efficient
 
@@ -72,14 +76,14 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 
 ### SAC (Soft Actor-Critic)
 
-**Overview:** Off-policy algorithm with entropy regularization, state-of-the-art for continuous control.
+**Overview:** Off-policy algorithm with entropy regularization, widely used for continuous control.
 
 **Strengths:**
 - Excellent sample efficiency
 - Very stable training
 - Automatic entropy tuning
 - Good exploration through stochastic policy
-- State-of-the-art for robotics
+- Suitable baseline for robotics
 
 **Weaknesses:**
 - Only supports continuous action spaces (Box)
@@ -98,7 +102,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 - `learning_starts`: 10000
 - `batch_size`: 256
 - `tau`: 0.005 (target network update rate)
-- `train_freq`: 1 with `gradient_steps=-1` for best performance
+- `train_freq`: 1 with `gradient_steps=-1` as one update-to-data ratio to evaluate
 
 ### TD3 (Twin Delayed DDPG)
 
@@ -124,7 +128,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 - `learning_rate`: 1e-3
 - `buffer_size`: 1M
 - `learning_starts`: 10000
-- `batch_size`: 100
+- `batch_size`: 256 (current TD3 default)
 - `policy_delay`: 2 (update policy every 2 critic updates)
 
 ### DDPG (Deep Deterministic Policy Gradient)
@@ -173,7 +177,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 
 **Variants:**
 - **QR-DQN**: Distributional RL version for better value estimates (SB3-Contrib)
-- **Maskable DQN**: For environments with action masking (SB3-Contrib)
+- **MaskablePPO**: Contrib supports invalid action masking with PPO; there is no released `MaskableDQN` in contrib 2.9.0.
 
 ### HER (Hindsight Experience Replay)
 
@@ -182,7 +186,7 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 **Strengths:**
 - Dramatically improves learning in sparse reward settings
 - Learns from failures by relabeling goals
-- Works with any off-policy algorithm (SAC, TD3, DQN)
+- Supports SB3 off-policy algorithms using compatible Dict replay buffers (SAC, TD3, DDPG, DQN)
 
 **Weaknesses:**
 - Only for goal-conditioned environments
@@ -193,7 +197,13 @@ This document provides detailed characteristics of all RL algorithms in Stable B
 - Sparse reward environments
 - Tasks where goal is clear but reward is binary
 
-**Usage:**
+**Usage (illustrative, supply the task environment):**
+
+The environment must return Dict observations containing `observation`,
+`achieved_goal`, and `desired_goal`, and expose vectorized `compute_reward`.
+Set `learning_starts` beyond the first full episode so HER can sample completed
+episodes. Pass an environment when loading a HER model, including for inference.
+
 ```python
 from stable_baselines3 import SAC, HerReplayBuffer
 
@@ -209,6 +219,12 @@ model = SAC(
 ```
 
 ### RecurrentPPO
+
+Use `from sb3_contrib import RecurrentPPO` and `"MlpLstmPolicy"`
+(or `"CnnLstmPolicy"` / `"MultiInputLstmPolicy"`). During manual prediction
+pass and retain `state`, and pass `episode_start=dones` from the preceding
+VecEnv step; initialize it to all True after reset. Core `evaluate_policy`
+handles those recurrent states. See the [official recurrent example](https://sb3-contrib.readthedocs.io/en/master/modules/ppo_recurrent.html).
 
 **Overview:** PPO with LSTM policy for handling partial observability.
 
@@ -267,8 +283,9 @@ model = SAC(
 ### For On-Policy Algorithms (PPO, A2C)
 
 ```python
-# Use vectorized environments for speed
-env = make_vec_env(env_id, n_envs=8, vec_env_cls=SubprocVecEnv)
+# Illustrative configuration; env_id and imports are supplied by the caller.
+# Use DummyVecEnv first; SubprocVecEnv calls require a guarded Python entry point.
+env = make_vec_env(env_id, n_envs=8)
 
 model = PPO(
     "MlpPolicy",
@@ -285,7 +302,7 @@ model = PPO(
 ### For Off-Policy Algorithms (SAC, TD3, DQN)
 
 ```python
-# Fewer environments, but use gradient_steps=-1 for efficiency
+# Use step-based collection with multiple environments.
 env = make_vec_env(env_id, n_envs=4)
 
 model = SAC(
@@ -303,28 +320,21 @@ model = SAC(
 ## Common Pitfalls
 
 1. **Using DQN with continuous actions** - DQN only works with discrete actions
-2. **Not using vectorized environments with PPO/A2C** - Wastes potential speedup
-3. **Using too few environments** - On-policy methods need many samples
+2. **Assuming parallelism always helps** - benchmark environment cost against IPC overhead
+3. **Changing n_envs without checking rollout size** - PPO uses n_envs * n_steps; choose batch_size dividing that product
 4. **Using too large replay buffer** - Can cause memory issues
 5. **Not tuning learning rate** - Critical for stable training
-6. **Ignoring reward scaling** - Normalize rewards for better learning
+6. **Mixing reward units** - if normalizing training rewards, report original rewards during evaluation
 7. **Wrong policy type** - Use "CnnPolicy" for images, "MultiInputPolicy" for dict observations
 
-## Performance Benchmarks
+## Reporting benchmark results
 
-Approximate expected performance (mean reward) on common benchmarks. Numbers are **indicative only** — actual results vary significantly with hyperparameters, training time, and random seed.
-
-### Continuous Control (MuJoCo, Gymnasium v4)
-- **HalfCheetah-v4**: PPO ~1800, SAC ~12000, TD3 ~9500
-- **Hopper-v4**: PPO ~2500, SAC ~3600, TD3 ~3600
-- **Walker2d-v4**: PPO ~3000, SAC ~5500, TD3 ~5000
-
-### Discrete Control (Atari)
-- **Breakout**: PPO ~400, DQN ~300
-- **Pong**: PPO ~20, DQN ~20
-- **Space Invaders**: PPO ~1000, DQN ~800
-
-*Note: Performance varies significantly with hyperparameters and training time.*
+Use the exact environment version, wrapper stack, action repeat, reward clipping,
+training budget and independent training seeds. Current Gymnasium MuJoCo IDs use
+v5 (for example `HalfCheetah-v5`); scores from v4 or different wrappers are not a
+reference target. Use the Zoo's versioned configurations and actual evaluation
+artifacts instead of unsourced expected reward numbers. The tiny tests for this
+skill do not measure comparative algorithm quality.
 
 ## SB3-Contrib (Experimental Algorithms)
 
@@ -338,7 +348,7 @@ These algorithms live in the separate **[sb3-contrib](https://github.com/Stable-
 | **RecurrentPPO** | Partial observability (POMDP) with LSTM policy |
 | **TQC** | Continuous control with distributional critics |
 
-Install with `uv pip install sb3-contrib`.
+Install with `uv pip install "sb3-contrib==2.9.0"`.
 
 ## Additional Resources
 
@@ -346,3 +356,13 @@ Install with `uv pip install sb3-contrib`.
 - **Hyperparameter Tuning**: Use Optuna for systematic tuning
 - **Custom Policies**: Extend base policies for custom network architectures
 - **PPO + MlpPolicy on CPU**: For small MLP tasks (CartPole, Pendulum), `device="cpu"` often trains faster than GPU
+
+### Masked evaluation
+
+For MaskablePPO, `True` marks a valid action. Use
+`sb3_contrib.common.maskable.callbacks.MaskableEvalCallback` and
+`sb3_contrib.common.maskable.evaluation.evaluate_policy`; core evaluators do not
+supply masks. In SubprocVecEnv, implement `action_masks()` inside the environment;
+`ActionMasker` is not the supported multiprocessing route. `check_env` samples
+actions without consulting masks, so validation needs a defined response to those
+actions. [Official masking contract](https://sb3-contrib.readthedocs.io/en/master/modules/ppo_mask.html).

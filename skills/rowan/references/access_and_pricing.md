@@ -1,37 +1,31 @@
 # Access, Pricing, and Credits
 
-Free-tier access, how credits are consumed per workflow, and typical cost estimates.
+Reviewed 2026-09-30 against [Rowan's official pricing page](https://rowansci.com/pricing).
+These are dated published terms, not a live account quote.
 
-## Access and pricing model
+- All users can create API keys. Free access covers core workflows; it does not
+  include every function exported by the Python package.
+- The public FAQ lists 500 signup credits and 20 credits per week for the general
+  free tier. Academic/team allowances differ; inspect the account's plan.
+- Listed compute rates are 1 credit/minute for CPU, 3 for GPU, and 7 for H100/H200.
+- The page lists purchased credits at US$0.04 each, expiring up to one year after purchase.
+- Advanced access includes macropKa, MSA, membrane permeability, protein/pose MD,
+  and batch docking; FEP is listed under enterprise/group offerings.
 
-Rowan uses a credit-based usage model. All users, including free-tier users, can create API keys and use the Python API.
+Check the current account rather than inferring entitlement from the importable SDK:
 
-### Free-tier access
+```python
+import rowan
+user = rowan.whoami()
+print(user.credits_available_string())
+print(user.enabled_workflows)
+# These are backend slugs; for example protein MD is molecular_dynamics.
+```
 
-- Access to all Rowan core workflows
-- 20 credits per week
-- 500 signup credits
-
-### Pricing and credit consumption
-
-Credits are consumed according to compute type:
-
-- **CPU**: 1 credit per minute
-- **GPU**: 3 credits per minute
-- **H100/H200 GPU**: 7 credits per minute
-
-Purchased credits are priced per credit and remain valid for up to one year from purchase.
-
-### Typical cost estimates
-
-| Workflow | Typical Runtime | Estimated Credits | Notes |
-|----------|----------------|-------------------|-------|
-| Descriptors | <1 min | 0.5–2 | Lightweight, good for triage |
-| pKa (single transition) | 2–5 min | 2–5 | Depends on molecule size |
-| MacropKa (pH 0–14) | 5–15 min | 5–15 | Broader sampling, higher cost |
-| Conformer search | 3–10 min | 3–10 | Ensemble quality matters |
-| Tautomer search | 2–5 min | 2–5 | Heterocyclic systems |
-| Docking (single ligand) | 5–20 min | 5–20 | Depends on pocket size, refinement |
-| Analogue docking series (10–50 ligands) | 30–120 min | 30–100+ | Shared reference frame |
-| MSA generation | 5–30 min | 5–30 | Sequence length dependent |
-| Protein-ligand cofolding | 15–60 min | 20–50+ | AI structure prediction, GPU-heavy |
+There is no validated per-workflow runtime/cost table in this skill. Molecular
+size, conformer counts, model/hardware, settings, and downstream calculations
+change usage. Use a representative pilot and inspect its charged credits, then
+budget the full campaign. Submission `max_credits` is a per-workflow ceiling;
+set it explicitly where appropriate, but do not mistake it for a campaign-wide
+limit or a guarantee the job can finish within that amount. Confirm account
+limits and current terms before scaling up.

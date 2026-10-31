@@ -26,6 +26,7 @@ import coverage_preflight  # noqa: E402
 import execution_plan  # noqa: E402
 import refget_digest_plan  # noqa: E402
 import tokenizer_manifest  # noqa: E402
+import _common  # noqa: E402
 
 CLI_NAMES = (
     "bed_validator.py",
@@ -186,6 +187,59 @@ class BedValidatorTests(unittest.TestCase):
 
 
 class PlanningTests(unittest.TestCase):
+    def test_fragment_scoring_does_not_approve_invalid_upstream_atac_queries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "fragments.tsv").write_text("chr1\t0\t20\tcell-a\t1\n")
+            (root / "peaks.bed").write_text("chr1\t0\t20\n")
+            arguments = ("--operation", "fragment-score", "--assembly", "toy",
+                         "--query", "fragments.tsv", "--universe", "peaks.bed",
+                         "--output", "counts.csv.gz")
+            result = run_cli(PLAN_CLI, *arguments, cwd=root)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("upstream_atac_right_cut_interval_invalid", payload(result)["errors"])
+            body_counts = run_cli(PLAN_CLI, *arguments, "--scoring-mode", "chip", cwd=root)
+            self.assertEqual(body_counts.returncode, 0)
+            (root / "counts.csv.gz_matrix.mtx.gz").write_bytes(b"existing")
+            barcodes = run_cli(PLAN_CLI, *arguments, "--barcode", cwd=root)
+            self.assertEqual(barcodes.returncode, 2)
+            self.assertIn("output_prefix_collisions", payload(barcodes)["errors"])
+
+    def test_consensus_rejects_impossible_support_threshold(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "a.bed").write_text("chr1\t0\t10\n")
+            result = run_cli(PLAN_CLI, "--operation", "consensus", "--assembly", "toy",
+                             "--input", "a.bed", "--input", "a.bed", "--min-count", "3",
+                             "--output", "consensus.bed", cwd=root)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("number of input sets", payload(result)["message"])
+
+    def test_overlap_plan_rejects_header_rows_ignored_by_python_reader(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "a.bed").write_text("# header\nchr1\t0\t10\n")
+            result = run_cli(PLAN_CLI, "--operation", "overlap", "--assembly", "toy",
+                             "--query", "a.bed", "--universe", "a.bed", cwd=root)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("query:cli_overlap_requires_header_free_bed", payload(result)["errors"])
+
+    def test_coverage_checks_derived_file_collisions_and_per_contig_rounding(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "chrom.sizes").write_text("chr1\t1\nchr2\t1\n")
+            (root / "input.bed").write_text("chr1\t0\t1\nchr2\t0\t1\n")
+            arguments = ("--input", "input.bed", "--chrom-sizes", "chrom.sizes",
+                         "--assembly", "toy", "--output-prefix", "coverage",
+                         "--step-size", "2")
+            result = run_cli("coverage_preflight.py", *arguments, cwd=root)
+            self.assertEqual(payload(result)["resource_estimate"]["dense_value_upper_bound"], 2)
+            (root / "coverage_core.bw").write_bytes(b"existing artifact")
+            rejected = run_cli("coverage_preflight.py", *arguments, cwd=root)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertEqual(payload(rejected)["errors"]["output_prefix_collisions"], 1)
+            self.assertEqual((root / "coverage_core.bw").read_bytes(), b"existing artifact")
+
     def test_overlap_and_coverage_plans_are_fixed_dry_runs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -316,7 +370,7 @@ class TokenizerAndRefgetTests(unittest.TestCase):
                 "schema_version": "1.0",
                 "assembly": "GRCh38",
                 "coordinate_system": "0-based-half-open",
-                "gtars_python_version": "0.9.2",
+                "gtars_python_version": "0.10.0",
                 "universe": {
                     "sha256": hashlib.sha256(universe.read_bytes()).hexdigest(),
                     "records": 2,
@@ -400,10 +454,28 @@ class TokenizerAndRefgetTests(unittest.TestCase):
 
 
 class ArtifactTests(unittest.TestCase):
+    def test_line_cap_bounds_the_read_before_allocating_a_whole_line(self):
+        class RecordingReader(io.BytesIO):
+            requested_sizes = []
+
+            def readline(self, size=-1):
+                self.requested_sizes.append(size)
+                return super().readline(size)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.txt"
+            path.write_bytes(b"A" * 30)
+            reader = RecordingReader(path.read_bytes())
+            with mock.patch.object(_common, "_open_binary_nofollow", return_value=reader):
+                with self.assertRaisesRegex(_common.SafetyError, "line-size limit"):
+                    list(_common.iter_text_lines(path, max_bytes=100, max_records=10,
+                                                max_line_bytes=8))
+            self.assertEqual(reader.requested_sizes, [9])
+
     def test_wheel_filename_and_checksum_are_screened_without_loading(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            wheel = root / "gtars-0.9.2-cp311-cp311-macosx_11_0_arm64.whl"
+            wheel = root / "gtars-0.10.0-cp311-cp311-macosx_11_0_arm64.whl"
             wheel.write_bytes(b"synthetic-wheel-envelope")
             digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
             (root / "SHA256SUMS").write_text(
@@ -421,7 +493,7 @@ class ArtifactTests(unittest.TestCase):
             result = payload(completed)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(result["ok"])
-            self.assertEqual(result["artifacts"][0]["version"], "0.9.2")
+            self.assertEqual(result["artifacts"][0]["version"], "0.10.0")
             self.assertTrue(result["artifacts"][0]["checksum_verified"])
             self.assertFalse(result["contract"]["native_code_loaded"])
             self.assertFalse(result["contract"]["archives_extracted"])

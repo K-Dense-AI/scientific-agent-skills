@@ -7,7 +7,7 @@ use Ensembl VEP (`ensembl.md` §6, `CADD=1`).
 
 Search: `https://regulomedb.org/regulome-search/`
 Help: https://regulomedb.org/regulome-help/
-All figures verified 2026-09-10.
+The `rs6983267` GET response was rechecked on 2026-09-30. Other numeric examples below are historical observations from 2026-09-10, not current guarantees.
 
 ## Request
 
@@ -49,7 +49,7 @@ POST /regulome-search/   with a JSON body
 ```
 
 HTTP 200, `@id` `/regulome-notfound`, `@type` includes `regulome-help`.
-The old POST API is dead. Use GET.
+That historical POST probe did not return search results. Use the documented GET search; an HTTP 200 alone does not establish a valid result.
 
 ## Traps
 

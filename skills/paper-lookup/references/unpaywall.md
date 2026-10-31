@@ -31,19 +31,13 @@ GET /v2/{doi}?email=you@example.com
 https://api.unpaywall.org/v2/10.1038/nature12373?email=you@example.com
 ```
 
-### 2. Search (unreliable)
+### 2. Search (retired)
 
 ```
 GET /v2/search?query={text}&email=you@example.com
 ```
 
-**Warning:** The search endpoint has been returning HTTP 500 errors as of March 2026. It may be deprecated or intermittently broken. Use DOI lookups instead -- find papers via PubMed/OpenAlex/Semantic Scholar first, then check OA status per-DOI.
-
-| Parameter | Description |
-|-----------|-------------|
-| `query` | Search text. Supports quoted phrases, `OR`, `-` negation |
-| `is_oa` | `true` or `false` -- filter by OA status |
-| `page` | Page number (1-indexed), 50 results per page |
+**Retired on 2026-09-18; returns HTTP 410 Gone.** Use OpenAlex `/works?search=...` for discovery, or find papers in PubMed/Semantic Scholar and use the supported Unpaywall DOI lookup. Do not retry the retired search route.
 
 ## Response Format
 
@@ -105,23 +99,15 @@ GET /v2/search?query={text}&email=you@example.com
 | `is_best` | Whether this is the `best_oa_location` |
 | `oa_date` | When first available at this location |
 
-### Search response
-```json
-{
-  "results": [
-    {
-      "response": {...},
-      "score": 42.5,
-      "snippet": "...text with <b>highlighted</b> matches..."
-    }
-  ]
-}
-```
-
 ## Typical Workflow
 
 1. You have a DOI from PubMed, Crossref, or another source
 2. Call Unpaywall with the DOI
-3. Check `is_oa` -- if true, use `best_oa_location.url_for_pdf` for the free PDF
+3. Check `is_oa` and `best_oa_location`; use `url_for_pdf` if non-null, otherwise the landing-page URL. OA does not guarantee a direct PDF.
 4. Check `oa_status` to understand what kind of OA it is
-5. If closed, `oa_locations` will be empty -- the article requires a subscription
+5. If closed, report that Unpaywall found no OA copy. This does not establish that every possible copy requires a subscription.
+
+## Official sources reviewed 2026-09-30
+
+- https://unpaywall.org/products/api
+- https://unpaywall.org/data-format

@@ -1,290 +1,182 @@
 # Open Notebook Examples
 
-## Complete Research Workflow
+These examples target the official **v1.14.0** contracts documented in
+[the API reference](api_reference.md). Run from this skill's `scripts/` directory
+with `requests` installed and `OPEN_NOTEBOOK_URL` pointing to the backend.
+The shared client adds `OPEN_NOTEBOOK_PASSWORD` as a Bearer token when set,
+checks HTTP errors, and uses finite timeouts. Examples are illustrative for a live
+instance; mocked tests verify request bodies, pagination, status handling, and
+response parsing without performing real ingestion or model calls.
 
-This example demonstrates a full research workflow: creating a notebook, adding sources, generating notes, chatting with the AI, and searching across materials.
+## Research workflow with explicit context
+
+The caller supplies an accessible source URL. Respect access rights; an abstract
+page or a paywall response is not the full paper. Set `embed=True` only when a
+configured embedding model should process the text. This example uses full text
+for chat and keyword search, so it does not request embeddings.
 
 ```python
-import requests
-import time
-
-BASE_URL = "http://localhost:5055/api"
-
-
-def complete_research_workflow():
-    """End-to-end research workflow with Open Notebook."""
-
-    # 1. Create a research notebook
-    notebook = requests.post(f"{BASE_URL}/notebooks", json={
-        "name": "Drug Resistance in Cancer",
-        "description": "Review of mechanisms of drug resistance in solid tumors"
-    }).json()
-    notebook_id = notebook["id"]
-    print(f"Created notebook: {notebook_id}")
-
-    # 2. Add sources from URLs
-    urls = [
-        "https://www.nature.com/articles/s41568-020-0281-y",
-        "https://www.cell.com/cancer-cell/fulltext/S1535-6108(20)30211-8",
-    ]
-
-    source_ids = []
-    for url in urls:
-        source = requests.post(f"{BASE_URL}/sources", data={
-            "url": url,
-            "notebook_id": notebook_id,
-            "process_async": "true"
-        }).json()
-        source_ids.append(source["id"])
-        print(f"Added source: {source['id']}")
-
-    # 3. Wait for processing to complete
-    for source_id in source_ids:
-        while True:
-            status = requests.get(
-                f"{BASE_URL}/sources/{source_id}/status"
-            ).json()
-            if status.get("status") in ("completed", "failed"):
-                break
-            time.sleep(5)
-        print(f"Source {source_id}: {status['status']}")
-
-    # 4. Create a chat session and ask questions
-    session = requests.post(f"{BASE_URL}/chat/sessions", json={
-        "notebook_id": notebook_id,
-        "title": "Resistance Mechanisms"
-    }).json()
-
-    answer = requests.post(f"{BASE_URL}/chat/execute", json={
-        "session_id": session["id"],
-        "message": "What are the primary mechanisms of drug resistance in solid tumors?",
-        "context": {"include_sources": True, "include_notes": True}
-    }).json()
-    print(f"AI response: {answer}")
-
-    # 5. Search across materials
-    results = requests.post(f"{BASE_URL}/search", json={
-        "query": "efflux pump resistance mechanism",
-        "search_type": "vector",
-        "limit": 5
-    }).json()
-    print(f"Found {results['total']} search results")
-
-    # 6. Create a human note summarizing findings
-    note = requests.post(f"{BASE_URL}/notes", json={
-        "title": "Summary of Resistance Mechanisms",
-        "content": "Key findings from the literature...",
-        "note_type": "human",
-        "notebook_id": notebook_id
-    }).json()
-    print(f"Created note: {note['id']}")
+from _common import record_path, request_json
+from notebook_management import create_notebook
+from source_ingestion import add_url_source, wait_for_processing
+from chat_interaction import build_context, create_chat_session, send_chat_message
 
 
-if __name__ == "__main__":
-    complete_research_workflow()
+def research_workflow(source_url):
+    notebook = create_notebook("Study design review", "Inspect primary methods evidence")
+    source = add_url_source(notebook["id"], source_url, embed=False)
+    wait_for_processing(source["id"])
+    extracted = request_json("GET", "/sources/" + record_path(source["id"]))
+    if not (extracted.get("full_text") or "").strip():
+        raise RuntimeError("Extraction produced no research text")
+    built = build_context(notebook["id"], source_ids=[source["id"]], note_ids=[])
+    selected = built["context"]["sources"]
+    if not selected or not any(item.get("full_text") for item in selected):
+        raise RuntimeError("Full source text was not included in chat context")
+    session = create_chat_session(notebook["id"], "Methods review")
+    answer = send_chat_message(
+        session["id"], "Extract the study design and sample size; cite the source. "
+        "State what is missing and distinguish reported facts from inference.",
+        built["context"],
+    )
+    ai_messages = [m for m in answer["messages"] if m["type"] == "ai"]
+    if not ai_messages:
+        raise RuntimeError("Chat returned no AI message")
+    note = request_json("POST", "/notes", json={
+        "notebook_id": notebook["id"], "title": "Methods extraction - unverified draft",
+        "note_type": "ai", "content": ai_messages[-1]["content"],
+    })
+    return {"notebook": notebook, "source": extracted, "note": note,
+            "context_tokens": built["token_count"]}
 ```
 
-## File Upload Example
+Review source extraction and citations before interpreting the note as evidence.
+For sensitive projects, inspect the assembled context before invoking chat. Keep
+records after the workflow for provenance; cleanup is an explicit later action.
+
+## Uploads and complete source listing
 
 ```python
-import requests
-
-BASE_URL = "http://localhost:5055/api"
+from source_ingestion import upload_file_source, wait_for_processing, iter_sources
 
 
-def upload_research_papers(notebook_id, file_paths):
-    """Upload multiple research papers to a notebook."""
+def upload_papers(notebook_id, file_paths):
+    uploaded = []
     for path in file_paths:
-        with open(path, "rb") as f:
-            response = requests.post(
-                f"{BASE_URL}/sources",
-                data={
-                    "notebook_id": notebook_id,
-                    "process_async": "true",
-                },
-                files={"file": (path.split("/")[-1], f)},
-            )
-        if response.status_code == 200:
-            print(f"Uploaded: {path}")
-        else:
-            print(f"Failed: {path} - {response.text}")
+        source = upload_file_source(notebook_id, path, process_async=True, embed=False)
+        wait_for_processing(source["id"])
+        uploaded.append(source["id"])
+    return uploaded
 
 
-# Usage
-upload_research_papers("notebook:abc123", [
-    "papers/study_1.pdf",
-    "papers/study_2.pdf",
-    "papers/supplementary.docx",
-])
+def all_notebook_sources(notebook_id):
+    return list(iter_sources(notebook_id, page_size=100))
 ```
 
-## Podcast Generation Example
+The upload helper sends `type=upload` and multipart bytes; it never assumes that
+a client file path exists on the server. Long audio/video or OCR may require a
+longer polling deadline and optional extraction dependencies. A completed source
+can still lack embeddings; inspect `embedded_chunks` before vector retrieval.
+
+## Search and Ask
 
 ```python
-import requests
-import time
-
-BASE_URL = "http://localhost:5055/api"
+from _common import request_json
+from chat_interaction import search_knowledge_base, ask_question
 
 
-def generate_research_podcast(notebook_id):
-    """Generate a podcast episode from notebook contents."""
-
-    # Get available episode and speaker profiles
-    # (these must be configured in the UI or via API first)
-
-    # Submit podcast generation job
-    job = requests.post(f"{BASE_URL}/podcasts/generate", json={
-        "notebook_id": notebook_id,
-        "episode_profile_id": "episode_profile:default",
-        "speaker_profile_ids": [
-            "speaker_profile:host",
-            "speaker_profile:expert"
-        ]
-    }).json()
-    job_id = job["job_id"]
-    print(f"Podcast generation started: {job_id}")
-
-    # Poll for completion
-    while True:
-        status = requests.get(f"{BASE_URL}/podcasts/jobs/{job_id}").json()
-        print(f"Status: {status.get('status', 'processing')}")
-        if status.get("status") in ("completed", "failed"):
-            break
-        time.sleep(10)
-
-    if status["status"] == "completed":
-        # Download the audio
-        episode_id = status["episode_id"]
-        audio = requests.get(
-            f"{BASE_URL}/podcasts/episodes/{episode_id}/audio"
-        )
-        with open("research_podcast.mp3", "wb") as f:
-            f.write(audio.content)
-        print("Podcast saved to research_podcast.mp3")
-
-
-if __name__ == "__main__":
-    generate_research_podcast("notebook:abc123")
+def search_and_answer(query):
+    results = search_knowledge_base(query, search_type="vector", limit=10)
+    defaults = request_json("GET", "/models/defaults")
+    model_id = defaults.get("default_chat_model")
+    if not model_id or not defaults.get("default_embedding_model"):
+        raise RuntimeError("Configure chat and embedding models first")
+    answer = ask_question(query, model_id, model_id, model_id)
+    return results["total_count"], results["results"], answer["answer"]
 ```
 
-## Custom Transformation Pipeline
+This searches **all** eligible materials on v1.14.0. The Ask call performs its own
+retrieval; it does not synthesize only the ten preceding search results. Do not
+pass `source_ids` and claim source-restricted retrieval. Main after the release
+adds notebook scoping, but it must be verified in the installed OpenAPI schema.
+Select explicit source context for a bounded notebook chat on v1.14.0 instead.
+
+## Custom transformation
 
 ```python
-import requests
-
-BASE_URL = "http://localhost:5055/api"
+from _common import request_json
 
 
-def create_and_run_transformations():
-    """Create custom transformations and apply them to content."""
-
-    # Create a methodology extraction transformation
-    transform = requests.post(f"{BASE_URL}/transformations", json={
-        "name": "extract_methods",
-        "title": "Extract Methods",
-        "description": "Extract and structure methodology from papers",
-        "prompt": (
-            "Extract the methodology section from this text. "
-            "Organize into: Study Design, Sample Size, Statistical Methods, "
-            "and Key Variables. Format as structured markdown."
-        ),
+def extract_methods(text, model_id):
+    transformation = request_json("POST", "/transformations", json={
+        "name": "review_methods", "title": "Review Methods",
+        "description": "Extract reported methods with provenance and omissions",
+        "prompt": "Extract study design, sample size, variables and statistical "
+                  "methods. Quote short supporting passages. Mark missing details; "
+                  "do not invent values or infer a design from the conclusions.",
         "apply_default": False,
-    }).json()
-
-    # Get models to find a suitable one
-    models = requests.get(f"{BASE_URL}/models", params={
-        "model_type": "llm"
-    }).json()
-    model_id = models[0]["id"]
-
-    # Execute the transformation
-    result = requests.post(f"{BASE_URL}/transformations/execute", json={
-        "transformation_id": transform["id"],
-        "input_text": "We conducted a randomized controlled trial with...",
+    })
+    result = request_json("POST", "/transformations/execute", json={
+        "transformation_id": transformation["id"], "input_text": text,
         "model_id": model_id,
-    }).json()
-    print(f"Extracted methods:\n{result['output']}")
-
-
-if __name__ == "__main__":
-    create_and_run_transformations()
+    })
+    return result["output"]
 ```
 
-## Semantic Search with Filtering
+Select `model_id` from `GET /api/models?type=language`, matching a suitable registered
+model. Execution returns text without automatically persisting a note. Record the
+source/model/transformation IDs with any saved analysis and verify quantitative
+claims against original tables, figures, and units.
+
+## Podcast generation from reviewed text
+
+Choose names from `GET /api/episode-profiles` and `GET /api/speaker-profiles`.
+One speaker profile contains the cast; the API does not accept a speaker ID list.
+The profile's language and speech models must already be configured. This operation
+can incur provider charges.
 
 ```python
-import requests
-
-BASE_URL = "http://localhost:5055/api"
-
-
-def advanced_search(notebook_id, query):
-    """Perform filtered semantic search and get AI answers."""
-
-    # Get sources from a specific notebook
-    sources = requests.get(f"{BASE_URL}/sources", params={
-        "notebook_id": notebook_id
-    }).json()
-    source_ids = [s["id"] for s in sources]
-
-    # Vector search restricted to notebook sources
-    results = requests.post(f"{BASE_URL}/search", json={
-        "query": query,
-        "search_type": "vector",
-        "limit": 10,
-        "source_ids": source_ids,
-        "min_similarity": 0.75,
-    }).json()
-
-    print(f"Found {results['total']} results:")
-    for result in results["results"]:
-        print(f"  - {result.get('title', 'Untitled')} "
-              f"(similarity: {result.get('similarity', 'N/A')})")
-
-    # Get an AI-powered answer
-    answer = requests.post(f"{BASE_URL}/search/ask/simple", json={
-        "query": query,
-    }).json()
-    print(f"\nAI Answer: {answer['response']}")
+from pathlib import Path
+import time
+from _common import record_path, request, request_json
 
 
-if __name__ == "__main__":
-    advanced_search("notebook:abc123", "CRISPR gene editing efficiency")
+def generate_podcast(content, episode_profile, speaker_profile, output_path,
+                     timeout=1800):
+    if timeout <= 0:
+        raise ValueError("timeout must be positive")
+    job = request_json("POST", "/podcasts/generate", json={
+        "episode_profile": episode_profile, "speaker_profile": speaker_profile,
+        "episode_name": "Reviewed methods discussion", "content": content,
+    })
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Podcast job {job['job_id']} still pending")
+        status = request_json("GET", "/podcasts/jobs/" + record_path(job["job_id"]),
+                              timeout=min(30, remaining))
+        if status["status"] in {"failed", "error", "canceled", "cancelled"}:
+            raise RuntimeError(status.get("error_message") or "Podcast generation failed")
+        if status["status"] == "completed":
+            episode_id = (status.get("result") or {}).get("episode_id")
+            if not episode_id:
+                raise RuntimeError("Completed job returned no episode_id")
+            break
+        time.sleep(min(5, max(0, deadline - time.monotonic())))
+    audio_path = "/podcasts/episodes/" + record_path(episode_id) + "/audio"
+    with request("GET", audio_path, stream=True) as response:
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
+        if content_type != "audio/mpeg":
+            raise RuntimeError(f"Unexpected podcast content type: {content_type}")
+        with Path(output_path).open("xb") as handle:
+            for chunk in response.iter_content(chunk_size=65536):
+                if chunk:
+                    handle.write(chunk)
+    return episode_id
 ```
 
-## Model Management
-
-```python
-import requests
-
-BASE_URL = "http://localhost:5055/api"
-
-
-def setup_ai_models():
-    """Configure AI models for Open Notebook."""
-
-    # Check available providers
-    providers = requests.get(f"{BASE_URL}/models/providers").json()
-    print(f"Available providers: {providers}")
-
-    # Discover models from a provider
-    discovered = requests.get(
-        f"{BASE_URL}/models/discover/openai"
-    ).json()
-    print(f"Discovered {len(discovered)} OpenAI models")
-
-    # Sync models to make them available
-    requests.post(f"{BASE_URL}/models/sync/openai")
-
-    # Auto-assign default models
-    requests.post(f"{BASE_URL}/models/auto-assign")
-
-    # Check current defaults
-    defaults = requests.get(f"{BASE_URL}/models/defaults").json()
-    print(f"Default models: {defaults}")
-
-
-if __name__ == "__main__":
-    setup_ai_models()
-```
+Use a new output filename. A download interrupted after writing begins leaves a
+partial file; inspect it before reuse. Fetch the episode and review its transcript
+and scientific claims before distributing the audio. A timed-out generation request
+may still run on the server—inspect jobs/episodes rather than submitting duplicates.

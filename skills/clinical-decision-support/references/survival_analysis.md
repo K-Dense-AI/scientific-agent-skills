@@ -80,7 +80,7 @@ Distinguish:
 
 State which question the method answers. A subdistribution hazard ratio is not directly a risk ratio. When modeling several event types, check that resulting probability estimates are coherent.
 
-Primary reference: [Austin, Lee, and Fine, competing risks](https://pubmed.ncbi.nlm.nih.gov/26858290/).
+Primary reference: [Austin, Lee, and Fine, competing risks](https://pmc.ncbi.nlm.nih.gov/articles/PMC4741409/).
 
 ## Bias and Missingness
 

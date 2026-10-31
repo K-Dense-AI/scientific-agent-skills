@@ -2,13 +2,13 @@
 
 ## Supported baseline
 
-Verified 2026-07-23:
+Verified 2026-10-01:
 
 - `fluidsim==0.9.0`, released on PyPI 2025-12-04.
 - FluidSim package metadata requires Python `>=3.11` and classifies Python
   3.11–3.14.
 - `fluidsim-core==0.9.0`, released 2025-12-03.
-- `fluidfft==0.4.5`, released 2025-10-13, requires Python `>=3.11`.
+- `fluidfft==0.4.5`, released on PyPI 2025-10-14, requires Python `>=3.11`.
 - `pyFFTW==0.15.1`, released 2025-10-22, requires Python `>=3.11`.
 - `mpi4py==4.1.2`, released 2026-05-16, requires Python `>=3.8`.
 
@@ -31,7 +31,7 @@ environment. Record the generated lock and artifact hashes.
 Preferred project workflow:
 
 ```bash
-uv init --python 3.11
+uv init --python 3.12
 uv add "fluidsim[fft]==0.9.0" "fluidfft==0.4.5" "pyFFTW==0.15.1"
 uv lock
 uv sync --frozen
@@ -49,7 +49,7 @@ Check the lock into the study repository. Record:
 For an isolated smoke environment:
 
 ```bash
-uv venv --python 3.11
+uv venv --python 3.12
 uv pip install "fluidsim[fft]==0.9.0" "fluidfft==0.4.5" "pyFFTW==0.15.1"
 ```
 
@@ -60,6 +60,12 @@ Bare `fluidsim==0.9.0` supports parts of the framework and analysis stack, but a
 verified local smoke test found that importing NS2D succeeded while
 `Simul.create_default_params()` failed without `fluidfft`. Install the `fft`
 extra for pseudospectral solvers.
+
+Runtime coverage on 2026-10-01: Python 3.12.10, FluidDyn 0.9.0, NumPy 2.5.3,
+SciPy 1.18.1, h5py 3.16.0, h5netcdf 1.8.1, Transonic 0.8.0, and xarray 2026.9.0.
+Sequential pyFFTW construction, transforms, state serialization, output classes,
+and restart were executed. Native-plugin/MPI installation commands below are
+illustrative; no compiler, distributed allocation, or GPU was exercised.
 
 ## Sequential FFT choices
 
@@ -73,7 +79,8 @@ FluidFFT 0.4.5 registers:
 
 - `fft2d.with_pyfftw`
 - `fft3d.with_pyfftw`
-- `fft2d.with_dask` when Dask is installed
+- `fft2d.with_dask` is advertised by the core distribution even when the
+  optional Dask dependency is absent; an advertised method can fail to import.
 
 The native FFTW plugin is separately versioned:
 
@@ -98,14 +105,17 @@ It requires discoverable FFTW headers/libraries and a working native build
 toolchain. pyFFTW wheels bundle supported binaries on many 64-bit platforms;
 source builds require FFTW `>=3.3`, Cython, and a compiler.
 
-Discover only methods actually installed on the current host:
+Discover registered plugin entry points on the current host:
 
 ```bash
 fluidfft-get-methods
 ```
 
-Do not copy a method name from documentation and assume its plugin or ABI is
-usable. Run a tiny transform/FluidSim pilot and record the selected method.
+`get_methods()`/`fluidfft-get-methods` list entry points without importing their
+implementations. In the reviewed environment `fft2d.with_dask` was listed but
+`import_fft_class("fft2d.with_dask")` failed because Dask was absent. Do not
+equate discovery with a usable dependency stack or ABI. Run a tiny transform
+and FluidSim pilot, then record the selected method.
 
 ## MPI and distributed FFT
 
@@ -241,11 +251,11 @@ Run in this order:
 Do not run the full upstream test suite or MPI tests on a login node without
 approval; they can compile, spawn processes, and consume resources.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [FluidSim PyPI](https://pypi.org/project/fluidsim/) — 0.9.0 metadata and
   2025-12-04 release.
-- [FluidSim 0.9 source metadata](https://github.com/fluiddyn/fluidsim/blob/branch/default/pyproject.toml)
+- [FluidSim 0.9 source metadata](https://github.com/fluiddyn/fluidsim/blob/0.9.0/pyproject.toml)
   — dependencies, extras, entry points, Python requirement.
 - [Install and configure](https://fluidsim.readthedocs.io/en/latest/install.html)
   — extras, native plugins, MPI/HDF5, and environment variables.

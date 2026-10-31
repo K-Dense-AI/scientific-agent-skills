@@ -2,20 +2,20 @@
 name: modal
 description: Modal is a serverless cloud platform for running Python on demand, including on-demand GPUs. Use when deploying or serving AI/ML models, running GPU-accelerated workloads (training, fine-tuning, inference), serving web endpoints, scheduling batch jobs, or scaling Python code to cloud containers with the Modal SDK.
 license: Apache-2.0
+compatibility: Requires Python 3.10-3.14 and modal 1.6.0. Cloud execution needs a Modal account, authentication and network access; GPU use needs a payment method. Workload dependencies belong in their container Images.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-09-30"
+  tested-sdk: "modal 1.6.0"
   skill-author: K-Dense Inc.
   openclaw:
     envVars:
     - name: MODAL_TOKEN_ID
-      required: true
+      required: false
       description: Modal token id.
     - name: MODAL_TOKEN_SECRET
-      required: true
-      description: Modal token secret.
-    - name: DATABASE_URL
       required: false
-      description: Optional database URL for examples.
+      description: Modal token secret.
 ---
 
 # Modal
@@ -23,15 +23,15 @@ metadata:
 ## Overview
 
 Modal is a cloud platform for running Python code serverlessly, with a focus on AI/ML workloads. Key capabilities:
-- **GPU compute** on demand (T4, L4, A10, L40S, A100, H100, H200, B200)
+- **GPU compute** on demand (including H100, H200, B200 and B300)
 - **Serverless functions** with autoscaling from zero to thousands of containers
 - **Custom container images** built entirely in Python code
 - **Persistent storage** via Volumes for model weights and datasets
 - **Web endpoints** for serving models and APIs
 - **Scheduled jobs** via cron or fixed intervals
-- **Sub-second cold starts** for low-latency inference
+- **Container reuse** and warm pools to reduce cold starts (model loading still takes time)
 
-Everything in Modal is defined as code — no YAML, no Dockerfiles required (though both are supported).
+Modal Apps and Images are defined in Python; existing Dockerfiles are also supported.
 
 ## When to Use This Skill
 
@@ -50,10 +50,13 @@ Use this skill when:
 ### Install
 
 ```bash
-uv pip install modal
+uv pip install "modal==1.6.0"
 ```
 
-The Modal Python SDK supports Python 3.10–3.14. This skill targets the stable `modal>=1.0` API (current release: 1.4.x).
+Reviewed against SDK 1.6.0 and current [release notes](https://modal.com/docs/sdk/py/releases).
+Local SDK construction and selected handlers were tested; remote builds, deployments,
+GPU inference and cloud limits were not executed. Snippets using model/data placeholders
+or third-party workloads are illustrative and require their stated dependencies.
 
 ### Authenticate
 
@@ -61,9 +64,9 @@ Prefer existing credentials before creating new ones. Only the two Modal-specifi
 variables below are relevant — do not read, load, or expose any other environment
 variables or `.env` file contents:
 
-1. Check whether `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are already set in the current environment.
+1. Reuse an existing Modal profile, or check whether both `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are set; report presence only.
 2. If not, look up only those two keys in a local `.env` file (ignore all other entries) and load them if appropriate for the workflow.
-3. Only fall back to interactive `modal setup` or generating fresh tokens if neither source already provides those two values.
+3. Only fall back to interactive `modal setup` if no usable profile or token pair exists. The SDK supports profiles in `.modal.toml`; environment tokens are optional when a profile authenticates.
 
 ```bash
 modal setup
@@ -76,9 +79,9 @@ export MODAL_TOKEN_ID=<your-token-id>
 export MODAL_TOKEN_SECRET=<your-token-secret>
 ```
 
-If tokens are not already available in the environment or `.env`, generate them at https://modal.com/settings
+If neither an existing profile nor a token pair is available, create credentials at https://modal.com/settings
 
-Modal offers a free tier with $30/month in credits.
+Check [current pricing](https://modal.com/pricing) and workspace quotas before sizing a run. GPU use requires a payment method even when credits remain.
 
 **Reference**: See `references/getting-started.md` for detailed setup and first app walkthrough.
 
@@ -118,10 +121,10 @@ image = (
     .apt_install("git")
 )
 
-@app.function(image=image)
+@app.function(image=image, gpu="L40S")
 def inference(prompt):
     from transformers import pipeline
-    pipe = pipeline("text-generation", model="meta-llama/Llama-3-8B")
+    pipe = pipeline("text-generation", model="openai-community/gpt2", device=0)
     return pipe(prompt)
 ```
 
@@ -158,13 +161,14 @@ def flexible_inference():
     ...
 ```
 
-Available GPUs: T4, L4, A10, L40S, A100-40GB, A100-80GB, RTX-PRO-6000, H100, H200, B200, B200+
+Available GPU strings include T4, L4, A10, L40S, A100, A100-40GB, A100-80GB, RTX-PRO-6000, H100, H200, B200, B200+ and B300.
 
 - GPUs are always specified as **strings** (e.g. `gpu="H100"`, `gpu="H100:4"`). The old `modal.gpu.*` objects are deprecated as of v0.73.31.
 - Up to 8 GPUs per container (except A10: up to 4)
 - L40S is recommended for inference (cost/performance balance, 48 GB VRAM)
-- H100/A100 can be auto-upgraded to H200/A100-80GB at no extra cost
+- H100/A100 can be auto-upgraded to H200/A100-80GB at no extra cost; explicit A100-40GB selects 40 GB
 - Use `gpu="H100!"` to prevent auto-upgrade
+- B300 and B200+ require CUDA 13.1+ compatibility; RTX-PRO-6000 has 96 GB VRAM
 
 **Reference**: See `references/gpu.md` for GPU selection guidance and multi-GPU training.
 
@@ -177,13 +181,19 @@ vol = modal.Volume.from_name("model-weights", create_if_missing=True)
 
 @app.function(volumes={"/data": vol})
 def save_model():
+    import torch
+    model = train_model()  # Application-defined training code
     # Write to the mounted path
     with open("/data/model.pt", "wb") as f:
         torch.save(model.state_dict(), f)
+    vol.commit()
 
 @app.function(volumes={"/data": vol})
 def load_model():
-    model.load_state_dict(torch.load("/data/model.pt"))
+    import torch
+    vol.reload()
+    model = MyModel()  # Application-defined architecture
+    model.load_state_dict(torch.load("/data/model.pt", weights_only=True))
 ```
 
 - Optimized for write-once, read-many workloads (model weights, datasets)
@@ -221,7 +231,9 @@ Or from a `.env` file: `modal.Secret.from_dotenv()`
 Serve models and APIs as web endpoints:
 
 ```python
-@app.function()
+web_image = modal.Image.debian_slim().uv_pip_install("fastapi[standard]==0.136.3")
+
+@app.function(image=web_image)
 @modal.fastapi_endpoint()
 def predict(text: str):
     return {"result": model.predict(text)}
@@ -315,6 +327,7 @@ def heavy_computation():
 ```
 
 Defaults: 0.125 CPU cores, 128 MiB memory. Billed on max(request, usage).
+Use `cpu=(request, limit)` and `memory=(request, limit)` for explicit limits.
 
 **Reference**: See `references/resources.md` for limits and billing details.
 
@@ -351,19 +364,26 @@ app = modal.App.lookup("sandbox-demo", create_if_missing=True)
 sb = modal.Sandbox.create(
     app=app,
     image=modal.Image.debian_slim(),
-    outbound_cidr_allowlist=["10.0.0.0/8"],
+    block_network=True,
+    timeout=60,
 )
 
-# Stream files in/out via the filesystem API (beta)
-sb.filesystem.write_text("print(2 ** 10)\n", "/tmp/job.py")
-contents = sb.filesystem.read_text("/tmp/job.py")
-
-sb.terminate()
+try:
+    sb.filesystem.write_text("print(2 ** 10)\n", "/tmp/job.py")
+    proc = sb.exec("python", "/tmp/job.py")
+    output = proc.stdout.read()
+    proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError("Sandbox command failed")
+    print(output)
+finally:
+    sb.terminate(wait=True)
 ```
 
 - Run commands inside the sandbox with its `exec` method (e.g. run `python /tmp/job.py`) and read stdout from the returned process handle — see `references/api_reference.md`
 - Restrict connectivity with `outbound_cidr_allowlist=[...]` / `inbound_cidr_allowlist=[...]`
-- Snapshot the filesystem with `sb.snapshot_filesystem()` to reuse as a base image
+- SDK 1.6 `Sandbox.create()` blocks until scheduled; creation can raise `ResourceExhaustedError`
+- `sb.snapshot_filesystem()` returns an Image with a default 30-day TTL, not permanent storage
 - Ideal for code interpreters, agent tool execution, and per-user isolation
 
 ## Common Workflow Patterns
@@ -377,43 +397,29 @@ app = modal.App("llm-service")
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .uv_pip_install("vllm")
+    .uv_pip_install("vllm==0.21.0", "fastapi[standard]==0.136.3")
 )
 
-@app.cls(gpu="H100", image=image, min_containers=1)
+@app.cls(gpu="H100", image=image, max_containers=1)
 class LLMService:
     @modal.enter()
     def load(self):
         from vllm import LLM
-        self.llm = LLM(model="meta-llama/Llama-3-70B")
+        self.llm = LLM(model="Qwen/Qwen3-8B", max_model_len=4096)
 
-    @modal.method()
-    @modal.fastapi_endpoint(method="POST")
-    def generate(self, prompt: str, max_tokens: int = 256):
-        outputs = self.llm.generate([prompt], max_tokens=max_tokens)
+    @modal.fastapi_endpoint(method="POST", requires_proxy_auth=True)
+    def generate(self, body: dict):
+        from vllm import SamplingParams
+        params = SamplingParams(max_tokens=256)
+        outputs = self.llm.generate([body["prompt"]], sampling_params=params)
         return {"text": outputs[0].outputs[0].text}
 ```
 
 ### Batch Processing Pipeline
 
-```python
-app = modal.App("batch-pipeline")
-vol = modal.Volume.from_name("pipeline-data", create_if_missing=True)
-
-@app.function(volumes={"/data": vol}, cpu=4.0, memory=8192)
-def process_chunk(chunk_id: int):
-    import pandas as pd
-    df = pd.read_parquet(f"/data/input/chunk_{chunk_id}.parquet")
-    result = heavy_transform(df)
-    result.to_parquet(f"/data/output/chunk_{chunk_id}.parquet")
-    return len(result)
-
-@app.local_entrypoint()
-def main():
-    chunk_ids = list(range(100))
-    results = list(process_chunk.map(chunk_ids))
-    print(f"Processed {sum(results)} total rows")
-```
+Use `.map()` over independent inputs, unique output paths per run/chunk, and an
+explicit Volume commit before returning. See the complete illustrative batch
+pattern in `references/examples.md`.
 
 ### Scheduled Data Pipeline
 
@@ -449,7 +455,7 @@ def etl_job():
 
 ## Security Notes
 
-- **Credentials:** Only `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are needed to authenticate. Do not read, log, or forward any other environment variables or `.env` entries.
+- **Credentials:** Reuse an existing profile or the two `MODAL_TOKEN_*` values for SDK authentication. Read only workload-specific keys when explicitly needed for that workload; never dump environments or forward platform tokens to containers.
 - **Subprocess / custom servers:** Some patterns here (multi-GPU training launchers, `@modal.web_server` apps) call `subprocess.run`/`subprocess.Popen` or shell commands during builds. Keep argument lists fixed and hardcoded. Never construct subprocess or shell arguments from unsanitized user input — pass untrusted values as data (files, env vars, stdin), not as command arguments.
 - **Untrusted code:** Run user- or model-generated code inside a `modal.Sandbox` (see above), not a regular Function, and restrict network access with CIDR allowlists.
 

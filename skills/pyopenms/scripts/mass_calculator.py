@@ -34,7 +34,7 @@ def report_isotopes(formula, n, csv=None):
     for iso in dist.getContainer():
         mz = iso.getMZ()
         prob = iso.getIntensity()
-        print(f"  m/z {mz:.4f}  rel.abundance {prob*100:6.2f}%")
+        print(f"  neutral mass {mz:.4f} Da  rel.abundance {prob*100:6.2f}%")
         rows.append((mz, prob))
     if csv:
         import csv as csvmod
@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--negative", action="store_true", help="Report negative-mode m/z")
     parser.add_argument("--csv", help="Write isotope pattern to CSV")
     args = parser.parse_args()
+    if any(z <= 0 for z in args.charges):
+        parser.error("--charges must contain positive charge magnitudes")
 
     if not args.peptide and not args.formula:
         parser.error("provide --peptide and/or --formula")

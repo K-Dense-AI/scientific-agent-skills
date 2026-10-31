@@ -231,6 +231,13 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(f"output already exists (pass --force to replace it): {args.output}")
     if not args.output.parent.is_dir():
         raise ValueError(f"output directory does not exist: {args.output.parent}")
+    if args.output.resolve() in {args.queries.resolve(), args.references.resolve()}:
+        raise ValueError("output must not replace an input spectrum file")
+    for name in ("tolerance", "min_score", "relative_intensity", "mz_min", "mz_max",
+                 "remove_precursor_window", "bin_width"):
+        value = getattr(args, name)
+        if value is not None and not math.isfinite(value):
+            raise ValueError(f"--{name.replace('_', '-')} must be finite")
     if args.tolerance <= 0:
         raise ValueError("--tolerance must be positive")
     if args.top_k <= 0:
@@ -264,6 +271,17 @@ def installed_matchms_version() -> str:
         return version("matchms")
     except PackageNotFoundError:
         return "unknown"
+
+
+def require_finite_positive_precursor(spectrum_in: Any, clone: bool = True) -> Any:
+    """Reject NaN, infinity and zero that upstream range checks can accept."""
+    if spectrum_in is None:
+        return None
+    precursor = spectrum_in.get("precursor_mz")
+    if (isinstance(precursor, bool) or not isinstance(precursor, (int, float))
+            or not math.isfinite(precursor) or precursor <= 0):
+        return None
+    return spectrum_in.clone() if clone else spectrum_in
 
 
 def create_processor(args: argparse.Namespace) -> SpectrumProcessor:
@@ -310,7 +328,17 @@ def create_processor(args: argparse.Namespace) -> SpectrumProcessor:
         filters.append((reduce_to_number_of_peaks, {"n_max": args.max_peaks}))
     if args.min_peaks > 0:
         filters.append((require_minimum_number_of_peaks, {"n_required": args.min_peaks}))
-    return SpectrumProcessor(filters)
+    processor = SpectrumProcessor(filters)
+    if needs_precursor:
+        # Place after metadata harmonization and before any precursor-dependent
+        # peak operation; custom filters otherwise default to the end.
+        names = [step[0] if isinstance(step, tuple) else step
+                 for step in processor.processing_steps]
+        processor.parse_and_add_filter(
+            require_finite_positive_precursor,
+            filter_position=names.index("require_precursor_mz"),
+        )
+    return processor
 
 
 def load_and_process(
@@ -355,18 +383,21 @@ def create_metric(args: argparse.Namespace) -> Any:
             score_type="spectral_entropy",
             matching_mode="fragment",
             tolerance=args.tolerance,
+            noise_cutoff=args.relative_intensity,
         )
     if args.metric == "flash-cosine":
         return FlashSimilarity(
             score_type="cosine",
             matching_mode="fragment",
             tolerance=args.tolerance,
+            noise_cutoff=args.relative_intensity,
         )
     if args.metric == "flash-modified":
         return FlashSimilarity(
             score_type="cosine",
             matching_mode="hybrid",
             tolerance=args.tolerance,
+            noise_cutoff=args.relative_intensity,
         )
     raise ValueError(f"unsupported metric: {args.metric}")
 

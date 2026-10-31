@@ -1,6 +1,6 @@
 # Nextflow Configuration, Executors & CLI
 
-How to configure, scale, cache, observe, and drive Nextflow runs. Source: https://www.nextflow.io/docs/latest/config.html and related pages.
+How to configure, scale, cache, observe, and drive Nextflow runs. Targets stable 26.04.6. Sources: [configuration](https://docs.seqera.io/nextflow/config), [runtime config](https://docs.seqera.io/nextflow/reference/config), [executors](https://docs.seqera.io/nextflow/executor), and [cache](https://docs.seqera.io/nextflow/cache-and-resume). HPC/cloud configurations below are illustrative and were not submitted.
 
 ## Table of Contents
 
@@ -49,7 +49,7 @@ trace.enabled    = true
 
 manifest {
     name = 'my/pipeline'
-    nextflowVersion = '!>=24.04.0'   // enforce a minimum engine version
+    nextflowVersion = '!>=26.04.0'   // enforce a minimum engine version
 }
 ```
 
@@ -87,7 +87,7 @@ Activate (combine with commas; **order matters** — later profiles override ear
 nextflow run main.nf -profile test,singularity
 ```
 
-Container/infra profiles (`docker`, `singularity`, `conda`) are mutually exclusive — choose one. If no `-profile` is given, the `standard` profile (if defined) is used.
+Choose one execution environment profile (`docker`, `singularity`, or `conda`). Site/executor profiles can be combined with it; verify the resolved configuration. If no `-profile` is given, the `standard` profile (if defined) is used.
 
 > Ordering caveat: with the legacy parser, profiles are applied in the **order they are defined in the config**, regardless of CLI order; with the strict parser (default in 26.04) they apply in **CLI order**. To stay safe, avoid combining profiles that set the *same* option to conflicting values.
 
@@ -105,7 +105,7 @@ process {
     // by process name (regex / fully-qualified WORKFLOW:SUB:PROCESS)
     withName: 'FASTQC' { cpus = 4 }
     withName: '.*:ALIGN' {
-        container = 'quay.io/biocontainers/bwa:0.7.17--hed695b0_7'
+        // Keep the module’s pinned environment; it must contain every piped tool.
         ext.args  = '-M'                 // injected into the script as task.ext.args
         publishDir = [ path: { "${params.outdir}/bam" }, mode: 'copy' ]
     }
@@ -128,7 +128,7 @@ process { withLabel: 'process_high' { executor = 'slurm'; queue = 'bigmem' } }
 |----------|----------|
 | `local` | The current machine (default) |
 | `slurm` | SLURM clusters |
-| `sge` / `uge` | (Univa) Grid Engine |
+| `sge` | Sun/Univa-compatible Grid Engine |
 | `lsf` | IBM Spectrum LSF |
 | `pbs` / `pbspro` | PBS / Torque / PBS Pro |
 | `awsbatch` | AWS Batch |
@@ -154,7 +154,7 @@ executor {
 
 ## Cloud executors
 
-Each cloud needs its scope configured (region, work bucket, etc.). Always set `workDir` to cloud storage.
+Each cloud needs its scope configured, credentials/permissions, a compatible task image, and a work directory visible to its tasks. AWS/Google/Azure Batch examples below use object storage. Kubernetes commonly uses a shared persistent volume or a supported Fusion setup; object storage is not a universal executor requirement.
 
 ```groovy
 // AWS Batch
@@ -175,7 +175,7 @@ google.location  = 'us-central1'
 workDir = 'gs://my-bucket/work'
 ```
 
-For Azure use `azurebatch` + the `azure` scope with `workDir = 'az://...'`. For Kubernetes use `k8s` + `nextflow kuberun`. **Wave + Fusion** can accelerate cloud I/O (see `references/containers.md`). Seqera Platform (Tower) monitoring: set `tower.enabled = true` and `TOWER_ACCESS_TOKEN`, or run with `-with-tower`.
+For Azure use `azurebatch` + the `azure` scope with `workDir = 'az://...'`. For Kubernetes configure the `k8s` executor; `nextflow run` submits tasks from the launcher, while `nextflow kuberun` additionally deploys the launcher as a pod and requires `kubectl` (remote pipelines only). **Wave + Fusion** can support cloud I/O (see `references/containers.md`). Seqera Platform (Tower) monitoring: set `tower.enabled = true` and `TOWER_ACCESS_TOKEN`, or run with `-with-tower`.
 
 ## Caching and -resume
 
@@ -202,7 +202,7 @@ nextflow clean -f -before <run_name>    # remove work data before a run
 nextflow clean -f -but <run_name>       # keep one run, remove others
 ```
 
-Set `cleanup = true` in config to auto-remove `work/` on successful completion (note: this disables `-resume`).
+Set `cleanup = true` only when you intend to discard resumability: it deletes work directories after success. Preview cleanup with `nextflow clean -n ...` and review targets before `-f`. Archive publish outputs and provenance first.
 
 ## Tracing and reports
 
@@ -236,12 +236,12 @@ nextflow run <pipeline> [options]   # <pipeline> = path, .nf file, or github use
 | `-params-file f.yml` | Load params from YAML/JSON |
 | `-c file.config` | Add an extra config file (highest-precedence config) |
 | `-w <dir>` / `workDir` | Set the work directory (local path or cloud URI) |
-| `-stub-run` (`-stub`) | Execute `stub:` blocks instead of real scripts |
+| `-stub-run` (`-stub`) | Execute stubs where defined; other task scripts and `eval()` outputs still run |
 | `-entry <name>` | Run a specific named workflow as the entry point |
 | `-process.<dir> <val>` | Override a process directive at launch |
 | `-bg` | Run in background; `-ansi-log false` for plain logs |
 | `-dump-channels` | Print channel contents (with `.dump()`) |
-| `-preview` | Build the DAG without executing |
+| `-preview` | Preview the workflow without executing tasks; setup/configuration can still access remote resources |
 
 Other top-level commands:
 
@@ -268,9 +268,11 @@ nextflow self-update                # update the Nextflow engine
 | `NXF_SINGULARITY_CACHEDIR` / `NXF_APPTAINER_CACHEDIR` | Where SIF images are cached (set on HPC!) |
 | `NXF_CONDA_CACHEDIR` | Cached conda envs |
 | `NXF_CLOUDCACHE_PATH` | Store the task cache in object storage (e.g. `s3://bucket/cache`) for cloud runs |
-| `NXF_SYNTAX_PARSER=v2` | Opt into the strict-syntax parser (default in 26.04) |
+| `NXF_SYNTAX_PARSER=v2` | Strict parser, default in 26.04; `v1` is a legacy migration fallback |
 | `NXF_OPTS` | JVM options, e.g. `-Xms2g -Xmx4g` for big runs |
 | `TOWER_ACCESS_TOKEN` | Seqera Platform token (with `-with-tower`) |
-| `NXF_OFFLINE=true` | Disable network calls (offline/air-gapped runs) |
+| `NXF_OFFLINE=true` | Prevent automatic remote project/plugin downloads and version checks; not a network sandbox |
 
-On HPC, always set a shared `NXF_SINGULARITY_CACHEDIR` so image pulls are reused across jobs. See `references/running-pipelines.md` for offline execution.
+`NXF_OFFLINE` does not block remote input reads, container pulls, included HTTP config, task network access or telemetry configured elsewhere. Pre-stage and pin the engine, plugins, modules, configs, images, inputs and references; test with actual network isolation when an air gap is required.
+
+On HPC, set a shared `NXF_SINGULARITY_CACHEDIR` so image pulls are reused across jobs. See `references/running-pipelines.md` for offline execution.

@@ -27,7 +27,7 @@ HYPOGENIC_COMMIT = "8c3800ccae155e333fac5b530afa8abdaac38300"
 HYPOGENIC_WHEEL_SHA256 = (
     "f4ee8d7fa433cd59c58e0a8fe7df2f481ae29e7465a1b30ccbdac2c216a1b755"
 )
-PY_YAML_VERSION = "6.0.2"
+PY_YAML_VERSION = "6.0.3"
 
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
 MAX_JSON_BYTES = 128 * 1024 * 1024
@@ -80,7 +80,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise CliError(f"duplicate object key is forbidden: {key!r}")
+            raise CliError("duplicate object key is forbidden (key redacted)")
         result[key] = value
     return result
 
@@ -249,7 +249,7 @@ def _validate_plain_document(value: Any) -> Any:
                 if not isinstance(key, str):
                     raise CliError("object keys must be strings")
                 if key in result:
-                    raise CliError(f"duplicate object key is forbidden: {key!r}")
+                    raise CliError("duplicate object key is forbidden (key redacted)")
                 result[key] = visit(child, depth + 1)
             return result
         raise CliError(f"unsupported scalar type: {type(item).__name__}")
@@ -282,7 +282,7 @@ def _load_yaml(text: str) -> Any:
             if isinstance(token, forbidden_tokens):
                 raise CliError("YAML aliases, anchors, and explicit tags are forbidden")
     except yaml.YAMLError as exc:
-        raise CliError(f"invalid YAML token stream: {exc}") from exc
+        raise CliError("invalid YAML token stream (source content redacted)") from exc
 
     class UniqueSafeLoader(yaml.SafeLoader):
         pass
@@ -295,7 +295,7 @@ def _load_yaml(text: str) -> Any:
             if not isinstance(key, str):
                 raise CliError("YAML mapping keys must be strings")
             if key in mapping:
-                raise CliError(f"duplicate YAML key is forbidden: {key!r}")
+                raise CliError("duplicate YAML key is forbidden (key redacted)")
             mapping[key] = loader.construct_object(value_node, deep=deep)
         return mapping
 
@@ -308,7 +308,7 @@ def _load_yaml(text: str) -> Any:
     except CliError:
         raise
     except yaml.YAMLError as exc:
-        raise CliError(f"invalid safe YAML: {exc}") from exc
+        raise CliError("invalid safe YAML (source content redacted)") from exc
 
 
 def load_structured_document(
@@ -1110,7 +1110,7 @@ def validate_result_document(document: Any) -> dict[str, Any]:
             record["id"], name=f"records[{index}].id", maximum=256
         )
         if identifier in identifiers:
-            raise CliError(f"duplicate result id: {identifier!r}")
+            raise CliError(f"records[{index}].id duplicates an earlier result id (value redacted)")
         identifiers.add(identifier)
         label = nonempty_text(
             record["label"], name=f"records[{index}].label", maximum=256

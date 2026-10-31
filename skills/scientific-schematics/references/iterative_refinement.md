@@ -7,22 +7,22 @@ four worked examples.
 
 ## Smart Iterative Refinement Workflow
 
-The AI generation system uses **smart iteration** - it only regenerates if quality is below the threshold for your document type:
+The AI generation system uses **smart iteration** - it regenerates when the score is below the local document threshold or the reviewer explicitly requests improvement, within the two-attempt budget:
 
 ### How Smart Iteration Works
 
-```
-┌─────────────────────────────────────────────────────┐
-│  1. Generate image with Nano Banana 2             │
-│                    ↓                                │
-│  2. Review quality with Gemini 3.6 Flash            │
-│                    ↓                                │
-│  3. Score >= threshold?                             │
-│       YES → DONE! (early stop)                      │
-│       NO  → Improve prompt, go to step 1            │
-│                    ↓                                │
-│  4. Repeat until quality met OR max iterations      │
-└─────────────────────────────────────────────────────┘
+```text
+Source-backed prompt -> Generate PNG -> Review PNG
+                                        |
+                    +-------------------+-------------------+
+                    |                   |                   |
+              Criteria met       Improvement needed   Review unavailable
+                    |                   |                   |
+               Keep draft       Refine if budget left   Keep unchecked
+                                (2 attempts maximum)
+
+Generation error -> Stop; retain any earlier successful draft
+All paths -> Review log -> Manual scientific and visual verification
 ```
 
 ### Iteration 1: Initial Generation
@@ -33,16 +33,16 @@ Scientific diagram guidelines + User request
 
 **Output:** `diagram_v1.png`
 
-### Quality Review by Gemini 3.6 Flash
+### Quality Review by Gemini 3.7 Flash
 
-Gemini 3.6 Flash evaluates the diagram on:
+Gemini 3.7 Flash evaluates the diagram on:
 1. **Scientific Accuracy** (0-2 points) - Correct concepts, notation, relationships
 2. **Clarity and Readability** (0-2 points) - Easy to understand, clear hierarchy
 3. **Label Quality** (0-2 points) - Complete, readable, consistent labels
 4. **Layout and Composition** (0-2 points) - Logical flow, balanced, no overlaps
 5. **Professional Appearance** (0-2 points) - Publication-ready quality
 
-**Example Review Output:**
+**Illustrative review output** (not an actual model run):
 ```
 SCORE: 8.0
 
@@ -62,8 +62,10 @@ VERDICT: ACCEPTABLE (for poster, threshold 7.0)
 
 | If Score... | Action |
 |-------------|--------|
-| >= threshold | **STOP** - Quality is good enough for this document type |
-| < threshold | Continue to next iteration with improved prompt |
+| >= threshold and no improvement verdict | **STOP** - local review criteria met; inspect manually |
+| < threshold or improvement verdict | Refine if another iteration is available |
+| No usable review | Keep the image, stop, report unverified quality |
+| Generation fails | Stop; retain an earlier successful image if one exists |
 
 **Example:**
 - For a **poster** (threshold 7.0): Score of 7.5 → **DONE after 1 iteration!**
@@ -72,14 +74,14 @@ VERDICT: ACCEPTABLE (for poster, threshold 7.0)
 ### Subsequent Iterations (Only If Needed)
 
 If quality is below threshold, the system:
-1. Extracts specific issues from Gemini 3.6 Flash's review
+1. Extracts specific issues from Gemini 3.7 Flash's review
 2. Enhances the prompt with improvement instructions
 3. Regenerates with Nano Banana 2
-4. Reviews again with Gemini 3.6 Flash
+4. Reviews again with Gemini 3.7 Flash
 5. Repeats until threshold met or max iterations reached
 
 ### Review Log
-All iterations are saved with a JSON review log that includes early-stop information:
+Every attempt is saved in a JSON review log. This illustrative excerpt omits some fields:
 ```json
 {
   "user_prompt": "CONSORT participant flow diagram...",
@@ -131,12 +133,11 @@ number:
 ```
 
 The run exits 0 — the diagram is real — and prints
-`Review unavailable — image kept, quality not verified`. It does **not** regenerate: a reviewer that
+`Review unavailable - image kept, quality not verified`. It does **not** regenerate: a reviewer that
 did not answer says nothing about the diagram, so another generation would be guesswork. Look at the
-image yourself, and re-run if you want a score; these failures are usually transient.
+image yourself, and re-run if you want a score; first diagnose the failure rather than assuming another paid run will fix it.
 
-`final_reviewed` is the field to check in automation. `final_score` alone cannot distinguish
-"scored 7.5" from "never scored".
+`final_reviewed` indicates a numeric review; `quality_met` also requires the threshold and no improvement verdict. Neither means author-approved. `termination_reason` distinguishes `quality_threshold_met`, `review_unavailable`, `max_iterations`, and `generation_failed`. The selected image is the latest successful draft, not automatically the highest-scoring one. A failed second attempt does not discard the first image. A fully failed run exits 1; any retained image exits 0, even below threshold.
 
 ## Advanced AI Generation Usage
 
@@ -145,11 +146,8 @@ image yourself, and re-run if you want a score; these failures are usually trans
 ```python
 from scripts.generate_schematic_ai import ScientificSchematicGenerator
 
-# Initialize generator
-generator = ScientificSchematicGenerator(
-    api_key="your_openrouter_key",
-    verbose=True
-)
+# Illustrative paid call; credentials are resolved from the environment/.env.
+generator = ScientificSchematicGenerator(verbose=True)
 
 # Generate with iterative refinement (max 2 iterations)
 results = generator.generate_iterative(
@@ -164,8 +162,11 @@ print(f"Final image: {results['final_image']}")
 
 # Review individual iterations
 for iteration in results['iterations']:
-    print(f"Iteration {iteration['iteration']}: {iteration['score']}/10")
-    print(f"Critique: {iteration['critique']}")
+    if iteration.get("success"):
+        print(f"Iteration {iteration['iteration']}: {iteration['score']}/10")
+        print(f"Critique: {iteration['critique']}")
+    else:
+        print(f"Generation error: {iteration['error']}")
 ```
 
 ### Command-Line Options
@@ -186,9 +187,6 @@ python scripts/generate_schematic.py "complex diagram" -o diagram.png --iteratio
 # Verbose output (see all API calls and reviews)
 python scripts/generate_schematic.py "flowchart" -o flow.png -v
 
-# Provide API key via flag
-python scripts/generate_schematic.py "diagram" -o out.png --api-key "sk-or-v1-..."
-
 # Combine options
 python scripts/generate_schematic.py "neural network" -o nn.png --doc-type journal --iterations 2 -v
 ```
@@ -199,19 +197,16 @@ python scripts/generate_schematic.py "neural network" -o nn.png --doc-type journ
 # Get a key at https://openrouter.ai/keys
 export OPENROUTER_API_KEY='sk-or-v1-your_key_here'
 
-# Or persist it in the shell profile
-echo 'export OPENROUTER_API_KEY="sk-or-v1-your_key"' >> ~/.zshrc
-
-# Or drop it in a .env file at the project root
-echo "OPENROUTER_API_KEY=sk-or-v1-..." >> .env
+# Alternatively store OPENROUTER_API_KEY in a private, untracked .env file.
+# --api-key also exists, but command-line arguments can enter shell history.
 
 # The only Python dependency
 uv pip install requests
 ```
 
-Each iteration costs **two API calls**: one image generation and one vision review. A diagram that
-passes on the first try therefore costs two calls, and the maximum for any single run is four. The
-image model dominates the bill. Check current per-token pricing for
+Each successful generation normally makes **two API calls**: one image generation and one vision review. A diagram that
+passes on the first try therefore costs two calls, and the maximum for any single run is four. A generation error stops without automatic retry. The
+image model dominates the bill. Check current image-endpoint billing units and review-model pricing for
 `google/gemini-3.1-flash-image` and `google/gemini-3.7-flash` on OpenRouter — it changes, and any
 figure written here would go stale.
 
@@ -254,6 +249,8 @@ figure written here would go stale.
 
 ## AI Generation Examples
 
+These paid-generation commands are illustrative; they were not sent to OpenRouter during validation. Reconcile each scientific example with the actual experiment before use.
+
 ### Example 1: CONSORT Flowchart
 ```bash
 python scripts/generate_schematic.py \
@@ -261,9 +258,9 @@ python scripts/generate_schematic.py \
    Start with 'Assessed for eligibility (n=500)' at top. \
    Show 'Excluded (n=150)' with reasons: age<18 (n=80), declined (n=50), other (n=20). \
    Then 'Randomized (n=350)' splits into two arms: \
-   'Treatment group (n=175)' and 'Control group (n=175)'. \
-   Each arm shows 'Lost to follow-up' (n=15 and n=10). \
-   End with 'Analyzed' (n=160 and n=165). \
+   'Treatment group (n=175)' and 'Control group (n=175)'. Each group received its allocated intervention (n=175); did not receive (n=0). \
+   Each arm shows 'Discontinued intervention' (n=0) and 'Lost to follow-up for primary outcome' (n=15 and n=10), with illustrative reason 'outcome visit not attended'. \
+   End with 'Analyzed for primary outcome' (n=160 and n=165); excluded from this analysis due to missing primary outcome (n=15 and n=10). Do not imply missing follow-up always excludes an intention-to-treat analysis. \
    Use blue boxes for process steps, orange for exclusion, green for final analysis." \
   -o figures/consort.png
 ```
@@ -284,16 +281,18 @@ python scripts/generate_schematic.py \
 ```
 
 ### Example 3: Biological Pathway
+
+This simplified prompt follows the mechanism distinction in [Reactome's RAF/MAP kinase cascade](https://reactome.org/content/detail/R-HSA-5673001); it is not a complete pathway or a substitute for a curated diagram.
 ```bash
 python scripts/generate_schematic.py \
   "MAPK signaling pathway diagram. \
-   Start with EGFR receptor at cell membrane (top). \
-   Arrow down to RAS (with GTP label). \
-   Arrow to RAF kinase. \
+   Simplified pathway: activated EGFR receptor at cell membrane (top), then GRB2/SOS. \
+   Arrow to RAS-GTP labeled nucleotide exchange, then activation arrow to RAF. \
+   RAF kinase node. \
    Arrow to MEK kinase. \
    Arrow to ERK kinase. \
    Final arrow to nucleus showing gene transcription. \
-   Label each arrow with 'phosphorylation' or 'activation'. \
+   Label RAF-to-MEK and MEK-to-ERK arrows phosphorylation; do not label RAS nucleotide exchange as phosphorylation. Mark this as a simplified pathway, omitting downstream transcription factors. \
    Use rounded rectangles for proteins, different colors for each. \
    Include membrane boundary line at top." \
   -o figures/mapk_pathway.png
@@ -313,3 +312,13 @@ python scripts/generate_schematic.py \
 ```
 
 ---
+
+## OpenRouter contract (reviewed 2026-09-30)
+
+- **Generate:** `POST https://openrouter.ai/api/v1/images`, JSON body `model`, `prompt`, `n: 1`, `Authorization: Bearer ...`. The non-streaming response contains `data[]` with `b64_json` and optional `media_type`; usage may include cost. The helper saves the first PNG and fails clearly for another MIME type or invalid base64/signature. It does not decode all PNG pixels or claim a DPI value.
+- **Review:** `POST https://openrouter.ai/api/v1/chat/completions`, `model` plus `messages[].content` containing a `text` block and `image_url.url` data URL. Text is read from `choices[0].message.content`. These calls do not use the Image API response schema.
+- **Discovery:** public `GET /api/v1/images/models` returns `data[]`; `GET /api/v1/images/models/google/gemini-3.1-flash-image/endpoints` returns `endpoints[]`. The model capability map is a union; each endpoint map is authoritative. Both current Google endpoints allow `n=1`, up to 14 input references, and resolution/aspect-ratio controls. `output_format` is absent, so this helper does not send it. Resolution and reference-image options are not exposed by this CLI.
+- **Compatibility:** the current chat schema still lists image output in `modalities`; no retirement is claimed. This implementation uses the dedicated generation API described by the current guide. The helper's Gemini model calls were not tested with a paid end-to-end run.
+- **Failures:** one request per attempt, 120-second Requests connect/read inactivity timeout (not a total wall-clock deadline), no automatic transport retry. JSON/API/format errors are logged. A timeout is an ambiguous remote outcome; investigate before rerunning. Model IDs and review prompts are recorded for reproducibility, but re-running is stochastic.
+
+Official sources: [image guide](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [image request schema](https://openrouter.ai/docs/api/api-reference/images/generate-an-image), [chat schema](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion), [vision inputs](https://openrouter.ai/docs/guides/overview/multimodal/image-understanding), [image model catalog](https://openrouter.ai/api/v1/images/models), [chosen image endpoints](https://openrouter.ai/api/v1/images/models/google/gemini-3.1-flash-image/endpoints), and [general model catalog](https://openrouter.ai/api/v1/models). Public catalog/endpoint reads and offline mocked contract tests passed. No paid end-to-end run or review-quality benchmark of this helper was performed; repository workflow-diagram regeneration uses separate tooling and models.

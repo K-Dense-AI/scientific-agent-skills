@@ -1,21 +1,4 @@
-"""Tests for the Neuropixels SpikeInterface scripts.
-
-Almost everything here is a wrapper around SpikeInterface calls that need a real
-recording, but the part that decides which units make it into a published result
-is pure: the curation thresholds and the classification they drive. Those are
-checked against the criteria the skill's own `references/QUALITY_METRICS.md`
-documents -- Allen Visual Coding's `isi_violations_ratio < 0.5`, IBL's tighter
-`< 0.1`, strict single-unit `< 0.01` -- and against the ordering that follows
-from them: strict is at least as strict as IBL, which is at least as strict as
-Allen. A preset whose thresholds drift, or a pair whose names get swapped, is a
-silent scientific error, not a crash.
-
-The rest of the coverage is the boundary behaviour that costs a whole rerun to
-discover: every classification threshold is tested from both sides, an unknown
-curation method must raise rather than quietly drop units, the sorter presets
-must keep preprocessing from being applied twice, and the trace plot must
-subsample a 384-channel probe rather than draw all of it.
-"""
+"""Synthetic recording, curation and sorter-routing regression checks."""
 
 from __future__ import annotations
 
@@ -92,7 +75,7 @@ class CurationLabelTests(unittest.TestCase):
         self.assertNotEqual(self.label("allen", snr=1.5), "noise")
 
     def test_allen_tolerates_refractory_violations_that_ibl_calls_multi_unit(self) -> None:
-        # This is the documented difference between the two standards: Allen
+        # This is the documented difference between the two local presets: Allen
         # accepts isi_violations_ratio < 0.5, IBL only < 0.1.
         self.assertEqual(self.label("allen", isi_violations_ratio=0.3), "good")
         self.assertEqual(self.label("ibl", isi_violations_ratio=0.3), "mua")
@@ -171,7 +154,7 @@ class CurationCriteriaTests(unittest.TestCase):
         expected = {"snr", "isi_violations_ratio", "presence_ratio", "amplitude_cutoff"}
         for name, criteria in compute_metrics.CURATION_CRITERIA.items():
             with self.subTest(preset=name):
-                self.assertEqual(set(criteria), expected)
+                self.assertEqual(set(criteria), expected | ({"firing_rate"} if name == "ibl" else set()))
 
     def test_no_threshold_is_zero_or_none(self) -> None:
         # Same truthiness trap: `if criteria.get('snr')` treats 0.0 and None as
@@ -188,7 +171,7 @@ class CurationCriteriaTests(unittest.TestCase):
         self.assertEqual(allen["presence_ratio"], 0.9)
         self.assertEqual(allen["amplitude_cutoff"], 0.1)
 
-    def test_the_ibl_thresholds_are_the_documented_reproducible_ephys_ones(self) -> None:
+    def test_the_ibl_thresholds_are_the_documented_legacy_local_screen(self) -> None:
         ibl = compute_metrics.CURATION_CRITERIA["ibl"]
         self.assertEqual(ibl["isi_violations_ratio"], 0.1)
         self.assertEqual(ibl["presence_ratio"], 0.9)
@@ -244,10 +227,10 @@ class SorterDefaultTests(unittest.TestCase):
         # removed recording. Letting a sorter filter or re-reference it a second
         # time distorts the waveforms it then tries to cluster.
         defaults = run_sorting.SORTER_DEFAULTS
-        self.assertIs(defaults["kilosort3"]["do_CAR"], False)
+        self.assertIs(defaults["kilosort3"]["car"], False)
         self.assertIs(defaults["spykingcircus2"]["apply_preprocessing"], False)
         self.assertIs(defaults["mountainsort5"]["filter"], False)
-        self.assertIs(defaults["mountainsort5"]["whiten"], False)
+        self.assertIs(defaults["mountainsort5"]["whiten"], True)  # Input is filtered, not whitened.
 
     def test_the_kilosort4_thresholds_are_positive_spike_amplitudes(self) -> None:
         kilosort4 = run_sorting.SORTER_DEFAULTS["kilosort4"]

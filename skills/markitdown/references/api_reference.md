@@ -1,6 +1,6 @@
-# MarkItDown 0.1.6 API Reference
+# MarkItDown 0.1.8 API Reference
 
-Verified against the `v0.1.6` source tag and installed package on July 23, 2026.
+Verified against the `v0.1.8` source tag and installed package on October 1, 2026.
 
 ## Public Imports
 
@@ -61,7 +61,7 @@ Recognized constructor keywords include:
 | `cu_analyzer_id` | Custom Content Understanding analyzer |
 | `cu_file_types` | Restrict Content Understanding routing |
 
-The public signature uses `**kwargs`; spell these names exactly.
+The public signature uses `**kwargs`; spell these names exactly. Unknown names can be silently ignored: there is no `cu_api_version` option. `docintel_api_version=None` delegates to the installed Azure SDK default. See `cloud_and_ocr.md` for the tested SDK versions and network contracts.
 
 ### Conversion methods
 
@@ -78,7 +78,7 @@ convert(
 
 Dispatch rules:
 
-- `str` beginning with `http:`, `https:`, `file:`, or `data:` → `convert_uri()`
+- `str` with a parsed `http:`, `https:`, `file:`, or `data:` scheme (case-insensitive) → `convert_uri()`
 - other `str` or `Path` → `convert_local()`
 - `requests.Response` → `convert_response()`
 - binary file-like object → `convert_stream()`
@@ -295,7 +295,7 @@ from markitdown import (
 try:
     result = MarkItDown().convert_local("input.pdf")
 except MissingDependencyException:
-    print("Install markitdown[pdf]==0.1.6")
+    print("Install markitdown[pdf]==0.1.8")
 except UnsupportedFormatException:
     print("No converter accepted this input")
 except FileConversionException as exc:
@@ -388,7 +388,7 @@ markitdown --use-plugins input.rtf -o output.md
 markitdown [options] [filename]
 ```
 
-If `filename` is omitted, MarkItDown reads binary input from stdin.
+If `filename` is omitted, MarkItDown buffers all binary stdin in memory before detection. Document Intelligence mode requires a filename; CU accepts hinted stdin.
 
 | Option | Meaning |
 |---|---|
@@ -398,9 +398,9 @@ If `filename` is omitted, MarkItDown reads binary input from stdin.
 | `-m`, `--mime-type TYPE` | MIME-type hint |
 | `-c`, `--charset NAME` | Charset hint |
 | `-d`, `--use-docintel` | Use Azure Document Intelligence |
-| `-e`, `--endpoint URL` | Document Intelligence endpoint |
+| `-e`, `--endpoint URL` | Document Intelligence endpoint; fallback `MARKITDOWN_DOCINTEL_ENDPOINT` |
 | `--use-cu`, `--use-content-understanding` | Use Azure Content Understanding |
-| `--cu-endpoint URL` | Content Understanding endpoint |
+| `--cu-endpoint URL` | Content Understanding endpoint; fallback `MARKITDOWN_CU_ENDPOINT` |
 | `--cu-analyzer ID` | Custom analyzer ID |
 | `--cu-file-types LIST` | Comma-separated CU file types |
 | `-p`, `--use-plugins` | Enable installed third-party plugins |
@@ -409,10 +409,10 @@ If `filename` is omitted, MarkItDown reads binary input from stdin.
 
 Document Intelligence and Content Understanding are mutually exclusive in one CLI invocation.
 
-The core 0.1.6 parser does **not** expose `--llm-client` or `--llm-model`. Configure image descriptions or the OCR plugin through Python.
+The core 0.1.8 parser does **not** expose `--llm-client` or `--llm-model`. Configure image descriptions or the OCR plugin through Python.
 
 ## Source Basis
 
-- v0.1.6 package API: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown/src/markitdown
-- v0.1.6 CLI: https://github.com/microsoft/markitdown/blob/v0.1.6/packages/markitdown/src/markitdown/__main__.py
-- v0.1.6 sample plugin: https://github.com/microsoft/markitdown/tree/v0.1.6/packages/markitdown-sample-plugin
+- v0.1.8 package API: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown/src/markitdown
+- v0.1.8 CLI: https://github.com/microsoft/markitdown/blob/v0.1.8/packages/markitdown/src/markitdown/__main__.py
+- v0.1.8 sample plugin: https://github.com/microsoft/markitdown/tree/v0.1.8/packages/markitdown-sample-plugin

@@ -15,10 +15,10 @@ model's full context) with the recommended scorers, and the result is the
 official tidy long table: one row per variant x scorer x track (x gene).
 
 Examples:
-  python score_variants.py --variant chr22:36201698:A>C -o scores.tsv
+  python score_variants.py --variant "chr22:36201698:A>C" -o scores.tsv
   python score_variants.py --input variants.vcf --scorers RNA_SEQ SPLICE_SITE_USAGE \\
       --ontology UBERON:0001157 --min-abs-quantile 0.99 -o colon.tsv
-  python score_variants.py --organism mouse --variant chr7:45000000:A>G --sequence-length 500KB
+  python score_variants.py --organism mouse --variant "chr7:45000000:A>G" --sequence-length 500KB
   python score_variants.py --list-scorers
   python score_variants.py --list-tracks --output-type RNA_SEQ --query liver -o tracks.tsv
 """
@@ -177,7 +177,9 @@ def score(model, args: argparse.Namespace) -> int:
         frame = frame[frame["biosample_name"].astype(str).str.contains(args.biosample, case=False, regex=False)]
     if args.gene and "gene_name" in frame.columns:
         frame = frame[frame["gene_name"].isin(set(args.gene)) | frame["gene_name"].isna()]
-    if args.min_abs_quantile is not None and "quantile_score" in frame.columns:
+    if args.min_abs_quantile is not None:
+        if "quantile_score" not in frame.columns or frame["quantile_score"].isna().all():
+            raise SystemExit("no calibrated quantiles returned; omit --min-abs-quantile and inspect raw scores")
         frame = frame[frame["quantile_score"].abs() >= args.min_abs_quantile]
 
     frame = frame.sort_values("raw_score", key=lambda column: column.abs(), ascending=False)
@@ -204,7 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ontology", nargs="+", metavar="CURIE", help="keep tracks with these ontology CURIEs (post-hoc filter)")
     parser.add_argument("--biosample", metavar="TEXT", help="keep tracks whose biosample name contains this text")
     parser.add_argument("--gene", nargs="+", metavar="SYMBOL", help="keep gene-centric rows for these symbols")
-    parser.add_argument("--min-abs-quantile", type=float, help="keep rows with |quantile_score| >= this (e.g. 0.99)")
+    parser.add_argument("--min-abs-quantile", type=common.unit_interval, help="keep rows with |quantile_score| >= this in [0,1]; requires calibrated scores (human recommended scorers)")
     parser.add_argument("--workers", type=int, default=5, help="parallel requests (default 5)")
     parser.add_argument("--list-scorers", action="store_true", help="print the recommended scorer configurations and exit")
     parser.add_argument("--list-tracks", action="store_true", help="print the model's track metadata (ontology CURIEs, biosamples) and exit")

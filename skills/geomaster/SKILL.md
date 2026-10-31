@@ -1,379 +1,217 @@
 ---
 name: geomaster
-description: Comprehensive geospatial science skill covering remote sensing, GIS, spatial analysis, machine learning for earth observation, and 30+ scientific domains. Supports satellite imagery processing (Sentinel, Landsat, MODIS, SAR, hyperspectral), vector and raster data operations, spatial statistics, point cloud processing, network analysis, cloud-native workflows (STAC, COG, Planetary Computer), and 8 programming languages (Python, R, Julia, JavaScript, C++, Java, Go, Rust) with 500+ code examples. Use for remote sensing workflows, GIS analysis, spatial ML, Earth observation data processing, terrain analysis, hydrological modeling, marine spatial analysis, atmospheric science, and any geospatial computation task.
+description: Supports geospatial research workflows for remote sensing, vector and raster GIS, spatial statistics, terrain and network analysis, and machine learning for Earth observation. Use when processing satellite imagery, aligning coordinate systems and raster grids, accessing STAC catalogs, analyzing geospatial time series, or implementing scientific GIS workflows in Python, R, Julia, JavaScript, C++, Java, Go, or Rust.
 license: MIT License
+compatibility: Core examples require Python 3.12+ and GeoPandas, Rasterio, NumPy and PyProj. Optional workflows require their named packages, native GIS applications, GPU runtimes, or service credentials and network access.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
 ---
 
 # GeoMaster
 
-Comprehensive geospatial science skill covering GIS, remote sensing, spatial analysis, and ML for Earth observation across 70+ topics with 500+ code examples in 8 programming languages.
+Geospatial analysis across vector/raster GIS, remote sensing, spatial ML, terrain,
+networks, and scientific applications. Start with the relevant workflow, inspect
+input provenance, and load only the reference needed for the task.
 
-## Installation
+## Tested scope and installation
+
+The local recipe suite targets GeoPandas 1.2.0, Rasterio 1.5.2, Shapely 2.1.2,
+PyProj 3.8.0, Rioxarray 0.23.0, Xarray 2026.9.0, OSMnx 2.1.1 and
+PySTAC Client 0.9.0. See [review and source ledger](references/review.md) for
+execution limits. Examples requiring actual input files are templates; authenticated
+Earth Engine/CDS/commercial services, desktop GIS and GPU training remain illustrative.
 
 ```bash
-# Core Python stack (conda recommended)
-conda install -c conda-forge gdal rasterio fiona shapely pyproj geopandas
-
-# Remote sensing & ML (rsgislib is conda-forge only, not on PyPI)
-conda install -c conda-forge rsgislib
-uv pip install torchgeo earthengine-api
-uv pip install scikit-learn xgboost torch-geometric
-
-# Network & visualization
-uv pip install osmnx networkx folium keplergl
-uv pip install cartopy contextily mapclassify
-
-# Big data & cloud
-uv pip install xarray rioxarray dask-geopandas
-uv pip install pystac-client planetary-computer
-
-# Point clouds
-uv pip install laspy pylas open3d pdal
-
-# Databases
-conda install -c conda-forge postgis spatialite
+# In a dedicated environment; install only the workflow's optional dependencies.
+uv venv --python 3.13
+uv pip install geopandas==1.2.0 rasterio==1.5.2 shapely==2.1.2 pyproj==3.8.0
+uv pip install rioxarray==0.23.0 xarray==2026.9.0 'dask[array]' scikit-learn==1.9.1
+uv pip install pystac-client==0.9.0 planetary-computer==1.0.0 odc-stac
+# For osgeo/native CLI or PDAL, use a separate conda-forge environment:
+# conda create -n geo-native -c conda-forge python=3.13 gdal pdal python-pdal
 ```
 
-## Quick Start
+Install TorchGeo/PyTorch, RSGISLib, Py6S/6S, ArcPy, QGIS or other specialist
+runtimes separately when required. A Rasterio wheel includes its own GDAL library;
+it does not install `osgeo` or the GDAL command-line programs.
 
-### NDVI from Sentinel-2
+## Workflow
+
+1. Record product/collection ID, acquisition time, processing baseline, license,
+   band names, scale/offset, QA meaning, horizontal/vertical CRS and units.
+2. Verify CRS from authoritative metadata. `set_crs` labels coordinates;
+   `to_crs` transforms them. Never infer an unknown CRS from plausible bounds.
+3. Align extent, affine transform, dimensions, pixel registration and resolution.
+   Reproject categorical masks with nearest-neighbor resampling; choose an appropriate
+   resampler for continuous data. Matching array shape alone does not prove alignment.
+4. Preserve nodata, clouds, shadows and saturation masks. Convert unsigned integers
+   to floating point before differences; apply the provider's radiometric transform once.
+5. Run the analysis at a defensible support/resolution. Keep training labels and
+   validation blocks separate. Terrain elevation and horizontal units must agree.
+6. Export CRS, transform, valid-data mask, units, model settings and provenance.
+   Check numeric expectations on a small known fixture before scaling up.
+
+## Local raster recipes
+
+Import the bundled [raster helper](scripts/raster_workflows.py) from its directory
+(add that directory to `PYTHONPATH` or run from it). It implements small in-memory
+recipes; use windows/Dask for larger data. Writers require a new output path. It does not infer band identities or masks.
+
+### NDVI
+
+```python
+from raster_workflows import write_ndvi
+
+# This example assumes a VERIFIED four-band B02/B03/B04/B08 stack whose mask
+# already excludes clouds/shadows, and harmonized DN reflectance = DN * 0.0001.
+write_ndvi('s2_masked_stack.tif', 'ndvi.tif', red_band=3, nir_band=4,
+           scale=0.0001, offset=0.0)
+```
+
+Do not use those indices or calibration for an arbitrary `sentinel2.tif`.
+SAFE products and STAC assets are often separate single-band rasters. Additive
+radiometric offsets affect even NDVI. EVI/SAVI require physical reflectance.
+`normalized_difference` keeps undefined ratios and invalid cells as NaN, not zero.
+
+### Terrain
 
 ```python
 import rasterio
-import numpy as np
+from raster_workflows import terrain_metrics
 
-with rasterio.open('sentinel2.tif') as src:
-    red = src.read(4).astype(float)   # B04
-    nir = src.read(8).astype(float)   # B08
-    ndvi = (nir - red) / (nir + red + 1e-8)
-    ndvi = np.nan_to_num(ndvi, nan=0)
-
-    profile = src.profile
-    profile.update(count=1, dtype=rasterio.float32)
-
-    with rasterio.open('ndvi.tif', 'w', **profile) as dst:
-        dst.write(ndvi.astype(rasterio.float32), 1)
+with rasterio.open('dem_metres.tif') as src:
+    slope_deg, aspect_deg, shade = terrain_metrics(
+        src.read(1, masked=True), src.transform, src.crs)
 ```
 
-### Spatial Analysis with GeoPandas
+The helper requires a north-up projected metric grid and elevations in metres.
+Aspect points downslope clockwise from north; it is undefined for flat cells.
+Slope is resolution-aware; nodata contaminating a derivative stencil stays invalid.
+Hillshade is an illumination visualization, not hydrological flow or exposure risk.
+
+### Classification
+
+```python
+import geopandas as gpd
+from raster_workflows import classify_imagery
+
+training = gpd.read_file('training.gpkg')  # polygons with class_id in 1..65534
+model = classify_imagery('masked_features.tif', training, 'classified.tif')
+```
+
+The helper checks CRS, geometry, labels, valid training pixels and overlapping
+labels, then preserves nodata in a uint16 output. It fits a small demonstration
+model; it does not measure accuracy. Use spatial/temporal holdouts at the field,
+scene or regional level before reporting predictive performance. See
+[machine learning](references/machine-learning.md).
+
+## Vector analysis
 
 ```python
 import geopandas as gpd
 
-# Load and ensure same CRS
 zones = gpd.read_file('zones.geojson')
 points = gpd.read_file('points.geojson')
-
-if zones.crs != points.crs:
-    points = points.to_crs(zones.crs)
-
-# Spatial join and statistics
+if zones.crs is None or points.crs is None:
+    raise ValueError('Resolve missing CRS before analysis')
+points = points.to_crs(zones.crs)
 joined = gpd.sjoin(points, zones, how='inner', predicate='within')
-stats = joined.groupby('zone_id').agg({
-    'value': ['count', 'mean', 'std', 'min', 'max']
-}).round(2)
+stats = joined.groupby('zone_id')['value'].agg(['count', 'mean', 'std'])
+
+# Local data only: verify the estimated CRS area of use before accepting it.
+metric = zones.to_crs(zones.estimate_utm_crs())
+metric['area_m2'] = metric.area
+buffers = metric.geometry.buffer(1000).to_crs(zones.crs)
 ```
 
-### Google Earth Engine Time Series
+`within` excludes boundary points; overlapping zones can duplicate observations.
+Choose and document a boundary/overlap policy. A projected CRS need not use metres
+or preserve area. UTM suits local regions, not every national, polar or global task.
+
+## Cloud catalogs and Earth Engine
+
+[Data sources](references/data-sources.md) documents current STAC, CDSE, CDS,
+Overpass and geocoding contracts. Discovery is separate from downloading pixels.
 
 ```python
-import ee
-import pandas as pd
+from pystac_client import Client
+import planetary_computer
 
-ee.Initialize(project='your-project')
-roi = ee.Geometry.Point([-122.4, 37.7]).buffer(10000)
-
-s2 = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-      .filterBounds(roi)
-      .filterDate('2020-01-01', '2023-12-31')
-      .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)))
-
-def add_ndvi(img):
-    return img.addBands(img.normalizedDifference(['B8', 'B4']).rename('NDVI'))
-
-s2_ndvi = s2.map(add_ndvi)
-
-def extract_series(image):
-    stats = image.reduceRegion(ee.Reducer.mean(), roi.centroid(), scale=10, maxPixels=1e9)
-    return ee.Feature(None, {'date': image.date().format('YYYY-MM-dd'), 'ndvi': stats.get('NDVI')})
-
-series = s2_ndvi.map(extract_series).getInfo()
-df = pd.DataFrame([f['properties'] for f in series['features']])
-df['date'] = pd.to_datetime(df['date'])
+catalog = Client.open('https://planetarycomputer.microsoft.com/api/stac/v1',
+                      modifier=planetary_computer.sign_inplace)
+search = catalog.search(collections=['sentinel-2-l2a'],
+                        bbox=[-122.5, 37.7, -122.3, 37.9],
+                        datetime='2023-06-01/2023-06-30',
+                        query={'eo:cloud_cover': {'lt': 20}}, max_items=5)
+items = list(search.items())
+if not items:
+    raise ValueError('No matching scenes')
+# Save item IDs/properties; inspect asset keys, scale/offset and QA before load.
 ```
 
-## Core Concepts
+`limit` controls page size; `max_items` bounds total traversal. Planetary Computer
+signing returns expiring SAS asset URLs; use unsigned IDs/metadata for durable
+provenance and sign near the time of access. Earth Engine requires prior
+`ee.Authenticate()` and `ee.Initialize(project='your-registered-project')`.
+Cloud filters at scene level do not replace per-pixel masks. The
+[remote-sensing reference](references/remote-sensing.md) includes SCL masking and
+region summaries with an explicit exclusive date end.
 
-### Data Types
-
-| Type | Examples | Libraries |
-|------|----------|-----------|
-| Vector | Shapefile, GeoJSON, GeoPackage | GeoPandas, Fiona, GDAL |
-| Raster | GeoTIFF, NetCDF, COG | Rasterio, Xarray, GDAL |
-| Point Cloud | LAS, LAZ | Laspy, PDAL, Open3D |
-
-### Coordinate Systems
-
-- **EPSG:4326** (WGS 84) - Geographic, lat/lon, use for storage
-- **EPSG:3857** (Web Mercator) - Web maps only (don't use for area/distance!)
-- **EPSG:326xx/327xx** (UTM) - Metric calculations, <1% distortion per zone
-- Use `gdf.estimate_utm_crs()` for automatic UTM detection
-
-```python
-# Always check CRS before operations
-assert gdf1.crs == gdf2.crs, "CRS mismatch!"
-
-# For area/distance calculations, use projected CRS
-gdf_metric = gdf.to_crs(gdf.estimate_utm_crs())
-area_sqm = gdf_metric.geometry.area
-```
-
-### OGC Standards
-
-- **WMS**: Web Map Service - raster maps
-- **WFS**: Web Feature Service - vector data
-- **WCS**: Web Coverage Service - raster coverage
-- **STAC**: Spatiotemporal Asset Catalog - modern metadata
-
-## Common Operations
-
-### Spectral Indices
-
-Before using the illustrative snippets, map raster band positions to named
-Sentinel bands and align their grids/resolutions. Convert digital numbers to
-physical reflectance using that product's scale and offset before EVI or SAVI: their
-additive constants do not cancel the scale. The
-[Earth Engine harmonized SR collection](https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_SR_HARMONIZED)
-uses a 0.0001 scale and already corrects the processing-baseline offset; do not
-apply that offset twice. Preserve nodata/cloud masks instead of turning invalid
-index pixels into zero, which is a valid vegetation-index value.
-
-```python
-def calculate_indices(image_path):
-    """NDVI, EVI, SAVI, NDWI from Sentinel-2."""
-    with rasterio.open(image_path) as src:
-        B02, B03, B04, B08, B11 = [src.read(i).astype(float) for i in [1,2,3,4,5]]
-
-    ndvi = (B08 - B04) / (B08 + B04 + 1e-8)
-    evi = 2.5 * (B08 - B04) / (B08 + 6*B04 - 7.5*B02 + 1)
-    savi = ((B08 - B04) / (B08 + B04 + 0.5)) * 1.5
-    ndwi = (B03 - B08) / (B03 + B08 + 1e-8)
-
-    return {'NDVI': ndvi, 'EVI': evi, 'SAVI': savi, 'NDWI': ndwi}
-```
-
-### Vector Operations
-
-```python
-# Buffer (use projected CRS!)
-gdf_proj = gdf.to_crs(gdf.estimate_utm_crs())
-gdf['buffer_1km'] = gdf_proj.geometry.buffer(1000)
-
-# Spatial relationships
-intersects = gdf[gdf.geometry.intersects(other_geometry)]
-contains = gdf[gdf.geometry.contains(point_geometry)]
-
-# Geometric operations
-gdf['centroid'] = gdf.geometry.centroid
-gdf['simplified'] = gdf.geometry.simplify(tolerance=0.001)
-
-# Overlay operations
-intersection = gpd.overlay(gdf1, gdf2, how='intersection')
-union = gpd.overlay(gdf1, gdf2, how='union')
-```
-
-### Terrain Analysis
-
-```python
-def terrain_metrics(dem_path):
-    """Calculate slope, aspect, hillshade from DEM."""
-    with rasterio.open(dem_path) as src:
-        dem = src.read(1)
-
-    dy, dx = np.gradient(dem)
-    slope = np.arctan(np.sqrt(dx**2 + dy**2)) * 180 / np.pi
-    aspect = (90 - np.arctan2(-dy, dx) * 180 / np.pi) % 360
-
-    # Hillshade
-    az_rad, alt_rad = np.radians(315), np.radians(45)
-    hillshade = (np.sin(alt_rad) * np.sin(np.radians(slope)) +
-                 np.cos(alt_rad) * np.cos(np.radians(slope)) *
-                 np.cos(np.radians(aspect) - az_rad))
-
-    return slope, aspect, hillshade
-```
-
-### Network Analysis
+## Networks
 
 ```python
 import osmnx as ox
 import networkx as nx
-
-# Download and analyze street network
-G = ox.graph_from_place('San Francisco, CA', network_type='drive')
-G = ox.add_edge_speeds(G).add_edge_travel_times(G)
-
-# Shortest path
-orig = ox.distance.nearest_nodes(G, -122.4, 37.7)
-dest = ox.distance.nearest_nodes(G, -122.3, 37.8)
-route = nx.shortest_path(G, orig, dest, weight='travel_time')
+G = ox.graph_from_place('Portland, Maine, USA', network_type='drive')
+G = ox.routing.add_edge_speeds(G)
+G = ox.routing.add_edge_travel_times(G)
+origin = ox.distance.nearest_nodes(G, -70.26, 43.66)
+destination = ox.distance.nearest_nodes(G, -70.27, 43.67)
+route = nx.shortest_path(G, origin, destination, weight='travel_time')
 ```
 
-## Image Classification
+This makes public Nominatim/Overpass requests. Handle no-route results and inspect
+imputed speeds; these estimate free-flow time, not observed traffic. Use graph CRS
+for nearest-node coordinates and distinguish travel-time seconds from metres.
+
+## Efficient storage
 
 ```python
-from sklearn.ensemble import RandomForestClassifier
-import rasterio
-from rasterio.features import rasterize
-
-def classify_imagery(raster_path, training_gdf, output_path):
-    """Train RF and classify imagery."""
-    with rasterio.open(raster_path) as src:
-        image = src.read()
-        profile = src.profile
-        transform = src.transform
-
-    # Extract training data
-    X_train, y_train = [], []
-    for _, row in training_gdf.iterrows():
-        mask = rasterize([(row.geometry, 1)],
-                        out_shape=(profile['height'], profile['width']),
-                        transform=transform, fill=0, dtype=np.uint8)
-        pixels = image[:, mask > 0].T
-        X_train.extend(pixels)
-        y_train.extend([row['class_id']] * len(pixels))
-
-    # Train and predict
-    rf = RandomForestClassifier(n_estimators=100, max_depth=20, n_jobs=-1)
-    rf.fit(X_train, y_train)
-
-    prediction = rf.predict(image.reshape(image.shape[0], -1).T)
-    prediction = prediction.reshape(profile['height'], profile['width'])
-
-    profile.update(dtype=rasterio.uint8, count=1)
-    with rasterio.open(output_path, 'w', **profile) as dst:
-        dst.write(prediction.astype(rasterio.uint8), 1)
-
-    return rf
-```
-
-## Modern Cloud-Native Workflows
-
-### STAC + Planetary Computer
-
-```python
-import pystac_client
-import planetary_computer
-import odc.stac
-
-# Search Sentinel-2 via STAC
-catalog = pystac_client.Client.open(
-    "https://planetarycomputer.microsoft.com/api/stac/v1",
-    modifier=planetary_computer.sign_inplace,
-)
-
-search = catalog.search(
-    collections=["sentinel-2-l2a"],
-    bbox=[-122.5, 37.7, -122.3, 37.9],
-    datetime="2023-01-01/2023-12-31",
-    query={"eo:cloud_cover": {"lt": 20}},
-)
-
-# Load as xarray (cloud-native!)
-data = odc.stac.load(
-    list(search.get_items())[:5],
-    bands=["B02", "B03", "B04", "B08"],
-    crs="EPSG:32610",
-    resolution=10,
-)
-
-# Calculate NDVI on xarray
-ndvi = (data.B08 - data.B04) / (data.B08 + data.B04)
-```
-
-### Cloud-Optimized GeoTIFF (COG)
-
-```python
-import rasterio
-from rasterio.session import AWSSession
-
-# Read COG directly from cloud (partial reads)
-session = AWSSession(aws_access_key_id=..., aws_secret_access_key=...)
-with rasterio.open('s3://bucket/path.tif', session=session) as src:
-    # Read only window of interest
-    window = ((1000, 2000), (1000, 2000))
-    subset = src.read(1, window=window)
-
-# Write COG
-with rasterio.open('output.tif', 'w', **profile,
-                   tiled=True, blockxsize=256, blockysize=256,
-                   compress='DEFLATE', predictor=2) as dst:
-    dst.write(data)
-
-# Validate COG
+import rioxarray
+from rasterio.shutil import copy as rio_copy
 from rio_cogeo.cogeo import cog_validate
-cog_validate('output.tif')
+
+cube = rioxarray.open_rasterio('large.tif', masked=True,
+                             chunks={'band': 1, 'x': 1024, 'y': 1024})
+# Compute bounded windows or reductions; do not force the entire cube into memory.
+rio_copy('input.tif', 'output_cog.tif', driver='COG', compress='DEFLATE')
+valid, errors, warnings = cog_validate('output_cog.tif')
+if not valid:
+    raise ValueError(errors)
 ```
 
-## Performance Tips
+Tiling/compression alone does not establish COG layout. Preserve or regenerate
+appropriate overviews at COG creation; do not mutate the result in place.
 
-```python
-# 1. Spatial indexing (10-100x faster queries)
-gdf.sindex  # Auto-created by GeoPandas
+## References
 
-# 2. Chunk large rasters
-with rasterio.open('large.tif') as src:
-    for i, window in src.block_windows(1):
-        block = src.read(1, window=window)
-
-# 3. Dask for big data
-import dask.array as da
-dask_array = da.from_rasterio('large.tif', chunks=(1, 1024, 1024))
-
-# 4. Use Arrow for I/O
-gdf.to_file('output.gpkg', use_arrow=True)
-
-# 5. GDAL caching
-from osgeo import gdal
-gdal.SetCacheMax(2**30)  # 1GB cache
-
-# 6. Parallel processing
-rf = RandomForestClassifier(n_jobs=-1)  # All cores
-```
-
-## Best Practices
-
-1. **Always check CRS** before spatial operations
-2. **Use projected CRS** for area/distance calculations
-3. **Validate geometries**: `gdf = gdf[gdf.is_valid]`
-4. **Handle missing data**: `gdf['geometry'] = gdf['geometry'].fillna(None)`
-5. **Use efficient formats**: GeoPackage > Shapefile, Parquet for large data
-6. **Apply cloud masking** to optical imagery
-7. **Preserve lineage** for reproducible research
-8. **Use appropriate resolution** for your analysis scale
-
-## Detailed Documentation
-
-- **[Coordinate Systems](references/coordinate-systems.md)** - CRS fundamentals, UTM, transformations
-- **[Core Libraries](references/core-libraries.md)** - GDAL, Rasterio, GeoPandas, Shapely
-- **[Remote Sensing](references/remote-sensing.md)** - Satellite missions, spectral indices, SAR
-- **[Machine Learning](references/machine-learning.md)** - Deep learning, CNNs, GNNs for RS
-- **[GIS Software](references/gis-software.md)** - QGIS, ArcGIS, GRASS integration
-- **[Scientific Domains](references/scientific-domains.md)** - Marine, hydrology, agriculture, forestry
-- **[Advanced GIS](references/advanced-gis.md)** - 3D GIS, spatiotemporal, topology
-- **[Big Data](references/big-data.md)** - Distributed processing, GPU acceleration
-- **[Industry Applications](references/industry-applications.md)** - Urban planning, disaster management
-- **[Programming Languages](references/programming-languages.md)** - Python, R, Julia, JS, C++, Java, Go, Rust
-- **[Data Sources](references/data-sources.md)** - Satellite catalogs, APIs
-- **[Troubleshooting](references/troubleshooting.md)** - Common issues, debugging, error reference
-- **[Code Examples](references/code-examples.md)** - 500+ examples
-
----
-
-**GeoMaster covers everything from basic GIS operations to advanced remote sensing and machine learning.**
+- [Coordinate systems](references/coordinate-systems.md): authority, axis order, projections
+- [Core libraries](references/core-libraries.md): GDAL, Rasterio, Fiona, Shapely, PyProj, GeoPandas
+- [Remote sensing](references/remote-sensing.md): optical, SAR, hyperspectral, QA and calibration
+- [Machine learning](references/machine-learning.md): spatial holdouts, RF/SVM, neural models, XAI
+- [GIS software](references/gis-software.md): QGIS, ArcGIS, GRASS, SAGA
+- [Scientific domains](references/scientific-domains.md): marine, atmosphere, hydrology, agriculture, forestry
+- [Advanced GIS](references/advanced-gis.md): 3D, trajectories, topology, networks
+- [Big data](references/big-data.md): Dask, cloud access, GPU, COG, GeoParquet, Zarr
+- [Industry applications](references/industry-applications.md): urban, hazards, utilities, transportation
+- [Specialized topics](references/specialized-topics.md): geostatistics, optimization, privacy, provenance
+- [Programming languages](references/programming-languages.md): R, Julia, JavaScript, C++, Java, Go, Rust
+- [Data sources](references/data-sources.md): catalog and API contracts
+- [Troubleshooting](references/troubleshooting.md): common failure modes
+- [Code examples](references/code-examples.md): small corrected recipes
+- [Review evidence](references/review.md): upstream sources and verification boundaries
 
 ## Citing Scientific Agent Skills
 

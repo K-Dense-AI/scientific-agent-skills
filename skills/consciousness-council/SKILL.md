@@ -1,22 +1,29 @@
 ---
 name: consciousness-council
-description: Run a multi-perspective Mind Council deliberation on any question, decision, or creative challenge. Use this skill whenever the user wants diverse viewpoints, needs help making a tough decision, asks for a council/panel/board discussion, wants to explore a problem from multiple angles, requests devil's advocate analysis, or says things like "what would different experts think about this", "help me think through this from all sides", "council mode", "mind council", or "deliberate on this". Also trigger when the user faces a dilemma, trade-off, or complex choice with no obvious answer.
-allowed-tools: Read Write
+description: Structures a multi-perspective council exercise for decisions, research trade-offs, and creative challenges. Simulates thinking archetypes, separates evidence from assumptions and values, and synthesizes a conditional recommendation. Use when the user requests a council, panel, devil's advocate analysis, "mind council", or deliberate comparison of perspectives on a difficult choice.
 license: MIT license
 metadata:
-  version: "1.1"
+  version: "1.2"
   skill-author: AHK Strategies (ashrafkahoush-ux)
+  last-reviewed: "2026-09-30"
 ---
 
 # Consciousness Council
 
 A structured exercise that simulates several thinking archetypes, each emphasizing different assumptions and priorities, then synthesizes their perspectives. These are generated viewpoints from one system, not independent experts or independent evidence. Label factual claims, assumptions, and value judgments separately; verify consequential factual claims against external sources.
 
-## Why This Exists
+## When to use
 
-Single-perspective thinking has a ceiling. When you ask one mind for an answer, you get one frame. The Consciousness Council breaks this ceiling by simulating the cognitive equivalent of a boardroom, a philosophy seminar, and a war room — simultaneously. It is a simulated perspective exercise; distinct voices do not establish independent expertise.
+Use for a requested comparison of competing priorities or assumptions, including research planning decisions. The output is a decision aid: a conditional recommendation, unresolved questions, and a next step. It does not establish scientific validity by agreement or by the number of perspectives.
 
-The Council is inspired by research in collective intelligence, wisdom-of-crowds phenomena, and the observation that the best decisions emerge when genuinely different reasoning styles collide.
+This skill runs within the current conversation. It has no bundled code, service API, credentials, or MindBook connection; use the host's available research tools when factual verification is needed. Do not claim that it creates hosted sessions, stores persistent memories, or contacts real experts.
+
+## Before deliberation
+
+1. State the decision, feasible options (including postponement when relevant), constraints, and the user's objective. Use supplied context; state material missing information as an assumption or a question.
+2. Create a short evidence brief: **given facts**, **externally verified facts with sources**, **assumptions**, **unknowns**, and **value judgments**. All perspectives use this same brief.
+3. Verify facts that could change the recommendation using original sources or supplied data. If verification is unavailable, keep the conclusion conditional and identify what must be checked; a simulated Empiricist is not a source.
+4. Select a response budget: quick (3 perspectives), standard (4–6), or deep (6). These counts organize the output; they are not validated accuracy settings.
 
 ## How It Works
 
@@ -24,7 +31,7 @@ The Council has three phases:
 
 ### Phase 1 — Summon the Council
 
-Based on the user's question, select 4-6 Council Members from the archetypes below. Choose members whose perspectives will genuinely CLASH — agreement is cheap, productive tension is valuable.
+Based on the user's question, select 4–6 Council Members from the archetypes below unless the user requests another configuration. Choose lenses that examine different assumptions, constraints, or values. Agreement supported by the evidence is a valid outcome.
 
 **The 12 Archetypes:**
 
@@ -52,7 +59,7 @@ Based on the user's question, select 4-6 Council Members from the archetypes bel
 - **Ethical questions** → Ethicist + Contrarian + Empiricist + Empath + Historian
 - **Strategy/competition** → Strategist + Historian + Futurist + Contrarian + Pragmatist
 
-These are starting points — adapt based on the specific question. The goal is productive disagreement, not consensus.
+These are starting points — adapt based on the specific question. The goal is to expose decision-relevant trade-offs and evidence gaps without a quota for disagreement or consensus.
 
 ### Phase 2 — Deliberation
 
@@ -65,16 +72,18 @@ Position: [One-sentence stance]
 
 Reasoning: [2-4 sentences explaining their logic from their specific lens]
 
+Basis: [Which given/verified facts, assumptions, or values support the position]
+
 Key Risk They See: [The danger others might miss]
 
-Surprising Insight: [Something non-obvious that emerges from their frame]
+Decision Check: [Evidence or a changed constraint that would alter this position]
 ```
 
 **Critical rules for deliberation:**
 
 - Seek substantive differences in assumptions, evidence, and values, but do not manufacture factual disagreement. When evidence supports agreement, record it and examine remaining uncertainty or decision trade-offs.
-- Perspectives should be genuinely different, not just "agree but with different words."
-- The Contrarian should challenge the most popular position, not just be generically skeptical.
+- Distinguish the lenses even when they reach the same recommendation; avoid repeating one argument in different voices.
+- The Contrarian tests the strongest assumption behind the leading option and may conclude that it withstands scrutiny. Do not invent contrary evidence.
 - Keep each member's contribution focused and sharp. Depth over breadth.
 
 ### Phase 3 — Synthesis
@@ -86,16 +95,20 @@ After all members speak, deliver:
 
 Points of Convergence: [Shared conclusions, with their evidence and assumptions; agreement alone is not a confidence signal]
 
-Core Tension: [The central disagreement that won't resolve easily — this IS the insight]
+Core Tension: [The decision-relevant trade-off, or state that no substantive disagreement remains]
 
-The Blind Spot: [What NO member addressed — the question behind the question]
+Open Question: [An overlooked issue or missing evidence; say if none was identified]
 
-Recommended Path: [Actionable recommendation that respects the tension rather than ignoring it]
+Recommended Path: [Conditional recommendation, next step, and what would change the choice]
 
-Confidence Level: [High / Medium / Low — based on source quality, independent corroboration, and sensitivity to assumptions]
+Confidence Level: [Qualitative High / Medium / Low with reasons, tied to a specific claim; no percentage inferred from votes or rhetoric]
 
 One Question to Sit With: [The question the user should keep thinking about after this session]
 ```
+
+Before delivering the synthesis, check that every consequential factual claim traces to the evidence brief, each recommendation respects the constraints, and uncertainties are still visible. A critical unverified premise prevents a high-confidence recommendation. Distinguish confidence in the proposed next step from confidence in the eventual outcome. Record supported agreement and unresolved disagreements; do not resolve them by majority vote.
+
+This is a qualitative review by the agent, not an automated validation gate or proof that the premises are true. Report unresolved checks explicitly.
 
 ## Council Configurations
 
@@ -106,9 +119,11 @@ The user can customize the Council:
 - **"Add [archetype]"** → Include a specific archetype
 - **"Without [archetype]"** → Exclude a specific archetype
 - **"Custom council: [list]"** → User picks exact members
-- **"Anonymous council"** → Don't reveal which archetype is speaking until synthesis (reduces anchoring bias)
-- **"Devil's advocate mode"** → Every member must argue AGAINST whatever seems most intuitive
+- **"Anonymous council"** → Use neutral labels until synthesis. This is a presentation option; no bias-reduction effect is established for this skill.
+- **"Devil's advocate mode"** → Stress-test the intuitive choice with plausible failure cases and label hypothetical premises. Retain facts that survive the challenge.
 - **"Rounds mode"** → After initial positions, members respond to each other for a second round
+
+See [advanced configurations](references/advanced-configurations.md) for domain mixes, optional editorial scoring, and bounded multi-round or synthesis-only output.
 
 ## What Makes a Good Council Question
 
@@ -134,18 +149,28 @@ If the question seems too simple for a full Council, say so — and offer a quic
 - The Synthesis should feel like genuine integration, not just a list of what each member said.
 - "Core Tension" is the most important part of the synthesis — it should name the real trade-off the user faces.
 - "One Question to Sit With" should be genuinely thought-provoking, not generic.
-- Never let the Council devolve into everyone agreeing politely. Productive friction is the point.
+- Preserve substantive trade-offs without staging conflict. Evidence-based agreement is useful too.
 
-## Example
+## Worked example: pilot or full study
 
-**User:** "Should I quit my stable corporate job to start a company?"
+**User:** "Quick council: should we run a pilot or begin the full experiment? We have ten weeks and 100 budget units. The pilot costs 20 units and takes two weeks; the full study costs 80 units and takes eight weeks. We don't know whether our assay is reproducible."
 
-**Council Selection:** Pragmatist, Futurist, Empath, Contrarian, Strategist (5 members — high-stakes life decision with financial, emotional, and strategic dimensions)
+This is a fictional, manually worked illustration, not an experimentally validated outcome. The costs, durations, and uncertainty are given facts within the scenario. Assume sequential scheduling, no overlap, and that the pilot would assess the assay conditions needed for the study. Protecting interpretable results is a stated decision priority, not an empirical finding.
 
-Then run the full 3-phase deliberation.
+| Perspective | Position and basis | Risk and decision check |
+| --- | --- | --- |
+| Empiricist | Prefer the pilot because assay reproducibility is unknown. Define fit-for-purpose acceptance criteria before observing pilot results. | A pilot using different conditions may not answer the study's question. Change the position if relevant existing validation resolves that uncertainty. |
+| Pragmatist | The pilot followed by the full study exactly uses 100 units and ten weeks under the stated assumptions. | There is no contingency for repeats or delays. Check whether the deadline and budget allow a staged decision. |
+| Contrarian | Challenge whether this pilot can change the go/no-go decision; if it cannot, redesign it before spending 20 units. | A reassuring pilot could still leave the key uncertainty unresolved. Specify what result would stop or modify the full study. |
+
+**Synthesis:** All three lenses support resolving the assay uncertainty; this agreement adds no independent evidence. The core tension is learning before commitment versus leaving no schedule or budget margin. The open question is whether the pilot's acceptance criteria can answer the reproducibility question under study conditions. Recommend defining those criteria and a stop rule before committing to either path. Confidence is medium in that next step and low in successful completion of the full study within the current limits. One question to resolve: "Which pilot result would actually change our decision?"
+
+**Sensitivity check:** If the pilot costs 25 units, the sequential plan costs 105 and is infeasible without a scope or budget change. If relevant assay validation already exists, revisit whether a new pilot is needed. These changes should alter the recommendation even if every archetype initially agreed.
+
+## Evidence and limits
+
+This specific prompt workflow and its optional scoring have not been benchmarked for decision accuracy. Multi-agent studies do not directly validate several voices generated in one conversation. [Baltaji et al. (2024)](https://arxiv.org/abs/2405.03862) report persona inconsistency and conformity in their tested collaborations. A [September 2026 preprint by Ferreira et al.](https://arxiv.org/abs/2609.35875) reports that debate did not reliably beat budget-matched sampling in its small-model setting. These bounded findings motivate checking evidence and assumptions; they do not establish a universal benefit or failure of council exercises.
 
 ## Attribution
 
-Created by AHK Strategies — consciousness infrastructure for the age of AI.
-Learn more: https://ahkstrategies.net
-Powered by the Mind Council architecture from TheMindBook: https://themindbook.app
+Originally created by [AHK Strategies](https://www.ahkstrategies.net/), with inspiration from [MindBook](https://themindbook.app/). The [current MindBook FAQ](https://themindbook.app/help), reviewed 2026-09-30, distinguishes its 12-archetype Council Chamber from a separate six-mind Mind Council. This repository's standalone exercise retains its own 3/4–6/6-perspective configurations; it is not a client for either hosted feature.

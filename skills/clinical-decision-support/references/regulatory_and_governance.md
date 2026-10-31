@@ -1,6 +1,6 @@
 # Regulatory and Governance Context
 
-Checked 2026-07-23. This is orientation for research documentation, not legal advice or a regulatory determination.
+Checked 2026-09-30. This is orientation for research documentation, not legal advice or a regulatory determination.
 
 ## FDA Clinical Decision Support
 
@@ -25,8 +25,8 @@ Use these sources only to identify documentation themes for research governance:
 
 - [Predetermined Change Control Plan for AI-Enabled Device Software Functions](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/marketing-submission-recommendations-predetermined-change-control-plan-artificial-intelligence) — final guidance, August 2025. A PCCP describes planned modifications, methods to develop/validate/implement them, and impact assessment; FDA reviews it within a marketing submission.
 - [AI-Enabled Device Software Functions: Lifecycle Management and Marketing Submission Recommendations](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/artificial-intelligence-enabled-device-software-functions-lifecycle-management-and-marketing) — draft guidance, January 2025; **not for implementation** as of the check date.
-- [Good Machine Learning Practice for Medical Device Development](https://www.fda.gov/medical-devices/software-medical-device-samd/good-machine-learning-practice-medical-device-development-guiding-principles) — FDA page points to the January 2025 IMDRF final principles.
-- [Transparency for Machine Learning-Enabled Medical Devices](https://www.fda.gov/medical-devices/software-medical-device-samd/transparency-machine-learning-enabled-medical-devices-guiding-principles) — joint guiding principles, June 2024.
+- [Good Machine Learning Practice for Medical Device Development](https://www.fda.gov/medical-devices/artificial-intelligence-enabled-medical-devices/good-machine-learning-practice-medical-device-development-guiding-principles) — FDA page points to the January 2025 IMDRF final principles.
+- [Transparency for Machine Learning-Enabled Medical Devices](https://www.fda.gov/medical-devices/artificial-intelligence-enabled-medical-devices/transparency-machine-learning-enabled-medical-devices-guiding-principles) — joint guiding principles, June 2024.
 
 Recurring lifecycle themes:
 
@@ -55,7 +55,7 @@ For predictive DSIs in scope, the rule and ONC materials emphasize source attrib
 - ongoing maintenance;
 - update, continued-validation, and fairness-assessment schedules.
 
-They also describe intervention risk management for predictive DSIs supplied by certified health IT developers. Use these categories as a useful transparency crosswalk only when relevant; do not claim ONC certification.
+They also describe intervention risk management for predictive DSIs supplied by certified health IT developers. At review, the [current 45 CFR 170.315(b)(11)](https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-D/part-170/subpart-C/section-170.315) still contains these provisions. The [HTI-5 proposed rule](https://healthit.gov/resources/health-data-technology-and-interoperability-astp-onc-deregulatory-actions-to-unleash-prosperity-hti-5-proposed-rule/) proposes removing AI model-card requirements; do not treat that proposal as an enacted change. Recheck the effective regulation before using this crosswalk. Use these categories as a useful transparency crosswalk only when relevant; do not claim ONC certification.
 
 Sources:
 

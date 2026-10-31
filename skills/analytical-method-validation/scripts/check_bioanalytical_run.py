@@ -20,7 +20,8 @@ points, which are excluded from the calibration pass count).
 
 Input for --isr: columns `original` and `repeat`.
 
-Input for --total-error: columns `label`, `accuracy_pct`, `precision_pct`.
+Input for --total-error: columns `label`, `accuracy_pct` (signed percent bias,
+not recovery), `precision_pct` (non-negative CV).
 
 Exit codes: 0 all applied criteria met, 1 criteria not met, 2 bad input.
 """
@@ -73,8 +74,9 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
     detail: list[dict] = []
 
     cal_pass = cal_total = 0
-    cal_levels: set[float] = set()
-    qc_by_level: dict[str, list[bool]] = {}
+    cal_by_level: dict[float, list[bool]] = {}
+    qc_by_level: dict[float, list[bool]] = {}
+    qc_labels: dict[float, str] = {}
     qc_pass = qc_total = 0
 
     for i, r in enumerate(rows):
@@ -82,12 +84,14 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
         label = (r.get("label") or "").strip()
         nominal = to_float(r["nominal"], "nominal", i)
         measured = to_float(r["measured"], "measured", i)
-        if nominal == 0:
-            raise InputError(f"row {i + 1}: nominal of 0 cannot be used")
+        if nominal <= 0:
+            raise InputError(f"row {i + 1}: nominal must be positive")
         dev = 100.0 * (measured - nominal) / nominal
 
         if kind in ("calibrator", "cal", "standard", "std"):
             if label.lower() == "anchor":
+                if crit["total_error_pct"] is None:
+                    raise InputError("ANCHOR exclusion is supported for LBA only")
                 detail.append({"type": "calibrator", "label": "ANCHOR", "nominal": nominal,
                                "measured": measured, "deviation_pct": dev,
                                "tolerance_pct": float("nan"), "within": "excluded"})
@@ -96,18 +100,19 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
             ok = abs(dev) <= tol
             cal_total += 1
             cal_pass += int(ok)
-            cal_levels.add(round(nominal, 12))
+            cal_by_level.setdefault(nominal, []).append(ok)
             detail.append({"type": "calibrator", "label": label or "-", "nominal": nominal,
                            "measured": measured, "deviation_pct": dev,
                            "tolerance_pct": tol, "within": ok})
         elif kind in ("qc", "quality-control"):
             tol = crit["qc_run_tolerance_pct"]
             ok = abs(dev) <= tol
-            key = label or f"{nominal:g}"
+            key = nominal
+            qc_labels[key] = label or f"{nominal:g}"
             qc_by_level.setdefault(key, []).append(ok)
             qc_total += 1
             qc_pass += int(ok)
-            detail.append({"type": "qc", "label": key, "nominal": nominal,
+            detail.append({"type": "qc", "label": qc_labels[key], "nominal": nominal,
                            "measured": measured, "deviation_pct": dev,
                            "tolerance_pct": tol, "within": ok})
         else:
@@ -117,12 +122,12 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
 
     # Calibration curve criteria.
     if cal_total:
-        n_levels = len(cal_levels)
+        n_levels = sum(any(flags) for flags in cal_by_level.values())
         need_levels = crit["calibration_min_levels"]
         if n_levels < need_levels:
             findings.append(
-                f"calibration curve has {n_levels} concentration levels; M10 requires a "
-                f"minimum of {need_levels}"
+                f"calibration curve has {n_levels} passing concentration levels; M10 requires a "
+                f"minimum of {need_levels} passing levels"
             )
         frac = cal_pass / cal_total
         need = crit["calibration_min_pass_fraction"]
@@ -131,6 +136,25 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
                 f"{cal_pass}/{cal_total} calibration standards within tolerance "
                 f"({frac * 100:.1f}%); M10 requires at least {need * 100:.0f}%"
             )
+        for nominal, flags in cal_by_level.items():
+            if sum(flags) / len(flags) < 0.5:
+                findings.append(f"calibration level {nominal:g}: fewer than 50% of replicates pass")
+        if cal_pass < cal_total:
+            findings.append("failed calibrators require documented exclusion and a refitted curve; "
+                            "this checker does not refit or establish a revised range")
+        for boundary in ("lloq", "uloq"):
+            points = [r for r in detail if r["type"] == "calibrator" and r["label"].lower() == boundary]
+            if not points:
+                findings.append(f"label {boundary.upper()} explicitly to verify boundary tolerances")
+            else:
+                expected = min(cal_by_level) if boundary == "lloq" else max(cal_by_level)
+                if any(point["nominal"] != expected for point in points):
+                    raise InputError(f"{boundary.upper()} label does not identify the calibration boundary")
+        for anchor in (r for r in detail if r["within"] == "excluded"):
+            if min(cal_by_level) <= anchor["nominal"] <= max(cal_by_level):
+                raise InputError("LBA anchor points must lie outside the quantitation range")
+    else:
+        findings.append("no non-anchor calibration standards supplied; run assessment incomplete")
 
     # Routine run QC criteria: both the overall fraction and per-level fraction.
     if qc_total:
@@ -148,13 +172,17 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
                 f"({frac * 100:.1f}%); M10 requires at least {need * 100:.0f}% of the total"
             )
         for level, flags in sorted(qc_by_level.items()):
+            if len(flags) < 2:
+                findings.append(f"QC level {qc_labels[level]}: at least two QC samples are needed")
             level_frac = sum(flags) / len(flags)
             if level_frac < crit["qc_run_pass_fraction_per_level"]:
                 findings.append(
-                    f"QC level {level}: {sum(flags)}/{len(flags)} within tolerance "
+                    f"QC level {qc_labels[level]}: {sum(flags)}/{len(flags)} within tolerance "
                     f"({level_frac * 100:.0f}%); M10 requires at least "
                     f"{crit['qc_run_pass_fraction_per_level'] * 100:.0f}% at each level"
                 )
+    else:
+        findings.append("no QCs supplied; run assessment incomplete")
     return detail, findings
 
 
@@ -167,6 +195,8 @@ def check_isr(path: str, crit: dict) -> tuple[list[dict], list[str]]:
     for i, r in enumerate(rows):
         original = to_float(r["original"], "original", i)
         repeat = to_float(r["repeat"], "repeat", i)
+        if original <= 0 or repeat <= 0:
+            raise InputError("ISR requires positive quantified concentrations within the validated range")
         mean_val = 0.5 * (original + repeat)
         if mean_val == 0:
             raise InputError(f"row {i + 1}: mean of original and repeat is zero")
@@ -199,6 +229,8 @@ def check_total_error(path: str, crit: dict) -> tuple[list[dict], list[str]]:
         label = (r["label"] or "").strip()
         acc = to_float(r["accuracy_pct"], "accuracy_pct", i)
         prec = to_float(r["precision_pct"], "precision_pct", i)
+        if prec < 0:
+            raise InputError("precision_pct must be a non-negative CV; accuracy_pct is signed bias, not recovery")
         total = abs(acc) + abs(prec)
         limit = (
             crit["total_error_pct_at_limits"]
@@ -286,6 +318,10 @@ def main() -> int:
         "run acceptance is a documented decision by the analyst; this tool applies stated "
         "criteria and does not accept or reject a run"
     )
+    if args.run:
+        note("one row must represent a reportable standard or QC sample, not an individual LBA well; "
+             "check blanks, zero samples, study-sample-dependent 5% QC count, bracketing, "
+             "plate/batch criteria, and calibration refitting separately")
     return EXIT_FINDINGS if findings else EXIT_OK
 
 

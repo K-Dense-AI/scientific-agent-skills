@@ -1,6 +1,6 @@
 # Security Validation Record
 
-Validation date: **2026-07-23** (local project date).
+Historical validation date: **2026-07-23** (local project date). Counts and scanner results below describe that run, not a new security certification.
 
 ## Baseline
 
@@ -59,8 +59,7 @@ None of the LOW findings permits data transmission or credential access. No CRIT
 ## Reproduction
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
-  -s tests/peer-review -p "test_*.py" -v
+PYTHONDONTWRITEBYTECODE=1 uv run --with pytest python -m pytest tests/peer-review -q
 
 uv run skills-ref validate skills/peer-review
 
@@ -73,3 +72,7 @@ uv run python scan_pr_skills.py \
 ```
 
 The repository-level `SECURITY.md` was intentionally not edited in this scoped refresh; its generated snapshot will update through the repository’s normal scan process.
+
+## 2026-10-01 maintenance checks
+
+The intake now distinguishes a disclosed conflict awaiting clearance from actual editor clearance. The reporting catalog adds SPIRIT-AI protocols and non-prediction LLM studies. Standard-library synthetic tests pass (30 tests and 7 CLI-help subtests), and `skills-ref validate` passes. A new collection-level security scan is coordinated separately; the historical scanner counts above were not rerun for this record. These checks use synthetic inputs and do not constitute a live manuscript review.

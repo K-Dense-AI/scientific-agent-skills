@@ -1,271 +1,278 @@
-"""
-Phylogenetic Analysis Pipeline
-===============================
-Complete workflow: MAFFT alignment → IQ-TREE tree → ETE3 visualization.
+"""MAFFT alignment, IQ-TREE 3 / FastTree inference, optional ETE3 rendering.
 
-Requirements:
-    conda install -c bioconda mafft iqtree
-    uv pip install ete3
-
-Usage:
-    python phylogenetic_analysis.py sequences.fasta --type nt --threads 4
-    python phylogenetic_analysis.py proteins.fasta --type aa --fasttree
+Python 3.12 with ete3==3.1.3 for tree summaries; PyQt5 for rendering.
+External executables: mafft plus iqtree3 (or --iqtree-bin iqtree2) / FastTree.
 """
 
 import argparse
+import math
 import os
-import subprocess
-import sys
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 
 
-def check_dependencies():
-    """Check that required tools are installed."""
-    tools = {
-        "mafft": "conda install -c bioconda mafft",
-        "iqtree2": "conda install -c bioconda iqtree",
-    }
-    missing = []
-    for tool, install_cmd in tools.items():
-        result = subprocess.run(["which", tool], capture_output=True)
-        if result.returncode != 0:
-            missing.append(f"  {tool}: {install_cmd}")
+MAFFT_METHODS = {
+    "auto": ["--auto"],
+    "linsi": ["--localpair", "--maxiterate", "1000"],
+    "einsi": ["--genafpair", "--maxiterate", "1000"],
+    "fftnsi": ["--retree", "2", "--maxiterate", "2"],
+    "fftns": ["--retree", "2", "--maxiterate", "0"],
+}
 
+
+def check_dependencies(use_fasttree=False, iqtree_bin="iqtree3", fasttree_bin="FastTree"):
+    """Check only the selected inference backend, portably."""
+    required = ["mafft", fasttree_bin if use_fasttree else iqtree_bin]
+    missing = [tool for tool in required if shutil.which(tool) is None]
     if missing:
-        print("Missing dependencies:")
-        for m in missing:
-            print(m)
-        sys.exit(1)
-    print("All dependencies found.")
+        raise RuntimeError("Missing executables on PATH: " + ", ".join(missing))
+    print("[OK] All dependencies found.")
 
 
 def count_sequences(fasta_file: str) -> int:
-    """Count sequences in a FASTA file."""
-    with open(fasta_file) as f:
-        return sum(1 for line in f if line.startswith('>'))
+    with open(fasta_file) as handle:
+        return sum(line.startswith(">") for line in handle)
 
 
-def run_mafft(input_fasta: str, output_fasta: str, n_threads: int = 4,
-               method: str = "auto") -> str:
-    """Run MAFFT multiple sequence alignment."""
-    n_seqs = count_sequences(input_fasta)
-    print(f"MAFFT: Aligning {n_seqs} sequences...")
+def validate_fasta(path, seq_type="nt", aligned=False, min_taxa=4):
+    """Reject ambiguous identifiers, empty records, wrong alphabets and ragged MSAs."""
+    alphabets = {"nt": set("ACGTURYSWKMBDHVN?-"),
+                 "aa": set("ACDEFGHIKLMNPQRSTVWYBXZ?-")}
+    if seq_type not in alphabets:
+        raise ValueError("Sequence type must be nt or aa")
+    records = {}
+    name = None
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                name = line[1:]
+                if (not name or any(c.isspace() or c in "():,;[]'\"" for c in name)):
+                    raise ValueError("Use unique FASTA IDs without whitespace or Newick punctuation")
+                if name in records:
+                    raise ValueError(f"Duplicate FASTA ID: {name}")
+                records[name] = ""
+            elif name is None:
+                raise ValueError("Sequence before the first FASTA header")
+            else:
+                records[name] += line.upper()
+    if len(records) < min_taxa:
+        raise ValueError(f"Need at least {min_taxa} taxa")
+    for name, sequence in records.items():
+        missing = set("?-") | ({"N"} if seq_type == "nt" else {"X"})
+        if not sequence or not (set(sequence) - missing):
+            raise ValueError(f"Empty or entirely missing sequence: {name}")
+        invalid = set(sequence) - alphabets[seq_type]
+        if invalid:
+            raise ValueError(f"Invalid {seq_type} symbols in {name}: {sorted(invalid)}")
+    if aligned and len({len(sequence) for sequence in records.values()}) != 1:
+        raise ValueError("Aligned FASTA sequences must have equal lengths")
+    return records
 
-    # Auto-select method based on dataset size
-    if method == "auto":
-        if n_seqs <= 200:
-            cmd = ["mafft", "--localpair", "--maxiterate", "1000",
-                   "--thread", str(n_threads), "--inputorder", input_fasta]
-        elif n_seqs <= 1000:
-            cmd = ["mafft", "--auto", "--thread", str(n_threads),
-                   "--inputorder", input_fasta]
-        else:
-            cmd = ["mafft", "--fftns", "--thread", str(n_threads),
-                   "--inputorder", input_fasta]
-    else:
-        cmd = ["mafft", f"--{method}", "--thread", str(n_threads),
-               "--inputorder", input_fasta]
 
-    with open(output_fasta, 'w') as out:
-        result = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, text=True)
-
-    if result.returncode != 0:
-        raise RuntimeError(f"MAFFT failed:\n{result.stderr[:500]}")
-
-    print(f"  Alignment complete -> {output_fasta}")
-    return output_fasta
+def _run_to_file(command, output, label):
+    """Keep any previous output intact when an executable fails or emits nothing."""
+    output = Path(output)
+    with tempfile.NamedTemporaryFile(mode="w", dir=output.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            result = subprocess.run(command, stdout=handle, stderr=subprocess.PIPE, text=True)
+            handle.flush()
+            if result.returncode != 0:
+                raise RuntimeError(f"{label} failed:\n{result.stderr[-2000:]}")
+            if temporary.stat().st_size == 0:
+                raise RuntimeError(f"{label} produced an empty output")
+            os.replace(temporary, output)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return str(output)
 
 
-def run_iqtree(aligned_fasta: str, prefix: str, seq_type: str = "nt",
-                bootstrap: int = 1000, n_threads: int = 4,
-                outgroup: str = None) -> str:
-    """Run IQ-TREE 2 phylogenetic inference."""
-    print(f"IQ-TREE 2: Building maximum likelihood tree...")
+def run_mafft(input_fasta: str, output_fasta: str, n_threads=4, method="auto") -> str:
+    """Use documented MAFFT options; auto delegates strategy selection to MAFFT."""
+    if method not in MAFFT_METHODS:
+        raise ValueError(f"Unsupported MAFFT method: {method}")
+    if n_threads < 1:
+        raise ValueError("Threads must be positive")
+    if Path(input_fasta).resolve() == Path(output_fasta).resolve():
+        raise ValueError("Alignment output must differ from input")
+    command = ["mafft", *MAFFT_METHODS[method], "--thread", str(n_threads),
+               "--inputorder", str(Path(input_fasta).resolve())]
+    return _run_to_file(command, output_fasta, "MAFFT")
 
-    cmd = [
-        "iqtree2",
-        "-s", aligned_fasta,
-        "--prefix", prefix,
-        "-m", "TEST",           # Auto model selection
-        "-B", str(bootstrap),   # Ultrafast bootstrap
-        "-T", str(n_threads),
-        "--redo",
-        "-alrt", "1000",        # SH-aLRT test
-    ]
 
+def run_iqtree(aligned_fasta: str, prefix: str, seq_type="nt", bootstrap=1000,
+               n_threads=4, outgroup=None, executable="iqtree3", model="MFP",
+               seed=42, redo=False) -> str:
+    """Infer an ML tree with SH-aLRT/UFBoot labels; preserve checkpoints by default."""
+    if seq_type not in {"nt", "aa"}:
+        raise ValueError("Sequence type must be nt or aa")
+    if bootstrap < 1000:
+        raise ValueError("Ultrafast bootstrap requires at least 1000 replicates")
+    if n_threads < 1:
+        raise ValueError("Threads must be positive")
+    command = [executable, "-s", str(Path(aligned_fasta).resolve()),
+               "--prefix", str(Path(prefix).resolve()), "-st", "DNA" if seq_type == "nt" else "AA",
+               "-m", model, "-B", str(bootstrap), "-T", str(n_threads),
+               "--alrt", "1000", "--seed", str(seed)]
     if outgroup:
-        cmd += ["-o", outgroup]
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-
+        command += ["-o", outgroup]
+    if redo:
+        command.append("--redo")
+    result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"IQ-TREE failed:\n{result.stderr[:500]}")
-
+        raise RuntimeError(f"IQ-TREE failed:\n{result.stderr[-2000:]}\n{result.stdout[-2000:]}")
     tree_file = f"{prefix}.treefile"
-
-    # Extract best model from log
-    log_file = f"{prefix}.log"
-    if os.path.exists(log_file):
-        with open(log_file) as f:
-            for line in f:
-                if "Best-fit model" in line:
-                    print(f"  {line.strip()}")
-
-    print(f"  Tree saved -> {tree_file}")
+    if not Path(tree_file).is_file() or Path(tree_file).stat().st_size == 0:
+        raise RuntimeError("IQ-TREE did not produce a nonempty .treefile")
+    print(f"[OK] IQ-TREE tree: {tree_file}; inspect {prefix}.iqtree for model and support order")
     return tree_file
 
 
-def run_fasttree(aligned_fasta: str, output_tree: str, seq_type: str = "nt") -> str:
-    """Run FastTree (faster alternative for large datasets)."""
-    print("FastTree: Building approximate ML tree (faster)...")
-
-    if seq_type == "nt":
-        cmd = ["FastTree", "-nt", "-gtr", "-gamma", aligned_fasta]
-    else:
-        cmd = ["FastTree", "-lg", "-gamma", aligned_fasta]
-
-    with open(output_tree, 'w') as out:
-        result = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, text=True)
-
-    if result.returncode != 0:
-        raise RuntimeError(f"FastTree failed:\n{result.stderr[:500]}")
-
-    print(f"  Tree saved -> {output_tree}")
-    return output_tree
+def run_fasttree(aligned_fasta: str, output_tree: str, seq_type="nt", executable="FastTree") -> str:
+    """CAT topology/length optimization followed by Gamma20 rescaling; SH-like support."""
+    if seq_type not in {"nt", "aa"}:
+        raise ValueError("Sequence type must be nt or aa")
+    if Path(aligned_fasta).resolve() == Path(output_tree).resolve():
+        raise ValueError("Tree output must differ from input")
+    options = ["-nt", "-gtr"] if seq_type == "nt" else ["-lg"]
+    return _run_to_file([executable, *options, "-gamma", str(Path(aligned_fasta).resolve())],
+                        output_tree, "FastTree")
 
 
-def visualize_tree(tree_file: str, output_png: str, outgroup: str = None) -> None:
-    """Visualize the phylogenetic tree with ETE3."""
+def load_tree(tree_file):
+    """Read slash-delimited IQ-TREE support as labels, never as invented support=1."""
+    from ete3 import Tree
+    tree = Tree(str(tree_file), format=1)
+    names = tree.get_leaf_names()
+    if len(names) != len(set(names)):
+        raise ValueError("Duplicate tree leaf names")
+    for node in tree.iter_descendants():
+        if not math.isfinite(node.dist) or node.dist < 0:
+            raise ValueError("Branch lengths must be finite and nonnegative")
+    return tree
+
+
+def root_for_display(tree, outgroup=None, midpoint=False):
+    """Root explicitly while retaining internal labels on their unrooted splits."""
+    if outgroup and midpoint:
+        raise ValueError("Choose outgroup or midpoint rooting, not both")
+    if not outgroup and not midpoint:
+        return tree
+    all_names = frozenset(tree.get_leaf_names())
+    if outgroup and outgroup not in all_names:
+        raise ValueError(f"Outgroup not found: {outgroup}")
+
+    def split_key(node):
+        side = frozenset(node.get_leaf_names())
+        return min(tuple(sorted(side)), tuple(sorted(all_names - side)))
+
+    labels = {}
+    for node in tree.iter_descendants():
+        if not node.is_leaf() and node.name:
+            key = split_key(node)
+            if key in labels and labels[key] != node.name:
+                raise ValueError("Conflicting labels on the same root split")
+            labels[key] = node.name
+    target = outgroup if outgroup else tree.get_midpoint_outgroup()
+    if target is None:
+        raise ValueError("Cannot midpoint-root this tree")
+    tree.set_outgroup(target)
+    for node in tree.traverse():
+        if not node.is_leaf():
+            node.name = "" if node.is_root() else labels.get(split_key(node), "")
+    return tree
+
+
+def visualize_tree(tree_file: str, output_png: str, outgroup=None, midpoint=False):
+    """Render labels verbatim; return the image path only on successful rendering."""
     try:
-        from ete3 import Tree, TreeStyle, NodeStyle
+        from ete3 import TreeStyle, TextFace
     except ImportError as exc:
-        # TreeStyle and NodeStyle live in ete3's Qt-backed treeview module, so
-        # this also fires when ete3 itself imported fine but PyQt5 is missing.
         print(f"ETE3 rendering unavailable ({exc}). Skipping visualization.")
-        print("  Install: uv pip install ete3 PyQt5")
-        return
-
-    t = Tree(tree_file)
-
-    # Root the tree
-    if outgroup and outgroup in [leaf.name for leaf in t.get_leaves()]:
-        t.set_outgroup(outgroup)
-        print(f"  Rooted at outgroup: {outgroup}")
-    else:
-        # Midpoint rooting
-        t.set_outgroup(t.get_midpoint_outgroup())
-        print("  Applied midpoint rooting")
-
-    # Style
-    ts = TreeStyle()
-    ts.show_leaf_name = True
-    ts.show_branch_support = True
-    ts.mode = "r"  # rectangular
-
+        print("Install in Python 3.12: uv pip install ete3==3.1.3 PyQt5")
+        return None
+    tree = root_for_display(load_tree(tree_file), outgroup, midpoint)
+    style = TreeStyle()
+    style.show_leaf_name = True
+    style.show_branch_support = False
+    style.mode = "r"
+    for node in tree.iter_descendants():
+        if not node.is_leaf() and node.name:
+            node.add_face(TextFace(node.name), column=0, position="branch-top")
     try:
-        t.render(output_png, tree_style=ts, w=800, units="px")
-        print(f"  Visualization saved -> {output_png}")
-    except Exception as e:
-        print(f"  Visualization failed (display issue?): {e}")
-        # Save tree in Newick format as fallback
-        rooted_nwk = output_png.replace(".png", "_rooted.nwk")
-        t.write(format=1, outfile=rooted_nwk)
-        print(f"  Rooted tree saved -> {rooted_nwk}")
+        tree.render(output_png, tree_style=style, w=800, units="px")
+    except Exception as exc:
+        print(f"Visualization failed: {exc}")
+        return None
+    print(f"[OK] Visualization: {output_png}")
+    return output_png
 
 
 def tree_summary(tree_file: str) -> dict:
-    """Print summary statistics for the tree."""
+    """Summarize original non-root branches, including zero-length edges."""
     try:
-        from ete3 import Tree
-        t = Tree(tree_file)
-        t.set_outgroup(t.get_midpoint_outgroup())
-
-        leaves = t.get_leaves()
-        branch_lengths = [n.dist for n in t.traverse() if n.dist > 0]
-
-        stats = {
-            "n_taxa": len(leaves),
-            "total_branch_length": sum(branch_lengths),
-            "mean_branch_length": sum(branch_lengths) / len(branch_lengths) if branch_lengths else 0,
-            "max_branch_length": max(branch_lengths) if branch_lengths else 0,
-        }
-
-        print("\nTree Summary:")
-        for k, v in stats.items():
-            if isinstance(v, float):
-                print(f"  {k}: {v:.6f}")
-            else:
-                print(f"  {k}: {v}")
-
+        tree = load_tree(tree_file)
+        lengths = [node.dist for node in tree.iter_descendants()]
+        stats = {"n_taxa": len(tree), "total_branch_length": sum(lengths),
+                 "mean_branch_length": sum(lengths) / len(lengths) if lengths else 0,
+                 "max_branch_length": max(lengths, default=0)}
+        print(f"Tree summary (original topology): {stats}")
         return stats
-    except Exception as e:
-        print(f"Could not compute tree stats: {e}")
+    except (ImportError, ValueError, OSError) as exc:
+        print(f"Could not compute tree stats: {exc}")
         return {}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Phylogenetic analysis pipeline")
-    parser.add_argument("input", help="Input FASTA file (unaligned)")
-    parser.add_argument("--type", choices=["nt", "aa"], default="nt",
-                        help="Sequence type: nt (nucleotide) or aa (amino acid)")
-    parser.add_argument("--threads", type=int, default=4, help="Number of threads")
-    parser.add_argument("--bootstrap", type=int, default=1000,
-                        help="Bootstrap replicates for IQ-TREE")
-    parser.add_argument("--fasttree", action="store_true",
-                        help="Use FastTree instead of IQ-TREE (faster, less accurate)")
-    parser.add_argument("--outgroup", help="Outgroup taxon name for rooting")
-    parser.add_argument("--mafft-method", default="auto",
-                        choices=["auto", "linsi", "einsi", "fftnsi", "fftns"],
-                        help="MAFFT alignment method")
-    parser.add_argument("--output-dir", default="phylo_results",
-                        help="Output directory")
-
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", help="FASTA with unique whitespace-free taxon IDs")
+    parser.add_argument("--type", choices=["nt", "aa"], default="nt")
+    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--bootstrap", type=int, default=1000, help="UFBoot replicates, >=1000")
+    parser.add_argument("--fasttree", action="store_true")
+    parser.add_argument("--iqtree-bin", default="iqtree3")
+    parser.add_argument("--fasttree-bin", default="FastTree")
+    parser.add_argument("--model", default="MFP", help="IQ-TREE model or ModelFinder Plus")
+    parser.add_argument("--seed", type=int, default=42, help="IQ-TREE random seed")
+    parser.add_argument("--redo", action="store_true", help="Explicitly overwrite IQ-TREE results")
+    root = parser.add_mutually_exclusive_group()
+    root.add_argument("--outgroup", help="One taxon ID; validate its biological suitability")
+    root.add_argument("--midpoint", action="store_true", help="Midpoint-root the display only")
+    parser.add_argument("--mafft-method", default="auto", choices=list(MAFFT_METHODS))
+    parser.add_argument("--aligned", action="store_true", help="Use a reviewed MSA without realignment")
+    parser.add_argument("--no-visualization", action="store_true")
+    parser.add_argument("--output-dir", default="phylo_results")
     args = parser.parse_args()
-
-    # Setup
-    os.makedirs(args.output_dir, exist_ok=True)
-    prefix = os.path.join(args.output_dir, Path(args.input).stem)
-
-    print("=" * 60)
-    print("Phylogenetic Analysis Pipeline")
-    print("=" * 60)
-    print(f"Input: {args.input}")
-    print(f"Sequence type: {args.type}")
-    print(f"Output dir: {args.output_dir}")
-
-    # Step 1: Multiple Sequence Alignment
-    print("\n[Step 1/3] Multiple Sequence Alignment (MAFFT)")
-    aligned = run_mafft(
-        args.input,
-        f"{prefix}_aligned.fasta",
-        n_threads=args.threads,
-        method=args.mafft_method
-    )
-
-    # Step 2: Tree Inference
-    print("\n[Step 2/3] Tree Inference")
+    if args.threads < 1 or (not args.fasttree and args.bootstrap < 1000):
+        parser.error("Threads must be positive; IQ-TREE UFBoot requires >=1000 replicates")
+    try:
+        records = validate_fasta(args.input, args.type, aligned=args.aligned)
+        if args.outgroup and args.outgroup not in records:
+            raise ValueError(f"Outgroup not found: {args.outgroup}")
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    prefix = str(Path(args.output_dir) / Path(args.input).stem)
+    aligned = args.input if args.aligned else run_mafft(
+        args.input, f"{prefix}_aligned.fasta", args.threads, args.mafft_method)
+    validated = validate_fasta(aligned, args.type, aligned=True)
+    if set(validated) != set(records):
+        raise RuntimeError("Alignment changed the taxon IDs")
     if args.fasttree:
-        tree_file = run_fasttree(aligned, f"{prefix}.tree", seq_type=args.type)
+        tree_file = run_fasttree(aligned, f"{prefix}.tree", args.type, args.fasttree_bin)
     else:
-        tree_file = run_iqtree(
-            aligned, prefix,
-            seq_type=args.type,
-            bootstrap=args.bootstrap,
-            n_threads=args.threads,
-            outgroup=args.outgroup
-        )
-
-    # Step 3: Visualization
-    print("\n[Step 3/3] Visualization (ETE3)")
-    visualize_tree(tree_file, f"{prefix}_tree.png", outgroup=args.outgroup)
+        tree_file = run_iqtree(aligned, prefix, args.type, args.bootstrap, args.threads,
+                              args.outgroup, args.iqtree_bin, args.model, args.seed, args.redo)
+    if not args.no_visualization:
+        visualize_tree(tree_file, f"{prefix}_tree.png", outgroup=args.outgroup, midpoint=args.midpoint)
     tree_summary(tree_file)
-
-    print("\n" + "=" * 60)
-    print("Analysis complete!")
-    print(f"Key outputs:")
-    print(f"  Aligned sequences: {aligned}")
-    print(f"  Tree file: {tree_file}")
-    print(f"  Visualization: {prefix}_tree.png")
+    print(f"[OK] Alignment: {aligned}\n[OK] Inferred tree: {tree_file}")
+    print("Retain the original tree, tool logs, model, support method, seed and alignment provenance.")
 
 
 if __name__ == "__main__":

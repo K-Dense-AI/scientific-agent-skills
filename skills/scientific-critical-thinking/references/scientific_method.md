@@ -1,5 +1,8 @@
 # Scientific Method Core Principles
 
+Use these principles as appraisal prompts. They are not an algorithm that proves a claim
+or substitutes for design-specific methods; see [review_sources.md](review_sources.md).
+
 ## Fundamental Principles
 
 ### 1. Empiricism
@@ -8,13 +11,15 @@
 - Subjective experience alone is insufficient for scientific conclusions
 
 ### 2. Falsifiability (Popper's Criterion)
-- A hypothesis must be capable of being proven false
+- A hypothesis should expose itself to observations inconsistent with its predictions;
+  statistical hypotheses require probabilistic evaluation, not one decisive contrary datum
 - Unfalsifiable claims are not scientific (e.g., "invisible, undetectable forces")
 - Good hypotheses make specific, testable predictions
 
-### 3. Reproducibility
-- Results must be replicable by independent researchers
-- Methods must be described with sufficient detail for replication
+### 3. Reproducibility and Replication
+- Distinguish reproducing computations with the same data/code from testing findings
+  in new independent data; report the terminology used in the field
+- Describe methods, data provenance, code, and environments sufficiently for checking
 - Single studies are rarely definitive; replication strengthens confidence
 
 ### 4. Parsimony (Occam's Razor)
@@ -122,8 +127,12 @@
 
 ## Standards for Causal Inference
 
-### Bradford Hill Criteria (adapted)
-1. **Strength** - Strong associations are more likely causal
+### Bradford Hill Viewpoints (adapted)
+These are considerations, not necessary-and-sufficient criteria or a points score.
+Weak associations can be causal; strong ones can arise from bias, and specificity is
+not required. Mechanistic plausibility changes with knowledge.
+
+1. **Strength** - Assess association size against plausible bias explanations
 2. **Consistency** - Repeated observations by different researchers
 3. **Specificity** - Specific outcomes from specific causes
 4. **Temporality** - Cause precedes effect (essential)
@@ -133,18 +142,25 @@
 8. **Experiment** - Experimental evidence supports causation
 9. **Analogy** - Similar cause-effect relationships exist
 
-### Establishing Causation Requires:
-- Temporal precedence (cause before effect)
-- Covariation (cause and effect correlate)
-- Elimination of alternative explanations
-- Ideally: experimental manipulation showing cause produces effect
+### Appraising a Causal Estimate
+- Define the intervention/exposure contrast, eligible population, time zero, follow-up,
+  outcome, and effect measure; association, prediction, and causation are distinct targets.
+- State assumptions that identify that target from the data: consistency, exchangeability,
+  positivity, appropriate handling of selection/missingness, and interference when relevant.
+- Use a causal diagram to reason about adjustment; confounders, mediators, and colliders
+  have different roles. Do not select adjustment variables just by statistical significance.
+- Randomization supports exchangeability at assignment; it does not guarantee balanced
+  realized groups or remove later selection, non-adherence, measurement, or attrition bias.
+- Observational designs may support causal inference under defended assumptions; acknowledge
+  untestable assumptions and sensitivity to plausible alternatives rather than claim proof.
+- Good prediction, small residual error, or a converged model does not establish identification.
 
 ## Peer Review and Scientific Consensus
 
 ### Understanding Peer Review
 - Filters obvious errors but isn't perfect
 - Reviewers can miss problems or have biases
-- Published ≠ proven; it means "passed initial scrutiny"
+- Publication and peer-review status are process information, not verification of every claim
 - Retraction mechanisms exist for flawed papers
 
 ### Scientific Consensus
@@ -165,5 +181,5 @@
 ### Why Transparency Matters
 - Reduces publication bias
 - Enables verification
-- Prevents p-hacking and HARKing (Hypothesizing After Results are Known)
+- Makes departures and selective reporting easier to detect; it does not prevent them
 - Accelerates scientific progress

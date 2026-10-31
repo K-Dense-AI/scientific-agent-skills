@@ -1,6 +1,6 @@
 # Heart-rate variability and RSA
 
-Checked **2026-07-23** against NeuroKit2 0.2.13 stable runtime/source,
+Checked **2026-10-01** against NeuroKit2 0.2.13 stable runtime/source,
 the official HRV API/tutorial, and HRV/RSA measurement guidance.
 
 ## Define the interval series
@@ -56,9 +56,9 @@ only prespecified outputs.
 
 ## Units and interval helpers
 
-Time-domain metrics are milliseconds where applicable. Frequency power is based on
-millisecond intervals and therefore commonly has ms²-derived units, but normalization
-and estimator settings change interpretation.
+Time-domain metrics are milliseconds where applicable. For absolute band power in ms²,
+use `hrv_frequency(..., normalize=False)`. The default `normalize=True` divides the
+PSD by its maximum before band integration, so those powers must not be labeled ms².
 
 ```python
 processed_rri, processed_time, interpolation_rate = nk.intervals_process(
@@ -128,6 +128,17 @@ Set `interpolation_rate=4` to approximate a common Kubios interpolation choice; 
 to `None` for already-interpolated intervals or Lomb–Scargle. Record detrending,
 interpolation, PSD method, window/order, frequency bands, and normalization.
 
+Stable `HRV_LFn` and `HRV_HFn` divide LF and HF by `HRV_TP`, which sums all five
+requested bands (ULF, VLF, LF, HF, VHF). They are not the conventional LF/(LF+HF) and
+HF/(LF+HF) definitions. Report the exact denominator rather than importing a textbook
+interpretation from the column names. Zero/NaN band power does not prove absent
+physiological modulation.
+
+The bundled pipeline deliberately uses `normalize=False`, Welch, and 4 Hz
+interpolation, records these choices, and gates frequency analysis on the span
+between first and last corrected peaks. This span still does not certify that every
+interval is usable: inspect exclusions, non-sinus beats, and correction burden.
+
 Do **not** interpret `HRV_LFHF` as a direct “sympathovagal balance.” LF contains mixed
 influences; HF depends on breathing frequency/depth and can miss respiratory variation
 outside the default 0.15–0.4 Hz band.
@@ -193,7 +204,7 @@ posture, and within- versus between-person contrasts can change interpretation.
 - prespecified metrics and multiplicity control; and
 - no diagnostic, monitoring, or medical-device claim without separate validation.
 
-## Sources checked 2026-07-23
+## Sources checked 2026-10-01
 
 - [Official HRV API](https://neuropsychology.github.io/NeuroKit/functions/hrv.html)
 - [Official HRV example](https://neuropsychology.github.io/NeuroKit/examples/ecg_hrv/ecg_hrv.html)
@@ -203,3 +214,5 @@ posture, and within- versus between-person contrasts can change interpretation.
 - [Berntson et al. (1997), interpretive caveats](https://doi.org/10.1111/j.1469-8986.1997.tb02140.x)
 - [Laborde et al. (2017), planning/reporting](https://doi.org/10.3389/fpsyg.2017.00213)
 - [Grossman & Taylor (2007), RSA caveats](https://doi.org/10.1016/j.biopsycho.2005.11.014)
+
+- [Stable `hrv_frequency.py` implementation](https://github.com/neuropsychology/NeuroKit/blob/v0.2.13/neurokit2/hrv/hrv_frequency.py)

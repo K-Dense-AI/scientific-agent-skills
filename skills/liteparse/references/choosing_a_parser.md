@@ -1,72 +1,32 @@
 # Choosing a Document Parser
 
-Use this guide to pick the right tool in the scientific-agent-skills repo (or LlamaParse for cloud escalation).
+LiteParse **2.15.0** supports text, JSON and Markdown locally. Do not route away
+from it solely because the consumer wants Markdown.
 
-The LiteParse column and routing below describe this skill's pinned **2.0.0 text/JSON workflows**. [Current upstream documentation](https://developers.llamaindex.ai/liteparse/) also offers Markdown; for a newer installed release, check its supported formats before routing away from LiteParse solely for Markdown.
+| Need | Suitable path |
+|---|---|
+| Text boxes, page PNGs, local PDF/Office/image parsing | LiteParse |
+| Heuristic Markdown from PDFs or converted Office files | LiteParse; visually inspect complex layouts |
+| HTML, EPUB, audio or other formats outside LiteParse's supported inputs | Review the `markitdown` skill and its converter dependencies |
+| Merge/split/rotate, watermark or fill PDF forms | A PDF manipulation library such as `pypdf` |
+| Local extraction fails on dense tables, handwriting or hard scans | Review LlamaParse cloud capabilities, document-sharing authorization and pricing separately |
 
-```mermaid
-flowchart TD
-  start[User has a document task]
-  start --> q1{Need PDF merge split forms or encryption utilities?}
-  q1 -->|yes| pdfSkill[pdf skill]
-  q1 -->|no| q2{Need Markdown audio video EPUB or Azure table extraction?}
-  q2 -->|yes| markitdown[markitdown skill]
-  q2 -->|no| q3{Need bounding boxes fast local parse or page PNGs for agents?}
-  q3 -->|yes| liteparse[liteparse skill]
-  q3 -->|no| q4{Complex tables handwriting or production cloud pipeline?}
-  q4 -->|yes| llamaparse[LlamaParse cloud]
-  q4 -->|no| liteparse
-```
+LiteParse's HTTP OCR is optional and may send rasterized pages to a remote
+server. Its bundled Tesseract can download missing language files. A local
+parser therefore does not imply a network-free first run.
 
-## Comparison table
+For layout-aware RAG, store page number, page dimensions and bounding boxes
+alongside text; pair the same pages/settings with screenshots. For Markdown,
+use `output_format="markdown"` directly and inspect headings, tables, equations,
+units and references. No local heuristic parser guarantees faithful scientific
+transcription or chart-data recovery.
 
-| Criterion | LiteParse | MarkItDown | pdf skill | LlamaParse |
-|-----------|-----------|------------|-----------|------------|
-| **Primary output** | Layout text + JSON with bboxes | Markdown | PDF bytes / extracted text | Structured markdown / JSON (cloud) |
-| **Runs locally** | Yes | Yes | Yes | No (cloud API) |
-| **Bounding boxes** | Yes | No | Limited | Yes (cloud) |
-| **OCR** | Tesseract + optional HTTP OCR | Yes (images/PDF) | Via external tools | Advanced |
-| **Page screenshots** | Yes (PNG) | No | Image extract only | Varies |
-| **Office → text** | Via LibreOffice convert | Native converters | N/A | Yes |
-| **Audio / video / EPUB** | No | Yes | No | Some formats |
-| **PDF merge / split / forms** | No | No | Yes | No |
-| **Best for** | RAG grounding, agent vision, batch PDF corpus | LLM-friendly Markdown pipelines | PDF manipulation | Hard documents at scale |
+The general comparison does not certify another parser's current format matrix
+or output fidelity. See its own skill/docs before execution. LlamaParse is a
+separate cloud service, not an endpoint or drop-in credential for LiteParse's
+HTTP OCR contract.
 
-## Decision rules
-
-### Choose **LiteParse** when
-
-- You need **coordinates** for citations, highlighting, or layout-aware chunking.
-- You want **fast local** parsing without API keys.
-- You are building **multimodal** workflows (parse JSON + page screenshots).
-- You are batch-processing **folders of PDFs** for a literature review pipeline.
-- Scanned PDFs need **OCR** with optional custom HTTP OCR backends.
-
-### Choose **MarkItDown** when
-
-- The downstream step expects **Markdown** (RAG, summarization, notebook ingestion).
-- Inputs include **HTML, EPUB, audio, YouTube**, or you want **Azure Document Intelligence** for tables.
-- You do not need per-span bounding boxes.
-
-### Choose the **pdf** skill when
-
-- The task is **PDF file operations**: merge, split, rotate, watermark, fill forms, encrypt/decrypt.
-- You only need simple text extraction without spatial layout or OCR orchestration.
-
-### Choose **LlamaParse** when
-
-- Documents have **dense tables, multi-column layouts, charts, or handwriting** beyond what local parsers handle well.
-- You are building a **production document pipeline** and accept cloud dependency and signup.
-
-Link: https://docs.cloud.llamaindex.ai/llamaparse/overview
-
-## Combining tools
-
-Common pipelines:
-
-1. **LiteParse → chunk + embed** — JSON/text for vector store; bboxes for UI highlights.
-2. **LiteParse screenshots + vision model** — figures and tables; text JSON for search.
-3. **LiteParse text → MarkItDown-style post-processing** — only if you must have Markdown; otherwise use LiteParse text directly.
-4. **pdf skill merge** → **LiteParse parse** — assemble supplementary PDFs, then extract.
-
-Avoid running LiteParse and MarkItDown on the same file unless you have distinct consumers (coordinates vs Markdown).
+Reviewed 2026-10-01:
+[LiteParse overview](https://developers.llamaindex.ai/liteparse/),
+[released LiteParse README](https://github.com/run-llama/liteparse/blob/d3a79177b9e9e570f8c2d9878ace601445fdaf76/README.md),
+[LlamaParse overview](https://developers.llamaindex.ai/llamaparse/parse/).

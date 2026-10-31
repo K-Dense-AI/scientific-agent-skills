@@ -214,6 +214,8 @@ def require_unique_identifiers(values: Iterable[str], context: str) -> None:
 
 def parse_iso_date(value: Any, context: str) -> str:
     text = require_text(value, context, maximum=10)
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", text):
+        raise ValidationError(f"{context} must be YYYY-MM-DD: {text!r}")
     try:
         date.fromisoformat(text)
     except ValueError as exc:
@@ -222,12 +224,12 @@ def parse_iso_date(value: Any, context: str) -> str:
 
 
 def parse_year(value: Any, context: str) -> int:
-    if isinstance(value, bool):
+    if type(value) is int:
+        parsed = value
+    elif isinstance(value, str) and re.fullmatch(r"[0-9]{4}", value.strip()):
+        parsed = int(value.strip())
+    else:
         raise ValidationError(f"{context} must be an integer year")
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValidationError(f"{context} must be an integer year") from exc
     if not 1800 <= parsed <= 2200:
         raise ValidationError(f"{context} must be between 1800 and 2200")
     return parsed

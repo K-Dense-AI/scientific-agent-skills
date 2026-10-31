@@ -5,7 +5,7 @@
 `scripts/generate_schematic.py` (a thin CLI) and `scripts/generate_schematic_ai.py`
 (the generator). Rather than write the same tests four times, each suite
 instantiates the factories below against its own copy; `tests/_meta` separately
-pins the copies together.
+pins the copies together with `shared_file_problems()`.
 
 Two lineages descend from that generator with the same review-parsing code:
 `infographics/scripts/generate_infographic_ai.py` and
@@ -29,12 +29,61 @@ Nothing here makes a network call or needs an API key.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import sys
 import unittest
 from pathlib import Path
 from unittest import mock
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILLS_DIR = REPO_ROOT / "skills"
+
+#: Files several skills ship byte-identical copies of. A copy that drifts is a
+#: skill quietly behaving differently from its siblings, so `tests/_meta` pins
+#: them together. Each entry is (path relative to the skill, skills).
+SHARED_FILES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "scripts/generate_schematic.py",
+        (
+            "scientific-schematics",
+            "latex-posters",
+            "literature-review",
+            "scientific-slides",
+        ),
+    ),
+    (
+        "scripts/generate_schematic_ai.py",
+        (
+            "scientific-schematics",
+            "latex-posters",
+            "literature-review",
+            "scientific-slides",
+        ),
+    ),
+)
+
+
+def shared_file_problems(skills_dir: Path = SKILLS_DIR) -> list[str]:
+    """Every skill in a `SHARED_FILES` group ships the same bytes."""
+    problems = []
+    for relative, skills in SHARED_FILES:
+        digests = {}
+        for name in skills:
+            path = skills_dir / name / relative
+            if not path.is_file():
+                problems.append(f"{name}: {relative} is missing")
+                continue
+            digests[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if len(set(digests.values())) > 1:
+            reference = skills[0]
+            problems.extend(
+                f"{name}: {relative} has drifted from {reference}'s copy"
+                for name, digest in digests.items()
+                if digest != digests.get(reference)
+            )
+    return problems
 
 
 def schematic_test_case(skill_root: Path) -> type[unittest.TestCase]:

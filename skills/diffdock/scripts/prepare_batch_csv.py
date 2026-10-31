@@ -12,6 +12,8 @@ Usage:
 """
 
 import argparse
+import csv
+import re
 import os
 import sys
 import pandas as pd
@@ -24,17 +26,17 @@ try:
     RDKIT_AVAILABLE = True
 except ImportError:
     RDKIT_AVAILABLE = False
-    print("Warning: RDKit not available. SMILES validation will be skipped.")
+    print("[WARN] RDKit not available. SMILES-only rows cannot pass validation.")
 
 
 def validate_smiles(smiles_string):
     """Validate a SMILES string using RDKit."""
     if not RDKIT_AVAILABLE:
-        return True, "RDKit not available for validation"
+        return False, "RDKit not available; chemistry validation was not performed"
 
     try:
         mol = Chem.MolFromSmiles(smiles_string)
-        if mol is None:
+        if mol is None or mol.GetNumAtoms() == 0:
             return False, "Invalid SMILES structure"
         return True, "Valid SMILES"
     except Exception as e:
@@ -52,7 +54,7 @@ def validate_file_path(file_path, base_dir=None):
     else:
         full_path = Path(file_path)
 
-    if full_path.exists():
+    if full_path.is_file():
         return True, f"File exists: {full_path}"
     else:
         return False, f"File not found: {full_path}"
@@ -64,7 +66,7 @@ def validate_csv(csv_path, base_dir=None):
 
     Args:
         csv_path: Path to CSV file
-        base_dir: Base directory for relative paths (default: CSV directory)
+        base_dir: Inference working directory for relative paths (default: current directory)
 
     Returns:
         bool: True if validation passes
@@ -75,7 +77,15 @@ def validate_csv(csv_path, base_dir=None):
 
     # Read CSV
     try:
-        df = pd.read_csv(csv_path)
+        with open(csv_path, newline="", encoding="utf-8-sig") as handle:
+            reader = csv.reader(handle, strict=True)
+            header = next(reader)
+            if len(header) != len(set(header)):
+                raise ValueError("Duplicate CSV column names")
+            for line_number, fields in enumerate(reader, 2):
+                if len(fields) != len(header):
+                    raise ValueError(f"CSV row {line_number} has {len(fields)} fields; expected {len(header)}")
+        df = pd.read_csv(csv_path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
         messages.append(f"[OK] Successfully read CSV with {len(df)} rows")
     except Exception as e:
         messages.append(f"[FAIL] Error reading CSV: {e}")
@@ -93,7 +103,12 @@ def validate_csv(csv_path, base_dir=None):
 
     # Set base directory
     if base_dir is None:
-        base_dir = Path(csv_path).parent
+        base_dir = Path.cwd()
+
+    if df.empty:
+        messages.append("[FAIL] CSV contains no complexes")
+        valid = False
+    seen_names = set()
 
     # Validate each row. The per-row checks index the required columns
     # directly, so they can only run once every one of them is present --
@@ -102,10 +117,18 @@ def validate_csv(csv_path, base_dir=None):
     for idx, row in rows:
         row_msgs = []
 
-        # Check complex name
-        if pd.isna(row['complex_name']) or row['complex_name'] == "":
+        # Names become output directory names and ESM labels upstream.
+        name = row['complex_name']
+        if not name:
             row_msgs.append("Missing complex_name")
             valid = False
+        elif not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", name) or name in {"NA", "N/A", "NULL", "null", "None", "NaN", "nan"}:
+            row_msgs.append("Unsafe complex_name; use a letter/underscore followed by letters, digits, _, . or - (not an NA token)")
+            valid = False
+        if name in seen_names:
+            row_msgs.append("Duplicate complex_name would overwrite output")
+            valid = False
+        seen_names.add(name)
 
         # Check that either protein_path or protein_sequence is provided
         has_protein_path = not pd.isna(row['protein_path']) and row['protein_path'] != ""
@@ -124,23 +147,30 @@ def validate_csv(csv_path, base_dir=None):
                 row_msgs.append(f"Protein file issue: {msg}")
                 valid = False
 
-        # Validate ligand description
-        if pd.isna(row['ligand_description']) or row['ligand_description'] == "":
+        if has_protein_seq and not has_protein_path:
+            sequence = row['protein_sequence']
+            if not re.fullmatch(r"[ACDEFGHIKLMNPQRSTVWYXBZUO]+(?::[ACDEFGHIKLMNPQRSTVWYXBZUO]+)*", sequence):
+                row_msgs.append("Invalid protein_sequence; provide full uppercase amino-acid sequence, no ellipsis")
+                valid = False
+            elif any(len(chain) > 1022 for chain in sequence.split(':')):
+                row_msgs.append("Protein chain exceeds upstream inference ESM truncation length (1022 residues)")
+                valid = False
+
+        # Upstream tries SMILES first: / and backslash encode stereochemistry.
+        ligand_desc = row['ligand_description']
+        if not ligand_desc:
             row_msgs.append("Missing ligand_description")
             valid = False
         else:
-            ligand_desc = row['ligand_description']
-            # Check if it's a file path or SMILES
-            if os.path.exists(ligand_desc) or "/" in ligand_desc or "\\" in ligand_desc:
-                # Likely a file path
-                file_valid, msg = validate_file_path(ligand_desc, base_dir)
-                if not file_valid:
-                    row_msgs.append(f"Ligand file issue: {msg}")
-                    valid = False
-            else:
-                # Likely a SMILES string
-                smiles_valid, msg = validate_smiles(ligand_desc)
-                if not smiles_valid:
+            smiles_valid, msg = validate_smiles(ligand_desc)
+            if not smiles_valid:
+                suffix = Path(ligand_desc).suffix
+                if suffix in {'.sdf', '.mol2', '.pdb', '.pdbqt'}:
+                    file_valid, file_msg = validate_file_path(ligand_desc, base_dir)
+                    if not file_valid:
+                        row_msgs.append(f"Ligand file issue: {file_msg}")
+                        valid = False
+                else:
                     row_msgs.append(f"SMILES issue: {msg}")
                     valid = False
 
@@ -152,7 +182,7 @@ def validate_csv(csv_path, base_dir=None):
     # Summary
     messages.append(f"\n{'='*60}")
     if valid:
-        messages.append("[OK] CSV validation PASSED - ready for DiffDock")
+        messages.append("[OK] CSV validation PASSED - input paths and SMILES checked; docking and file chemistry not validated")
     else:
         messages.append("[FAIL] CSV validation FAILED - please fix issues above")
 
@@ -162,6 +192,8 @@ def validate_csv(csv_path, base_dir=None):
 def create_template_csv(output_path, num_examples=3):
     """Create a template CSV file with example entries."""
 
+    if num_examples < 1:
+        raise ValueError("num_examples must be at least 1")
     examples = {
         'complex_name': ['example1', 'example2', 'example3'][:num_examples],
         'protein_path': ['protein1.pdb', '', 'protein3.pdb'][:num_examples],
@@ -211,7 +243,7 @@ Examples:
     parser.add_argument('--output', '-o', help='Output path for template CSV')
     parser.add_argument('--num-examples', type=int, default=3,
                         help='Number of example rows in template, 1-3 (default: 3)')
-    parser.add_argument('--base-dir', help='Base directory for relative file paths')
+    parser.add_argument('--base-dir', help='Planned inference working directory for relative paths (default: current directory)')
 
     args = parser.parse_args()
 

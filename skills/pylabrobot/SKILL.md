@@ -1,14 +1,14 @@
 ---
 name: pylabrobot
-description: Develop and review PyLabRobot lab-automation resources, liquid-handling plans, offline simulations, and supported-device integrations. Use for PyLabRobot protocols or API questions; keep physical execution behind an explicit operator safety gate.
+description: Develops and reviews PyLabRobot lab-automation resources, liquid-handling plans, offline simulations, and supported-device integrations. Supports PyLabRobot protocols and API questions; keep physical execution behind an explicit operator safety gate.
 license: MIT
-compatibility: Verified against PyLabRobot 0.2.1 on Python 3.9+. Bundled planning CLIs require only Python 3.11+ and make no serial, USB, or network connections. Physical devices need model-specific extras, configuration, calibration, and trained operator approval.
+compatibility: Verified against PyLabRobot 0.2.2 on Python 3.9+. Bundled planning CLIs require only Python 3.11+ and make no serial, USB, or network connections. Physical devices need model-specific extras, configuration, calibration, and trained operator approval.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: "K-Dense Inc."
-  pylabrobot-version: "0.2.1"
-  researched: "2026-07-23"
+  pylabrobot-version: "0.2.2"
+  last-reviewed: "2026-10-01"
 ---
 
 # PyLabRobot
@@ -19,16 +19,19 @@ manifest validation, bookkeeping, and the software-only chatterbox backend.
 
 ## Verified snapshot
 
-- PyPI stable: **`PyLabRobot==0.2.1`**, released **2026-03-23**.
-- Upstream requirement: **Python >=3.9**. This skill uses Python 3.11 for its
-  reproducible smoke tests.
-- `/stable/` documentation identifies itself as 0.2.1. `/dev/` and repository
-  `main` describe unreleased work and must not be assumed available in 0.2.1.
-- Stable liquid-handler backends include `STARBackend`, `VantageBackend`,
-  `EVOBackend`, `OpentronsOT2Backend`, and the offline
+- PyPI stable: **`PyLabRobot==0.2.2`**, released **2026-07-30**.
+- Upstream requirement: **Python >=3.9**; runtime checks here used **Python 3.13**.
+- Hosted `/stable/` pages mix 0.2.1 API pages with development documentation.
+  GitHub has no `v0.2.2` tag and its changelog has no 0.2.2 section. Use the
+  released wheel/source distribution for the tested contract, not the URL label.
+- Released liquid-handler backends include `STARBackend`, `VantageBackend`,
+  `EVOBackend`, `OpentronsOT2Backend`, and the software-only
   `LiquidHandlerChatterboxBackend`.
-- PyLabRobot's GitHub Releases page has no 0.2.x software release entry; use
-  the PyPI history, `v0.2.1` tag, and changelog as release evidence.
+- MicroSpin and `Plate.stacking_z_height` **are present in 0.2.2**, despite
+  being listed under `Unreleased` in the current changelog. Newer development
+  APIs, including the `track=` Hamilton deck keyword, are not this release.
+- See the [release and transport review](references/review.md) for source
+  hashes, tested behavior, and the known OT-2 cancellation mismatch.
 
 ## Non-negotiable hardware boundary
 
@@ -60,7 +63,7 @@ software state; it does not reverse a physical aspiration, dispense, or tip
 movement that partly completed. Preserve the error/channel details and have the
 operator reconcile tips and source/destination volumes before resuming. Do not
 blindly retry the failed operation from the pre-error plan. The
-[0.2.1 liquid-handler implementation](https://github.com/PyLabRobot/pylabrobot/blob/v0.2.1/pylabrobot/liquid_handling/liquid_handler.py)
+[0.2.2 liquid-handler implementation](https://pypi.org/project/PyLabRobot/0.2.2/#files)
 commits or rolls back trackers according to reported operation success. The Visualizer renders resource/tracker events; it
 does not model physics. Chatterbox prints planned operations; it does not prove
 calibration, reachability, collision freedom, liquid behavior, or device state.
@@ -89,14 +92,14 @@ draft only.
 For offline API inspection and chatterbox simulation:
 
 ```bash
-uv venv --python 3.11 .venv-pylabrobot
-uv pip install --python .venv-pylabrobot/bin/python "PyLabRobot==0.2.1"
+uv venv --python 3.13 .venv-pylabrobot
+uv pip install --python .venv-pylabrobot/bin/python "PyLabRobot==0.2.2"
 ```
 
 On Windows, use `.venv-pylabrobot\Scripts\python.exe`. Do not install hardware
 extras until the user names the device and explicitly approves its transport
-dependencies. Then inspect the matching stable device page before considering a
-pin such as `"PyLabRobot[serial]==0.2.1"` or `"PyLabRobot[usb]==0.2.1"`.
+dependencies. Then inspect the matching release source and device page before considering a
+pin such as `"PyLabRobot[serial]==0.2.2"` or `"PyLabRobot[usb]==0.2.2"`.
 
 ## Offline-first workflow
 
@@ -120,12 +123,12 @@ python3 skills/pylabrobot/scripts/generate_simulation_plan.py \
   --transfers tests/pylabrobot/fixtures/transfers.csv
 
 python3 skills/pylabrobot/scripts/inspect_backends.py \
-  --expected-version 0.2.1 --strict
+  --expected-version 0.2.2 --strict
 ```
 
 The geometry checker uses conservative static axis-aligned boxes; it is not a
 motion planner. The transfer planner requires one new tip per row and checks
-source/dead/destination volumes, tip capacity, wells, channels, heights, rates,
+explicit source and destination starting volumes, dead volume, tip capacity, wells, channels, heights, rates,
 units, and allowlists. Review
 `assets/protocol-manifest.schema.json` and the synthetic fixtures before making
 a project-specific manifest.
@@ -133,12 +136,16 @@ a project-specific manifest.
 ## Verified software-only example
 
 The exact backend below is software-only. Do not substitute a hardware backend.
+This example uses notebook top-level `await`; in a script, wrap it in
+`async def main()` and call `asyncio.run(main())`. The round trip returns an
+empty simulated tip to its original spot; production tip disposal follows the
+reviewed contamination policy, and the planner uses a new tip for every row.
 
 ```python
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import LiquidHandlerChatterboxBackend
 from pylabrobot.resources import (
-    Cor_96_wellplate_360ul_Fb,
+    cor_96_wellplate_360uL_Fb,
     PLT_CAR_L5AC_A00,
     TIP_CAR_480_A00,
     hamilton_96_tiprack_1000uL_filter,
@@ -155,13 +162,14 @@ tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
 tips = hamilton_96_tiprack_1000uL_filter(name="tips")
 tip_carrier[0] = tips
 plate_carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
-source = Cor_96_wellplate_360ul_Fb(name="source")
-destination = Cor_96_wellplate_360ul_Fb(name="destination")
+source = cor_96_wellplate_360uL_Fb(name="source")
+destination = cor_96_wellplate_360uL_Fb(name="destination")
 plate_carrier[0] = source
 plate_carrier[1] = destination
 deck.assign_child_resource(tip_carrier, rails=3)
 deck.assign_child_resource(plate_carrier, rails=15)
 source.get_well("A1").tracker.set_volume(100.0)  # planned state, not sensing
+destination.get_well("A1").tracker.set_volume(0.0)  # explicitly empty fixture
 
 lh = LiquidHandler(backend=LiquidHandlerChatterboxBackend(), deck=deck)
 await lh.setup()  # safe here only because the backend above is software-only
@@ -186,8 +194,12 @@ finally:
   `await vis.stop()`; it starts localhost HTTP/WebSocket servers and may open a
   browser.
 - There is no generic `from pylabrobot.liquid_handling import LiquidClass` in
-  0.2.1. Stable liquid classes are vendor-specific, for example
+  0.2.2. Stable liquid classes are vendor-specific, for example
   `pylabrobot.liquid_handling.liquid_classes.hamilton.HamiltonLiquidClass`.
+- Machine frontends support `async with` after construction; it calls `setup()`
+  and `stop()`. Use it only with the literal software backend for offline tests.
+  Cleanup runs after successful entry; a failed setup may need backend-specific
+  recovery and does not prove a physical instrument is safe.
 - Most frontend methods are async. Backend kwargs and capabilities are
   vendor/model specific; a shared frontend does not imply identical behavior.
 
@@ -208,18 +220,11 @@ finally:
 
 ## Dated upstream sources
 
-Checked **2026-07-23**:
-
-- [PyPI 0.2.1](https://pypi.org/project/PyLabRobot/) — released 2026-03-23;
-  Python >=3.9; extras and artifacts.
-- [Stable installation guide](https://docs.pylabrobot.org/stable/user_guide/_getting-started/installation.html)
-  — stable versus source/dev install and optional transport groups.
-- [Stable API](https://docs.pylabrobot.org/stable/api/pylabrobot.html) and
-  [supported machines](https://docs.pylabrobot.org/stable/user_guide/machines.html)
-  — 0.2.1 API and model-specific support labels.
-- [`v0.2.1` source tag](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1)
-  and [changelog](https://github.com/PyLabRobot/pylabrobot/blob/main/CHANGELOG.md)
-  — tag dated 2026-03-23; `Unreleased` is development-only.
+Reviewed **2026-10-01** against [PyPI 0.2.2 release files](https://pypi.org/project/PyLabRobot/0.2.2/#files),
+[current documentation](https://docs.pylabrobot.org/stable/), and the
+[official repository](https://github.com/PyLabRobot/pylabrobot).
+The [review ledger](references/review.md) identifies documentation drift and
+separates native software tests from source inspection and physical validation.
 
 ## Citing Scientific Agent Skills
 

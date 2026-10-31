@@ -3,6 +3,7 @@
 The operator can choose sample count, transfer volume, and dry-run mode in the
 Opentrons App without editing source code. Validate the full allowed parameter
 space and volume budget before adapting this template to an assay.
+The dry_run parameter only shortens a delay: liquid handling still occurs.
 """
 
 from opentrons import protocol_api
@@ -41,7 +42,7 @@ def add_parameters(parameters: protocol_api.ParameterContext) -> None:
     parameters.add_bool(
         variable_name="dry_run",
         display_name="Dry run",
-        description="Use a short example incubation.",
+        description="Shorten incubation only; liquid handling still occurs.",
         default=True,
     )
 

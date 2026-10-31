@@ -2,11 +2,11 @@
 """Drug-drug interaction prediction: ICH M12 basic models and the mechanistic static model.
 
 ICH M12 (Step 4, 2024) sets out a stepwise risk assessment: in vitro data feed
-basic models whose cut-offs decide whether a clinical study is needed, and a
+basic models whose cut-offs trigger further evaluation, and a
 mechanistic static or PBPK model can be used to refine a positive basic-model
 signal. The basic models are deliberately conservative — they are designed to
-over-predict, so a negative result is meaningful and a positive one is only a
-trigger for further work.
+over-predict under their assumptions. Uncertain inputs or unmodeled mechanisms
+can invalidate a negative screen; a positive screen needs further evaluation.
 
     python3 ddi_static.py --basic --ki 0.5 --imax 2.0 --fu 0.05 --dose 100
     python3 ddi_static.py --basic --tdi --ki-inact 1.2 --kinact 0.04 --imax 2.0 --fu 0.05
@@ -20,6 +20,7 @@ against an Imax in ng/mL is a silent, and common, error.
 from __future__ import annotations
 
 import argparse
+import math
 from typing import Sequence
 
 from _common import InputError, Report, add_format_argument, main_wrapper
@@ -32,6 +33,7 @@ CUTOFF_R3_INDUCTION = 0.80
 CUTOFF_TRANSPORTER_HEPATIC_UPTAKE = 1.1
 CUTOFF_TRANSPORTER_INTESTINAL = 10.0
 CUTOFF_TRANSPORTER_RENAL = 0.1
+CUTOFF_TRANSPORTER_MATE = 0.02
 
 # Default intestinal dissolution volume used to form the nominal gut
 # concentration, and the hepatic blood flow used for the inlet concentration.
@@ -66,11 +68,11 @@ def inlet_concentration(imax: float, fu: float, dose: float, fa: float, fg: floa
     """Maximum unbound hepatic inlet concentration.
 
     ``Iu,inlet,max = fu * (Imax + Fa*Fg*ka*Dose / (Qh*RB))``. This is the
-    concentration the liver actually sees during absorption, which is higher
-    than systemic Imax and is what M12 asks for in hepatic uptake-transporter
+    estimated inlet concentration under these assumptions, rather than
+    measured systemic Imax and is what M12 asks for in hepatic uptake-transporter
     assessments.
     """
-    portal = fa * fg * ka * dose / (HEPATIC_BLOOD_FLOW_L_H * blood_ratio)
+    portal = fa * fg * (ka * 60.0) * dose / (HEPATIC_BLOOD_FLOW_L_H * blood_ratio)
     return fu * (imax + portal)
 
 
@@ -94,10 +96,19 @@ def mechanistic_static(
 
     The two fractions that dominate the answer are ``fm`` (the fraction of
     systemic clearance through the affected enzyme) and ``Fg`` (the fraction
-    escaping gut metabolism). A perpetrator cannot raise the victim's AUC more
-    than ``1/(1-fm)`` however potent it is, so an fm assumed at 1.0 when it is
+    escaping gut metabolism). Hepatic inhibition alone is limited
+    by ``1/(1-fm)``; including gut inhibition gives ``1/((1-fm)*Fg)``, so an fm assumed at 1.0 when it is
     really 0.7 changes an unbounded prediction into a 3.3-fold ceiling.
     """
+    if not all(math.isfinite(x) for x in (ih, ig, fm, fg, kdeg_h, kdeg_g, ind_emax, ind_scaling)):
+        raise InputError("MSM inputs must be finite")
+    if ih < 0 or ig < 0 or not 0 <= fm <= 1 or not 0 < fg <= 1 or min(kdeg_h, kdeg_g) <= 0 or min(ind_emax, ind_scaling) < 0:
+        raise InputError("MSM concentrations/fm/induction must be non-negative, Fg in (0,1], fm <= 1, and kdeg positive")
+    for value in (ki, ki_inact, ind_ec50):
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise InputError("Ki, KI and EC50 must be finite and positive when supplied")
+    if (ki_inact is None) != (kinact is None) or (kinact is not None and (not math.isfinite(kinact) or kinact < 0)):
+        raise InputError("TDI requires paired KI and non-negative kinact")
     def terms(i_conc: float, kdeg: float) -> tuple[float, float, float]:
         a = 1.0 / (1.0 + i_conc / ki) if ki else 1.0
         if ki_inact and kinact:
@@ -121,7 +132,8 @@ def mechanistic_static(
         "gut_component": gut,
         "hepatic_component": hepatic,
         "auc_ratio": gut * hepatic,
-        "maximum_possible_auc_ratio": 1.0 / (1.0 - fm) if fm < 1 else float("inf"),
+        "maximum_possible_auc_ratio": 1.0 / ((1.0 - fm) * fg) if fm < 1 else float("inf"),
+        "hepatic_only_auc_ceiling": 1.0 / (1.0 - fm) if fm < 1 else float("inf"),
     }
 
 
@@ -134,7 +146,7 @@ def classify(auc_ratio: float) -> str:
     if auc_ratio >= 1.25:
         return "weak inhibitor (1.25 <= AUCR < 2)"
     if auc_ratio > 0.8:
-        return "no clinically relevant effect predicted (0.8 < AUCR < 1.25)"
+        return "within the 0.8-1.25 screening band; clinical relevance requires substrate-specific assessment"
     if auc_ratio > 0.5:
         return "weak inducer (0.5 < AUCR <= 0.8)"
     if auc_ratio > 0.2:
@@ -155,8 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--msm", action="store_true", help="run the mechanistic static model")
 
     parser.add_argument("--imax", type=float, help="maximum total systemic plasma concentration of the perpetrator")
+    parser.add_argument("--fu-validated", action="store_true", help="accuracy and precision of fu < 0.01 demonstrated")
     parser.add_argument("--fu", type=float, default=1.0, help="unbound fraction in plasma (default: 1.0)")
-    parser.add_argument("--dose", type=float, help="perpetrator molar dose, for the gut concentration")
+    parser.add_argument("--dose", type=float, help="perpetrator amount; use micromoles when concentrations are micromolar (amount/L)")
     parser.add_argument("--ka", type=float, default=0.1, help="perpetrator absorption rate constant, per min (default: 0.1)")
     parser.add_argument("--fa", type=float, default=1.0, help="fraction absorbed (default: 1.0)")
     parser.add_argument("--fg-perpetrator", type=float, default=1.0, help="perpetrator gut availability (default: 1.0)")
@@ -173,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--fm", type=float, help="fraction of victim clearance via the affected enzyme")
     parser.add_argument("--fg", type=float, default=1.0, help="victim fraction escaping gut metabolism (default: 1.0)")
-    parser.add_argument("--transporter", choices=("hepatic-uptake", "intestinal", "renal"), help="also run the transporter basic model")
+    parser.add_argument("--transporter", choices=("hepatic-uptake", "intestinal", "renal", "mate", "systemic-efflux"), help="also run the transporter basic model")
     parser.add_argument("--transporter-ki", type=float)
     add_format_argument(parser)
     return parser
@@ -181,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
     if args.basic == args.msm:
         raise InputError("choose exactly one of --basic or --msm")
     if args.imax is None:
@@ -189,8 +204,25 @@ def run(argv: Sequence[str] | None = None) -> int:
         raise InputError("--fu must be in (0, 1]")
 
     report = Report()
+    for name in ("imax", "dose", "kinact", "ind_emax", "ind_scaling"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            raise InputError(f"--{name.replace('_', '-')} must be non-negative")
+    for name in ("ki", "ki_inact", "ind_ec50", "transporter_ki", "ka", "kdeg", "blood_ratio"):
+        value = getattr(args, name)
+        if value is not None and value <= 0:
+            raise InputError(f"--{name.replace('_', '-')} must be positive")
+    if not 0 <= args.fa <= 1 or not 0 <= args.fg_perpetrator <= 1:
+        raise InputError("--fa and --fg-perpetrator must be in [0, 1]")
+    if args.fu < 0.01 and not args.fu_validated:
+        report.finding("fu below 0.01 without demonstrated assay reliability: using M12's 0.01 floor")
+        args.fu = 0.01
+    if args.tdi and (args.ki_inact is None or args.kinact is None):
+        raise InputError("--tdi needs --ki-inact and --kinact")
+    if (args.ind_emax > 0) != (args.ind_ec50 is not None):
+        raise InputError("supply --ind-emax > 0 together with --ind-ec50")
     unbound = args.imax * args.fu
-    gut = (args.dose / (GUT_VOLUME_ML / 1000.0)) if args.dose else None
+    gut = (args.dose / (GUT_VOLUME_ML / 1000.0)) if args.dose is not None else None
     report.scalar("imax_total", args.imax)
     report.scalar("imax_unbound", unbound)
     if gut is not None:
@@ -225,16 +257,16 @@ def run(argv: Sequence[str] | None = None) -> int:
                     }
                 )
         if args.tdi:
-            if not (args.ki_inact and args.kinact):
+            if args.ki_inact is None or args.kinact is None:
                 raise InputError("--tdi needs --ki-inact and --kinact")
-            r2 = r2_time_dependent(unbound * 50.0, args.ki_inact, args.kinact, args.kdeg)
+            r2 = r2_time_dependent(unbound * 5.0, args.ki_inact, args.kinact, args.kdeg)
             rows.append(
                 {
                     "model": "time-dependent inhibition, hepatic",
                     "value": r2,
                     "cutoff": f">= {CUTOFF_R2_TDI}",
                     "triggers_study": r2 >= CUTOFF_R2_TDI,
-                    "basis": "(kobs + kdeg)/kdeg at 50 x Imax,u",
+                    "basis": "(kobs + kdeg)/kdeg at 5 x Imax,u",
                 }
             )
         if args.ind_ec50 and args.ind_emax:
@@ -266,8 +298,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                 basis = "Igut/IC50 (P-gp, BCRP)"
             else:
                 value = unbound / args.transporter_ki
-                cutoff, triggers = CUTOFF_TRANSPORTER_RENAL, value >= CUTOFF_TRANSPORTER_RENAL
-                basis = "Imax,u/Ki (OAT, OCT, MATE)"
+                cutoff = CUTOFF_TRANSPORTER_MATE if args.transporter in {"mate", "systemic-efflux"} else CUTOFF_TRANSPORTER_RENAL
+                triggers = value >= cutoff
+                basis = "Imax,u/IC50,u (MATE1/2-K or systemic P-gp/BCRP)" if cutoff == CUTOFF_TRANSPORTER_MATE else "Imax,u/IC50,u (OAT1/3, OCT2)"
             rows.append(
                 {
                     "model": f"transporter inhibition, {args.transporter}",
@@ -299,9 +332,15 @@ def run(argv: Sequence[str] | None = None) -> int:
             raise InputError("--fm must be in (0, 1]")
         if not 0 < args.fg <= 1:
             raise InputError("--fg must be in (0, 1]")
+        if args.dose is None:
+            raise InputError("--msm needs --dose (use 0 for a systemic-only scenario)")
+        ih = inlet_concentration(args.imax, args.fu, args.dose, args.fa, args.fg_perpetrator, args.ka, args.blood_ratio)
+        ig = args.fa * args.ka * 60.0 * args.dose / 18.0
+        report.scalar("msm_hepatic_inlet_unbound", ih)
+        report.scalar("msm_enterocyte_concentration", ig)
         result = mechanistic_static(
-            ih=unbound,
-            ig=gut if gut is not None else 0.0,
+            ih=ih,
+            ig=ig,
             fm=args.fm,
             fg=args.fg,
             ki=args.ki,
@@ -316,7 +355,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         report.scalar("predicted_auc_ratio", result["auc_ratio"])
         report.scalar("classification", classify(result["auc_ratio"]))
         report.note(
-            f"With fm = {args.fm}, no inhibitor of this pathway can raise the victim AUC above "
+            f"With fm = {args.fm} and Fg = {args.fg}, the combined hepatic/gut inhibition ceiling is "
             f"{result['maximum_possible_auc_ratio']:.2f}-fold. If the prediction approaches that "
             "ceiling, fm is doing more work than the inhibition constants."
         )
@@ -331,7 +370,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if result["auc_ratio"] >= 2.0:
             report.finding(
                 f"predicted AUC ratio {result['auc_ratio']:.2f} - {classify(result['auc_ratio'])}; "
-                "a clinical evaluation and labelling implications follow"
+                "this screening prediction needs confirmation before clinical or labelling conclusions"
             )
         report.note(
             "The mechanistic static model assumes a single constant perpetrator concentration and no "
@@ -339,6 +378,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             "ICH M12 points to PBPK with a verified perpetrator model."
         )
 
+    if args.msm and args.ind_emax and (args.ki is not None or args.tdi):
+        report.finding("Run inhibition-only and induction-only scenarios separately as well: combined effects can mask either mechanism (ICH M12 7.5.1.1)")
     return report.emit(args.format)
 
 

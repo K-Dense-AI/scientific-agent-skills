@@ -108,8 +108,8 @@ def plan_m10(modality: str) -> list[dict]:
             "item": "calibration curve",
             "requirement": (
                 f"minimum {crit['calibration_min_levels']} concentration levels including "
-                f"the LLOQ; at least "
-                f"{crit['calibration_min_pass_fraction'] * 100:.0f}% of standards must pass"
+                f"the LLOQ and ULOQ; at least "
+                f"{crit['calibration_min_pass_fraction'] * 100:.0f}% of standards and at least 6 levels must pass"
             ),
             "tolerance": (
                 f"+/-{crit['calibration_tolerance_pct']:.0f}% nominal; "
@@ -173,7 +173,7 @@ def plan_m10(modality: str) -> list[dict]:
         rows.append(
             {
                 "item": "total error",
-                "requirement": "sum of absolute accuracy (%) and precision (%)",
+                "requirement": "absolute bias (%) plus precision CV (%)",
                 "tolerance": (
                     f"<={crit['total_error_pct']:.0f}%, "
                     f"<={crit['total_error_pct_at_limits']:.0f}% at LLOQ and ULOQ"
@@ -211,7 +211,7 @@ def render_protocol(framework: str, attribute: str | None, modality: str | None,
         "- Decision the result supports (release, stability, in-process, clinical): [ ]",
         "- Specification or reporting limits the procedure must serve: [ ]",
         "- Required reportable range, derived from the specification: [ ]",
-        "- Performance characteristics and criteria (the ATP, ICH Q14 section 3): [ ]",
+        "- Performance characteristics and criteria: [ ] (formal ATP optional under ICH Q14)",
         "",
         "## 3. Pre-stated acceptance criteria",
         "",
@@ -223,9 +223,9 @@ def render_protocol(framework: str, attribute: str | None, modality: str | None,
             lines.append(
                 f"| {row['item']} | {row['tolerance']} | guideline default | ICH M10 |"
             )
-    elif attribute:
+    elif framework == "ich-q2r2" and attribute:
         for row in plan_q2r2(attribute, technique, range_use):
-            crit = "[ ] state a numeric criterion"
+            crit = "[ ] state an appropriate criterion"
             lines.append(
                 f"| {row['characteristic']} | {crit} | [ ] | {row['reference'] or 'ICH Q2(R2)'} |"
             )

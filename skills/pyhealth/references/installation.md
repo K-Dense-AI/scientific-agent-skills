@@ -1,112 +1,90 @@
-# Installation & Environment Setup
+# Installation and environment
 
-## Python version
+Reviewed for the released **PyHealth 2.0.2** wheel on 2026-09-30. Its metadata
+requires Python `>=3.12,<3.14` and `torch~=2.7.1`, which excludes Torch 2.8 and later.
+The tested macOS CPU environment resolved Torch 2.7.1 and torchvision 0.22.1.
+Do not independently upgrade to the newest Torch or copy CUDA 12.1 commands from
+older PyHealth examples. The [release metadata](https://pypi.org/project/pyhealth/2.0.2/)
+is authoritative for this pin; `/en/latest/` documentation may describe newer source.
 
-PyHealth 2.0 requires **Python 3.12 or 3.13** (`>=3.12,<3.14`). The 1.x line supports Python 3.9+ if a downgrade is unavoidable.
-
-## Recommended: uv
-
-`uv` is the right tool here — it resolves and installs an order of magnitude faster than `pip`, and the lockfile makes runs reproducible across machines.
-
-### New project
+## Project setup
 
 ```bash
-uv init my-pyhealth-project
+uv init --python 3.12 my-pyhealth-project
 cd my-pyhealth-project
-uv python pin 3.12          # writes .python-version
-uv add pyhealth             # resolves PyTorch + transitive deps, writes uv.lock
-uv run python train.py      # runs inside the project venv
+uv add 'pyhealth==2.0.2'
+uv run python -c 'import torch; import importlib.metadata as m; print(m.version("pyhealth"), torch.__version__)'
 ```
 
-### Existing project
-
-If a `pyproject.toml` already exists:
+Keep the generated lockfile. To run independently of the surrounding project's
+Python requirement or dependencies:
 
 ```bash
-uv add pyhealth
+uv run --no-project --isolated --python 3.12 --with pyhealth==2.0.2 python train.py
 ```
 
-If only `requirements.txt` exists, either migrate to `pyproject.toml` (preferred) or:
+PyHealth 1.x has different datasets, task functions, schemas and model arguments.
+Treat an existing 1.x environment as a separate migration; these examples target
+2.0.2 and do not claim legacy compatibility.
 
-```bash
-uv pip install pyhealth
-```
+## CPU, CUDA and MPS
 
-### One-off scripts (no project)
+Start with `Trainer(..., device="cpu")`. GPU selection at runtime does not determine
+which wheel the installer downloads. For Linux CUDA/ROCm, choose a supported
+**Torch 2.7.1 / torchvision 0.22.1** pair from the
+[official previous-version installer](https://pytorch.org/get-started/previous-versions/),
+and configure the package index appropriately for that environment. CUDA installation
+was not tested in this review.
 
-```bash
-uv run --with pyhealth python script.py
-```
+On Apple Silicon, check `torch.backends.mps.is_available()` before explicitly passing
+`device="mps"`; the trainer's automatic device choice is CUDA-or-CPU. MPS operation
+coverage is model-dependent and was not tested here. Optional graph models may need
+`pyhealth[graph]==2.0.2`; pretrained text/image models can require separate downloads.
 
-This creates an ephemeral environment, runs the script, and disposes the env. Good for quick experiments.
+## Data access and layout
 
-### Legacy 1.x
+The public PyHealth `Synthetic_MIMIC-III` bucket is an unauthenticated collection of
+CSV files, not a clinical production dataset or JSON API:
+`https://storage.googleapis.com/pyhealth/Synthetic_MIMIC-III/`.
+The 2.0.2 loader tries configured `.csv.gz` files and then `.csv` alternatives.
 
-```bash
-uv add 'pyhealth==1.16'     # last 1.x release, Python 3.9+
-```
+Real MIMIC and eICU require the relevant PhysioNet access conditions (credentialing,
+training and the data use agreement). Confirm access and release-specific conditions
+on the [dataset landing page](https://physionet.org/content/mimiciv/); download through
+an authorized channel and pass a local path. Do not embed access credentials in code.
 
-The 1.x and 2.x APIs differ — examples in this skill target 2.x. If a user is on 1.x, mention the version mismatch before debugging.
-
-## GPU / CPU
-
-PyHealth uses PyTorch under the hood. `uv add pyhealth` pulls the default PyTorch wheel, which is CPU-only on macOS and CUDA-enabled on Linux when CUDA is detected.
-
-For explicit CUDA control on Linux:
-
-```bash
-# Replace cu121 with the user's CUDA version
-uv add 'torch>=2.1' --index https://download.pytorch.org/whl/cu121
-uv add pyhealth
-```
-
-For Apple Silicon, the default wheel works and uses MPS automatically when `Trainer(device="mps")` is set. CPU is the safe default if device behavior is unclear.
-
-## Dataset access
-
-### Synthetic MIMIC-III (no credentials)
-
-PyHealth hosts a synthetic copy on Google Cloud Storage that any pipeline can hit directly:
+For MIMIC-IV the root must contain `hosp/` **and** `icu/` because the default config
+loads `hosp/patients.csv.gz`, `hosp/admissions.csv.gz`, `icu/icustays.csv.gz` plus
+requested clinical tables. PyHealth's bundled MIMIC-IV config is labeled 2.2;
+compatibility with all newer PhysioNet releases has not been established here.
 
 ```python
-root="https://storage.googleapis.com/pyhealth/Synthetic_MIMIC-III/"
-```
-
-Use this for demos, tutorials, and any code that needs to run without PhysioNet credentials.
-
-### Real MIMIC-III / MIMIC-IV / eICU
-
-These require completed CITI training and a credentialed PhysioNet account. Once downloaded, point `root=` (or `ehr_root=` for MIMIC-IV) at the local directory containing the CSV/CSV.gz files:
-
-```python
-MIMIC4Dataset(
-    ehr_root="/path/to/mimic-iv/2.2/hosp",   # not `root`
+from pyhealth.datasets import MIMIC4EHRDataset
+base = MIMIC4EHRDataset(
+    root="./data/mimic-iv",  # contains hosp/ and icu/
     tables=["diagnoses_icd", "procedures_icd", "prescriptions"],
-    cache_dir="/path/to/cache",              # cache parsed output
+    cache_dir="./cache/mimic4", num_workers=1,
 )
 ```
 
-### OMOP-CDM
+This constructor was checked against released source; restricted data parsing was
+not executed. MIMIC-III uses lowercase selectors with uppercase source filenames.
+OMOP uses its own bundled config: inspect it before assuming a particular CDM export
+naming convention.
 
-Standardized schema; point `root=` at the directory containing CDM tables (`person.csv`, `condition_occurrence.csv`, etc.).
+## Caching and small runs
 
-## Caching
+`BaseDataset(cache_dir=None)` uses a persistent platform-specific user cache.
+An explicit cache root gains a dataset UUID subdirectory; task/schema/processor
+caches live below it. It is incorrect that omitting `cache_dir` always reparses.
+The dataset cache key includes root, tables, dataset name and `dev`, but not the raw
+file contents or full config contents. A task source edit need not invalidate the
+task cache either. Choose a new cache root after changing those inputs and record
+raw-data checksums/release and task version with each run.
 
-The first call to `set_task()` is expensive (parses every CSV, applies the task to every patient). Set `cache_dir=` on the dataset constructor to persist the parsed result:
-
-```python
-MIMIC3Dataset(root=..., tables=..., cache_dir="./cache/mimic3")
-```
-
-Subsequent runs reload from disk in seconds. Without `cache_dir`, every run re-parses from scratch — fine for a one-off script, painful for iteration.
-
-## `dev=True`
-
-All dataset constructors accept `dev=True`, which loads only a small subset of patients. Use this while iterating on pipeline shape; switch to `dev=False` (the default) once the pipeline runs end-to-end.
-
-## Common installation issues
-
-- **"Could not find a version that satisfies the requirement pyhealth"** — Python version is < 3.12. Run `uv python pin 3.12` and reinstall.
-- **CUDA OOM during `set_task`** — set_task is CPU-only; this is almost always a `Trainer` issue. Reduce `batch_size` or move to CPU temporarily to localize the problem.
-- **Slow first run** — expected; set `cache_dir=` and re-run.
-- **`KeyError` on table name** — table names are case-sensitive and dataset-specific. MIMIC-III uses uppercase (`DIAGNOSES_ICD`), MIMIC-IV uses lowercase (`diagnoses_icd`). Check the user's dataset version.
+`dev=True` limits BaseDataset processing to 1000 patients; it is not a guarantee
+that only 1000 patients' CSV bytes are downloaded or scanned. Not every wrapper
+exposes it: `SleepEDFDataset`, for example, has no `dev` or `cache_dir` parameter.
+Use a `main()` guard for executable examples because dataset processing can spawn
+workers on macOS/Windows. `num_workers=1` is a useful initial setting, not a guarantee
+that every upstream library avoids subprocesses.

@@ -1,13 +1,13 @@
 ---
 name: analytical-method-validation
-description: Plan, execute, and document validation, verification, and transfer of analytical procedures under the governing framework - ICH Q2(R2) and Q14, USP <1220>/<1225>/<1226>, ICH M10 bioanalytical, CLSI EP, or ISO/IEC 17025. Use for HPLC, LC-MS/MS, GC, CE, ICP-MS, dissolution, qNMR, qPCR, NIR, and ligand binding or cell-based assays whenever the question is whether a procedure is fit for its intended purpose. Triggers include "method validation", "analytical method validation", "AMV", "validation protocol", "acceptance criteria", "linearity", "reportable range", "accuracy and precision", "repeatability", "intermediate precision", "recovery", "LOD", "LOQ", "detection limit", "quantitation limit", "specificity", "robustness", "method transfer", "method comparison", "Deming", "Passing-Bablok", "Bland-Altman", "equivalence testing", "OOS investigation", "ICH Q2", "Q2(R2)", "Q14", "USP 1225", "ICH M10", "incurred sample reanalysis", "ISR", "CLSI EP", and any request to show that an assay works.
+description: Plans, executes, and documents validation, verification, and transfer of analytical procedures under the governing framework - ICH Q2(R2) and Q14, USP <1220>/<1225>/<1226>, ICH M10 bioanalytical, CLSI EP, or ISO/IEC 17025. Use for HPLC, LC-MS/MS, GC, CE, ICP-MS, dissolution, qNMR, qPCR, NIR, and ligand binding or cell-based assays whenever the question is whether a procedure is fit for its intended purpose. Triggers include "method validation", "analytical method validation", "AMV", "validation protocol", "acceptance criteria", "linearity", "reportable range", "accuracy and precision", "repeatability", "intermediate precision", "recovery", "LOD", "LOQ", "detection limit", "quantitation limit", "specificity", "robustness", "method transfer", "method comparison", "Deming", "Passing-Bablok", "Bland-Altman", "equivalence testing", "OOS investigation", "ICH Q2", "Q2(R2)", "Q14", "USP 1225", "ICH M10", "incurred sample reanalysis", "ISR", "CLSI EP", and any request to show that an assay works.
 license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no numpy, scipy, or network access. Statistical distributions are computed from first principles so results are reproducible in any conforming interpreter.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.4"
+  version: "2.0"
   skill-author: K-Dense Inc.
-  last-reviewed: "2026-07-27"
+  last-reviewed: "2026-09-30"
 ---
 
 # Analytical Method Validation
@@ -38,7 +38,8 @@ assays.
 This skill plans studies, computes the statistics correctly, and structures the documentation. It
 does **not** decide that a procedure is validated, release a batch, accept or reject a run, close
 an investigation, or substitute for the analyst, the technical reviewer, the quality unit, or the
-regulator. Every script reports; none of them concludes.
+regulator. Every script reports computations and supported findings; only the responsible reviewers can
+make the fitness-for-purpose decision. JSON uses `null` for unavailable statistics.
 
 ## Copyright boundary
 
@@ -87,12 +88,20 @@ cd skills/analytical-method-validation/scripts
 | `check_response.py` | Does the calibration model actually hold across the range? |
 | `check_accuracy_precision.py` | What is the recovery, and how much of the variability is between days? |
 | `check_detection_limits.py` | What are DL and QL by each allowed approach, and do they serve the reporting threshold? |
-| `check_bioanalytical_run.py` | Does this run meet ICH M10 for its modality? |
+| `check_bioanalytical_run.py` | Which supported ICH M10 numerical checks raise findings? |
 | `compare_methods.py` | Are two procedures equivalent, at a pre-stated margin? |
 
-All take `--format table|tsv|json`. Provenance, guideline citations, and caveats go to stderr;
+Commands below use placeholder data filenames; supply your own controlled data. The printed
+numerical examples were re-executed with synthetic repository fixtures under
+`tests/analytical-method-validation/fixtures/` on Python 3.13.3. They are computational smoke
+tests, not evidence that a physical assay is validated. All scripts take `--format table|tsv|json`. Provenance, guideline citations, and caveats go to stderr;
 data goes to stdout, so `> out.tsv` keeps them separate. Exit code is `0` for no findings, `1`
 when findings were raised, `2` for bad input — so any of them can gate a workflow.
+
+Version 2.0 tightens the numerical input contract: QL confirmation needs explicit bias/CV limits;
+intercept-based limits need independent curves; M10 runs need complete labelled calibrator/QC
+records; grouped accuracy uses group means; unavailable JSON statistics are `null`. Re-run saved
+analyses rather than comparing their exit codes with version 1.x unchanged.
 
 ## Workflow
 
@@ -154,12 +163,13 @@ level     n  mean_response  mean_back_calculated  relative_error_pct
 r² = 0.983 and the model is unusable: −9.0% back-calculated error at the bottom of the range,
 lack-of-fit p = 1.5 × 10⁻⁶, non-random residual signs. **r² is not evidence of linearity** — it
 rises with range and is nearly insensitive to curvature. The lack-of-fit F test against pure error
-and the residual pattern are the evidence, which is why Q2(R2) 3.2.2.1 asks for an analysis of the
+and the residual pattern provide diagnostics, which is why Q2(R2) 3.2.2.1 asks for an analysis of the
 deviation of points from the line rather than a correlation coefficient alone.
 
-Add `--weight 1/x2` for a wide-range curve. The script flags heteroscedasticity when the residual
-variance in the top third of the range exceeds the bottom third by more than 10×, because an
-unweighted fit then biases exactly the low end where a reporting threshold lives.
+Use `--weight 1/x2` only when supported by the variance model for a wide-range curve. The script flags heteroscedasticity when the residual
+variance in the top third of the range exceeds the bottom third by more than 10×, as a heuristic warning. Unequal variance does not itself bias OLS coefficients; choose weights
+from a justified error model, then assess low-end performance. Weighted lack-of-fit assumes the
+weights represent inverse variances. A significant test is not a practical acceptance criterion.
 
 ### 4. Evaluate accuracy and precision
 
@@ -172,13 +182,16 @@ or instrument. Record independent sample-preparation IDs separately from repeat 
 reinjecting one preparation estimates injection repeatability, not the whole procedure.
 The bundled one-way model estimates one between-group component. If day, analyst, and
 instrument change together, it cannot identify their separate contributions; use a
-planned crossed or nested study and a matching model when those components matter.
+planned crossed or nested study and a matching model when those components matter. Grouped
+accuracy intervals use independent group means with equal group weighting; individual injections
+are not counted as independent evidence across days. To check the six-at-100% design alternative,
+state `--test-concentration 100` when nominal values are percentages (or the actual concentration).
 
 ```
 level  component                       sd      rsd_pct  df      ci90_low_sd  ci90_high_sd
-100    repeatability (within group)    0.0707  0.0707   3       0.0438       0.2065
-100    between-group                   1.6515  1.6515   2       n/a          n/a
-100    intermediate precision (total)  1.6530  1.6530   2.0037  0.9554       7.2821
+100    repeatability (within group)    0.0707  0.0705   3       0.0438       0.2065
+100    between-group                   1.6515  1.6458   2       n/a          n/a
+100    intermediate precision (total)  1.6530  1.6473   2.0037  0.9554       7.2821
 ```
 
 Repeatability of 0.07% RSD looks superb; intermediate precision is 1.65%, twenty-three times
@@ -190,7 +203,7 @@ Two traps the script handles for you:
 
 - **Precision is estimated within each level, never pooled across levels.** Pooling 80/100/120%
   results into one standard deviation turns the range itself into apparent imprecision. The script
-  reports per level, plus a level-independent view as percent of nominal.
+  reports per level; even pooling percent recoveries can confound level-specific bias with imprecision.
 - **`--require-ci-within-limit`** enforces that the whole confidence interval sits inside the
   limit, not just the mean. Q2(R2) 3.3.1.4 asks for the interval to be *compatible with* the
   criterion; a mean that scrapes inside on six replicates has not demonstrated much.
@@ -199,17 +212,21 @@ Two traps the script handles for you:
 
 ```bash
 python3 check_detection_limits.py --calibration lowcal.csv --blanks blanks.csv \
-    --confirm-ql 0.05 --confirm-data ql_check.csv --reporting-threshold 0.05
+    --confirm-ql 0.05 --confirm-data ql_check.csv --reporting-threshold 0.05 \
+    --confirm-accuracy-limit 10 --confirm-rsd-limit 10
 ```
 
 ```
 approach                                          sigma   slope      DL      QL
 sd-and-slope (sigma = residual SD of regression)  7.2816  5033.3490  0.0048  0.0145
-sd-and-slope (sigma = SD of y-intercept)          4.3303  5033.3490  0.0028  0.0086
 sd-and-slope (sigma = SD of 8 blanks)             3.7702  5033.3490  0.0025  0.0075
 ```
 
-The same data give QL estimates spanning 1.9×, purely from the choice of σ. Q2(R2) 3.2.3.5
+The two estimates differ by about 1.9× from the choice of σ.
+The example limits of 10% bias/CV are illustrative protocol choices, not Q2 defaults.
+Supply `--intercepts curves.csv` (column `intercept`) only for independent low-range calibration
+curves: their intercept SD is not the standard error of one fitted intercept. The helper uses
+unweighted low-range fits; it does not automate visual detection or establish a validated limit. Q2(R2) 3.2.3.5
 therefore requires the limit **and the approach used to determine it** to be reported, and an
 estimated limit to be confirmed with samples at or near it. For an impurity procedure the QL must
 be at or below the reporting threshold. Reaching for `3.3σ/slope` reflexively, reporting one number
@@ -236,9 +253,12 @@ python3 check_bioanalytical_run.py --modality lba --criteria
 Applying the ±15% chromatographic numbers to a ligand binding assay, or importing the LBA total-error
 criterion into a chromatographic method, are both common and both wrong.
 
-The run check enforces the per-level rule that gets missed: at least 2/3 of *all* QCs **and** at
+The run check requires calibrators and QCs, at least six passing calibration levels, explicit
+LLOQ/ULOQ labels and duplicate QCs at three levels. It treats each row as one reportable sample,
+not one LBA well. It flags failed calibrators for documented exclusion/refitting and checks: at least 2/3 of *all* QCs **and** at
 least 50% at *each* level. A run can pass the overall fraction while a single level fails
-completely.
+completely. Check blanks/zero samples, QC bracketing, the study-size-dependent 5% QC count,
+plate/batch rules, and revised ranges separately; the script does not establish full M10 compliance.
 
 ```
 finding: QC level high: 0/2 within tolerance (0%); M10 requires at least 50% at each level
@@ -270,11 +290,13 @@ Two errors this replaces:
   is close to guaranteed. TOST tests the hypothesis that matters — that the true difference lies
   inside a pre-stated margin. Here the t test says the difference is highly significant *and* TOST
   says the methods are equivalent at ±2%; both are true, and only one answers the question.
-- **Ordinary least squares for method comparison.** OLS assumes the reference values carry no
-  error, which is false when comparing two procedures, and biases the slope toward zero. Deming
-  (with a stated error-variance ratio) and Passing–Bablok (non-parametric, outlier-resistant) are
-  the appropriate regressions and are reported side by side with OLS for contrast.
+- **Ignoring reference measurement error.** OLS treats reference values as fixed without error;
+  appreciable error can attenuate its slope. Deming uses a justified variance ratio
+  `lambda = SD(test replicates)^2 / SD(reference replicates)^2`. Passing–Bablok requires its own
+  linear-relation and error-distribution assumptions; it is not assumption-free.
 
+TOST here concerns the **mean paired difference**, not interchangeability of individual results.
+Specify limits of agreement and relevant decision-point bias criteria separately.
 The script also flags proportional bias — when the difference trends with concentration, a single
 mean bias and its limits of agreement are misleading regardless of how tight they look.
 
@@ -292,7 +314,7 @@ mean bias and its limits of agreement are misleading regardless of how tight the
 
 - `references/framework-selection.md` — which framework governs, and the questions that decide it
 - `references/ich-q2r2.md` — structure, Table 1 and Table 2, per-characteristic recommended data
-- `references/ich-m10-bioanalytical.md` — the full chromatographic and LBA criteria side by side
+- `references/ich-m10-bioanalytical.md` — selected chromatographic and LBA criteria side by side
 - `references/compendial-and-clsi.md` — USP, CLSI and ISO designations, scope, and how to cite them
 - `references/statistics.md` — the statistical methods, why each one, and the common errors
 - `references/source-ledger.md` — provenance and research dates for every claim in this skill

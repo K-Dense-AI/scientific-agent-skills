@@ -1,328 +1,219 @@
 ---
 name: scvelo
-description: RNA velocity analysis with scVelo. Estimate cell state transitions from unspliced/spliced mRNA dynamics, infer trajectory directions, compute latent time, and identify driver genes in single-cell RNA-seq data. Complements Scanpy/scVI-tools for trajectory inference.
+description: Performs RNA velocity analysis with scVelo from spliced and unspliced single-cell RNA counts. Fits deterministic or dynamical models, examines gene phase portraits, builds velocity graphs, estimates relative latent time, and ranks velocity-associated genes. Use for directional trajectory hypotheses and kinetic-model diagnostics alongside Scanpy; velocity alone does not establish cell fate or causal drivers.
 license: BSD-3-Clause
-compatibility: Requires Python 3.10+ with scvelo, scanpy, and anndata. Verified against scvelo 0.3.4, whose dynamical model and pl.scatter need pandas<3 and whose stochastic estimator needs numpy<2; the deterministic estimator works on current releases.
+compatibility: Requires Python 3.13 for the tested stack with scvelo 0.3.4, scanpy 1.12.4, anndata 0.13.4, numpy 2.5.3 and pandas 2.3.3. Loom import requires loompy. Local H5AD analysis needs no network or credentials. The default stochastic solver is incompatible with NumPy 2.
 metadata:
-  version: "1.3"
+  version: "2.0"
   skill-author: Kuan-lin Huang
+  last-reviewed: "2026-10-01"
 ---
 
-# scVelo — RNA Velocity Analysis
+# scVelo RNA Velocity
 
-## Overview
+## When to use
 
-scVelo is the leading Python package for RNA velocity analysis in single-cell RNA-seq data. It infers cell state transitions by modeling the kinetics of mRNA splicing — using the ratio of unspliced (pre-mRNA) to spliced (mature mRNA) abundances to determine whether a gene is being upregulated or downregulated in each cell. This allows reconstruction of developmental trajectories and identification of cell fate decisions without requiring time-course data.
+Use for kinetic analysis of aligned spliced/unspliced RNA counts, directional
+trajectory hypotheses, gene-level phase portraits, and dynamical latent time.
+Use the [model reference](references/velocity_models.md) for assumptions,
+transition probabilities, and an optional CellRank handoff.
 
-**Installation:** `uv pip install scvelo`
+RNA velocity estimates an expression derivative under a model. Smooth arrows
+are not observed cell movement, lineage tracing, causal drivers, or proof of
+future fate. The dynamical estimator is not automatically more accurate than
+a steady-state estimator on every dataset.
 
-**Key resources:**
-- Documentation: https://scvelo.readthedocs.io/
-- GitHub: https://github.com/theislab/scvelo
-- Paper: Bergen et al. (2020) Nature Biotechnology. PMID: 32747759
+## Tested environment and compatibility
 
-## When to Use This Skill
+The maintained workflow targets scVelo **0.3.4**, Scanpy **1.12.4**, AnnData
+**0.13.4**, NumPy **2.5.3**, pandas **2.3.3**, SciPy **1.18.1**, Matplotlib
+**3.11.2**, and loompy **3.0.8** on Python 3.13. Use an isolated environment:
 
-Use scVelo when:
+```bash
+uv venv --python 3.13 .venv-velocity
+uv pip install --python .venv-velocity/bin/python \
+  scvelo==0.3.4 scanpy==1.12.4 anndata==0.13.4 numpy==2.5.3 \
+  pandas==2.3.3 scipy==1.18.1 matplotlib==3.11.2 loompy==3.0.8
+```
 
-- **Trajectory inference from snapshot data**: Determine which direction cells are differentiating
-- **Cell fate prediction**: Identify progenitor cells and their downstream fates
-- **Driver gene identification**: Find genes whose dynamics best explain observed trajectories
-- **Developmental biology**: Model hematopoiesis, neurogenesis, epithelial-to-mesenchymal transitions
-- **Latent time estimation**: Order cells along a pseudotime derived from splicing dynamics
-- **Complement to Scanpy**: Add directional information to UMAP embeddings
+The packages above were resolved from cache and tested in an isolated `uv`
+environment; shell paths above use POSIX syntax. Installation requires network
+access unless packages are cached. No API key is required.
 
-## Prerequisites
+- **Deterministic and dynamical models:** native synthetic fitting, graphs,
+  relative times, plots and H5AD round trips are tested on this stack.
+- **Stochastic model:** scVelo 0.3.4's default GLS scalar assignment fails with
+  NumPy 2. Scanpy 1.12 requires NumPy 2, so installing `numpy<2` beside current
+  Scanpy is not a solution. A separately validated legacy Scanpy/NumPy environment
+  is required; that legacy stack was not executed in this review. The helper
+  rejects this combination before modifying data, without changing the model.
+- **pandas 3:** scVelo 0.3.4 dynamical fitting and some plots use operations no
+  longer supported by pandas 3. Keep the explicit pandas pin.
+- The upstream stable tutorial still contains removed `scv.read` and older
+  preprocessing calls. Check the [0.3.4 source](https://github.com/theislab/scvelo/tree/v0.3.4)
+  when a tutorial disagrees with the installed API.
 
-scVelo requires count matrices for both **unspliced** and **spliced** RNA. These are generated by:
-1. **STARsolo** or **kallisto|bustools** with `lamanno` mode
-2. **velocyto** CLI: `velocyto run10x` / `velocyto run`
-3. **alevin-fry** / **simpleaf** with spliced/unspliced output
+## Input contract
 
-Data is stored in an `AnnData` object with `layers["spliced"]` and `layers["unspliced"]`.
+1. Obtain spliced and unspliced counts from a velocity-aware quantifier. Keep
+   quantifier/version, reference annotation, counting mode, sample IDs and cell
+   barcode mapping. Upstream quantification is outside the bundled script.
+2. Supply **cells by genes** matrices in `adata.layers['spliced']` and
+   `adata.layers['unspliced']`, with identical cell/gene ordering and unique IDs.
+   Counts must be finite and nonnegative; fractional count estimates are allowed.
+   Never use logged, scaled, residualized, or batch-corrected values as counts.
+   Numerical inspection alone cannot establish that data are raw.
+3. Inspect per-library/cluster coverage, doublets, ambient RNA, zero-count cells,
+   and annotation compatibility before fitting. Preserve the original full-gene
+   count file. Retained-gene backups do not preserve filtered-out genes.
+4. Resolve barcode prefixes and gene identifiers explicitly when combining
+   files. Do not silently strip library IDs, intersect away most cells, or make
+   duplicated biological IDs unique without understanding why they repeat.
 
-## Standard RNA Velocity Workflow
-
-### 1. Setup and Data Loading
+Read H5AD through AnnData. scVelo 0.3.4 has no `scv.read` or `scv.DataFrame`:
 
 ```python
+import anndata as ad
+adata = ad.read_h5ad("velocity_counts.h5ad")
+```
+
+For legacy loom input use `ad.io.read_loom('counts.loom', X_name='spliced',
+sparse=True)`. AnnData 0.13 deprecates loom; convert to H5AD for further work.
+Its `layers[None]` aliases `X`: do not delete it or iterate all layers as if every
+key were a string. The helper accesses only named velocity layers. Native loom
+reading and exact, reordered metadata alignment are covered by the tests;
+AnnData 0.13 `write_loom` is not used.
+
+## Run the maintained workflow
+
+The [bundled script](scripts/rna_velocity_workflow.py) accepts local files and
+never downloads a demonstration dataset on startup:
+
+```bash
+MPLBACKEND=Agg .venv-velocity/bin/python scripts/rna_velocity_workflow.py \
+  velocity_counts.h5ad --mode dynamical --groupby clusters \
+  --n-top-genes 2000 --n-neighbors 30 --n-jobs 1 --output-dir velocity_results
+
+# Import a loom and align its raw counts to an existing annotation file:
+MPLBACKEND=Agg .venv-velocity/bin/python scripts/rna_velocity_workflow.py \
+  counts.loom --processed-h5ad annotated.h5ad --groupby clusters \
+  --mode deterministic --output-dir velocity_check
+```
+
+Run these from the skill directory. Input filenames and biological annotations
+are illustrative; the same CLI and functions are tested on small generated
+kinetic fixtures. Omit `--groupby` when annotations are unavailable. Use
+`--no-plots` for analysis without computing UMAP.
+
+The helper performs these steps:
+
+1. Validate layers, IDs, model compatibility and grouping; refuse previously
+   generated moments/velocity so preprocessing cannot silently run twice.
+2. Back up retained raw layers as `spliced_counts` and `unspliced_counts` and
+   rebuild `X` from raw spliced counts. Filter genes and normalize `X` and the
+   two count layers on a linear scale.
+3. Apply `sc.pp.log1p` **only to X**, select highly variable genes with Scanpy,
+   and rebuild PCA and neighbors after subsetting. Reusing stale PCA/neighbors
+   from an unrelated feature set can silently change the velocity model.
+4. Compute `Ms` and `Mu` with `scv.pp.moments(adata, n_neighbors=None)` from the
+   explicit Scanpy graph. Moments are dense: budget memory for multiple
+   cells-by-genes arrays, not only the sparse input.
+5. For dynamical mode, call `recover_dynamics(var_names='all')` on the selected
+   genes before `velocity(mode='dynamical')`; otherwise fit the selected model.
+   Require usable genes and a nonempty velocity graph.
+6. Compute velocity coherence and velocity pseudotime; add latent time only for
+   dynamical fits. Rank velocity-associated genes only with at least two groups
+   and at least two cells per group. Record/warn about nonfinite or constant
+   time/coherence outputs in `uns['velocity_workflow']['diagnostics']`; a
+   constant pseudotime does not support a trajectory ordering. Ranking is exploratory.
+7. For plots, recompute UMAP from the rebuilt graph, project velocities, save
+   PNGs directly to the requested directory, then save H5AD with package versions
+   and selected parameters. Existing labels remain annotations, not validated
+   cell identities.
+
+The Python function mutates its argument in place; pass `adata.copy()` to keep
+the original object. The CLI writes to `output_dir/adata_velocity.h5ad`.
+Version 2 changes the former helper's behavior deliberately: raw layer geometry
+is rebuilt, missing requested labels are errors, and plots/parallelism can be
+controlled explicitly. Runtime depends on cells, genes and fit difficulty;
+there is no universal 10–30 minute expectation.
+
+## Inspect the evidence before interpretation
+
+After a dynamical run (dataset-specific gene selection is illustrative):
+
+```python
+import pandas as pd
 import scvelo as scv
-import scanpy as sc
-import numpy as np
-import matplotlib.pyplot as plt
 
-# Configure settings
-scv.settings.verbosity = 3       # Show computation steps
-scv.settings.presenter_view = True
-scv.settings.set_figure_params('scvelo')
+# Candidate kinetic genes, not experimentally established drivers.
+candidates = adata.var['fit_likelihood'].dropna().nlargest(6).index.tolist()
+scv.pl.velocity(adata, var_names=candidates, basis='umap', show=False)
 
-# Load data (AnnData with spliced/unspliced layers)
-# Option A: Load from loom (velocyto output)
-adata = scv.read("cellranger_output.loom", cache=True)
+# This ranks group-associated velocities, not causal influence or condition DE.
+scv.tl.rank_velocity_genes(adata, groupby='clusters', min_corr=0.3)
+ranked = pd.DataFrame(adata.uns['rank_velocity_genes']['names'])
 
-# Option B: Merge velocyto loom with Scanpy-processed AnnData
-adata_processed = sc.read_h5ad("processed.h5ad")  # Has UMAP, clusters
-adata_velocity = scv.read("velocyto.loom")
-adata = scv.utils.merge(adata_processed, adata_velocity)
-
-# Verify layers
-print(adata)
-# obs × var: N × G
-# layers: 'spliced', 'unspliced' (required)
-# obsm['X_umap'] (required for visualization)
-```
-
-### 2. Preprocessing
-
-```python
-# Filter and normalize. As of scVelo 0.3, filter_and_normalize() only filters
-# genes and normalizes per cell -- it no longer takes n_top_genes and no longer
-# log-transforms, so the log step and HVG selection come from Scanpy.
-scv.pp.filter_and_normalize(
-    adata,
-    min_shared_counts=20    # Minimum counts in spliced+unspliced
-)
-sc.pp.log1p(adata)
-sc.pp.highly_variable_genes(adata, n_top_genes=2000, subset=True)
-
-# Compute first and second order moments (means and variances)
-# knn_connectivities must be computed first
-sc.pp.neighbors(adata, n_neighbors=30, n_pcs=30)
-scv.pp.moments(
-    adata,
-    n_pcs=30,
-    n_neighbors=30
-)
-```
-
-### 3. Velocity Estimation — Stochastic Model
-
-The stochastic model is fast and suitable for exploratory analysis:
-
-```python
-# Stochastic velocity (faster, less accurate)
-scv.tl.velocity(adata, mode='stochastic')
-scv.tl.velocity_graph(adata)
-
-# Visualize
-scv.pl.velocity_embedding_stream(
-    adata,
-    basis='umap',
-    color='leiden',
-    title="RNA Velocity (Stochastic)"
-)
-```
-
-### 4. Velocity Estimation — Dynamical Model (Recommended)
-
-The dynamical model fits the full splicing kinetics and is more accurate:
-
-```python
-# Recover dynamics (computationally intensive; ~10-30 min for 10K cells)
-scv.tl.recover_dynamics(adata, n_jobs=4)
-
-# Compute velocity from dynamical model
-scv.tl.velocity(adata, mode='dynamical')
-scv.tl.velocity_graph(adata)
-```
-
-### 5. Latent Time
-
-The dynamical model enables computation of a shared latent time (pseudotime):
-
-```python
-# Compute latent time
-scv.tl.latent_time(adata)
-
-# Visualize latent time on UMAP
-scv.pl.scatter(
-    adata,
-    color='latent_time',
-    color_map='gnuplot',
-    size=80,
-    title='Latent time'
-)
-
-# Identify top genes ordered by latent time
-top_genes = adata.var['fit_likelihood'].sort_values(ascending=False).index[:300]
-scv.pl.heatmap(
-    adata,
-    var_names=top_genes,
-    sortby='latent_time',
-    col_color='leiden',
-    n_convolve=100
-)
-```
-
-### 6. Driver Gene Analysis
-
-```python
-# Identify genes with highest velocity fit
-scv.tl.rank_velocity_genes(adata, groupby='leiden', min_corr=0.3)
-df = scv.DataFrame(adata.uns['rank_velocity_genes']['names'])
-print(df.head(10))
-
-# Speed and coherence
 scv.tl.velocity_confidence(adata)
-scv.pl.scatter(
-    adata,
-    c=['velocity_length', 'velocity_confidence'],
-    cmap='coolwarm',
-    perc=[5, 95]
-)
-
-# Phase portraits for specific genes
-scv.pl.velocity(adata, ['Cpe', 'Gnao1', 'Ins2'],
-               ncols=3, figsize=(16, 4))
+scv.pl.scatter(adata, color=['velocity_length', 'velocity_confidence'], show=False)
 ```
 
-### 7. Velocity Arrows and Pseudotime
+Inspect spliced-versus-unspliced phase portraits, coverage across induction and
+repression, fitted parameters, failed/NaN fits, and branch-specific kinetics.
+Check sensitivity to gene set, neighbors, subsampling and model assumptions.
+Use time-course labels, perturbations, lineage tracing or labeling experiments
+as independent directional evidence where available. A plausible UMAP alone
+cannot validate a fit, and tuning until arrows match a desired story is not a
+validation strategy.
 
-```python
-# Arrow plot on UMAP
-scv.pl.velocity_embedding(
-    adata,
-    arrow_length=3,
-    arrow_size=2,
-    color='leiden',
-    basis='umap'
-)
+There is no general minimum of 2,000 cells, universal unspliced fraction, or
+rule that root cells must have the highest unspliced/spliced ratio. Coverage of
+relevant kinetic states and measurement quality matter. Negative velocity can
+represent repression or model misspecification; it is not by itself evidence
+that layers were swapped.
 
-# Stream plot (cleaner visualization)
-scv.pl.velocity_embedding_stream(
-    adata,
-    basis='umap',
-    color='leiden',
-    smooth=0.8,
-    min_mass=4
-)
+## Output interpretation
 
-# Velocity pseudotime (alternative to latent time)
-scv.tl.velocity_pseudotime(adata)
-scv.pl.scatter(adata, color='velocity_pseudotime', cmap='gnuplot')
-```
+| Field | Interpretation |
+| --- | --- |
+| `layers['velocity']` | Model-estimated derivative in processed gene-expression space |
+| `var['velocity_genes']` | Genes selected for the velocity graph; distinct from all HVGs |
+| `layers['Ms']`, `layers['Mu']` | Neighbor-averaged linear-scale spliced/unspliced expression |
+| `layers['fit_t']` | Gene-specific fitted time coordinates, dynamical model only |
+| `var['fit_alpha/beta/gamma']` | Fitted rates on the model's inferred scale; not calibrated physical rates |
+| `var['fit_likelihood']` | Relative model-fit diagnostic; not a posterior probability of biological truth |
+| `uns['velocity_graph']` | Sparse positive cosine correlations for candidate transitions; not row-stochastic |
+| `obsm['velocity_umap']` | Projected vectors, only after embedding computation/plotting |
+| `obs['velocity_pseudotime']` | Graph-based relative ordering |
+| `obs['latent_time']` | Coupled dynamical ordering; normally scaled 0–1, not elapsed hours |
+| `obs['velocity_length']` | Processed-space vector magnitude; not physical cell speed |
+| `obs['velocity_confidence']` | Neighbor velocity coherence, not calibrated uncertainty |
 
-### 8. PAGA Trajectory Graph
-
-```python
-# PAGA graph with velocity-informed transitions
-scv.tl.paga(adata, groups='leiden')
-df = scv.get_df(adata, 'paga/transitions_confidence', precision=2).T
-df.style.background_gradient(cmap='Blues').format('{:.2g}')
-
-# Plot PAGA with velocity
-scv.pl.paga(
-    adata,
-    basis='umap',
-    size=50,
-    alpha=0.1,
-    min_edge_width=2,
-    node_size_scale=1.5
-)
-```
-
-## Complete Workflow Script
-
-```python
-import scvelo as scv
-import scanpy as sc
-
-def run_rna_velocity(adata, n_top_genes=2000, mode='dynamical', n_jobs=4):
-    """
-    Complete RNA velocity workflow.
-
-    Args:
-        adata: AnnData with 'spliced' and 'unspliced' layers, UMAP in obsm
-        n_top_genes: Number of top HVGs for velocity
-        mode: 'stochastic' (fast) or 'dynamical' (accurate)
-        n_jobs: Parallel jobs for dynamical model
-
-    Returns:
-        Processed AnnData with velocity information
-    """
-    scv.settings.verbosity = 2
-
-    # 1. Preprocessing (scVelo 0.3 dropped log/HVG from filter_and_normalize)
-    scv.pp.filter_and_normalize(adata, min_shared_counts=20)
-    sc.pp.log1p(adata)
-    sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes, subset=True)
-
-    if 'neighbors' not in adata.uns:
-        sc.pp.neighbors(adata, n_neighbors=30)
-
-    scv.pp.moments(adata, n_pcs=30, n_neighbors=30)
-
-    # 2. Velocity estimation
-    if mode == 'dynamical':
-        scv.tl.recover_dynamics(adata, n_jobs=n_jobs)
-
-    scv.tl.velocity(adata, mode=mode)
-    scv.tl.velocity_graph(adata)
-
-    # 3. Downstream analyses
-    if mode == 'dynamical':
-        scv.tl.latent_time(adata)
-        scv.tl.rank_velocity_genes(adata, groupby='leiden', min_corr=0.3)
-
-    scv.tl.velocity_confidence(adata)
-    scv.tl.velocity_pseudotime(adata)
-
-    return adata
-```
-
-## Key Output Fields in AnnData
-
-After running the workflow, the following fields are added:
-
-| Location | Key | Description |
-|----------|-----|-------------|
-| `adata.layers` | `velocity` | RNA velocity per gene per cell |
-| `adata.layers` | `fit_t` | Fitted latent time per gene per cell |
-| `adata.obsm` | `velocity_umap` | 2D velocity vectors on UMAP |
-| `adata.obs` | `velocity_pseudotime` | Pseudotime from velocity |
-| `adata.obs` | `latent_time` | Latent time from dynamical model |
-| `adata.obs` | `velocity_length` | Speed of each cell |
-| `adata.obs` | `velocity_confidence` | Confidence score per cell |
-| `adata.var` | `fit_likelihood` | Gene-level model fit quality |
-| `adata.var` | `fit_alpha` | Transcription rate |
-| `adata.var` | `fit_beta` | Splicing rate |
-| `adata.var` | `fit_gamma` | Degradation rate |
-| `adata.uns` | `velocity_graph` | Sparse cosine similarities between velocities and candidate cell-state changes; not a normalized transition matrix |
-
-## Velocity Models Comparison
-
-| Model | Speed | Accuracy | When to Use |
-|-------|-------|----------|-------------|
-| `stochastic` | Fast | Moderate | Exploratory; large datasets |
-| `deterministic` | Medium | Moderate | Simple linear kinetics |
-| `dynamical` | Slow | High | Publication-quality; identifies driver genes |
-
-## Best Practices
-
-- **Start with stochastic mode** for exploration; switch to dynamical for final analysis
-- **Need good coverage of unspliced reads**: Short reads (< 100 bp) may miss intron coverage
-- **Minimum 2,000 cells**: RNA velocity is noisy with fewer cells
-- **Velocity should be coherent**: Arrows should follow known biology; randomness indicates issues
-- **k-NN bandwidth matters**: Too few neighbors → noisy velocity; too many → oversmoothed
-- **Sanity check**: Root cells (progenitors) should have high unspliced/spliced ratios for marker genes
-- **Dynamical model requires distinct kinetic states**: Works best for clear differentiation processes
+For fate probabilities use an explicitly normalized transition kernel and a
+validated terminal-state definition; see the optional CellRank example in the
+reference. PAGA requires optional igraph and compatible Scanpy internals; it is
+not part of the tested core workflow or a substitute for fate inference.
 
 ## Troubleshooting
 
-| Problem | Solution |
-|---------|---------|
-| Missing unspliced layer | Re-run velocyto or use STARsolo with `--soloFeatures Gene Velocyto` |
-| Very few velocity genes | Lower `min_shared_counts`; check sequencing depth |
-| Random-looking arrows | Try different `n_neighbors` or velocity model |
-| Memory error with dynamical | Set `n_jobs=1`; reduce `n_top_genes` |
-| Negative velocity everywhere | Check that spliced/unspliced layers are not swapped |
+| Problem | Action |
+| --- | --- |
+| Missing or mismatched layers | Revisit quantification and explicit ID alignment; X cannot substitute for unspliced counts |
+| Very few velocity genes | Inspect depth, state coverage and phase portraits before altering thresholds |
+| Smooth but implausible arrows | Check model assumptions, batch geometry and individual genes; compare independent evidence |
+| Nonfinite fit or empty graph | Stop interpretation and investigate degenerate features/coverage |
+| Excessive memory or fitting time | Use a justified gene set and `n_jobs=1`; account for dense moments and fit arrays |
+| Stochastic failure on NumPy 2 | Use a separately validated compatible legacy stack or explicitly reconsider the model |
+| pandas `unique` error in fit/plot | Use the tested pandas 2.3.3 pin |
 
-## Additional Resources
+## Sources and verification scope
 
-- **scVelo documentation**: https://scvelo.readthedocs.io/
-- **Tutorial notebooks**: https://scvelo.readthedocs.io/tutorials/
-- **GitHub**: https://github.com/theislab/scvelo
-- **Paper**: Bergen V et al. (2020) Nature Biotechnology. PMID: 32747759
-- **velocyto** (preprocessing): http://velocyto.org/
-- **CellRank** (fate prediction, extends scVelo): https://cellrank.readthedocs.io/
-- **dynamo** (metabolic labeling alternative): https://dynamo-release.readthedocs.io/
+Reviewed 2026-10-01 against the [released source](https://github.com/theislab/scvelo/tree/v0.3.4),
+[API](https://scvelo.readthedocs.io/en/latest/api.html),
+[kinetic-model caveats](https://scvelo.readthedocs.io/en/latest/perspectives/Perspectives.html),
+and [AnnData loom reader](https://anndata.readthedocs.io/en/stable/generated/anndata.io.read_loom.html).
+The main paper is [Bergen et al., 2020](https://doi.org/10.1038/s41587-020-0591-3).
+Synthetic execution tests verify software contracts and file/figure production;
+they do not establish biological accuracy, identifiability or dataset-specific
+parameter recovery. Optional CellRank/PAGA analyses remain source-reviewed,
+illustrative extensions. No authenticated remote service is used.

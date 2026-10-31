@@ -1,9 +1,9 @@
 # Workspaces and Organizations
 
-Verified **2026-07-23** against the official
-[Workspaces API](https://apidoc.protocols.io/),
-[workspace help center](https://www.protocols.io/help/workspace-management),
-and current organization-export section.
+Verified **2026-09-30** against the official
+[Workspaces API](https://apidoc.protocols.io/) and its
+current organization-export section, plus rendered
+[workspace help](https://www.protocols.io/help/workspace-management).
 
 ## Workspace Objects
 
@@ -35,7 +35,7 @@ wire field; do not silently rename it without a compatibility layer.
 
 | Purpose | Request |
 |---|---|
-| Search public workspaces | `GET /api/v3/workspaces` |
+| Search public or joined workspaces | `GET /api/v3/workspaces` |
 | Researcher's workspaces | `GET /api/v3/researchers/<username>/workspaces` |
 | Get one workspace | `GET /api/v3/workspaces/[uri]` |
 | Public protocols in a workspace | `GET /api/v3/workspaces/<workspace_uri>/protocols` |
@@ -43,7 +43,13 @@ wire field; do not silently rename it without a compatibility layer.
 
 Workspace list/researcher list parameters document `key`, `page_size` 1–100,
 and `page_id`. Use the validated server `next_page`; the same page-origin
-inconsistency described in `protocols_api.md` applies.
+inconsistency described in `protocols_api.md` applies. The general workspace
+list also documents `filter=all_public` (default), `my_groups` (joined workspaces,
+including private), `user_public` (joined public workspaces), and
+`all_public_request` (public workspaces still available to join). Use
+`filter=my_groups` to discover the private workspace URI required by File
+Manager search. Unknown filters silently fall back to `all_public`; validate
+the requested filter locally.
 
 The v3 workspace-protocol endpoint returns **public protocols only**. The
 official reference directs callers seeking private workspace protocols to the
@@ -64,7 +70,8 @@ The current reference uses one URI:
 
 - `POST /api/v3/workspaces/<uri>/members` — request to join;
 - `PUT /api/v3/workspaces/<uri>/members` — confirm an invitation;
-- `DELETE /api/v3/workspaces/<uri>/members` — reject an invitation.
+- `DELETE /api/v3/workspaces/<uri>/members` — leave a workspace or reject
+  an invitation/join request.
 
 Each returns the token user's status object. The maintained section does not
 document the former `join-request` or `/join` paths and does not document a
@@ -94,7 +101,10 @@ The current v4 File Manager item access object documents booleans including:
 
 Check the operation-specific flag immediately before a write. A visible item is
 not necessarily editable, downloadable, movable, or publishable. Do not cache
-permissions across membership or workspace changes.
+permissions across membership or workspace changes. The help center says a
+member's private folder is visible only to that member, including within a shared
+workspace; even workspace owners/admins cannot access another member's private
+folder. Workspace membership therefore does not imply access to every folder.
 
 ## Organization Content Export
 
@@ -182,11 +192,13 @@ When reporting:
 ## Sources
 
 - [Official API reference — Workspaces and File Manager](https://apidoc.protocols.io/),
-  accessed 2026-07-23 — workspace objects, v3 reads/membership, v4 item
+  accessed 2026-09-30 — workspace objects, v3 reads/membership, v4 item
   permissions, public/private routing.
 - [Workspaces & Collaboration help](https://www.protocols.io/help/workspace-management),
-  accessed 2026-07-23 — current user-facing workspace guidance.
+  accessed 2026-09-30 through rendered extraction — collaboration, private
+  folders, and workspace access guidance.
 - [Invite members help](https://www.protocols.io/help/workspace-management/invite-members-workspace),
-  accessed 2026-07-23 — current invitation workflow entry point.
-- [Platform features](https://www.protocols.io/features), accessed 2026-07-23
+  accessed 2026-09-30 through rendered extraction — invitation workflow and
+  workspace visibility settings.
+- [Platform features](https://www.protocols.io/features), accessed 2026-09-30
   — shared files, reagent library, editing, commenting, permissions.

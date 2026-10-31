@@ -1,6 +1,6 @@
 # Correct Pysam Workflow Patterns
 
-These patterns target pysam 0.24.0 and make filtering and coordinate semantics
+These patterns target pysam 0.24.1 and make filtering and coordinate semantics
 explicit. Adapt thresholds to the assay rather than treating them as universal
 defaults.
 
@@ -50,7 +50,10 @@ with pysam.AlignmentFile("sample.bam", "rb", require_index=True) as bam:
         print(stats.contig, stats.mapped, stats.unmapped, stats.total)
 ```
 
-Index statistics are fast but cannot replace custom record-level QC.
+Index statistics are fast but cannot replace custom record-level QC. CRAI has
+no record counts: the CRAM index-statistic zeros are unavailable data.
+The QC script counts mapped non-soft-clipped query bases, including insertions,
+only when CIGAR and SEQ exist. Missing SEQ does not contribute to mean length.
 
 ## Zero-Aware Coverage
 
@@ -69,6 +72,8 @@ def base_depth(
     *,
     min_base_quality: int = 20,
 ) -> list[int]:
+    if not 0 <= start < stop <= bam.get_reference_length(contig):
+        raise ValueError("coverage interval must be nonempty and within the contig")
     a, c, g, t = bam.count_coverage(
         contig,
         start,
@@ -108,7 +113,9 @@ a, c, g, t = bam.count_coverage(
 )
 ```
 
-Only A/C/G/T query bases contribute.
+Only A/C/G/T query bases contribute. Overlapping mates count separately.
+`count_coverage` does not use pileup BAQ/overlap correction; pass numeric span
+arguments because 0.24.1 does not size arrays from `region=`/`end=` aliases.
 
 ### Convert low-depth bases into intervals
 
@@ -161,11 +168,18 @@ def aligned_depth_at(
     )
     for column in iterator:
         if column.reference_pos == position:
-            return column.get_num_aligned()
+            return sum(
+                not item.is_del and not item.is_refskip
+                and item.query_position is not None
+                for item in column.pileups
+            )
     return 0
 ```
 
-This definition is not identical to VCF `INFO/DP` from a caller. Name custom
+`get_num_aligned()` includes D/N entries in 0.24.1, so this helper deliberately
+counts observed bases. BAQ is enabled when the reference is supplied. MAPQ255
+is retained by the numeric threshold; apply an explicit unavailable-MAPQ
+policy if required. This definition is not identical to VCF `INFO/DP` from a caller. Name custom
 annotations so their provenance and filters remain clear.
 
 ## SNP Base Support
@@ -182,12 +196,17 @@ def snp_base_counts(
     record: pysam.VariantRecord,
 ) -> Counter[str]:
     if (
-        len(record.ref) != 1
+        record.ref.upper() not in {"A", "C", "G", "T"}
         or not record.alts
-        or any(len(alt) != 1 for alt in record.alts)
+        or any(alt.upper() not in {"A", "C", "G", "T"} for alt in record.alts)
+        or any(alt.upper() == record.ref.upper() for alt in record.alts)
     ):
         raise ValueError("snp_base_counts only supports simple SNP records")
 
+    # Validate REF without inferring a variant from a mismatched assembly.
+    observed_ref = fasta.fetch(record.contig, record.start, record.start + 1)
+    if observed_ref.upper() != record.ref.upper():
+        raise ValueError("VCF REF does not match the selected FASTA")
     counts: Counter[str] = Counter()
     iterator = bam.pileup(
         record.contig,
@@ -234,6 +253,10 @@ def annotate_depth(
     reference_fasta: str,
     output_vcf: str,
 ) -> None:
+    from pathlib import Path
+
+    if Path(output_vcf).exists():
+        raise FileExistsError(output_vcf)
     with pysam.FastaFile(reference_fasta) as fasta, pysam.AlignmentFile(
         input_bam,
         "rb",
@@ -304,7 +327,8 @@ Use the bundled script for common primary-read filtering:
 ```bash
 python scripts/alignment_qc.py input.bam --max-records 10000
 python scripts/filter_alignments.py input.bam filtered.bam \
-  --min-mapq 20 --exclude-duplicates --exclude-supplementary --index
+  --min-mapq 20 --exclude-unmapped --exclude-secondary \
+  --exclude-qcfail --exclude-duplicates --exclude-supplementary --index
 ```
 
 If implementing custom filtering, preserve the source header and stream
@@ -321,17 +345,13 @@ with pysam.AlignmentFile("input.bam", "rb") as source, pysam.AlignmentFile(
 
 Filtering preserves input order; it does not sort. Index only coordinate-sorted
 output. If the header's sort-order declaration is wrong, fix the workflow
-rather than trusting it.
+rather than trusting it. Use `--index --csi` for BAM beyond BAI limits.
+Per-record filtering preserves RG/reference dictionaries and mate fields, but
+can remove one mate without fetching or repairing its partner.
 
 ## Extract Strand-Aware BED Sequences
 
 ```python
-IUPAC_COMPLEMENT = str.maketrans(
-    "ACGTRYMKBDHVNacgtrymkbdhvn",
-    "TGCAYRKMVHDBNtgcayrkmvhdbn",
-)
-
-
 with pysam.TabixFile(
     "genes.bed.gz", parser=pysam.asBed()
 ) as genes, pysam.FastaFile("reference.fa") as fasta, open(
@@ -340,11 +360,13 @@ with pysam.TabixFile(
     for gene in genes.fetch():
         sequence = fasta.fetch(gene.contig, gene.start, gene.end)
         if gene.strand == "-":
-            sequence = sequence.translate(IUPAC_COMPLEMENT)[::-1]
+            sequence = pysam.reverse_complement(sequence)
         output.write(f">{gene.name}\n{sequence}\n")
 ```
 
-BED parser coordinates are already 0-based. Sanitize or encode record names if
+This requires BED6 with a strand and extracts the full span, not spliced BED12
+exons. Validate FASTA bounds and strand before extraction. BED parser
+coordinates are already 0-based. Sanitize or encode record names if
 they will be consumed by strict downstream FASTA parsers.
 
 ## Count RNA Splice Junctions
@@ -356,7 +378,9 @@ with pysam.AlignmentFile("rna.bam", "rb") as bam:
     primary_reads = (
         read
         for read in bam.fetch("chr1")
-        if not read.is_secondary
+        if not read.is_unmapped
+        and not read.is_qcfail
+        and not read.is_secondary
         and not read.is_supplementary
         and not read.is_duplicate
         and read.mapping_quality >= 20
@@ -391,6 +415,7 @@ pysam.samtools.index(
 pysam.bcftools.norm(
     "-f", "reference.fa",
     "-m", "-any",
+    "--multi-overlaps", ".",  # other ALT alleles become missing after splitting
     "-Oz",
     "-o", "normalized.vcf.gz",
     "input.vcf.gz",
@@ -402,6 +427,11 @@ pysam.bcftools.index(
     catch_stdout=False,
 )
 ```
+
+Splitting changes genotype/allele indexing: the explicit missing policy avoids
+turning another ALT into a reference call. It does not preserve the original
+multiallelic haplotype representation. Keep the source and validate GT/AD/PL
+semantics before interpreting normalized calls.
 
 Pass each argument as its own string. Do not split or evaluate an untrusted
 shell command. Use `catch_stdout=False` when `-o` writes large or binary data.

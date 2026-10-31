@@ -204,10 +204,9 @@ def annotation_record(
     max_string_length: int,
     max_value_items: int,
 ) -> dict[str, Any]:
-    kind = getattr(
-        annotation,
-        "OMERO_CLASS",
-        type(annotation).__name__.removesuffix("Wrapper"),
+    # AnnotationWrapper subclasses inherit OMERO_CLASS=None in OMERO.py.
+    kind = getattr(annotation, "OMERO_CLASS", None) or (
+        type(annotation).__name__.removesuffix("Wrapper")
     )
     record: dict[str, Any] = {
         "id": call_or_none(annotation, "getId"),
@@ -307,6 +306,21 @@ def shape_record(
             max_value_items=1,
         )
     record["geometry"] = geometry
+    # Shape coordinates are in the shape's local coordinate system. Omitting
+    # its affine transform changes the ROI when reconstructing it on an image.
+    transform = call_or_none(shape, "getTransform")
+    record["transform"] = None if transform is None else {
+        field.lower(): normalized(
+            call_or_none(transform, f"get{field}"),
+            max_string_length=max_string_length,
+            max_value_items=1,
+        )
+        for field in ("A00", "A01", "A02", "A10", "A11", "A12")
+    }
+    points = unwrap_omero(call_or_none(shape, "getPoints"))
+    record["geometry_truncated"] = (
+        isinstance(points, str) and len(points) > max_string_length
+    )
     if model_name == "MaskI":
         record["mask_bytes_omitted"] = True
     return record
@@ -353,7 +367,9 @@ def export_one_image(
         image.listAnnotations(),
         args.max_annotations_per_image,
     )
-    roi_result = roi_service.findByImage(image_id, None)
+    roi_result = roi_service.findByImage(
+        image_id, None, connection.SERVICE_OPTS,
+    )
     roi_items = take_bounded(
         roi_result.rois,
         args.max_rois_per_image,

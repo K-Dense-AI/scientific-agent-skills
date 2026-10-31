@@ -1,7 +1,7 @@
 # CRAM, Remote I/O, Threads, and Performance
 
-This reference targets pysam 0.24.0, which embeds HTSlib/samtools/bcftools
-1.23.1.
+This reference targets pysam 0.24.1, which embeds HTSlib/samtools/bcftools
+1.24.
 
 ## Pysam 0.24 CRAM Changes
 
@@ -179,6 +179,9 @@ Depending on how the wheel/build was configured, HTSlib can read HTTP(S) and
 other plugin-backed URLs. Random access also needs a reachable index and range
 request support.
 
+The following URLs are illustrative placeholders, not a deployed endpoint.
+Remote access was checked against upstream contracts, not a production service.
+
 ```python
 with pysam.AlignmentFile(
     "https://example.org/data/sample.bam",
@@ -203,13 +206,18 @@ URLs.
 
 ## Threads
 
-`threads=` on `AlignmentFile`, `VariantFile`, and `TabixFile` controls HTSlib
+`threads=` on `AlignmentFile` and `VariantFile` controls HTSlib
 compression/decompression threads:
 
 ```python
 with pysam.AlignmentFile("sample.bam", "rb", threads=4) as bam:
     ...
 ```
+
+In 0.24.1, `TabixFile` accepts `threads=` but its open path resets it to 1;
+do not assume threaded tabix decoding. Linux 0.24.1 wheels load networking
+libraries dynamically and restore Debian/Ubuntu S3 support; a wheel install
+alone does not prove those runtime libraries/credentials are present.
 
 It does **not** parallelize Python filtering, pileup interpretation, or
 statistical analysis. More threads can increase memory and I/O contention, and
@@ -229,7 +237,8 @@ Avoid sharing one active file handle across threads. Prefer:
   overhead is acceptable
 
 Variant iterators use `fetch(..., reopen=True)`; Tabix and alignment iterators
-use `multiple_iterators=True`.
+use `multiple_iterators=True`. CRAM **pileup** does not implement independent
+iterators via that flag: open separate CRAM handles for concurrent pileups.
 
 Reopening a remote file for every small iterator can be especially expensive.
 
@@ -300,11 +309,12 @@ iterator alive while using:
 - `PileupRead`
 - `persist=False` FASTX records
 
-Copy primitive values if data must outlive iteration.
+Consume a pileup column before advancing the iterator, because its backing
+buffer changes on advance. Copy primitive values if data must outlive a step.
 
 ## Reproducibility Checklist
 
-- pin pysam (`pysam==0.24.0`)
+- pin pysam (`pysam==0.24.1`)
 - record `pysam.__version__` and `pysam.__samtools_version__`
 - record reference FASTA checksum and assembly
 - record CRAM output version

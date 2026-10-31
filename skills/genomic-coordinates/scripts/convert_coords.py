@@ -50,7 +50,9 @@ def convert_one(
     length = end0 - start0
 
     status, detail = "ok", ""
-    if length < 0:
+    if start0 < 0:
+        status, detail = "invalid", f"start {start} is below the origin of {src.label}"
+    elif length < 0 or (not src.half_open and end < start):
         status = "invalid"
         detail = (
             f"end precedes start in {src.label} coordinates; "
@@ -63,7 +65,7 @@ def convert_one(
         else:
             status = "unrepresentable"
             detail = (
-                f"zero-length interval cannot be written in {dst.label}; "
+                f"zero-length interval needs format-specific feature semantics in {dst.label}; "
                 f"the arithmetic gives end = start - 1. Keep it in a half-open "
                 "format, or record the insertion against its anchor base as VCF does"
             )
@@ -72,13 +74,13 @@ def convert_one(
 
     def render(conv: Convention, s: int, e: int) -> str:
         if conv.name in REGION_STRING_FORMATS:
-            return format_region(contig, s, e, strand)
+            return format_region(contig, s, e, strand, conv.name)
         return f"{s}-{e}"
 
     return {
         "contig": contig,
         "input": render(src, start, end),
-        "output": render(dst, out_start, out_end),
+        "output": render(dst, out_start, out_end) if status not in {"invalid", "unrepresentable"} else "",
         "length": length,
         "status": status,
         "detail": detail,
@@ -93,9 +95,12 @@ def read_intervals(path: str, conv: Convention) -> list[tuple[str, int, int, str
     """Read intervals from a file: columnar for file formats, one region per line
     for the region-string formats."""
     out: list[tuple[str, int, int, str | None]] = []
+    supported = REGION_STRING_FORMATS | {"bed", "bedgraph", "gff", "gff3", "gtf", "vcf", "granges", "pyranges", "python"}
+    if conv.name not in supported:
+        raise SystemExit(f"--input does not parse {conv.name} files; extract contig/start/end and pass an explicit triple")
     for lineno, line in iter_data_lines(path):
         try:
-            if conv.name in REGION_STRING_FORMATS or ":" in line.split("\t")[0]:
+            if conv.name in REGION_STRING_FORMATS:
                 contig, start, end, strand = parse_region(line.split("\t")[0], conv)
             else:
                 fields = line.split("\t")
@@ -106,6 +111,10 @@ def read_intervals(path: str, conv: Convention) -> list[tuple[str, int, int, str
                     strand = fields[6] if len(fields) > 6 else None
                 elif conv.name == "vcf":
                     contig, pos, ref = fields[0], int(fields[1]), fields[3]
+                    if len(fields) < 8 or not ref or set(ref.upper()) - set("ACGTN"):
+                        raise ValueError("expected a VCF record with eight fixed fields and literal REF")
+                    if any(not a or set(a.upper()) - set("ACGTN") for a in fields[4].split(",")):
+                        raise ValueError("only literal VCF alleles have a simple REF-span conversion; handle SV/gVCF/breakends separately")
                     start, end, strand = pos, pos + len(ref) - 1, None
                 else:
                     contig, start, end = fields[0], int(fields[1]), int(fields[2])
@@ -126,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("end", nargs="?", type=int)
     parser.add_argument("--from", dest="src", help="source convention")
     parser.add_argument("--to", dest="dst", help="target convention")
-    parser.add_argument("--input", help="file of intervals in the source convention")
+    parser.add_argument("--input", help="BED/bedGraph, GFF/GTF, literal-allele VCF, three-column TSV for granges/pyranges/python, or explicit region strings")
     parser.add_argument("--format", choices=("tsv", "json"), default="tsv")
     parser.add_argument("-o", "--output", help="write here instead of stdout")
     parser.add_argument(

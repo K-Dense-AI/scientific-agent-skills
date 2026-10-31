@@ -31,7 +31,8 @@ state_phys_t<TIME>[_it<ITERATION>].nc
 or `.h5`, depending on the backend. The file is HDF5-backed in either current
 path. It contains:
 
-- `/state_phys`: solver state datasets.
+- `/state_phys`: solver state datasets, plus netCDF dimension-scale datasets
+  such as `x` and `y`; coordinates alone are not a valid physical state.
 - `/state_phys` attributes including `time`, `it`, variable type, and purpose.
 - `/info_simul`: solver and parameter provenance.
 - Saved state parameters when available, including restart-relevant forcing
@@ -134,6 +135,9 @@ The helper:
 - Does not follow soft or external HDF5 links.
 - Emits strict JSON and no raw field values.
 
+The byte/count limits and hyperslabs bound requested data, not native HDF5
+metadata allocation or decompression buffers; they are not an OS memory quota.
+
 If a `.nc` file is classic netCDF rather than HDF5, it reports it unreadable
 rather than trying another unbounded parser.
 
@@ -158,9 +162,13 @@ Examples:
 ```python
 sim.output.phys_fields.plot(time=1.0)
 sim.output.spatial_means.plot()
-sim.output.spectra.plot1d(tmin=0.5, tmax=1.0)
+sim.output.spectra.plot1d(tmin=0.5, tmax=1.0, coef_compensate=0)
 sim.output.spect_energy_budg.plot(tmin=0.5, tmax=1.0)
 ```
+
+For NS2D, `plot1d` and `plot2d` default to `coef_compensate=3`, multiplying
+the plotted spectrum by a power of wave number. Use `coef_compensate=0` for
+an uncompensated spectrum and record the choice before interpreting slopes.
 
 Methods and accepted arguments vary by solver/output class. Check the selected
 class API. A successful plot says nothing about correctness.
@@ -200,14 +208,19 @@ python3 scripts/budget_summary.py \
 It:
 
 - Aggregates finite spatial-mean values in constant memory.
-- Supports FluidSim key/value text and strict JSON-lines.
+- Supports every semicolon-separated term in FluidSim key/value text and
+  strict JSON-lines, including enstrophy and total injection/dissipation.
+- Counts nonfinite values rather than silently reporting a finite-only success;
+  its mean remains an unweighted mean of finite saved samples.
 - Summarizes only bounded spectral/budget hyperslabs.
 - Uses the latest first-axis record for multidimensional datasets.
 - Emits a sum only when the entire latest record fits the value bound.
-- Does not follow external links or load full large arrays.
+- Does not follow soft/external links, and rejects virtual/external dataset
+  storage before reading values; it does not load full large arrays.
 - Explicitly reports that convergence/physical validity are not established.
 
-This is a triage summary, not a solver-aware closure calculation.
+This is a triage summary, not a solver-aware closure calculation or a
+time-weighted average. Check `nonfinite_count` alongside the finite statistics.
 
 ## Budget checks
 
@@ -300,15 +313,19 @@ Every exported result should carry:
 
 Avoid manual GUI-only transformations that cannot be reconstructed.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
-- [Physical-field save source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/util/phys_fields.py)
+- [Physical-field save source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/util/phys_fields.py)
   — `.nc`/`.h5` selection, groups, attributes, state parameters, filename.
-- [Physical-fields output source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/output/phys_fields.py).
-- [Spatial-means source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/output/spatial_means.py).
-- [Spectra source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/output/spectra.py).
-- [Spectral-budget base source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/base/output/spect_energy_budget.py).
-- [NS2D spectral-budget source](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/solvers/ns2d/output/spect_energy_budget.py).
-- [Load utilities](https://github.com/fluiddyn/fluidsim/blob/branch/default/fluidsim/util/util.py).
+- [Physical-fields output source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/output/phys_fields.py).
+- [NS2D spatial-means source](https://fluidsim.readthedocs.io/en/latest/_modules/fluidsim/solvers/ns2d/output/spatial_means.html)
+  — semicolon-separated energy, enstrophy, and total budget terms.
+- [h5py link access](https://docs.h5py.org/en/stable/high/group.html) and
+  [dataset storage](https://docs.h5py.org/en/stable/high/dataset.html).
+- [Spatial-means source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/output/spatial_means.py).
+- [Spectra source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/output/spectra.py).
+- [Spectral-budget base source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/base/output/spect_energy_budget.py).
+- [NS2D spectral-budget source](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/solvers/ns2d/output/spect_energy_budget.py).
+- [Load utilities](https://github.com/fluiddyn/fluidsim/blob/0.9.0/fluidsim/util/util.py).
 - Mohanan et al., [FluidSim primary paper](https://doi.org/10.5334/jors.239),
   published 2019-04-26 — architecture and output-class method claims.

@@ -242,8 +242,11 @@ def plan_import(args: argparse.Namespace) -> dict[str, Any]:
             scan_depth=args.scan_depth,
         )
         total_files += entry["regular_files"]
-        scan_command = ["omero", "import", "-f", entry["path"]]
-        import_command = ["omero", "import"]
+        scan_command = [
+            "omero", "import", "--depth", str(args.scan_depth),
+            "-f", entry["path"],
+        ]
+        import_command = ["omero", "import", "--depth", str(args.scan_depth)]
         if args.target:
             import_command.extend(["-T", args.target])
         import_command.append(entry["path"])
@@ -256,6 +259,7 @@ def plan_import(args: argparse.Namespace) -> dict[str, Any]:
         for entry in entries
         if entry["kind"] == "directory"
     )
+    skipped_symlinks = sum(entry.get("skipped_symlinks", 0) for entry in entries)
     return {
         "operation": "import",
         "mode": "local-dry-run",
@@ -270,12 +274,15 @@ def plan_import(args: argparse.Namespace) -> dict[str, Any]:
         },
         "total_regular_files": total_files,
         "depth_limit_reached": depth_limited,
-        "ready_for_remote_import_review": not depth_limited,
+        "skipped_symlinks": skipped_symlinks,
+        "ready_for_remote_import_review": not depth_limited and not skipped_symlinks,
         "entries": entries,
         "notes": [
             "Run each local 'omero import -f' scan before any remote import.",
             "Use a separately prompted 'omero login'; do not add -w or -k.",
             "Importer grouping/file-format support is determined by Bio-Formats.",
+            "Local counts do not bound files added by Bio-Formats fileset discovery.",
+            "Review the actual -f fileset list, including paths outside the scan.",
         ],
     }
 

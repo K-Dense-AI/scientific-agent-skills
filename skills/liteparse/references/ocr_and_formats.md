@@ -1,143 +1,135 @@
-# OCR and Supported Input Formats
+# OCR and Supported Input Formats (2.15.0)
 
-## Built-in OCR (Tesseract)
+## Built-in Tesseract
 
-- **Default:** OCR enabled on parse.
-- **Engine:** Tesseract bundled with the library (zero extra setup for typical English PDFs).
-- **Disable** when PDFs have selectable text: `--no-ocr` or `ocr_enabled=False`.
+OCR is enabled by default and runs selectively on sparse pages and embedded
+images. `--no-ocr` / `ocr_enabled=False` bypasses it. Tesseract itself is bundled,
+but a missing language file triggers a download, even if `tessdata_path` or
+`TESSDATA_PREFIX` names a directory. The client performs an unauthenticated GET
+of `https://github.com/tesseract-ocr/tessdata_best/raw/main/<code>.traineddata`.
+
+For offline operation, populate **every** requested file before parsing and use
+an explicit directory; merely setting that directory does not disable downloads.
+`ocr_language="eng+fra"` requires both files. Standard Tesseract codes include
+`eng`, `fra`, `deu`, `spa`, `chi_sim`; common two-letter aliases are normalized
+by the built-in engine. Language data and download permissions are separate
+from installing the package.
 
 ```bash
-lit parse document.pdf
-lit parse document.pdf --ocr-language fra
+lit parse scan.pdf --ocr-language eng --tessdata-path ./tessdata
 lit parse document.pdf --no-ocr
 ```
 
-```python
-parser = LiteParse(ocr_enabled=True, ocr_language="eng", num_workers=4)
-```
+Check that `./tessdata/eng.traineddata` exists before the first command. These
+commands assume caller-supplied input files; local English OCR was exercised
+with already-installed language data, not a network download.
 
-### Language codes
+## Optional HTTP OCR
 
-Use **Tesseract** codes (not ISO alone): `eng`, `fra`, `deu`, `spa`, `chi_sim`, etc. Map HTTP OCR `language=en` separately (see below).
-
-### Offline / air-gapped environments
-
-Pre-download `.traineddata` files, then either:
+Pass the **complete endpoint URL**, including its path. LiteParse POSTs to the
+URL unchanged; it does **not** append `/ocr`:
 
 ```bash
-export TESSDATA_PREFIX=/path/to/tessdata
-lit parse document.pdf --ocr-language eng
+lit parse scan.pdf --ocr-server-url http://localhost:8080/ocr --ocr-language en
 ```
 
-or:
-
-```bash
-lit parse document.pdf --tessdata-path /path/to/tessdata
-```
-
----
-
-## HTTP OCR servers (optional)
-
-For higher accuracy or GPU-backed OCR, run a server implementing the LiteParse OCR API and point LiteParse at it:
-
-```bash
-lit parse document.pdf --ocr-server-url http://localhost:8080/ocr
-```
+This sends rendered document images to that server. There is no built-in cloud
+account, fixed hosted endpoint, or universal auth scheme. A server requiring
+credentials can be configured through Python without embedding a secret:
 
 ```python
-parser = LiteParse(ocr_server_url="http://localhost:8080/ocr")
+import os
+from liteparse import LiteParse
+
+parser = LiteParse(
+    ocr_server_url=os.environ["OCR_SERVER_URL"],
+    ocr_server_headers={"Authorization": "Bearer " + os.environ["OCR_API_KEY"]},
+    ocr_language="en",
+    quiet=True,
+)
+result = parser.parse("scan.pdf")
 ```
 
-### API contract (summary)
+This authentication example is illustrative; configure the header scheme your
+server requires. CLI `--ocr-server-header "Name: Value"` is repeatable. Do not
+log credentials; command arguments may be visible in process lists.
 
-- **POST** `{base_url}/ocr` (typically `http://host:8080/ocr`)
-- **Content-Type:** `multipart/form-data`
-- **Fields:** `file` (image bytes, required), `language` (optional, ISO 639-1, default `en`)
-- **Response JSON:**
+### Wire contract
+
+- Method: **POST** to the exact configured URL (commonly `/ocr`). No pagination,
+  jobs, polling, or separate upload endpoint: each call processes one raster.
+- Request: `multipart/form-data`; `file` is PNG bytes named `image.png`, and
+  `language` is a string.
+- **Language is forwarded unchanged to HTTP OCR.** The standalone API spec
+  suggests ISO 639-1 (`en`, `fr`), while LiteParse's default is `eng`. Set a code
+  accepted by the server; the HTTP client does not perform the Tesseract alias mapping.
+- Response: HTTP 200, `application/json`, with `results` entries containing
+  `text`, `bbox` and `confidence`. Empty results are valid.
 
 ```json
 {
-  "results": [
-    {
-      "text": "recognized text",
-      "bbox": [x1, y1, x2, y2],
-      "confidence": 0.95
-    }
-  ]
+  "results": [{
+    "text": "recognized text",
+    "bbox": [10, 20, 130, 40],
+    "confidence": 0.95
+  }]
 }
 ```
 
-- Origin top-left; bbox axis-aligned in pixels.
-- Full spec: https://github.com/run-llama/liteparse/blob/main/OCR_API_SPEC.md
+Coordinates are top-left-origin image pixels; `[x1,y1,x2,y2]` must have positive
+width/height. Optional `polygon` is four `[x,y]` points ordered TL, TR, BR, BL in
+the glyphs' upright reading frame, to preserve rotation information.
 
-### Reference server implementations (upstream repo)
+The client also accepts a worker-style `result` array of `[polygon,text,confidence]`
+tuples, but use the standard `results` contract for new servers. Non-2xx HTTP
+responses fail. In 2.15.0, transient failures can trigger up to 10 attempts with
+60-second per-request timeouts and backoff; 400/401/404 are not retried.
+`ocr_failure_fatal=True` (default) fails the parse if all OCR tasks fail and at
+least one sparse page depends on OCR. Partial OCR failures may still leave an
+incomplete document: compare source pages and extracted content. Python
+`pool_size` plus `parse_timeout` can enforce a whole-parse deadline. Request
+hedging is opt-in and creates duplicate server work; leave it unset normally.
 
-- `ocr/easyocr/` — EasyOCR wrapper
-- `ocr/paddleocr/` — PaddleOCR wrapper
+A loopback test verified exact URL, multipart PNG, language, auth header,
+successful result decoding and non-retried 401 handling. This verifies client
+transport, not any production OCR service or its recognition quality.
 
-You only need a server if you choose HTTP OCR; Tesseract is sufficient for many workflows.
+## File conversion
 
----
+| Input | Examples | Requirement |
+|---|---|---|
+| PDF | `.pdf` | Native PDFium |
+| Word | `.doc`, `.docx`, `.docm`, `.odt`, `.rtf`, `.pages` | LibreOffice |
+| Presentations | `.ppt`, `.pptx`, `.pptm`, `.odp`, `.key` | LibreOffice |
+| Spreadsheets | `.xls`, `.xlsx`, `.xlsm`, `.xlsb`, `.ods`, `.csv`, `.tsv`, `.numbers` | LibreOffice |
+| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.tif`, `.webp`, `.svg` | Built-in Rust image/resvg/usvg conversion |
 
-## Supported input formats
+Office and image inputs convert to PDF first. **ImageMagick is not required in
+2.15.0**, despite stale internal enum names in source. Plain `.txt`/`.md` are not
+supported page-layout inputs and cannot be screenshot-rendered. A supported
+extension is not a promise that every file or animation/frame is preserved;
+check page count and rendering, especially for multi-frame images and Office formats.
 
-### PDF (native)
-
-`.pdf` — no conversion step.
-
-### Office documents (LibreOffice)
-
-Requires LibreOffice installed and on PATH.
-
-| Type | Extensions |
-|------|------------|
-| Word | `.doc`, `.docx`, `.docm`, `.odt`, `.rtf`, `.pages` |
-| PowerPoint | `.ppt`, `.pptx`, `.pptm`, `.odp`, `.key` |
-| Spreadsheets | `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.csv`, `.tsv`, `.numbers` |
-
-**Install LibreOffice:**
+LibreOffice must be discoverable by the platform. Typical installation commands
+(illustrative; not run as part of this review):
 
 ```bash
 # macOS
 brew install --cask libreoffice
-
 # Ubuntu/Debian
 sudo apt-get install libreoffice
-
-# Windows (Chocolatey)
+# Windows / Chocolatey
 choco install libreoffice-fresh
 ```
 
-On Windows, add LibreOffice `program` directory to PATH (often `C:\Program Files\LibreOffice\program`).
+On Windows, put LibreOffice's `program` directory on PATH. Font availability,
+print areas, pagination and formula caches affect converted output. Validate
+scientific symbols and sheet coverage visually rather than equating a successful
+conversion with complete extraction.
 
-### Images (ImageMagick)
+Sources reviewed 2026-10-01:
 
-Requires ImageMagick.
-
-| Formats |
-|---------|
-| `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.webp`, `.svg` |
-
-**Install ImageMagick:**
-
-```bash
-# macOS
-brew install imagemagick
-
-# Ubuntu/Debian
-sudo apt-get install imagemagick
-
-# Windows
-choco install imagemagick.app
-```
-
----
-
-## Conversion pipeline
-
-```text
-Office / image → (LibreOffice or ImageMagick) → PDF → PDFium extract → optional OCR → grid projection → text + JSON
-```
-
-If conversion fails, install the missing tool and retry. Plain-text-only paths cannot be screenshot-rendered.
+- [OCR API specification](https://github.com/run-llama/liteparse/blob/d3a79177b9e9e570f8c2d9878ace601445fdaf76/OCR_API_SPEC.md)
+- [HTTP client](https://github.com/run-llama/liteparse/blob/d3a79177b9e9e570f8c2d9878ace601445fdaf76/crates/liteparse/src/ocr/http_simple.rs)
+- [Language downloads](https://github.com/run-llama/liteparse/blob/d3a79177b9e9e570f8c2d9878ace601445fdaf76/crates/liteparse/src/ocr/tesseract.rs)
+- [Conversion implementation](https://github.com/run-llama/liteparse/blob/d3a79177b9e9e570f8c2d9878ace601445fdaf76/crates/liteparse/src/conversion.rs)

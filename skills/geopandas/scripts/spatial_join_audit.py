@@ -105,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _work_frame(frame: Any, row_column: str, attributes: list[str]) -> Any:
     active = frame.geometry.name
     columns = [active, *attributes]
-    work = frame.loc[:, columns].copy()
+    work = frame.loc[:, columns].reset_index(drop=True).copy()
     if active != "_audit_geometry":
         work = work.rename_geometry("_audit_geometry")
     work[row_column] = range(len(work))
@@ -252,6 +252,13 @@ def audit(args: argparse.Namespace) -> dict[str, Any]:
         if attribute not in left.columns or attribute not in right.columns:
             blockers.append("an on_attribute column is absent from one input")
             break
+        if attribute in {
+            "_audit_geometry", "_audit_left_row", "_audit_right_row",
+            left.geometry.name, right.geometry.name,
+        }:
+            blockers.append("on_attribute must not use geometry or reserved audit columns")
+    if len(set(args.on_attribute)) != len(args.on_attribute):
+        blockers.append("on_attribute columns must not be repeated")
 
     distance: float | None = None
     max_distance: float | None = None

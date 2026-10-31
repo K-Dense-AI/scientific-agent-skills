@@ -1,6 +1,6 @@
 # Protocol, Collection, and Step APIs
 
-Verified **2026-07-23** against the maintained sections of the official
+Verified **2026-09-30** against the maintained sections of the official
 [protocols.io API reference](https://apidoc.protocols.io/). The page title says
 “API v3,” but the contracts below deliberately preserve each endpoint's
 documented version.
@@ -32,12 +32,16 @@ The current reference documents:
 - `order_dir`: `asc` or `desc`;
 - `fields`: comma-separated response fields;
 - `page_size`: 1–100;
-- `page_id`.
+- `page_id`;
+- optional `peer_reviewed`: 1 for journal peer-reviewed, 0 for non-peer-reviewed.
 
 The prose says `page_id` defaults to 1, while some response examples use
 zero-based `current_page`. Treat that as an upstream documentation
 inconsistency. Start with an explicit bounded page and then validate the
 returned `next_page`; do not synthesize an offset from `current_page`.
+
+User-scoped filters collapse versions into one item. Iterate each item's
+`versions` field when all historical versions are required.
 
 List responses document `items`, `pagination`, `status_code`, and in some
 sections `total`/`total_pages`. Code must tolerate only those fields it needs
@@ -66,6 +70,12 @@ For reproducible work:
 - when a numeric ID was used, normalize the archive record to the response's
   version-specific URI before downstream use.
 
+The maintained v4 get example puts the protocol object directly in `payload`.
+Its response table still calls that object `protocol`; do not require a root
+`protocol` key. The offline validator accepts `payload`, `protocol`, nested
+`payload.protocol`, and a bare saved protocol object. An empty DOI is valid
+for an unpublished protocol and is reported as absent.
+
 ### Content representation
 
 The v4 get/steps sections document `content_format`:
@@ -81,7 +91,8 @@ formats.
 
 ### PDF
 
-The PDF section documents:
+The PDF section documents numeric ID or protocol URI identifiers, not DOIs.
+Resolve a DOI through v4 get before PDF export. It documents:
 
 - `compact_view`;
 - `only_materials`;
@@ -105,7 +116,8 @@ These are mutations. The bundled helper only plans them.
 - `3` — collection;
 - `4` — document.
 
-The path uses a 32-character GUID. Creation is not a single broad JSON create
+The example sends `type_id` as form data, not JSON. The path uses a
+32-character GUID. Creation is not a single broad JSON create
 contract: create the shell, inspect the returned protocol, and plan a separate
 v4 update for documented fields.
 
@@ -117,7 +129,8 @@ collections without explicit user intent.
 ### Update
 
 `PUT /api/v4/protocols/[id]` accepts JSON and identifies the target by integer
-ID, URI, or GUID. The reviewed body section documents fields including:
+ID, unversioned URI, or GUID; DOI/version-suffixed read identifiers are not
+documented here. The reviewed body section documents fields including:
 
 - private-only content such as `title`, `description`, `before_start`,
   `guidelines`, `warning`, `materials_text`, `link`, and `collection_items`;
@@ -144,6 +157,12 @@ helper rejects payload fields outside its conservative documented subset.
 makes the protocol public. The current version cannot be edited after its DOI
 is issued. The protocol needs a title and at least one author. The reference
 documents `prepublish=1` to obtain a DOI without making it publicly accessible.
+
+The section labels `title`/`prepublish` as URI parameters while labeling
+`protocol_uri` as a POST parameter, and its curl example has no body. Their
+placement/encoding therefore remains ambiguous. The planner leaves the
+content type unset and marks nonempty publish payloads as needing upstream
+verification; do not assume the v4 JSON-body contract applies.
 
 Before publication:
 
@@ -177,7 +196,12 @@ content-format options as protocol retrieval.
 
 - top-level required `steps` array;
 - each changed step requires `guid`, `previous_guid`, and plain-text `step`;
-- `section` is optional/nullable in the documented body.
+- `section` and `section_color` (HEX color) are optional/nullable strings;
+- `is_substep` is an optional/nullable boolean.
+
+The planner checks `section_color` as a six-digit HEX color, optionally prefixed
+with `#`; this is its conservative local validation, not an upstream regex.
+Use an unversioned ID, URI, or GUID for step mutations, as for protocol update.
 
 Only new or modified steps should be sent, but sequence changes must include
 every affected step. Ordering is a linked list:
@@ -244,13 +268,13 @@ presented as original work.
 
 ## Sources
 
-- [Official API reference](https://apidoc.protocols.io/), accessed 2026-07-23
+- [Official API reference](https://apidoc.protocols.io/), accessed 2026-09-30
   — maintained v3/v4 protocol, step, material, publication, object, error, and
   rate-limit sections.
 - [Developer resources](https://www.protocols.io/developers), accessed
-  2026-07-23 — REST API entry point and access modes.
-- [Platform features](https://www.protocols.io/features), accessed 2026-07-23
+  2026-09-30 — REST API entry point and access modes.
+- [Platform features](https://www.protocols.io/features), accessed 2026-09-30
   — protocols/documents/collections, versioning, DOI publication, long-term
   preservation, and developer integrations.
 - [Code of Conduct](https://www.protocols.io/code-of-conduct), accessed
-  2026-07-23 — published-content attribution guidance.
+  2026-09-30 — published-content attribution guidance.

@@ -5,7 +5,7 @@ diseases, chemicals, species, variants, and cell lines, plus typed relations.
 Use it when the user wants *entities in a paper* or papers that mention a
 normalized entity (`@CHEMICAL_remdesivir`), not when they want a citation list.
 
-Europe PMC `/textMinedTerms` is a thinner per-article alternative. PubMed search
+Europe PMC has a separate Annotations API. PubMed search
 does not normalize "remdesivir" to a concept ID. PubTator3 APIs are **not** the
 old PubTator / `CBBresearch` endpoints.
 
@@ -130,7 +130,7 @@ GET /relations?e1={entityId}&type={relation}&e2={entity_type}
 
 Relation types include `treat`, `cause`, `interact`, `associate`,
 `positive_correlate`, `negative_correlate`, `prevent`, `inhibit`, `stimulate`,
-`drug_interact`. `e1` must be an autocomplete `_id`.
+`drug_interact`, `cotreat`, `convert`, and `compare`. `e1` must be an autocomplete `_id`; `type` and `e2` are optional. Related entity types include gene, disease, chemical, and variant.
 
 ## Typical Workflow
 
@@ -138,7 +138,7 @@ Relation types include `treat`, `cause`, `interact`, `associate`,
 2. Search with that ID (and a relation if they asked "what does X treat?").
 3. Export `biocjson` for the PMIDs you will report, and list the annotations.
 4. For the paper itself (abstract, OA PDF), go to PubMed / Europe PMC /
-   Unpaywall. PubTator is not a full-text store.
+   Unpaywall. PubTator full-text annotations cover a subset; check returned passages before claiming full-text coverage.
 
 ## Failure Modes
 
@@ -149,3 +149,7 @@ Relation types include `treat`, `cause`, `interact`, `associate`,
 | Called the old `pubtator-api` or `CBBresearch` URL | May still 200, but the contract changed | Use `pubtator3-api` |
 | `full=true` with `format=pubtator` | No full text | Use `biocjson` or `biocxml` |
 | Parallel fan-out | Easy to exceed 3 req/s | Serialize |
+
+## Official sources reviewed 2026-09-30
+
+- https://www.ncbi.nlm.nih.gov/research/pubtator3/api

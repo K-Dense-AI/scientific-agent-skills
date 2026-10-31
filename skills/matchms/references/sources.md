@@ -1,6 +1,8 @@
 # Sources and Verification Record
 
-This skill was refreshed on **2026-07-23** against matchms **0.33.1**.
+This skill was refreshed on **2026-10-01** against the current stable release,
+matchms **0.33.1**. Public PyPI metadata, current official API pages, the released
+wheel/source, and live public services were checked separately.
 
 ## Version and Packaging
 
@@ -13,9 +15,11 @@ This skill was refreshed on **2026-07-23** against matchms **0.33.1**.
 - [matchms releases](https://github.com/matchms/matchms/releases) — complete
   upstream release history.
 
-The 0.33.1 wheel was installed in an isolated uv environment and its public
-objects were inspected with `inspect.signature`. Runnable examples in this skill
-were checked against that environment.
+The 0.33.1 wheel was installed in isolated uv environments on macOS ARM64 with
+Python 3.13.3. Public objects in core, I/O, filtering, similarity, Pipeline,
+Fingerprints, and networking were inspected with `inspect.signature`; decorated
+writer signatures and return/side-effect semantics were checked in source.
+The project environment was not given scientific dependencies.
 
 ## Release Notes Used for Migration
 
@@ -43,8 +47,9 @@ were checked against that environment.
 - [Similarity](https://matchms.readthedocs.io/en/latest/api/matchms.similarity.html)
 - [Networking](https://matchms.readthedocs.io/en/latest/api/matchms.networking.html)
 
-Read the Docs "latest" and the installed 0.33.1 source were treated as
-authoritative for class names, signatures, return values, and deprecations.
+Read the Docs pages identify 0.33.1, but individual cached source pages can be
+older. The installed released source resolves disagreements, including several
+docstring/implementation differences reproduced below.
 
 ## User Guides
 
@@ -53,7 +58,7 @@ authoritative for class names, signatures, return values, and deprecations.
 - [Building an MS/MS analysis pipeline](https://matchms.github.io/matchms-docs/notebooks/matchms_tutorial_01_building_analysis_pipeline.html)
 - [User-guide repository](https://github.com/matchms/matchms-docs)
 - [Latest recorded guide revision](https://github.com/matchms/matchms-docs/commit/796f156c58d25adfb7e1528fcb24eb8c40c143a5)
-  — 2024-06-13.
+  — 2024-06-13; still the newest guide commit on the review date.
 
 The tutorials are useful for workflow concepts but predate releases 0.27-0.33.
 In particular, the pipeline tutorial still uses `ModifiedCosine`. Current API
@@ -85,7 +90,8 @@ and its exact defaults remain defined by the 0.33.1 API/source.
 
 ## Ecosystem References
 
-The current PyPI project description lists compatible or complementary tools:
+The upstream ecosystem lists complementary tools; they were not runtime-tested
+as part of this matchms refresh:
 
 - [MS2DeepScore](https://github.com/matchms/ms2deepscore)
 - [Spec2Vec](https://github.com/iomega/spec2vec)
@@ -97,17 +103,65 @@ The current PyPI project description lists compatible or complementary tools:
 Check each project's current compatibility matrix before combining environments;
 matchms 0.33.1 uses NumPy 2 and Python 3.10-3.14.
 
-## Research Queries
+## Released-Source Findings
 
-Focused web searches and extracts covered:
+- [Spectrum and metadata construction](https://github.com/matchms/matchms/blob/0.33.1/matchms/Spectrum.py):
+  `metadata_harmonization=False` still harmonizes keys; `plot_against` returns
+  `(figure, axis)`.
+- [SpectrumProcessor](https://github.com/matchms/matchms/blob/0.33.1/matchms/filtering/SpectrumProcessor.py):
+  direct single-spectrum processing can mutate input, while list processing
+  clones inputs without a report; registered filters are reordered.
+- [Scores calculation](https://github.com/matchms/matchms/blob/0.33.1/matchms/Scores.py):
+  coordinate-only computation requires a left/inner join and fewer than half of
+  all coordinates; 1-by-1 always calls `pair`.
+- [CosineLinear](https://github.com/matchms/matchms/blob/0.33.1/matchms/similarity/CosineLinear.py):
+  close peaks are merged before matching.
+- [FlashSimilarity](https://github.com/matchms/matchms/blob/0.33.1/matchms/similarity/FlashSimilarity.py):
+  sparse output still allocates a dense matrix. Entropy with `neutral_loss`
+  adds fragment and loss terms and gave a self-score near 2 in both pair/matrix
+  tests; the skill explicitly excludes that combination as a normalized score.
+- [Metadata export mappings](https://github.com/matchms/matchms/blob/0.33.1/matchms/data/export_key_conversions.csv):
+  MassBank-style precursor keys did not return to `precursor_mz` on reimport.
+- [mzSpecLib writer](https://github.com/matchms/matchms/blob/0.33.1/matchms/exporting/save_as_mzspeclib.py):
+  direct text output rounds intensities to two decimals and assumes collision
+  energy text is expressed in eV.
 
-- current matchms stable version, Python support, dependencies, and release
-  history;
-- breaking changes and deprecated/removed APIs since 2023;
-- current core, filtering, I/O, similarity, Pipeline, Scores, and networking
-  documentation;
-- current upstream tutorials and their last revision;
-- primary publications for matchms, modified cosine/molecular networking,
-  BLINK, Flash Entropy, and Spec2Vec.
+## Endpoint Verification
 
-No research JSON artifacts were committed to the repository.
+- [USI helper source](https://github.com/matchms/matchms/blob/0.33.1/matchms/importing/load_from_usi.py)
+  and [GNPS API documentation](https://ccms-ucsd.github.io/GNPSDocumentation/api/):
+  public GET `/json/?usi1=<USI>` on `https://metabolomics-usi.gnps2.org`, no
+  authentication or pagination, one JSON spectrum. Live retrieval of the two
+  documented USIs produced 317 and 119 peaks. The first raw response included
+  `precursor_charge` and `splash`, which matchms discards. Both were successfully
+  loaded with matchms, identically normalized, and cosine-scored; this was an
+  execution check, not a compound-identification validation.
+- [Name-annotation filter source](https://github.com/matchms/matchms/blob/0.33.1/matchms/filtering/metadata_processing/derive_annotation_from_compound_name.py)
+  and [PubChemPy name-search documentation](https://docs.pubchempy.org/en/latest/guide/searching.html):
+  public name lookup via PubChemPy, optional local CSV cache, neutral-parent-mass
+  gate, no credential. A live caffeine lookup at 0.001 Da tolerance returned
+  the expected reference InChIKey. This does not establish identity for unknown
+  spectra or ambiguity-free annotation for arbitrary names.
+
+## Execution Coverage and Limits
+
+- `uv run skills-ref validate skills/matchms`: passed.
+- `PYTHONDONTWRITEBYTECODE=1 python tests/run_all.py --isolated matchms`:
+  117 tests passed, including the original 58 and 59 API/CLI regressions.
+- Small synthetic smoke checks passed for mzML/mzXML MS-level selection,
+  precursor and peak arrays; Pipeline/YAML; five network export formats;
+  Fingerprints bridging and three structure metrics; binned and metadata
+  scoring; mirror-plot export; and all ten bundled CLI metrics.
+- MGF/MSP/JSON roundtrips covered matchms, GNPS, NIST, and RIKEN metadata styles;
+  separate regression cases record MassBank precursor loss. Score JSON
+  serialization/reloading was exercised. No untrusted pickle was opened.
+- Flash pair and serial matrix paths were checked. Large-library performance,
+  multiprocessing scaling, ANN recall, acquisition-specific thresholds,
+  downstream mzSpecLib conformance, every repair heuristic, and other operating
+  systems/Python versions were not experimentally validated. Broader snippets
+  are workflow templates requiring representative local validation.
+- The ordinary project-environment pytest invocation skipped both modules
+  because scientific dependencies are intentionally absent; the isolated run
+  above is the executable validation.
+
+No downloaded scientific datasets or research JSON artifacts are shipped.

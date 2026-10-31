@@ -177,11 +177,77 @@ class SafetyAndManifestTests(unittest.TestCase):
                 "signal_processing.md",
             },
         )
-        for path in REFERENCES.glob("*.md"):
-            self.assertIn("2026-07-23", path.read_text(encoding="utf-8"), path.name)
 
 
 class DependencyFreeWorkflowTests(unittest.TestCase):
+    def test_neurokit_seed_rejects_negative_before_loading_dependencies(self) -> None:
+        for script in ("ecg_hrv_pipeline.py", "eda_pipeline.py"):
+            result = run_script(script, "--synthetic", "--sampling-rate", "100", "--seed", "-1")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("unsigned 32-bit", result.stderr)
+
+    def test_epoch_planner_rejects_outside_onsets_and_overflow(self) -> None:
+        for onset in (-1, 1000):
+            with self.subTest(onset=onset), self.assertRaises(_common.CliError):
+                plan_epochs.plan(
+                    [onset], recording_samples=1000, sampling_rate=100,
+                    epoch_start_s=-0.2, epoch_end_s=0.5,
+                    baseline_start_s=None, baseline_end_s=None,
+                    boundary_policy="report",
+                )
+        with self.assertRaises(_common.CliError):
+            plan_epochs._event_samples([-1.0], unit="samples", sampling_rate=100)
+        with self.assertRaises(_common.CliError):
+            plan_epochs._sample_offset(1e308, 100, name="window")
+
+    def test_epoch_padding_is_bounded_by_window_length(self) -> None:
+        for start, end, direction in ((-20, -19, "before"), (20, 21, "after")):
+            report = plan_epochs.plan(
+                [500], recording_samples=1000, sampling_rate=100,
+                epoch_start_s=start, epoch_end_s=end,
+                baseline_start_s=None, baseline_end_s=None, boundary_policy="report",
+            )
+            self.assertEqual(report["events"][0][f"pad_{direction}_samples"], 100)
+            self.assertFalse(report["events"][0]["complete"])
+
+    def test_multimodal_rejects_accumulated_drift_and_interior_jitter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for mode in ("aligned", "drift", "jitter", "common_jitter"):
+                with self.subTest(mode=mode):
+                    for name in ("ECG", "RSP"):
+                        times = []
+                        for index in range(1001):
+                            time = index / 100
+                            if name == "RSP" and mode == "drift":
+                                time *= 1.005  # within the 1% median-rate tolerance
+                            if 450 < index < 550 and (
+                                (name == "RSP" and mode == "jitter")
+                                or mode == "common_jitter"
+                            ):
+                                time += 0.006
+                            times.append(time)
+                        (root / f"{name}.csv").write_text(
+                            f"time_s,{name}\n" + "".join(
+                                f"{time:.9f},{index % 7}\n"
+                                for index, time in enumerate(times)
+                            ), encoding="utf-8",
+                        )
+                    document = {
+                        "schema_version": "1.0",
+                        "streams": [
+                            {"name": name, "path": f"{name}.csv", "value_column": name,
+                             "time_column": "time_s", "sampling_rate_hz": 100, "unit": "a.u."}
+                            for name in ("ECG", "RSP")
+                        ],
+                        "alignment": {"reference_stream": "ECG", "synchronization": "shared_clock",
+                                      "max_start_offset_ms": 1, "minimum_overlap_s": 9},
+                    }
+                    report = validate_multimodal.validate_manifest(document, root=root, max_rows=2000)
+                    self.assertTrue(report["valid"])
+                    self.assertEqual(report["bio_process_direct_input_compatible"], mode == "aligned")
+                    self.assertEqual(report["alignment"]["start_offsets_ms"]["RSP"], 0)
+
     def test_synthetic_generation_is_deterministic_and_inspectable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -327,6 +393,37 @@ class DependencyFreeWorkflowTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_NEUROKIT2, "pinned NeuroKit2 is not installed")
 class PinnedNeuroKitSmokeTests(unittest.TestCase):
+    def test_synthetic_eda_preserves_declared_duration(self) -> None:
+        import neurokit2 as nk
+        import numpy as np
+        import pandas as pd
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_script(
+                "eda_pipeline.py", "--synthetic", "--sampling-rate", "100",
+                "--duration", "20", "--scr-number", "3", "--seed", "42",
+                "--root", directory, "--signals-output", "eda.csv",
+                without_site_packages=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            actual = pd.read_csv(Path(directory) / "eda.csv")["EDA_Raw"].to_numpy()
+            expected = nk.eda_simulate(duration=20, length=2000, sampling_rate=100,
+                                       scr_number=3, random_state=42)
+            np.testing.assert_allclose(actual, expected, rtol=1e-10)
+
+    def test_frequency_gate_uses_peak_span(self) -> None:
+        result = run_script(
+            "ecg_hrv_pipeline.py", "--synthetic", "--sampling-rate", "250",
+            "--duration", "120", "--domains", "frequency",
+            without_site_packages=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["duration_s"], 120)
+        self.assertLess(report["hrv_peak_span_s"], 120)
+        self.assertNotIn("frequency", report["hrv"])
+        self.assertTrue(any("first and last corrected peaks" in w for w in report["warnings"]))
+
     def test_pinned_version_and_synthetic_ecg_pipeline(self) -> None:
         from importlib.metadata import version
 

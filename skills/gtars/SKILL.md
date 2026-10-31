@@ -1,11 +1,12 @@
 ---
 name: gtars
-description: Use Gtars for local genomic interval models and set algebra, overlaps and counts, consensus and coverage, tokenization, fragment processing, and refget/BEDbase planning across Python, Rust, and the CLI.
+description: Supports Gtars for local genomic interval models and set algebra, overlaps and counts, consensus and coverage, tokenization, fragment processing, and refget/BEDbase planning across Python, Rust, and the CLI.
 license: MIT
-compatibility: Python bindings require Python 3.10+ and gtars 0.9.2. The Rust meta-crate and gtars-cli are 0.9.0 and require a Rust toolchain supporting Edition 2024; upstream declares no rust-version. Bundled audit CLIs use only Python 3.10+ standard library and are local/network-free. Remote constructors, pretrained tokenizers, refget, and BEDbase caching require explicit network and storage approval.
+compatibility: Python bindings require Python 3.10+ and gtars 0.10.0. The Rust meta-crate and gtars-cli are 0.10.0 and require a Rust toolchain supporting Edition 2024; upstream declares no rust-version. Bundled audit CLIs use only Python 3.10+ standard library and are local/network-free. Remote constructors, pretrained tokenizers, refget, and BEDbase caching require explicit network and storage approval.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -16,21 +17,24 @@ Gtars provides native Rust implementations, Python bindings, and a feature-gated
 bundled local inspectors; call upstream code only after the data contract,
 provenance, resource bounds, and side effects are explicit.
 
-## Verified snapshot (2026-07-23)
+## Verified snapshot (2026-10-01)
 
-- Python: [`gtars==0.9.2`](https://pypi.org/project/gtars/), released
-  2026-06-17, `Requires-Python >=3.10`.
-- Rust meta-crate: [`gtars=0.9.0`](https://crates.io/crates/gtars), released
-  2026-06-15. Its default feature set is empty.
-- CLI crate/binary: [`gtars-cli=0.9.0`](https://crates.io/crates/gtars-cli);
-  the installed binary is named `gtars`.
-- Direct refget crate: [`gtars-refget=0.9.1`](https://crates.io/crates/gtars-refget),
-  released 2026-06-17. `gtars=0.9.0` itself pins its component release set, which
-  includes refget 0.9.0.
-- Upstream intentionally versions workspace crates, Python bindings, and CLI
-  independently. Do not assume matching numbers mean matching artifacts.
-- The published docs changelog stops at 0.5.1. API examples here were checked
-  against the 0.9.2 Python stubs/runtime and the `v0.9.0` CLI/Rust source.
+- Published Python wheel: [`gtars==0.10.0`](https://pypi.org/project/gtars/0.10.0/),
+  released 2026-09-05, `Requires-Python >=3.10`; local examples were exercised
+  on Python 3.12 with synthetic intervals, fragments, and FASTA.
+- Rust meta-crate and CLI: [`gtars=0.10.0`](https://crates.io/crates/gtars/0.10.0)
+  and [`gtars-cli=0.10.0`](https://crates.io/crates/gtars-cli/0.10.0), released
+  2026-09-05. The binary is `gtars`; the wrapper's default feature set is empty.
+  Rust/CLI examples are source-reviewed templates, not compiled executions.
+- Direct [`gtars-refget=0.11.0`](https://crates.io/crates/gtars-refget/0.11.0)
+  was released 2026-09-22. Its Rust `list_sequences()` now returns a `Result`.
+  The wrapper requests refget 0.10.x; keep Cargo.lock because component
+  dependencies use compatible ranges, not exact pins.
+- A [`gtars-python-v0.11.0` Git tag](https://github.com/databio/gtars/releases/tag/gtars-python-v0.11.0)
+  exists, but PyPI still publishes 0.10.0. Do not assume that Git tags, Python
+  packages, components, or CLI versions coincide.
+- Published guides contain older examples. This review used the PyPI 0.10.0
+  source distribution/runtime, published CLI crate source, and current releases.
 
 The `license: MIT` field covers this skill. Published `gtars` crates declare MIT,
 while the GitHub repository currently displays BSD-2-Clause at the root; verify
@@ -44,7 +48,7 @@ execution:
 
 1. Confirm the official PyPI/crates.io/GitHub owner and immutable version.
 2. Review filenames, platform tags, release provenance, license, and SHA-256.
-   GitHub's v0.9.0 binary release includes per-archive `.sha256` sidecars.
+   Verify checksums from the exact release; do not reuse older binary archives.
 3. Never run an untrusted prebuilt binary, wheel, source tree, Cargo build script,
    or archive installer. Use isolation and CPU/RAM/disk/time limits.
 4. Keep a lockfile and artifact hashes with the analysis manifest.
@@ -53,30 +57,31 @@ After that review, create an isolated Python environment:
 
 ```bash
 uv venv --python 3.11 .venv-gtars
-uv pip install --dry-run --python .venv-gtars/bin/python "gtars==0.9.2"
-uv pip install --python .venv-gtars/bin/python "gtars==0.9.2"
+uv pip install --dry-run --python .venv-gtars/bin/python "gtars==0.10.0"
+uv pip install --python .venv-gtars/bin/python "gtars==0.10.0"
 .venv-gtars/bin/python -c \
-  "import gtars; assert gtars.__version__ == '0.9.2'; print(gtars.__version__)"
+  "import gtars; assert gtars.__version__ == '0.10.0'; print(gtars.__version__)"
 ```
 
-For the reviewed CLI source release:
+For the source-reviewed CLI release (installation template, not run in this audit):
 
 ```bash
-cargo install gtars-cli --version 0.9.0 --locked
+cargo install gtars-cli --version 0.10.0 --locked
 gtars --version
 gtars --help
 ```
 
-For a Rust project, pin the wrapper exactly and enable only required features:
+For a Rust project, this source-reviewed template pins the wrapper and enables
+only required features; retain Cargo.lock for transitive versions:
 
 ```toml
 [dependencies]
-gtars = { version = "=0.9.0", default-features = false, features = [
+gtars = { version = "=0.10.0", default-features = false, features = [
   "core", "overlaprs", "uniwig", "tokenizers", "refget"
 ] }
 ```
 
-Use `gtars-refget = "=0.9.1"` directly only when the newer direct component API is
+Use `gtars-refget = "=0.11.0"` directly only when the newer direct component API is
 required and compatibility has been tested. Do not replace these pins with a Git
 branch or an unreviewed release.
 
@@ -96,10 +101,12 @@ Apply this contract before every operation:
 4. **Sorting:** preserve the original file, then sort a copy by chromosome-sizes
    order and numeric start/end when the operation requires it. Python
    `RegionSet(path)` currently sorts lexicographically by contig and start while
-   loading; do not rely on original row order afterward.
+   loading; do not rely on original row order afterward. Construction does not
+   merge overlapping intervals; call `reduce()` explicitly when that is intended.
 5. **Strand:** BED6 uses `+`, `-`, or `.`. `Region.rest` retains trailing BED
    fields, but a file-backed Python `RegionSet` currently initializes its separate
-   `strands` vector to `*`. Several set operations drop strand. Preserve and
+   `strands` vector to `*`. `sort()` reorders regions without reordering that
+   vector, and several set operations drop strand. Preserve and
    validate strand externally when it is scientifically meaningful.
 6. **Duplicates/adjacency:** choose policies explicitly. `reduce()` and consensus
    merge overlapping **and adjacent** intervals; ordinary half-open overlap does
@@ -169,16 +176,20 @@ rows = consensus([query, universe])
 # rows: [{"chr": ..., "start": ..., "end": ..., "count": ...}, ...]
 ```
 
-The [0.9.0 consensus algorithm](https://github.com/databio/gtars/blob/v0.9.0/gtars-genomicdist/src/consensus.rs)
+The [consensus algorithm in the 0.10.0 release](https://github.com/databio/gtars/blob/gtars-v0.10.0/gtars-genomicdist/src/consensus.rs)
 counts input sets touching a merged union component, not support at every base.
 For example, `[0,10)` and `[5,15)` yield `[0,15)` with count 2, although its
 edges have one-set support. Do not describe a count-filtered consensus as
 basewise replicate agreement; use a support-segmenting method when that is the
 scientific requirement.
 
-Signal-track generation is **not** exposed as `gtars.uniwig` in Python 0.9.2;
+Signal-track generation is **not** exposed as `gtars.uniwig` in Python 0.10.0;
 use the reviewed CLI or Rust API. `RegionSet.coverage()` is a base-pair set metric,
 not a WIG/bigWig generator.
+
+Coverage tracks, overlap counts, and consensus are separate analysis outputs.
+Do not feed a smoothed signal into interval consensus or interpret a consensus
+count as per-base support.
 
 ## Tokenizers, fragments, and reference stores
 
@@ -193,6 +204,7 @@ regions = RegionSet("local-query.bed")
 tokens = tokenizer.tokenize(regions)
 encoding = tokenizer(regions)
 ids = encoding["input_ids"]
+assert tokenizer.vocab_size == len(tokenizer.get_vocab())
 ```
 
 `Tokenizer.from_pretrained(name)` contacts Hugging Face and writes its cache when
@@ -200,6 +212,10 @@ the argument is not an existing local directory; it exposes no revision or cache
 argument. Obtain explicit approval, fetch an immutable revision through a reviewed
 mechanism, verify checksums, then pass the local snapshot directory. See
 `references/tokenizers.md`.
+
+Python 0.10.0 refget batch imports return `ImportReport`, not a list; read
+`report.collections` and its per-run counters. The CLI adds `refget export` and
+`refget lock-status`; see `references/refget.md`.
 
 For refget, prefer `RefgetStore.in_memory()` or `RefgetStore.open_local(path)`.
 `open_remote(cache_path, remote_url)` contacts a remote service, creates/uses a
@@ -247,6 +263,9 @@ samples and replicate aggregation separately.
 All six helpers reject URLs, traversal, symlinks, and special files; apply byte,
 record, file, coordinate, and worker caps; use no network or gtars import; and
 write no output files. Plans contain fixed argv templates and never launch them.
+The fragment-score planner rejects the source-confirmed invalid right-cut query
+in the CLI 0.10.0 default ATAC mode; see `references/cli.md` before choosing
+fragment-body counts or a separately validated cut-site method.
 
 ```bash
 python3 -B scripts/bed_validator.py --help
@@ -271,22 +290,22 @@ Do not use stale examples containing `gtars.RegionSet`,
 `gtars.uniwig.coverage_from_bed`, `gtars.RefgetStore`, global
 `set_option`/`set_log_level`, `parallel_apply`, or invented exception classes.
 CLI forms such as `uniwig generate`, `igd build`, `scoring score`, and
-`fragsplit cluster-split` are also stale for 0.9.0.
+`fragsplit cluster-split` are also stale for 0.10.0.
 
 Upstream's published docs and stubs have some drift (for example the older
-`GlobalRefgetStore` tutorial and incomplete 0.9.2 stubs). Prefer installed
+`GlobalRefgetStore` tutorial and incomplete 0.10.0 stubs). Prefer installed
 signature smoke tests plus immutable tagged source when they conflict.
 
 ## Bundled references
 
 These are the only six bundled references; all links are local and present:
 
-- `references/python-api.md` — exact Python 0.9.2 imports and behavior
+- `references/python-api.md` — exact Python 0.10.0 imports and behavior
 - `references/overlap.md` — overlap/count/set algebra and consensus semantics
 - `references/coverage.md` — uniwig, bigWig, coverage, sorting, and resources
 - `references/tokenizers.md` — tokenizer/universe and fragment compatibility
 - `references/refget.md` — digests, stores, BEDbase, network/cache controls
-- `references/cli.md` — CLI 0.9.0 commands, features, and migrations
+- `references/cli.md` — CLI 0.10.0 commands, features, and migrations
 
 ## Citing Scientific Agent Skills
 

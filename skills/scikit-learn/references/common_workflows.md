@@ -1,5 +1,7 @@
 # Common Workflows
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 Two worked end-to-end workflows: building a classification model and performing a
 clustering analysis.
 
@@ -26,13 +28,18 @@ clustering analysis.
 3. **Create preprocessing pipeline**
    ```python
    from sklearn.pipeline import Pipeline
-   from sklearn.preprocessing import StandardScaler
+   from sklearn.preprocessing import StandardScaler, OneHotEncoder
+   from sklearn.ensemble import RandomForestClassifier
    from sklearn.compose import ColumnTransformer
 
+   # Choose these using the training schema; exclude target/identifiers.
+   numeric_features = X_train.select_dtypes(include='number').columns.tolist()
+   categorical_features = X_train.columns.difference(numeric_features).tolist()
+   # This minimal example assumes no missing values.
    # Handle numeric and categorical features separately
    preprocessor = ColumnTransformer([
        ('num', StandardScaler(), numeric_features),
-       ('cat', OneHotEncoder(), categorical_features)
+       ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
    ])
    ```
 
@@ -76,18 +83,23 @@ clustering analysis.
    X_scaled = scaler.fit_transform(X)
    ```
 
-2. **Find optimal number of clusters**
+2. **Explore candidate cluster counts**
    ```python
    from sklearn.cluster import KMeans
    from sklearn.metrics import silhouette_score
 
+   import numpy as np
    scores = []
-   for k in range(2, 11):
-       kmeans = KMeans(n_clusters=k, random_state=42)
+   candidates = range(2, min(11, len(X_scaled)))
+   for k in candidates:
+       kmeans = KMeans(n_clusters=k, n_init=10, random_state=42)
        labels = kmeans.fit_predict(X_scaled)
-       scores.append(silhouette_score(X_scaled, labels))
+       scores.append(silhouette_score(X_scaled, labels)
+                     if 2 <= len(np.unique(labels)) < len(labels) else np.nan)
 
-   optimal_k = range(2, 11)[np.argmax(scores)]
+   if not scores or not np.isfinite(scores).any():
+       raise ValueError("No valid silhouette candidate")
+   optimal_k = candidates[int(np.nanargmax(scores))]  # Exploratory candidate only
    ```
 
 3. **Apply clustering**
@@ -99,9 +111,15 @@ clustering analysis.
 4. **Visualize with dimensionality reduction**
    ```python
    from sklearn.decomposition import PCA
+   import matplotlib.pyplot as plt
 
    pca = PCA(n_components=2)
    X_2d = pca.fit_transform(X_scaled)
 
    plt.scatter(X_2d[:, 0], X_2d[:, 1], c=labels, cmap='viridis')
    ```
+
+## Upstream references
+
+- https://scikit-learn.org/stable/common_pitfalls.html
+- https://scikit-learn.org/stable/modules/clustering.html

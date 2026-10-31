@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import platform
 from pathlib import Path
 from typing import Any
@@ -46,10 +47,10 @@ def nonnegative_int(value: str) -> int:
 
 
 def positive_float(value: str) -> float:
-    """Parse a strictly positive float."""
+    """Parse a finite, strictly positive tolerance."""
     parsed = float(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("value must be greater than zero")
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be finite and greater than zero")
     return parsed
 
 
@@ -71,7 +72,7 @@ def parse_args() -> argparse.Namespace:
         "--class-index",
         type=nonnegative_int,
         default=1,
-        help="Class probability to explain (default: 1).",
+        help="Class probability: 0=malignant, 1=benign (default: 1).",
     )
     parser.add_argument(
         "--background-size",
@@ -117,6 +118,8 @@ def select_output(
     class_index: int,
 ) -> shap.Explanation:
     """Select one output from a tabular Explanation."""
+    if class_index < 0:
+        raise ValueError("class_index must be zero or greater")
     values = np.asarray(explanation.values)
 
     if values.ndim == 2:
@@ -142,9 +145,11 @@ def select_output(
     return explanation[..., class_index]
 
 
-def save_axis(axis: Any, path: Path) -> None:
+def save_axis(axis: Any, path: Path, title: str | None = None) -> None:
     """Save and close the figure associated with a SHAP plot axis."""
     figure = axis.figure if axis is not None else plt.gcf()
+    if title is not None:
+        figure.suptitle(title)
     figure.tight_layout()
     figure.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(figure)
@@ -167,7 +172,9 @@ def main() -> int:
     args = parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    X, y = load_breast_cancer(as_frame=True, return_X_y=True)
+    dataset = load_breast_cancer(as_frame=True)
+    # Match the float32 input representation used by sklearn tree prediction.
+    X, y = dataset.data.astype(np.float32), dataset.target
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -200,11 +207,15 @@ def main() -> int:
 
     explainer = shap.TreeExplainer(
         model,
-        data=background,
+        # Passing a bare frame silently resamples backgrounds larger than 100.
+        data=shap.maskers.Independent(background, max_samples=len(background)),
         feature_perturbation="interventional",
         model_output="probability",
     )
     all_outputs = explainer(X_explain)
+    all_outputs.output_names = [
+        str(dataset.target_names[int(label)]) for label in model.classes_
+    ]
     explanation = select_output(all_outputs, args.class_index)
 
     values = np.asarray(explanation.values, dtype=float)
@@ -213,6 +224,9 @@ def main() -> int:
     reconstructed = base_values + values.sum(axis=1)
     errors = reconstructed - predictions
     max_abs_error = float(np.max(np.abs(errors)))
+
+    if not all(np.isfinite(array).all() for array in (values, base_values, predictions)):
+        raise ValueError("Non-finite model outputs or attributions cannot be reported")
 
     np.testing.assert_allclose(
         reconstructed,
@@ -259,26 +273,27 @@ def main() -> int:
         index=False,
     )
 
+    plot_title = f"SHAP for {dataset.target_names[int(model.classes_[args.class_index])]} probability"
     axis = shap.plots.bar(
         explanation,
         max_display=args.max_display,
         show=False,
     )
-    save_axis(axis, args.output_dir / "bar.png")
+    save_axis(axis, args.output_dir / "bar.png", title=plot_title)
 
     axis = shap.plots.beeswarm(
         explanation,
         max_display=args.max_display,
         show=False,
     )
-    save_axis(axis, args.output_dir / "beeswarm.png")
+    save_axis(axis, args.output_dir / "beeswarm.png", title=plot_title)
 
     axis = shap.plots.waterfall(
         explanation[0],
         max_display=args.max_display,
         show=False,
     )
-    save_axis(axis, args.output_dir / "waterfall-first-row.png")
+    save_axis(axis, args.output_dir / "waterfall-first-row.png", title=plot_title)
 
     top_feature = str(importance.loc[0, "feature"])
     axis = shap.plots.scatter(
@@ -287,7 +302,7 @@ def main() -> int:
         alpha=0.6,
         show=False,
     )
-    save_axis(axis, args.output_dir / "scatter-top-feature.png")
+    save_axis(axis, args.output_dir / "scatter-top-feature.png", title=plot_title)
 
     metadata = {
         "python_version": platform.python_version(),
@@ -297,13 +312,19 @@ def main() -> int:
         "model": type(model).__name__,
         "model_score": float(model.score(X_test, y_test)),
         "seed": args.seed,
-        "background_rows": len(background),
+        "background_rows": len(explainer.data),
+        "background_requested_rows": args.background_size,
+        "background_mean_prediction": float(
+            model.predict_proba(background)[:, args.class_index].mean()
+        ),
         "explained_rows": len(X_explain),
         "feature_count": X_explain.shape[1],
+        "model_input_dtype": "float32",
         "all_output_shape": list(np.shape(all_outputs.values)),
         "selected_output_shape": list(values.shape),
         "selected_class_index": args.class_index,
         "selected_class_label": str(model.classes_[args.class_index]),
+        "selected_class_meaning": str(dataset.target_names[int(model.classes_[args.class_index])]),
         "selected_output_name": output_name(explanation, args.class_index),
         "output_units": "class probability",
         "feature_perturbation": "interventional",
@@ -311,6 +332,7 @@ def main() -> int:
         "additivity_atol": args.atol,
         "additivity_rtol": args.rtol,
         "top_feature": top_feature,
+        "interpretation": "Predictive attribution demo; no causal or clinical validity claim.",
     }
     (args.output_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n",

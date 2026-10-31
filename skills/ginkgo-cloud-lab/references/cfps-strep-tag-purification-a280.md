@@ -1,6 +1,8 @@
 # Cell Free Protein Expression with Strep-tag Purification and Yield via A280
 
 **URL:** https://cloud.ginkgo.bio/protocols/cfps-strep-tag-purification-a280
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-strep-tag-a280
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $149/sample
 **Turnaround:** up to 11 days
@@ -8,7 +10,7 @@
 
 ## Overview
 
-End-to-end automated expression and purification of StrepII-tagged proteins. Linear DNA templates are expressed in 100 uL CFPS reactions for 20 hours, purified with StreptactinXT magnetic beads on the Agilent Bravo, and quantified from the eluate by A280 absorbance on the BMG PHERAstar. Purity and size assessment are performed on the Revvity LabChip. Enables rapid, data-driven assessment of expressibility before larger-scale campaigns.
+End-to-end automated expression and purification of StrepII-tagged proteins in 100 uL CFPS reactions, followed by StreptactinXT magnetic bead purification and A280 quantification. The catalog mentions 20-hour expression and LabChip, but the service terms describe typical 4-16-hour reactions and promise A280 yield/reporting without a LabChip deliverable. Confirm incubation and readout scope in the order; choose the [A280 + LabChip tier](cfps-expression-purification-quantification.md) when purity/size data are required.
 
 ## Input
 
@@ -52,4 +54,4 @@ End-to-end automated expression and purification of StrepII-tagged proteins. Lin
 
 - Purified-protein yield quantification from cell-free expression
 - Screening Strep-tagged constructs before scale-up
-- Comparing expression and purity across sequence variants
+- Comparing purified concentration across sequence variants

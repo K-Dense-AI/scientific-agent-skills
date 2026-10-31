@@ -8,7 +8,7 @@
 **Best for:** Cloud infrastructure, service topology, deployment architecture, network layout
 **When NOT to use:** Logical system boundaries (use [C4](c4.md)), component layout without cloud semantics (use [Block](block.md))
 
-> ⚠️ **Accessibility:** Architecture diagrams do **not** support `accTitle`/`accDescr`. Always place a descriptive _italic_ Markdown paragraph directly above the code block.
+> **Accessibility:** Mermaid 12.0.0 emits `accTitle`/`accDescr` for this type. Keep a visible description and verify older destination renderers.
 
 ---
 
@@ -18,6 +18,8 @@ _Architecture diagram showing a cloud-hosted web application with a load balance
 
 ```mermaid
 architecture-beta
+    accTitle: Architecture Example
+    accDescr: Illustrative architecture diagram; the surrounding text describes its data and relationships.
     group cloud(cloud)[AWS Cloud]
     group vpc(cloud)[VPC] in cloud
 
@@ -40,7 +42,7 @@ architecture-beta
 - Direction annotations on connections: `:L` (left), `:R` (right), `:T` (top), `:B` (bottom)
 - Built-in icon types: `cloud`, `server`, `database`, `internet`, `disk`
 - Nest groups with `in parent_group`
-- **Labels must be plain text** — no emoji and no hyphens in `[]` labels (parser treats `-` as an edge operator)
+- Keep labels concise. Mermaid 12.0.0 accepts hyphens and Unicode inside `[]`; older hosts may differ
 - Use `-->` for directional arrows, `--` for undirected edges
 - Keep to **6–8 services** per diagram
 - **Always** pair with a Markdown text description above for screen readers
@@ -53,6 +55,8 @@ _Description of the infrastructure topology and key components:_
 
 ```mermaid
 architecture-beta
+    accTitle: Architecture Example
+    accDescr: Illustrative architecture diagram; the surrounding text describes its data and relationships.
     group region(cloud)[Cloud Region]
 
     service frontend(internet)[Web Frontend] in region
@@ -71,6 +75,8 @@ _Multi-region cloud deployment with 3 nested groups (2 regional clusters + share
 
 ```mermaid
 architecture-beta
+    accTitle: Architecture Example
+    accDescr: Illustrative architecture diagram; the surrounding text describes its data and relationships.
     group cloud(cloud)[AWS Platform]
 
     group east(cloud)[US East Region] in cloud
@@ -103,6 +109,11 @@ architecture-beta
 ### Why this works
 
 - **Nested groups mirror real infrastructure** — cloud > region > services is exactly how teams think about multi-region deployments. The nesting creates clear blast radius boundaries.
-- **Plain text labels only** — architecture diagrams parse-fail with emoji in `[]` labels. All visual distinction comes from the group nesting and icon types (`internet`, `server`, `database`).
-- **Directional annotations prevent overlap** — `:B --> T:` (bottom-to-top), `:R --> L:` (right-to-left) control where edges connect. Without these, Mermaid stacks edges on top of each other.
+- **Conservative labels** keep this example readable across hosts; current Mermaid also accepts Unicode and hyphens in labels. Group nesting and built-in icons supply the primary visual distinctions.
+- **Directional annotations select ports** — `:B --> T:` connects the source bottom to the target top, and `:R --> L:` connects source right to target left. Inspect routing and crossings; port selection does not guarantee a clean layout.
 - **Cross-region replication is explicit** — the `db_primary:R --> L:db_replica` edge is the most important infrastructure detail and reads clearly as a horizontal connection between regions.
+
+
+## Verified reference
+
+Syntax examples reviewed against [official Mermaid documentation](https://mermaid.js.org/syntax/architecture.html) and rendered with Mermaid 12.0.0 (2026-10-01). Check the destination version; appearance and accessibility are not guaranteed by a successful parse.

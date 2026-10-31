@@ -16,19 +16,20 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata
+from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata, prepare_counts, normalize_hvg
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     add_io_args(p, default_output="normalized.h5ad")
+    p.add_argument("--counts-layer", default=None, help="Explicit raw-count layer instead of X")
     p.add_argument("--target-sum", type=float, default=1e4,
                    help="Counts per cell after normalization (default 1e4)")
     p.add_argument("--n-top-genes", type=int, default=2000,
                    help="Number of highly variable genes (default 2000)")
     p.add_argument("--flavor", default="seurat",
-                   choices=["seurat", "cell_ranger", "seurat_v3"],
+                   choices=["seurat", "cell_ranger", "seurat_v3", "seurat_v3_paper"],
                    help="HVG flavor. seurat_v3 expects raw counts (default seurat)")
     p.add_argument("--batch-key", default=None,
                    help="obs column for batch-aware HVG selection")
@@ -45,31 +46,21 @@ def main():
     adata = load_anndata(args.input)
     info(f"Loaded {adata.n_obs} cells x {adata.n_vars} genes")
 
-    # Preserve raw counts in a dedicated layer for pseudobulk / DE later.
-    adata.layers["counts"] = adata.X.copy()
-
-    if args.flavor == "seurat_v3":
-        # seurat_v3 selects HVGs on raw counts, before normalization.
-        sc.pp.highly_variable_genes(adata, n_top_genes=args.n_top_genes,
-                                    flavor="seurat_v3", batch_key=args.batch_key)
-        sc.pp.normalize_total(adata, target_sum=args.target_sum)
-        sc.pp.log1p(adata)
-    else:
-        sc.pp.normalize_total(adata, target_sum=args.target_sum)
-        sc.pp.log1p(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=args.n_top_genes,
-                                    flavor=args.flavor, batch_key=args.batch_key)
+    prepare_counts(adata, args.counts_layer)
+    normalize_hvg(sc, adata, target_sum=args.target_sum, n_top_genes=args.n_top_genes,
+                  flavor=args.flavor, batch_key=args.batch_key)
 
     n_hvg = int(adata.var["highly_variable"].sum())
     info(f"Selected {n_hvg} highly variable genes")
 
     # Stash the full normalized log matrix so plots can use_raw=True.
-    adata.raw = adata
+    # normalize_hvg saved an independent full log-normalized snapshot.
 
     if not args.no_plots:
         sc.pl.highly_variable_genes(adata, show=False, save="_hvg.png")
 
     if args.subset_hvg:
+        info("HVG subsetting also subsets counts; retain the full-gene input for pseudobulk")
         adata = adata[:, adata.var["highly_variable"]].copy()
         info(f"Subset to {adata.n_vars} HVGs")
 

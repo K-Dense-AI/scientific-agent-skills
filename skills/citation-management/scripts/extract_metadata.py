@@ -13,7 +13,7 @@ import re
 import json
 import xml.etree.ElementTree as ET
 from typing import Optional, Dict, List, Tuple
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, unquote
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 
@@ -39,6 +39,7 @@ class MetadataExtractor:
             'User-Agent': 'MetadataExtractor/1.0 (Citation Management Tool)'
         })
         self.email = email or os.getenv('NCBI_EMAIL', '')
+        self._last_arxiv_request = None
     
     def identify_type(self, identifier: str) -> Tuple[str, str]:
         """
@@ -57,6 +58,7 @@ class MetadataExtractor:
             return self._parse_url(identifier)
         
         # Check for DOI
+        identifier = re.sub(r'^doi:\s*', '', identifier, flags=re.IGNORECASE)
         if identifier.startswith('10.'):
             return ('doi', identifier)
         
@@ -65,9 +67,11 @@ class MetadataExtractor:
             return ('arxiv', identifier)
         if identifier.startswith('arXiv:'):
             return ('arxiv', identifier.replace('arXiv:', ''))
+        if re.fullmatch(r'[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?', identifier):
+            return ('arxiv', identifier)
         
         # Check for PMID (8-digit number typically)
-        if identifier.isdigit() and len(identifier) >= 7:
+        if identifier.isdigit() and int(identifier) > 0:
             return ('pmid', identifier)
         
         # Check for PMCID
@@ -81,24 +85,33 @@ class MetadataExtractor:
         parsed = urlparse(url)
         
         # DOI URLs
-        if 'doi.org' in parsed.netloc:
-            doi = parsed.path.lstrip('/')
+        if parsed.hostname in ('doi.org', 'dx.doi.org'):
+            doi = unquote(parsed.path.lstrip('/'))
             return ('doi', doi)
         
         # PubMed URLs
-        if 'pubmed.ncbi.nlm.nih.gov' in parsed.netloc or 'ncbi.nlm.nih.gov/pubmed' in url:
+        if parsed.hostname == 'pubmed.ncbi.nlm.nih.gov' or (
+            parsed.hostname == 'www.ncbi.nlm.nih.gov' and parsed.path.startswith('/pubmed/')
+        ):
             pmid = re.search(r'/(\d+)', parsed.path)
             if pmid:
                 return ('pmid', pmid.group(1))
         
         # arXiv URLs
-        if 'arxiv.org' in parsed.netloc:
-            arxiv_id = re.search(r'/abs/(\d{4}\.\d{4,5})', parsed.path)
-            if arxiv_id:
-                return ('arxiv', arxiv_id.group(1))
+        if parsed.hostname in ('arxiv.org', 'www.arxiv.org', 'export.arxiv.org'):
+            arxiv_path = re.sub(r'^/(?:abs|pdf)/', '', parsed.path)
+            arxiv_path = re.sub(r'\.pdf$', '', arxiv_path)
+            kind, value = self.identify_type(arxiv_path)
+            if kind == 'arxiv':
+                return (kind, value)
+
+        if parsed.hostname in ('pmc.ncbi.nlm.nih.gov', 'www.ncbi.nlm.nih.gov'):
+            pmcid = re.search(r'/articles/(PMC\d+)', parsed.path, re.IGNORECASE)
+            if pmcid:
+                return ('pmcid', pmcid.group(1).upper())
         
         # Nature, Science, Cell, etc. - try to extract DOI from URL
-        doi_match = re.search(r'10\.\d{4,}/[^\s/]+', url)
+        doi_match = re.search(r'10\.\d{4,}/[^\s]+', unquote(parsed.path))
         if doi_match:
             return ('doi', doi_match.group())
         
@@ -171,7 +184,7 @@ class MetadataExtractor:
             'db': 'pubmed',
             'id': pmid,
             'retmode': 'xml',
-            'rettype': 'abstract'
+            'tool': 'citation-management',
         }
         
         if self.email:
@@ -252,13 +265,18 @@ class MetadataExtractor:
         Returns:
             Metadata dictionary or None
         """
-        url = 'http://export.arxiv.org/api/query'
+        url = 'https://export.arxiv.org/api/query'
         params = {
             'id_list': arxiv_id,
             'max_results': 1
         }
         
         try:
+            # arXiv requests must be at least three seconds apart, including
+            # callers using this class directly rather than the batch CLI.
+            if self._last_arxiv_request is not None:
+                time.sleep(max(0, 3.0 - (time.monotonic() - self._last_arxiv_request)))
+            self._last_arxiv_request = time.monotonic()
             response = self.session.get(url, params=params, timeout=15)
             
             if response.status_code == 200:
@@ -269,6 +287,10 @@ class MetadataExtractor:
                 entry = root.find('atom:entry', ns)
                 if entry is None:
                     print(f'Error: No entry found for arXiv ID: {arxiv_id}', file=sys.stderr)
+                    return None
+
+                if '/api/errors' in entry.findtext('atom:id', '', ns):
+                    print(f'Error: arXiv returned an error entry for {arxiv_id}', file=sys.stderr)
                     return None
                 
                 # Extract DOI if published
@@ -443,6 +465,10 @@ class MetadataExtractor:
         date_parts = message.get('published-print', {}).get('date-parts', [[]])
         if not date_parts or not date_parts[0]:
             date_parts = message.get('published-online', {}).get('date-parts', [[]])
+        if not date_parts or not date_parts[0]:
+            date_parts = message.get('published', {}).get('date-parts', [[]])
+        if not date_parts or not date_parts[0]:
+            date_parts = message.get('issued', {}).get('date-parts', [[]])
         
         if date_parts and date_parts[0]:
             return str(date_parts[0][0])
@@ -480,7 +506,7 @@ class MetadataExtractor:
 
     def extract_from_pmcid(self, pmcid: str) -> Optional[Dict]:
         """Resolve a PMCID to a PMID via the NCBI ID converter, then extract."""
-        url = 'https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/'
+        url = 'https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/'
         params = {'ids': pmcid, 'format': 'json', 'tool': 'citation-management'}
         if self.email:
             params['email'] = self.email
@@ -492,16 +518,16 @@ class MetadataExtractor:
                 return None
 
             records = response.json().get('records', [])
-            if not records or 'pmid' not in records[0]:
+            if not records or not records[0].get('pmid'):
                 if records and records[0].get('doi'):
                     return self.extract_from_doi(records[0]['doi'])
                 print(f'Error: Could not resolve {pmcid} to a PMID or DOI', file=sys.stderr)
                 return None
 
-            return self.extract_from_pmid(records[0]['pmid'])
+            return self.extract_from_pmid(str(records[0]['pmid']))
 
         except (requests.exceptions.RequestException, ValueError) as e:
-            print(f'Error resolving PMCID {pmcid}: {e}', file=sys.stderr)
+            print(f'Error resolving PMCID {pmcid} ({type(e).__name__}); request details omitted', file=sys.stderr)
             return None
 
     def extract_from_url(self, url: str) -> Optional[Dict]:
@@ -603,6 +629,31 @@ class MetadataExtractor:
         return record
 
 
+def read_identifiers(filepath: str) -> List[str]:
+    """Read newline identifiers or the JSON results emitted by search scripts."""
+    with open(filepath, encoding='utf-8') as handle:
+        content = handle.read()
+    if not content.lstrip().startswith(('{', '[')):
+        return [line.strip() for line in content.splitlines() if line.strip()]
+    payload = json.loads(content)
+    rows = payload.get('results', payload.get('entries')) if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError('JSON input must be an array or contain results/entries array')
+    identifiers = []
+    for index, row in enumerate(rows, start=1):
+        if isinstance(row, str):
+            identifier = row.strip()
+        elif isinstance(row, dict):
+            identifier = next((str(row[key]).strip() for key in
+                               ('doi', 'pmid', 'pmcid', 'arxiv_id', 'url') if row.get(key)), '')
+        else:
+            identifier = ''
+        if not identifier:
+            raise ValueError(f'JSON record {index} has no DOI, PMID, PMCID, arXiv ID, or URL')
+        identifiers.append(identifier)
+    return identifiers
+
+
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
@@ -610,11 +661,12 @@ def main():
         epilog='Example: python extract_metadata.py --doi 10.1038/s41586-021-03819-2'
     )
     
-    parser.add_argument('--doi', help='Digital Object Identifier')
-    parser.add_argument('--pmid', help='PubMed ID')
-    parser.add_argument('--arxiv', help='arXiv ID')
-    parser.add_argument('--url', help='URL to article')
-    parser.add_argument('-i', '--input', help='Input file with identifiers (one per line)')
+    parser.add_argument('--doi', action='append', help='Digital Object Identifier (repeatable)')
+    parser.add_argument('--pmid', action='append', help='PubMed ID (repeatable)')
+    parser.add_argument('--pmcid', action='append', help='PubMed Central ID (repeatable)')
+    parser.add_argument('--arxiv', action='append', help='arXiv ID (repeatable)')
+    parser.add_argument('--url', action='append', help='URL to article (repeatable)')
+    parser.add_argument('-i', '--input', help='Newline identifiers or search-results JSON file')
     parser.add_argument('-o', '--output', help='Output file for BibTeX (default: stdout)')
     parser.add_argument('--format', choices=['bibtex', 'json'], default='bibtex', help='Output format')
     parser.add_argument('--email', help='Email for NCBI E-utilities (recommended)')
@@ -624,19 +676,19 @@ def main():
     # Collect identifiers
     identifiers = []
     if args.doi:
-        identifiers.append(args.doi)
+        identifiers.extend(args.doi)
     if args.pmid:
-        identifiers.append(args.pmid)
+        identifiers.extend(args.pmid)
+    if args.pmcid:
+        identifiers.extend(args.pmcid)
     if args.arxiv:
-        identifiers.append(args.arxiv)
+        identifiers.extend(args.arxiv)
     if args.url:
-        identifiers.append(args.url)
+        identifiers.extend(args.url)
     
     if args.input:
         try:
-            with open(args.input, 'r', encoding='utf-8') as f:
-                file_ids = [line.strip() for line in f if line.strip()]
-                identifiers.extend(file_ids)
+            identifiers.extend(read_identifiers(args.input))
         except Exception as e:
             print(f'Error reading input file: {e}', file=sys.stderr)
             sys.exit(1)
@@ -683,8 +735,10 @@ def main():
         print(output)
     
     print(f'\nExtracted {len(bibtex_entries)}/{len(identifiers)} entries', file=sys.stderr)
+    if len(records) < len(identifiers):
+        print('Error: partial extraction; review failed identifiers before using output', file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == '__main__':
     main()
-

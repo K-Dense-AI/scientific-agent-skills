@@ -83,6 +83,8 @@ def _length_to_inches(value: str | None) -> tuple[float | None, str | None]:
         "cm": 1.0 / 2.54,
         "mm": 1.0 / 25.4,
     }
+    if not math.isfinite(number) or number <= 0:
+        raise CliError("SVG dimensions must be finite and greater than zero")
     return number * factors[unit], unit
 
 
@@ -172,6 +174,8 @@ def inspect_svg(path: Path) -> dict[str, Any]:
     except (ET.ParseError, OSError) as exc:
         raise CliError(f"invalid SVG/XML input: {exc}") from exc
 
+    if root.tag not in {"svg", "{http://www.w3.org/2000/svg}svg"}:
+        raise CliError("XML root must be an SVG element")
     width_raw = root.get("width")
     height_raw = root.get("height")
     width_in, width_unit = _length_to_inches(width_raw)
@@ -257,7 +261,7 @@ def _pdf_font_report(page: Any) -> dict[str, Any]:
             subtype = str(font.get("/Subtype", ""))
             if subtype == "/Type3":
                 # Type 3 glyph programs live in the PDF CharProcs dictionary.
-                return True
+                return True if font.get("/CharProcs") else None
             candidates = [font]
             descendants = font.get("/DescendantFonts")
             if descendants:
@@ -325,7 +329,7 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
     except ImportError as exc:
         raise CliError(
             "pypdf is required for PDF metadata; "
-            "run with --with 'pypdf==6.14.2'"
+            "run with --with 'pypdf==6.19.0'"
         ) from exc
     try:
         reader = PdfReader(path, strict=False)
@@ -354,6 +358,20 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
         page = reader.pages[0]
         width_pt = float(page.mediabox.width)
         height_pt = float(page.mediabox.height)
+        user_unit = float(page.user_unit)
+        rotation = int(page.rotation) % 360
+        crop_width = float(page.cropbox.width)
+        crop_height = float(page.cropbox.height)
+        if rotation not in {0, 90, 180, 270} or not all(
+            math.isfinite(value) and value > 0
+            for value in (width_pt, height_pt, crop_width, crop_height, user_unit)
+        ):
+            raise CliError("PDF page dimensions, UserUnit, or rotation are invalid")
+        display_width, display_height = width_pt * user_unit, height_pt * user_unit
+        crop_width, crop_height = crop_width * user_unit, crop_height * user_unit
+        if rotation in {90, 270}:
+            display_width, display_height = display_height, display_width
+            crop_width, crop_height = crop_height, crop_width
         return {
             "format": "PDF",
             "kind": "vector-container",
@@ -361,14 +379,21 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
             "page_count": page_count,
             "first_page_width_pt": width_pt,
             "first_page_height_pt": height_pt,
-            "width_mm": width_pt / 72.0 * 25.4,
-            "height_mm": height_pt / 72.0 * 25.4,
+            "user_unit": user_unit,
+            "rotation_degrees": rotation,
+            "width_mm": display_width / 72.0 * 25.4,
+            "height_mm": display_height / 72.0 * 25.4,
+            "crop_width_mm": crop_width / 72.0 * 25.4,
+            "crop_height_mm": crop_height / 72.0 * 25.4,
+            "cropbox_differs_from_mediabox": list(page.cropbox) != list(page.mediabox),
             "dpi_x": None,
             "dpi_y": None,
             "mode": None,
             "font_resources": _pdf_font_report(page),
             "note": (
-                "PDF page size and font resources do not establish the "
+                "Dimensions use first-page MediaBox with UserUnit and rotation; "
+                "CropBox dimensions are reported separately. Raw first_page_*_pt "
+                "values are unscaled user coordinates. Page size and fonts do not establish the "
                 "resolution of embedded raster images."
             ),
         }

@@ -12,15 +12,19 @@ Usage:
 
 import argparse
 import sys
+import math
 from pathlib import Path
 
 try:
-    from rdkit import Chem
-    from rdkit.Chem import AllChem, MACCSkeys, rdFingerprintGenerator
+    from rdkit import Chem, rdBase
+    from rdkit.Chem import MACCSkeys, rdFingerprintGenerator
     from rdkit import DataStructs
 except ImportError:
     print("Error: RDKit not installed. Install with: uv pip install rdkit")
     sys.exit(1)
+
+
+from _common import read_molecule_records, molecule_smiles
 
 
 FINGERPRINT_METHODS = {
@@ -32,15 +36,20 @@ FINGERPRINT_METHODS = {
 }
 
 
-def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048):
+def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048,
+                         include_chirality=False):
     """Generate molecular fingerprint based on specified method."""
-    if mol is None:
+    if mol is None or mol.GetNumAtoms() == 0:
         return None
 
     method = method.lower()
+    if radius < 0 or n_bits <= 0:
+        raise ValueError("radius must be nonnegative and n_bits must be positive")
+    if include_chirality and method in {'rdkit', 'maccs'}:
+        raise ValueError(f"{method} does not support include_chirality")
 
     if method == 'morgan':
-        gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits)
+        gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits, includeChirality=include_chirality)
         return gen.GetFingerprint(mol)
     elif method == 'rdkit':
         gen = rdFingerprintGenerator.GetRDKitFPGenerator(maxPath=7, fpSize=n_bits)
@@ -48,10 +57,10 @@ def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048):
     elif method == 'maccs':
         return MACCSkeys.GenMACCSKeys(mol)
     elif method == 'atompair':
-        gen = rdFingerprintGenerator.GetAtomPairGenerator(fpSize=n_bits)
+        gen = rdFingerprintGenerator.GetAtomPairGenerator(fpSize=n_bits, includeChirality=include_chirality)
         return gen.GetFingerprint(mol)
     elif method == 'torsion':
-        gen = rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=n_bits)
+        gen = rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=n_bits, includeChirality=include_chirality)
         return gen.GetFingerprint(mol)
     else:
         raise ValueError(f"Unknown fingerprint method: {method}")
@@ -59,43 +68,16 @@ def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048):
 
 def load_molecules(file_path):
     """Load molecules from file."""
-    path = Path(file_path)
-
-    if not path.exists():
-        print(f"Error: File not found: {file_path}")
-        return []
-
-    molecules = []
-
-    if path.suffix.lower() in ['.sdf', '.mol']:
-        suppl = Chem.SDMolSupplier(str(path))
-    elif path.suffix.lower() in ['.smi', '.smiles', '.txt']:
-        suppl = Chem.SmilesMolSupplier(str(path), titleLine=False)
-    else:
-        print(f"Error: Unsupported file format: {path.suffix}")
-        return []
-
-    for idx, mol in enumerate(suppl):
-        if mol is None:
-            print(f"Warning: Failed to parse molecule {idx+1}")
-            continue
-
-        # Try to get molecule name
-        name = mol.GetProp('_Name') if mol.HasProp('_Name') else f"Mol_{idx+1}"
-        smiles = Chem.MolToSmiles(mol)
-
-        molecules.append({
-            'index': idx + 1,
-            'name': name,
-            'smiles': smiles,
-            'mol': mol
-        })
-
-    return molecules
+    return [
+        {'index': index,
+         'name': mol.GetProp('_Name') if mol.HasProp('_Name') else f'Mol_{index}',
+         'smiles': molecule_smiles(mol), 'mol': mol}
+        for index, mol in read_molecule_records(file_path)
+    ]
 
 
 def similarity_search(query_mol, database, method='morgan', threshold=0.7,
-                     radius=2, n_bits=2048, metric='tanimoto'):
+                     radius=2, n_bits=2048, metric='tanimoto', include_chirality=False):
     """
     Perform similarity search.
 
@@ -111,12 +93,14 @@ def similarity_search(query_mol, database, method='morgan', threshold=0.7,
     Returns:
         List of hits with similarity scores
     """
-    if query_mol is None:
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("threshold must be finite and between 0 and 1")
+    if query_mol is None or query_mol.GetNumAtoms() == 0:
         print("Error: Invalid query molecule")
         return []
 
     # Generate query fingerprint
-    query_fp = generate_fingerprint(query_mol, method, radius, n_bits)
+    query_fp = generate_fingerprint(query_mol, method, radius, n_bits, include_chirality)
     if query_fp is None:
         print("Error: Failed to generate query fingerprint")
         return []
@@ -134,7 +118,7 @@ def similarity_search(query_mol, database, method='morgan', threshold=0.7,
     # Search database
     hits = []
     for db_entry in database:
-        db_fp = generate_fingerprint(db_entry['mol'], method, radius, n_bits)
+        db_fp = generate_fingerprint(db_entry['mol'], method, radius, n_bits, include_chirality)
         if db_fp is None:
             continue
 
@@ -234,6 +218,8 @@ Examples:
                        help='Morgan fingerprint radius (default: 2)')
     parser.add_argument('--bits', '-b', type=int, default=2048,
                        help='Fingerprint size (default: 2048)')
+    parser.add_argument('--chirality', action='store_true',
+                       help='Include chirality (Morgan, atom pair, torsion only)')
     parser.add_argument('--metric', default='tanimoto',
                        choices=['tanimoto', 'dice', 'cosine'],
                        help='Similarity metric (default: tanimoto)')
@@ -243,6 +229,13 @@ Examples:
 
     args = parser.parse_args()
 
+    if not math.isfinite(args.threshold) or not 0 <= args.threshold <= 1:
+        parser.error("threshold must be finite and between 0 and 1")
+    if args.radius < 0 or args.bits <= 0 or args.max_display <= 0:
+        parser.error("radius must be nonnegative; bits and max-display must be positive")
+    if args.chirality and args.method in {'rdkit', 'maccs'}:
+        parser.error(f"{args.method} does not support --chirality")
+
     # Load query
     query_path = Path(args.query)
     if query_path.exists():
@@ -251,18 +244,22 @@ Examples:
         if not query_mols:
             print("Error: No valid molecules in query file")
             sys.exit(1)
+        if len(query_mols) != 1:
+            parser.error('Query file must contain exactly one valid molecule')
         query_mol = query_mols[0]['mol']
         query_smiles = query_mols[0]['smiles']
     else:
         # Query is SMILES string
         query_mol = Chem.MolFromSmiles(args.query)
         query_smiles = args.query
-        if query_mol is None:
+        if query_mol is None or query_mol.GetNumAtoms() == 0:
             print(f"Error: Failed to parse query SMILES: {args.query}")
             sys.exit(1)
 
     print(f"Query: {query_smiles}")
-    print(f"Method: {args.method}")
+    print(f"RDKit: {rdBase.rdkitVersion}; method={args.method}; radius={args.radius}; "
+          f"bits={167 if args.method == 'maccs' else args.bits}; "
+          f"chirality={args.chirality}; metric={args.metric}")
     print(f"Threshold: {args.threshold}")
     print(f"Loading database: {args.database}...")
 
@@ -282,7 +279,8 @@ Examples:
         threshold=args.threshold,
         radius=args.radius,
         n_bits=args.bits,
-        metric=args.metric
+        metric=args.metric,
+        include_chirality=args.chirality
     )
 
     # Output results

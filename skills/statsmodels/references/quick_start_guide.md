@@ -1,154 +1,109 @@
-# Quick Start Guide
+# Quick start: executable synthetic examples
 
-Worked minimal examples for OLS, logistic regression, ARIMA, and GLM, including how to
-read the summary output.
+Run the four blocks in order with the stack in SKILL.md. The generated data are
+mechanical smoke checks, not evidence that a model fits a real scientific problem.
 
-## Quick Start Guide
-
-### Linear Regression (OLS)
+## OLS: design alignment and uncertainty targets
 
 ```python
-import statsmodels.api as sm
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
 
-# Prepare data - ALWAYS add constant for intercept
+rng = np.random.default_rng(42)
+n = 240
+X_data = pd.DataFrame(rng.normal(size=(n, 2)), columns=["x1", "x2"])
 X = sm.add_constant(X_data)
-
-# Fit OLS model
-model = sm.OLS(y, X)
-results = model.fit()
-
-# View comprehensive results
+y = 1 + 0.7 * X_data.x1 - 0.4 * X_data.x2 + rng.normal(size=n)
+results = sm.OLS(y, X, missing="raise").fit()
+assert np.linalg.matrix_rank(X) == X.shape[1]
 print(results.summary())
 
-# Key results
-print(f"R-squared: {results.rsquared:.4f}")
-print(f"Coefficients:\\n{results.params}")
-print(f"P-values:\\n{results.pvalues}")
+# One new row needs an explicit intercept; preserve training column order.
+X_new_data = pd.DataFrame({"x1": [0.0], "x2": [1.0]})
+X_new = sm.add_constant(X_new_data, has_constant="add")[X.columns]
+pred_summary = results.get_prediction(X_new).summary_frame()
+print(pred_summary[["mean", "mean_ci_lower", "mean_ci_upper",
+                    "obs_ci_lower", "obs_ci_upper"]])
+# OLS mean CI and new-observation interval rely on their covariance/error assumptions.
 
-# Predictions with confidence intervals
-predictions = results.get_prediction(X_new)
-pred_summary = predictions.summary_frame()
-print(pred_summary)  # includes mean, CI, prediction intervals
-
-# Diagnostics
 from statsmodels.stats.diagnostic import het_breuschpagan
-bp_test = het_breuschpagan(results.resid, X)
-print(f"Breusch-Pagan p-value: {bp_test[1]:.4f}")
-
-# Visualize residuals
-import matplotlib.pyplot as plt
+print("Breusch-Pagan/Koenker p-value:", het_breuschpagan(results.resid, X)[1])
 plt.scatter(results.fittedvalues, results.resid)
-plt.axhline(y=0, color='r', linestyle='--')
-plt.xlabel('Fitted values')
-plt.ylabel('Residuals')
+plt.axhline(0, color="r", linestyle="--")
+plt.xlabel("Fitted values")
+plt.ylabel("Residuals")
 plt.show()
 ```
 
-### Logistic Regression (Binary Outcomes)
+## Binary logit: average marginal effects and held-out evaluation
 
 ```python
-from statsmodels.discrete.discrete_model import Logit
+from scipy.special import expit
+from sklearn.metrics import roc_auc_score, log_loss
 
-# Add constant
-X = sm.add_constant(X_data)
-
-# Fit logit model
-model = Logit(y_binary, X)
-results = model.fit()
-
-print(results.summary())
-
-# Odds ratios
-odds_ratios = np.exp(results.params)
-print("Odds ratios:\\n", odds_ratios)
-
-# Predicted probabilities
-probs = results.predict(X)
-
-# Binary predictions (0.5 threshold)
-predictions = (probs > 0.5).astype(int)
-
-# Model evaluation
-from sklearn.metrics import classification_report, roc_auc_score
-
-print(classification_report(y_binary, predictions))
-print(f"AUC: {roc_auc_score(y_binary, probs):.4f}")
-
-# Marginal effects
-marginal = results.get_margeff()
-print(marginal.summary())
+# Toy independent rows; real repeated units need group-aware splitting.
+y_binary = rng.binomial(1, expit(-0.3 + 0.8 * X_data.x1 - 0.5 * X_data.x2))
+train, test = np.arange(180), np.arange(180, n)
+logit_result = sm.Logit(y_binary[train], X.iloc[train], missing="raise").fit(disp=0)
+assert logit_result.mle_retvals["converged"]
+print("Odds ratios:", np.exp(logit_result.params))
+print("Odds-ratio intervals:", np.exp(logit_result.conf_int()))
+print(logit_result.get_margeff(at="overall").summary())  # Average over observations
+# at="mean" instead evaluates effects at the mean predictor vector.
+probs = logit_result.predict(X.iloc[test])
+print("Held-out AUC:", roc_auc_score(y_binary[test], probs))
+print("Held-out log loss:", log_loss(y_binary[test], probs))
+# Select any classification threshold on training/validation data, not this test set.
 ```
 
-### Time Series (ARIMA)
+## ARIMA: chronological validation and forecast intervals
 
 ```python
 from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from statsmodels.tsa.stattools import adfuller, kpss
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from sklearn.metrics import mean_squared_error
 
-# Check stationarity
-from statsmodels.tsa.stattools import adfuller
-
-adf_result = adfuller(y_series)
-print(f"ADF p-value: {adf_result[1]:.4f}")
-
-if adf_result[1] > 0.05:
-    # Series is non-stationary, difference it
-    y_for_acf = y_series.diff().dropna()
-    d = 1
-else:
-    y_for_acf = y_series.dropna()
-    d = 0
-
-# Plot ACF/PACF to identify p, q
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-plot_acf(y_for_acf, lags=40, ax=ax1)
-plot_pacf(y_for_acf, lags=40, ax=ax2)
-plt.show()
-
-# Fit ARIMA(p,d,q)
-model = ARIMA(y_series, order=(1, d, 1))
-results = model.fit()
-
-print(results.summary())
-
-# Forecast
-forecast = results.forecast(steps=10)
-forecast_obj = results.get_forecast(steps=10)
-forecast_df = forecast_obj.summary_frame()
-
-print(forecast_df)  # includes mean and confidence intervals
-
-# Residual diagnostics
-results.plot_diagnostics(figsize=(12, 8))
-plt.show()
+# Stationary AR(1) toy process, with a daily index and known generating order.
+values = np.zeros(240)
+noise = rng.normal(size=240)
+for t in range(1, len(values)):
+    values[t] = 0.6 * values[t - 1] + noise[t]
+y_series = pd.Series(values, index=pd.date_range("2025-01-01", periods=240, freq="D"))
+train_series, test_series = y_series.iloc[:200], y_series.iloc[200:]
+adf = adfuller(train_series, result_object=True)
+kpss_result = kpss(train_series, regression="c", result_object=True)
+print("Unit-root null p:", adf.pvalue, "Level-stationarity null p:", kpss_result.pvalue)
+# KPSS can report a boundary p-value with an interpolation warning.
+# Do not automatically choose d from one test; inspect trend/seasonality and design.
+ts_result = ARIMA(train_series, order=(1, 0, 0)).fit()
+assert ts_result.mle_retvals["converged"]
+forecast = ts_result.get_forecast(steps=len(test_series))
+print(forecast.summary_frame())  # Model-based forecast-error intervals
+print("Test RMSE:", np.sqrt(mean_squared_error(test_series, forecast.predicted_mean)))
+innov = ts_result.filter_results.standardized_forecasts_error[0]
+innov = innov[ts_result.loglikelihood_burn:]
+print(acorr_ljungbox(innov, lags=[10], model_df=1, return_df=True))
 ```
 
-### Generalized Linear Models (GLM)
+## Poisson GLM: exposure and conditional mean intervals
 
 ```python
-import statsmodels.api as sm
-
-# Poisson regression for count data
-X = sm.add_constant(X_data)
-model = sm.GLM(y_counts, X, family=sm.families.Poisson())
-results = model.fit()
-
-print(results.summary())
-
-# Rate ratios (for Poisson with log link)
-rate_ratios = np.exp(results.params)
-print("Rate ratios:\\n", rate_ratios)
-
-# Check overdispersion
-overdispersion = results.pearson_chi2 / results.df_resid
-print(f"Overdispersion: {overdispersion:.2f}")
-
-if overdispersion > 1.5:
-    # Use Negative Binomial instead
-    from statsmodels.discrete.discrete_model import NegativeBinomial
-    nb_model = NegativeBinomial(y_counts, X)
-    nb_results = nb_model.fit()
-    print(nb_results.summary())
+exposure = rng.uniform(0.5, 2.0, n)
+mu = exposure * np.exp(0.2 + 0.3 * X_data.x1)
+y_counts = rng.poisson(mu)
+poisson_result = sm.GLM(y_counts, X, family=sm.families.Poisson(),
+                        exposure=exposure, missing="raise").fit(cov_type="HC0")
+assert poisson_result.converged
+print("Rate ratios:", np.exp(poisson_result.params))
+print("Pearson dispersion:", poisson_result.pearson_chi2 / poisson_result.df_resid)
+# The dispersion statistic can flag misspecification/dependence, not just NB variation.
+new_exposure = np.array([2.0])
+mean_prediction = poisson_result.get_prediction(
+    X_new, exposure=new_exposure, which="mean")
+print(mean_prediction.summary_frame())
+print("Conditional mean CI:", mean_prediction.conf_int())
+# This interval omits future count noise; it is not an observation prediction interval.
 ```

@@ -94,11 +94,16 @@ Do not replace a shared database in the middle of a multi-step analysis.
 
 ### ETE 4.4.0 updater caveats
 
-- NCBI refreshes download the official taxdump and verify its MD5 sidecar.
+- NCBI refreshes use `https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz`.
+  ETE checks the `.md5` sidecar only to decide whether an existing archive is
+  current; it does **not** verify newly downloaded bytes against the checksum.
+  The released downloader also lacks request timeouts and HTTP status checks.
+  Acquire and validate a dated archive separately for reproducible production
+  use, then pass that local archive to the constructor.
 - GTDB refreshes use ETE's converted NCBI-like dump, not a direct GTDB
   database file.
-- The ETE 4.4.0 GTDB freshness check requests an MD5 sidecar that is absent
-  from the current ETE-data location, so a nominal update can redownload data
+- The ETE 4.4.0 GTDB freshness check requests an MD5 sidecar that was absent
+  from the ETE-data location at this review, so a nominal update can redownload data
   instead of reporting it current.
 - Taxonomy conversion creates temporary files in the process working
   directory. Run updates in a controlled, writable workspace and remove
@@ -310,6 +315,10 @@ tree.annotate_gtdb_taxa(taxid_attr="species")
 print(tree.to_str(props=["name", "sci_name", "rank"]))
 ```
 
+For genome accessions represented at GTDB subspecies rank, ETE sets
+`sci_name` to the parent species while preserving the accession in the leaf
+name/TaxID. Do not use `sci_name` as a unique genome identifier.
+
 The annotation methods infer internal-node taxonomy from descendants when
 possible and return the translators they used. Preserve those mappings when
 the analysis needs an auditable record.
@@ -319,24 +328,51 @@ the analysis needs an auditable record.
 Prepare the database in a controlled networked step:
 
 ```python
+import os
+import tempfile
+from pathlib import Path
 from ete4 import NCBITaxa
 
-db_path = "taxonomy/ncbi_taxa.sqlite"
-ncbi = NCBITaxa(dbfile=db_path, update=False)
-ncbi.update_taxonomy_database("taxonomy/taxdump.tar.gz")
+# Paths are resolved before entering a disposable, writable conversion directory.
+db_path = Path("taxonomy/ncbi_taxa.sqlite").resolve()
+archive = Path("taxonomy/taxdump.tar.gz").resolve()
+if not archive.is_file():
+    raise FileNotFoundError(archive)
+previous_dir = Path.cwd()
+with tempfile.TemporaryDirectory() as conversion_dir:
+    try:
+        os.chdir(conversion_dir)  # run this setup in its own process
+        ncbi = NCBITaxa(
+            dbfile=str(db_path), taxdump_file=str(archive), update=False,
+        )
+    finally:
+        os.chdir(previous_dir)
 ```
 
 Use the pinned database without constructor schema updates in analysis jobs:
 
 ```python
-ncbi = NCBITaxa(
-    dbfile="taxonomy/ncbi_taxa.sqlite",
-    update=False,
-)
+from pathlib import Path
+from ete4 import NCBITaxa
+
+db_path = Path("taxonomy/ncbi_taxa.sqlite")
+if not db_path.is_file():
+    raise FileNotFoundError(db_path)  # update=False alone does not prevent download
+ncbi = NCBITaxa(dbfile=str(db_path), update=False)
 ```
 
 For a read-only container or cluster job, mount the database at an explicit
 path. Avoid relying on an unwritable home-directory default.
+
+Preserve the adjacent `<dbfile>.traverse.pkl` as well: descendant queries use
+this traversal cache. It is a Python pickle; use only the cache generated from
+your trusted archive, not an untrusted downloaded pickle. GTDB has no
+`update=False` constructor argument, so also ensure its existing database schema
+matches the installed ETE release before an offline run.
+
+These queries were exercised with tiny synthetic local NCBI and converted-GTDB
+archives. The real taxonomy-name examples are illustrative and depend on the
+chosen full snapshot; no full database was downloaded during this review.
 
 ## Validation Checklist
 

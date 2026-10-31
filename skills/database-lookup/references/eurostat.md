@@ -62,16 +62,16 @@ https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/une_rt_m/M.SA.TOTA
 
 **Example (HICP inflation, all items, monthly):**
 ```
-https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hicp_mmor/M.RCH_A.CP00.DE+FR+IT?startPeriod=2023-01&endPeriod=2024-06&format=sdmx+json
+https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hicp_mmor/M.RCH_M.CP00.DE+FR+IT?startPeriod=2023-01&endPeriod=2024-06&format=JSON
 ```
 
 ### 2. Get Dataset as CSV
 
-Append `?format=sdmx+csv` to any data request for a flat CSV response that is easier to parse.
+Append `?format=SDMX-CSV` to any data request for a flat CSV response that is easier to parse.
 
 **Example:**
 ```
-https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nama_10_gdp/A.CP_MEUR.B1GQ.DE+FR?startPeriod=2018&endPeriod=2023&format=sdmx+csv
+https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/nama_10_gdp/A.CP_MEUR.B1GQ.DE+FR?startPeriod=2018&endPeriod=2023&format=SDMX-CSV
 ```
 
 ### 3. Get Dataset Structure (Dimensions and Code Lists)
@@ -154,7 +154,7 @@ https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10_gdp?
       }
     }
   },
-  "value": {3336010.0, 3601750.0, 3876810.0, 2310420.0, 2500870.0, 2639090.0},
+  "value": [3336010.0, 3601750.0, 3876810.0, 2310420.0, 2500870.0, 2639090.0],
   "status": {}
 }
 ```
@@ -196,42 +196,20 @@ Aggregates: `EU27_2020` (EU-27), `EA20` (Euro area 20), `EA19` (Euro area 19), `
 
 **Note:** Greece uses `EL` (not `GR`) in Eurostat.
 
-## SDMX JSON Response Format
+## Format and dimension handling
 
-```json
-{
-  "header": {
-    "id": "...",
-    "prepared": "2024-01-15T10:00:00"
-  },
-  "dataSets": [
-    {
-      "series": {
-        "0:0:0:0": {
-          "observations": {
-            "0": [3336010.0],
-            "1": [3601750.0]
-          }
-        }
-      }
-    }
-  ],
-  "structure": {
-    "dimensions": {
-      "series": [...],
-      "observation": [...]
-    }
-  }
-}
-```
-
-In SDMX+JSON, dimension values are encoded as integer indices. The `structure.dimensions` section maps indices to codes and labels. This is compact but requires index lookup.
+The SDMX 2.1 API defaults to SDMX-ML Generic XML. Supported `format` values
+include `SDMX_2.1_STRUCTURED`, `SDMX-CSV`, `JSON` (JSON-stat), and `TSV`.
+Do not parse `format=JSON` as a SDMX-JSON dataSets/structure envelope.
+For JSON-stat, use `id`, `size`, and each dimension's category index to reshape
+`value`; values may be an array or a sparse index-keyed object. Missing cells
+are not zero. Preserve observation flags and dataset update time.
 
 ## Notes
 - Dimension order in the filter path depends on the dataset structure. Always check `/datastructure/ESTAT/{code}` first.
 - Use `+` to select multiple values in one dimension (e.g., `DE+FR+IT`).
 - Leave a dimension segment empty (consecutive dots `..`) to select all values.
-- CSV format (`?format=sdmx+csv`) is recommended for easier parsing -- it returns flat rows with labeled columns.
+- CSV format (`?format=SDMX-CSV`) is recommended for easier parsing -- it returns flat rows with labeled columns.
 - The JSON-stat API is simpler for quick queries but the SDMX API is more powerful and complete.
 - Dataset codes can be found at https://ec.europa.eu/eurostat/databrowser/ by browsing themes.
 - Large unrestricted queries may time out. Always filter by country and time period.

@@ -1,54 +1,30 @@
-# DrugBank API
+# DrugBank APIs
 
-## Important: DrugBank's full API is commercial (paid license required)
+DrugBank requires licensed API access; a website account does not imply an API
+subscription. Use the product and quota authorized for your key.
 
-**Free alternatives for drug data:**
-- **ChEMBL** — extensive bioactivity data, free API
-- **PubChem** — free compound data
-- **OpenFDA** — drug labels, adverse events
-- **DGIdb** (https://dgidb.org/api) — drug-gene interactions, free
+For drug/target research, the [Discovery API](https://docs.drugbank.com/discovery/v1/)
+base is `https://api.drugbank.com/discovery/v1`. Server-side authentication is
+`Authorization: <DRUGBANK_API_KEY>` without a Bearer prefix. Responses are JSON.
 
-## Base URL (Paid API)
-```
-https://api.drugbank.com/v1
-```
+| GET path | Purpose |
+|---|---|
+| `/drugs/DB00316` | Drug details |
+| `/drugs?q=acetaminophen` | Search drugs |
+| `/drugs/DB00316/bonds` | Target, enzyme, carrier and transporter bonds |
+| `/bonds/targets` | Target bonds |
+| `/polypeptides/P49189/bonds` | Bonds involving a UniProt protein |
 
-## Auth
-API key required: `Authorization: Bearer <api_key>`
-
-## Key Endpoints (Paid API)
-
-| Endpoint | Description |
-|----------|-------------|
-| `/drugs/{drugbank_id}` | Get drug by DrugBank ID |
-| `/drugs?q={query}` | Search drugs |
-| `/drugs/{id}/interactions` | Drug-drug interactions |
-| `/drugs/{id}/targets` | Drug targets |
-| `/drugs/{id}/enzymes` | Metabolizing enzymes |
-| `/drugs/{id}/pathways` | Associated pathways |
-| `/drugs/{id}/adverse_effects` | Adverse effects |
-| `/drug_interactions?drugbank_id={id1},{id2}` | Check specific interactions |
-
-## Example Calls
-```
-GET /drugs/DB00945  (aspirin)
-GET /drugs?q=aspirin
-GET /drugs/DB00945/interactions
-GET /drugs/DB00945/targets
+Illustrative authenticated request (not executed):
+```bash
+curl --fail-with-body 'https://api.drugbank.com/discovery/v1/drugs/DB00316/bonds' \
+  -H "Authorization: $DRUGBANK_API_KEY"
 ```
 
-## Response Format
-```json
-{
-  "drugbank_id": "DB00945",
-  "name": "Acetylsalicylic acid",
-  "cas_number": "50-78-2",
-  "groups": ["approved"],
-  "targets": [{"name": "Prostaglandin G/H synthase 1", "uniprot_id": "P23219", "gene_name": "PTGS1", "actions": ["inhibitor"]}],
-  "external_ids": {"chembl": "CHEMBL25", "pubchem_compound": "2244"}
-}
-```
+Bond responses are arrays with type, bio-entity, actions and references. Preserve
+organism, action direction and evidence; a listed bond need not prove efficacy.
 
-## Free Access Options
-- **DrugBank Open Data**: ~2,500 FDA-approved drugs as XML/CSV download from https://go.drugbank.com/releases/latest
-- **Academic License**: Free for non-commercial use, provides data downloads (not API)
+[Clinical API](https://docs.drugbank.com/v1/) calls use `https://api.drugbank.com/v1`
+and a different endpoint catalogue (including `/ddi`). Do not move Discovery
+routes under that base. Browser applications require short-lived tokens issued
+by a trusted backend; never embed the secret API key in a browser.

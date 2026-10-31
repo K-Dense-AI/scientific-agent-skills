@@ -1,5 +1,7 @@
 # Core Capabilities
 
+Targets scikit-learn 1.9.1. Snippets with caller-supplied data/columns are illustrative; fit all learned preprocessing inside the training folds when estimating predictive performance.
+
 Supervised learning, unsupervised learning, model evaluation and selection, data
 preprocessing, and pipelines and composition. Per-topic detail is in the other reference
 files in this directory.
@@ -131,3 +133,8 @@ Build reproducible, production-ready ML workflows.
 - When hyperparameter tuning includes preprocessing parameters
 
 **See:** `references/pipelines_and_composition.md` for comprehensive pipeline patterns.
+
+## Upstream references
+
+- https://scikit-learn.org/stable/user_guide.html
+- https://scikit-learn.org/stable/api/index.html

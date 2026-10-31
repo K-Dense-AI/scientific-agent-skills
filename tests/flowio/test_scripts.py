@@ -1,7 +1,7 @@
 """Tests for the FlowIO inspection helper.
 
-`inspect_fcs` exists to read an untrusted FCS file without letting it decide how
-much memory to allocate, so the guards are the product: the byte-size ceiling,
+`inspect_fcs` bounds common inspection allocations, but is not a process
+memory sandbox. Its guards include: the byte-size ceiling,
 the estimated-array ceiling that is enforced *before* DATA is loaded, and the
 multi-dataset offset walk that refuses a negative, non-increasing, or
 out-of-file `$NEXTDATA` chain. Those tests build the pathological offsets by
@@ -152,13 +152,13 @@ class ChannelClassificationTests(FcsFileTestCase):
         self.assertEqual([r["pns"] for r in records], ["fsc", "ssc", "CD3", "time"])
 
     def test_channel_records_carry_the_scaling_keywords_as_json_types(self) -> None:
-        # $PnE is a tuple in FlowIO; JSON cannot hold a tuple, so the record
-        # must convert it -- otherwise `write_report` fails on real files.
+        # $PnE is a tuple in FlowIO; records expose a list consistently with
+        # what readers receive after JSON serialization.
         record = inspect_fcs.channel_records(self.flow())[0]
         self.assertIsInstance(record["pne"], list)
         self.assertEqual(record["pne"], [0.0, 0.0])  # linear scaling
         self.assertEqual(record["png"], 1.0)  # unity gain
-        json.dumps(record)  # would raise if a tuple survived
+        json.dumps(record)
 
 
 class FiniteStatisticsTests(unittest.TestCase):
@@ -205,6 +205,18 @@ class FiniteStatisticsTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertIsNone(unusable[key])
         json.dumps(self.records, allow_nan=False)
+
+    def test_large_finite_doubles_do_not_overflow_the_mean(self) -> None:
+        records = inspect_fcs.finite_statistics(
+            np.array([[1e308, -1e308], [1e308, 1e308]]), ["large", "cancel"]
+        )
+        self.assertEqual(records[0]["mean"], 1e308)
+        self.assertEqual(records[1]["mean"], 0.0)
+        json.dumps(records, allow_nan=False)
+
+    def test_all_zero_channel_has_zero_mean(self) -> None:
+        records = inspect_fcs.finite_statistics(np.zeros((3, 1)), ["zero"])
+        self.assertEqual(records[0]["mean"], 0.0)
 
     def test_a_fully_finite_channel_keeps_every_event(self) -> None:
         clean = self.records[2]
@@ -274,7 +286,7 @@ class DatasetWalkTests(FcsFileTestCase):
             self.walk(["-8", "0"])
 
     def test_an_offset_past_the_end_of_the_file_is_refused(self) -> None:
-        # The file is 1000 bytes; seeking to 5000 would read foreign memory.
+        # The file is 1000 bytes; seeking to 5000 is outside this file.
         with self.assertRaisesRegex(
             flowio.exceptions.MultipleDataSetsError, "outside the input file"
         ):
@@ -373,6 +385,25 @@ class InspectFileTests(FcsFileTestCase):
             namespace(input=self.path, stats=True, max_array_bytes=48)
         )
         self.assertEqual(report["datasets"][0]["array_shape"], [3, 2])
+
+    def test_declared_count_mismatch_fails_before_array_allocation(self) -> None:
+        # Same-length edit leaves valid offsets but lies about number of events.
+        self.path.write_bytes(self.path.read_bytes().replace(b"$TOT/3/", b"$TOT/1/"))
+        metadata = inspect_fcs.inspect_file(namespace(input=self.path))
+        self.assertEqual(metadata["datasets"][0]["event_count"], 1)
+        with patch.object(flowio.FlowData, "as_array", side_effect=AssertionError("allocated")):
+            with self.assertRaisesRegex(ValueError, "DATA has 6 values"):
+                inspect_fcs.inspect_file(namespace(input=self.path, stats=True))
+
+    def test_uppercase_histogram_mode_is_refused(self) -> None:
+        self.path.write_bytes(self.path.read_bytes().replace(b"$MODE/L/", b"$MODE/C/"))
+        with self.assertRaisesRegex(ValueError, "list-mode"):
+            inspect_fcs.inspect_file(namespace(input=self.path))
+
+    def test_ascii_data_type_is_refused_before_event_loading(self) -> None:
+        self.path.write_bytes(self.path.read_bytes().replace(b"$DATATYPE/F/", b"$DATATYPE/A/"))
+        with self.assertRaisesRegex(ValueError, "integer, float, and double"):
+            inspect_fcs.inspect_file(namespace(input=self.path, stats=True))
 
     def test_a_missing_input_raises_file_not_found(self) -> None:
         with self.assertRaises(FileNotFoundError):

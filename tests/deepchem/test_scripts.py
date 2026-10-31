@@ -1,448 +1,236 @@
-"""Tests for the DeepChem training scripts.
-
-All three scripts end in a `model.fit(...)` that needs a GPU-scale budget and a
-deep-learning backend, so none of them can be run to completion here. What can
-be checked is everything that decides *what* gets trained, and that is where
-these scripts can go wrong in ways a user only discovers minutes into a run:
-
-* the MoleculeNet table -- `train_on_molnet` resolves a dataset name to
-  `dc.molnet.load_<name>` by attribute lookup, so a name with no matching
-  loader raises `AttributeError` only after the CLI has accepted it. BACE is
-  exactly that case: DeepChem ships `load_bace_classification` and
-  `load_bace_regression` but no `load_bace`.
-* the model factory -- every `--model` choice must reach a real branch of
-  `create_model`, not the fall-through `ValueError`.
-* featurizer selection in the transfer-learning script -- ChemBERTa and
-  MolFormer consume raw SMILES while GROVER needs graph features, and handing a
-  model the wrong representation fails deep inside the fit.
-* the fingerprint width, which is declared twice in `predict_solubility.py`:
-  once as the regressor's `n_features` and once as the featurizer's `size`. A
-  mismatch is a shape error at prediction time, after training has finished.
-
-MoleculeNet loaders are stubbed rather than called, so no test downloads a
-benchmark. The custom-CSV path is driven for real on twenty molecules, where the
-80/10/10 scaffold split has a known answer.
-"""
-
-from __future__ import annotations
-
-import ast
-import os
-import subprocess
-import sys
-import tempfile
-import unittest
+"""Offline synthetic API/data/fit contracts; no public datasets or model downloads."""
 from pathlib import Path
-from unittest import mock
-
+import sys
+import numpy as np
 import pytest
-
 import skill_contract
 
-SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "deepchem"
-SCRIPTS = SKILL_ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS))
-
-deepchem = pytest.importorskip("deepchem", reason="deepchem skill needs deepchem")
-pytest.importorskip("numpy", reason="deepchem skill needs numpy")
-
-import graph_neural_network  # noqa: E402
-import predict_solubility  # noqa: E402
-import transfer_learning  # noqa: E402
+SKILL_ROOT = Path(__file__).resolve().parents[2] / 'skills' / 'deepchem'
+sys.path.insert(0, str(SKILL_ROOT / 'scripts'))
+dc = pytest.importorskip('deepchem')
+import _common
+import graph_neural_network as graph
+import predict_solubility as solubility
+import transfer_learning as transfer
 
 CliHelpTests = skill_contract.cli.help_test_case(SKILL_ROOT)
 
-#: Published MoleculeNet task types. Delaney (ESOL), FreeSolv and Lipophilicity
-#: are regression benchmarks; Tox21, BBBP, BACE and HIV are classification.
-PUBLISHED_TASK_TYPES = {
-    "tox21": "classification",
-    "bbbp": "classification",
-    "bace": "classification",
-    "hiv": "classification",
-    "delaney": "regression",
-    "freesolv": "regression",
-    "lipo": "regression",
-}
-
-#: Tox21 comprises 12 toxicity assays; the other benchmarks here are single-task.
-PUBLISHED_TASK_COUNTS = {
-    "tox21": 12,
-    "bbbp": 1,
-    "bace": 1,
-    "hiv": 1,
-    "delaney": 1,
-    "freesolv": 1,
-    "lipo": 1,
-}
-
-#: Twenty distinct molecules -- enough scaffolds for an 80/10/10 split to give
-#: whole numbers, and small enough to featurize in milliseconds.
-SAMPLE_SMILES = [
-    "CCO", "CCC", "CCCC", "c1ccccc1", "CC(=O)O",
-    "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", "CCN", "CCCN", "c1ccncc1", "CC(C)O",
-    "CCOC", "CCCl", "CCBr", "c1ccc(O)cc1", "CC(N)=O",
-    "CCS", "CC#N", "CCC=O", "c1ccc2ccccc2c1", "CC(C)(C)O",
-]
-
-
-def parser_choices(module, destination: str) -> list[str]:
-    """The choices argparse offers for one option of a script's parser.
-
-    The parsers are built inside `main`, so they cannot be obtained without
-    running it; the choice lists are read off the module source instead.
-    """
-    tree = ast.parse((SCRIPTS / f"{module.__name__}.py").read_text(encoding="utf-8"))
-    flag = "--" + destination.replace("_", "-")
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not (node.args and isinstance(node.args[0], ast.Constant)):
-            continue
-        if node.args[0].value != flag:
-            continue
-        for keyword in node.keywords:
-            if keyword.arg != "choices":
-                continue
-            source = ast.unparse(keyword.value)
-            if source.startswith("list("):
-                # `choices=list(SOME_DICT)` or `choices=list(SOME_DICT.keys())`
-                name = source[len("list(") : -1].removesuffix(".keys()")
-                return list(getattr(module, name))
-            return list(ast.literal_eval(keyword.value))
-    raise AssertionError(f"{module.__name__} has no {flag} with choices")
-
-
-def dotted_name(node: ast.AST) -> str:
-    return ast.unparse(node)
-
-
-def keyword_constants(source: str, callee: str, keyword: str) -> list[object]:
-    """Every constant passed as `keyword` to calls of `callee` in `source`."""
-    found = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Call) and dotted_name(node.func) == callee:
-            for argument in node.keywords:
-                if argument.arg == keyword and isinstance(argument.value, ast.Constant):
-                    found.append(argument.value.value)
-    return found
-
-
-def run_script(name: str, *arguments: str, cwd: Path) -> subprocess.CompletedProcess:
-    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "MPLBACKEND": "Agg"}
-    return subprocess.run(
-        [sys.executable, str(SCRIPTS / name), *arguments],
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env=environment,
-        cwd=str(cwd),
-    )
-
-
-class MolnetCatalogueTests(unittest.TestCase):
-    """The dataset table in graph_neural_network.py."""
-
-    def test_every_dataset_name_resolves_to_a_real_molnet_loader(self) -> None:
-        # The regression this guards: `getattr(dc.molnet, f"load_{name}")` for a
-        # dataset DeepChem exposes only under a suffixed loader name.
-        for name in graph_neural_network.MOLNET_DATASETS:
-            with self.subTest(dataset=name):
-                loader = graph_neural_network.molnet_loader(name)
-                self.assertTrue(callable(loader))
-
-    def test_bace_resolves_to_the_classification_loader(self) -> None:
-        # DeepChem has no `load_bace`; the table declares BACE a classification
-        # benchmark, so the classification loader is the matching one.
-        self.assertIs(
-            graph_neural_network.molnet_loader("bace"),
-            deepchem.molnet.load_bace_classification,
-        )
-        self.assertFalse(hasattr(deepchem.molnet, "load_bace"))
-
-    def test_the_declared_task_types_match_the_published_benchmarks(self) -> None:
-        # The task type selects the metric set (ROC-AUC vs R²) and the model
-        # mode, so calling a regression benchmark "classification" produces
-        # numbers that look plausible and mean nothing.
-        self.assertEqual(
-            {
-                name: task_type
-                for name, (task_type, _) in graph_neural_network.MOLNET_DATASETS.items()
-            },
-            PUBLISHED_TASK_TYPES,
-        )
-
-    def test_the_declared_task_counts_match_the_published_benchmarks(self) -> None:
-        self.assertEqual(
-            {
-                name: count
-                for name, (_, count) in graph_neural_network.MOLNET_DATASETS.items()
-            },
-            PUBLISHED_TASK_COUNTS,
-        )
-
-    def test_the_dataset_flag_offers_exactly_the_table(self) -> None:
-        self.assertEqual(
-            parser_choices(graph_neural_network, "dataset"),
-            list(graph_neural_network.MOLNET_DATASETS),
-        )
-
-    def test_the_model_flag_offers_exactly_the_model_table(self) -> None:
-        self.assertEqual(
-            parser_choices(graph_neural_network, "model"),
-            list(graph_neural_network.AVAILABLE_MODELS),
-        )
-
-
-class ModelFactoryTests(unittest.TestCase):
-    """`create_model` must cover every `--model` choice."""
-
-    def test_an_unknown_model_is_refused_by_name(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Unknown model type: transformer"):
-            graph_neural_network.create_model("transformer", 1)
-
-    def test_every_advertised_model_reaches_a_branch(self) -> None:
-        # Constructing these needs a torch backend, which the documented install
-        # does not always provide, so the assertion is narrower than "it works":
-        # whatever happens, it must not be the unknown-model fall-through.
-        for name in graph_neural_network.AVAILABLE_MODELS:
-            with self.subTest(model=name):
-                try:
-                    graph_neural_network.create_model(name, 1)
-                except ValueError as error:  # pragma: no cover - backend dependent
-                    self.fail(f"{name} is advertised but unreachable: {error}")
-                except Exception:
-                    # A missing deep-learning backend is an environment problem,
-                    # not a wiring problem.
-                    pass
-
-    def test_every_advertised_model_has_a_human_readable_description(self) -> None:
-        # The descriptions are printed as the run banner, so an empty one leaves
-        # the log ambiguous about what was trained.
-        for name, description in graph_neural_network.AVAILABLE_MODELS.items():
-            with self.subTest(model=name):
-                self.assertTrue(description.strip())
-                self.assertNotEqual(description, name)
-
-
-class PretrainedCatalogueTests(unittest.TestCase):
-    """The pretrained-model table in transfer_learning.py."""
-
-    def test_the_model_flag_offers_exactly_the_pretrained_table(self) -> None:
-        self.assertEqual(
-            parser_choices(transfer_learning, "model"),
-            list(transfer_learning.PRETRAINED_MODELS),
-        )
-
-    def test_each_entry_carries_a_name_and_a_description(self) -> None:
-        for key, entry in transfer_learning.PRETRAINED_MODELS.items():
-            with self.subTest(model=key):
-                self.assertEqual(set(entry), {"name", "description", "model_id"})
-                self.assertTrue(entry["name"].strip())
-                self.assertTrue(entry["description"].strip())
-
-    def test_the_hub_backed_models_name_a_hugging_face_repository(self) -> None:
-        # These strings are passed straight to HuggingFaceModel; a bare model
-        # name without the owner prefix cannot be resolved.
-        for key in ("chemberta", "molformer"):
-            with self.subTest(model=key):
-                model_id = transfer_learning.PRETRAINED_MODELS[key]["model_id"]
-                self.assertRegex(model_id, r"^[\w.-]+/[\w.-]+$")
-
-    def test_grover_declares_no_hub_id_because_it_loads_itself(self) -> None:
-        # GroverModel takes a model_dir, not a hub id; a placeholder string here
-        # would be passed to a loader that ignores it.
-        self.assertIsNone(transfer_learning.PRETRAINED_MODELS["grover"]["model_id"])
-
-    def test_every_pretrained_model_has_a_fine_tuning_entry_point(self) -> None:
-        # main() dispatches on the key; an unhandled one falls through to a
-        # "not yet implemented" message after the dataset has been loaded.
-        for key in transfer_learning.PRETRAINED_MODELS:
-            with self.subTest(model=key):
-                self.assertTrue(callable(getattr(transfer_learning, f"train_{key}")))
-
-
-class MolnetFeaturizerSelectionTests(unittest.TestCase):
-    """`load_molnet_dataset` picks the representation each model can consume."""
-
-    def load(self, dataset: str, model: str, loader: str | None = None) -> dict:
-        """Call `load_molnet_dataset` with the real MoleculeNet loader stubbed."""
-        captured: dict = {}
-
-        def stub(**keywords):
-            captured.update(keywords)
-            return (["task"], ("train", "valid", "test"), [])
-
-        with mock.patch.object(deepchem.molnet, loader or f"load_{dataset}", stub):
-            transfer_learning.load_molnet_dataset(dataset, model)
-        return captured
-
-    def test_smiles_models_get_raw_strings_and_grover_gets_graphs(self) -> None:
-        # ChemBERTa and MolFormer tokenise SMILES themselves; GROVER is a graph
-        # transformer and cannot read a string.
-        self.assertEqual(self.load("bbbp", "chemberta")["featurizer"], "Raw")
-        self.assertEqual(self.load("bbbp", "molformer")["featurizer"], "Raw")
-        self.assertEqual(self.load("bbbp", "grover")["featurizer"], "GraphConv")
-
-    def test_an_unrecognised_model_falls_back_to_fingerprints(self) -> None:
-        self.assertEqual(self.load("bbbp", "random-forest")["featurizer"], "ECFP")
-
-    def test_every_dataset_is_loaded_with_a_scaffold_split(self) -> None:
-        # A random split shares scaffolds between train and test and inflates
-        # every reported score, so the split must not depend on the model.
-        for model in ("chemberta", "grover", "molformer"):
-            with self.subTest(model=model):
-                self.assertEqual(self.load("delaney", model)["splitter"], "scaffold")
-
-    def test_every_offered_dataset_is_in_the_loader_table(self) -> None:
-        # `--dataset` and the dict inside load_molnet_dataset are written out
-        # separately, so a name in one and not the other is a live failure --
-        # the CLI accepts the run and it dies on "Unknown dataset".
-        loaders = (
-            "load_tox21",
-            "load_bbbp",
-            "load_bace_classification",
-            "load_hiv",
-            "load_delaney",
-            "load_freesolv",
-            "load_lipo",
-        )
-
-        def stub(**keywords):
-            return (["task"], ("train", "valid", "test"), [])
-
-        with mock.patch.multiple(
-            deepchem.molnet, **{name: stub for name in loaders}
-        ):
-            for name in parser_choices(transfer_learning, "dataset"):
-                with self.subTest(dataset=name):
-                    tasks, datasets, _ = transfer_learning.load_molnet_dataset(
-                        name, "chemberta"
-                    )
-                    self.assertEqual(len(datasets), 3)
-                    self.assertEqual(tasks, ["task"])
-
-    def test_an_unknown_dataset_is_refused_before_anything_downloads(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Unknown dataset: not-a-benchmark"):
-            transfer_learning.load_molnet_dataset("not-a-benchmark", "chemberta")
-
-
-class CustomDatasetTests(unittest.TestCase):
-    """`load_custom_dataset` on a real CSV, where the split sizes are known."""
-
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self._temporary.cleanup)
-        self.root = Path(self._temporary.name)
-        self.csv = self.root / "molecules.csv"
-        rows = "\n".join(
-            f"{smiles},{index % 2}" for index, smiles in enumerate(SAMPLE_SMILES)
-        )
-        self.csv.write_text(f"smiles,target\n{rows}\n", encoding="utf-8")
-
-    def test_the_split_is_eighty_ten_ten(self) -> None:
-        train, valid, test = transfer_learning.load_custom_dataset(
-            str(self.csv), ["target"], "smiles", "chemberta"
-        )
-        self.assertEqual((len(train), len(valid), len(test)), (16, 2, 2))
-        # Nothing is lost or duplicated by the split.
-        self.assertEqual(len(train) + len(valid) + len(test), len(SAMPLE_SMILES))
-
-    def test_a_smiles_model_keeps_the_strings_unfeaturized(self) -> None:
-        # DummyFeaturizer is deliberate: the tokenizer inside the model does the
-        # featurizing, so turning the SMILES into a fingerprint here would
-        # destroy the input it needs.
-        train, _, _ = transfer_learning.load_custom_dataset(
-            str(self.csv), ["target"], "smiles", "chemberta"
-        )
-        self.assertEqual(train.X[0], "CCO")
-
-    def test_a_fingerprint_model_gets_a_2048_bit_vector(self) -> None:
-        train, _, _ = transfer_learning.load_custom_dataset(
-            str(self.csv), ["target"], "smiles", "random-forest"
-        )
-        # CircularFingerprint's documented default width.
-        self.assertEqual(train.X.shape, (16, 2048))
-
-    def test_the_named_smiles_column_is_the_one_featurized(self) -> None:
-        path = self.root / "renamed.csv"
-        rows = "\n".join(
-            f"{index % 2},{smiles}" for index, smiles in enumerate(SAMPLE_SMILES)
-        )
-        path.write_text(f"target,structure\n{rows}\n", encoding="utf-8")
-        train, _, _ = transfer_learning.load_custom_dataset(
-            str(path), ["target"], "structure", "chemberta"
-        )
-        self.assertEqual(train.X[0], "CCO")
-
-
-class SolubilityScriptTests(unittest.TestCase):
-    """Static consistency in predict_solubility.py."""
-
-    def test_the_fingerprint_width_matches_the_regressor_input_size(self) -> None:
-        # `n_features` is fixed when the model is built and `size` when new
-        # molecules are featurized. A mismatch is a shape error at predict
-        # time -- after the training run has already been paid for.
-        source = (SCRIPTS / "predict_solubility.py").read_text(encoding="utf-8")
-        declared = keyword_constants(source, "dc.models.MultitaskRegressor", "n_features")
-        featurized = keyword_constants(source, "dc.feat.CircularFingerprint", "size")
-        self.assertEqual(len(set(declared)), 1, declared)
-        self.assertEqual(set(declared), set(featurized))
-
-    def test_the_fingerprint_radius_is_the_same_everywhere(self) -> None:
-        # Training on ECFP4 and predicting with ECFP6 silently produces garbage
-        # rather than an error, because the vector width is unchanged.
-        source = (SCRIPTS / "predict_solubility.py").read_text(encoding="utf-8")
-        radii = keyword_constants(source, "dc.feat.CircularFingerprint", "radius")
-        self.assertEqual(len(set(radii)), 1, radii)
-
-    def test_the_default_target_column_is_the_delaney_column_name(self) -> None:
-        # The function's default has to match the column in the published
-        # Delaney (ESOL) CSV, or the benchmark path finds no target.
-        import inspect
-
-        default = inspect.signature(
-            predict_solubility.train_solubility_model
-        ).parameters["target_col"].default
-        self.assertEqual(default, "measured log solubility in mols per litre")
-
-
-class ArgumentValidationTests(unittest.TestCase):
-    """Both scripts refuse an ambiguous invocation before loading anything."""
-
-    def setUp(self) -> None:
-        self._temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self._temporary.cleanup)
-        self.root = Path(self._temporary.name)
-
-    def test_a_gnn_run_needs_a_dataset_or_a_csv(self) -> None:
-        result = run_script("graph_neural_network.py", cwd=self.root)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("Must specify either", result.stderr)
-
-    def test_a_gnn_run_refuses_both_a_dataset_and_a_csv(self) -> None:
-        # Silently preferring one would train on data the user did not ask for.
-        result = run_script(
-            "graph_neural_network.py", "--dataset", "bbbp", "--data", "custom.csv",
-            cwd=self.root,
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("Cannot specify both", result.stderr)
-
-    def test_transfer_learning_requires_a_pretrained_model(self) -> None:
-        result = run_script("transfer_learning.py", "--dataset", "bbbp", cwd=self.root)
-        # argparse's own exit code for a missing required option.
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("--model", result.stderr)
-
-    def test_transfer_learning_refuses_both_input_sources(self) -> None:
-        result = run_script(
-            "transfer_learning.py", "--model", "chemberta",
-            "--dataset", "bbbp", "--data", "custom.csv",
-            cwd=self.root,
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("Cannot specify both", result.stderr)
-
-
-if __name__ == "__main__":
-    unittest.main()
+SMILES = ['CCO', 'CCC', 'CCCC', 'c1ccccc1', 'CC(=O)O',
+          'CN1C=NC2=C1C(=O)N(C(=O)N2C)C', 'CCN', 'CCCN', 'c1ccncc1', 'CC(C)O',
+          'CCOC', 'CCCl', 'CCBr', 'c1ccc(O)cc1', 'CC(N)=O',
+          'CCS', 'CC#N', 'CCC=O', 'c1ccc2ccccc2c1', 'CC(C)(C)O']
+
+
+@pytest.fixture
+def csv_path(tmp_path):
+    path = tmp_path / 'molecules.csv'
+    path.write_text('smiles,target\n' + ''.join(f'{s},{i / 10}\n' for i, s in enumerate(SMILES)))
+    return path
+
+
+def test_molnet_catalogue_and_alias_contracts():
+    assert graph.molnet_loader('bace') is dc.molnet.load_bace_classification
+    for name in graph.MOLNET_DATASETS:
+        assert callable(graph.molnet_loader(name))
+    from deepchem.molnet.load_function.molnet_loader import featurizers
+    assert featurizers['ecfp'].featurize(['CCO']).shape == (1, 1024)
+    assert not isinstance(featurizers['raw'].featurize(['CCO'])[0], str)
+    assert transfer.transfer_featurizer('chemberta').featurize(['CCO'])[0] == 'CCO'
+
+
+@pytest.mark.parametrize('name,width,bonds', [('gcn',30,None),('gat',30,None),
+    ('attentivefp',30,11),('mpnn',30,11),('dmpnn',133,14)])
+def test_graph_model_feature_contract(name, width, bonds):
+    feature = graph.create_featurizer(name).featurize(['CCO'])[0]
+    assert feature.node_features.shape == (3, width)
+    if bonds is None:
+        assert feature.edge_features is None
+    else:
+        assert feature.edge_features.shape == (4, bonds)
+
+
+def test_grover_featurization():
+    feature = transfer.transfer_featurizer('grover').featurize(['CCO'])[0]
+    assert feature.node_features.shape == (3,151)
+    assert feature.edge_features.shape == (4,165)
+    assert len(feature.additional_features) == 2048
+
+
+def test_csv_loading_and_split_conserve_rows(csv_path):
+    train, valid, test = transfer.load_custom_dataset(csv_path, ['target'], 'smiles', 'chemberta')
+    assert (len(train), len(valid), len(test)) == (16, 2, 2)
+    assert set(np.concatenate([train.ids, valid.ids, test.ids])) == set(SMILES)
+    assert all(isinstance(s, str) for s in train.X)
+
+
+@pytest.mark.parametrize('text,match', [
+    ('smiles,target,target\nCCO,1,2\n','duplicate'),
+    ('smiles,target\nnot-a-molecule,1\n','Invalid SMILES'),
+    ('smiles,target\nCCO,nan\n','Non-finite'),
+    ('smiles,target\nCCO,inf\n','Non-finite'),
+    ('smiles,target\nCCO,1,2\n','number of fields'),
+])
+def test_csv_rejects_ambiguous_or_invalid_data(tmp_path, text, match):
+    path = tmp_path / 'bad.csv'
+    path.write_text(text)
+    with pytest.raises(ValueError, match=match):
+        _common.load_csv(path, ['target'], 'smiles', dc.feat.CircularFingerprint())
+
+
+def test_missing_labels_remain_masked(tmp_path):
+    path = tmp_path / 'missing.csv'
+    path.write_text('smiles,target\nCCO,\nCCC,1\n')
+    data = _common.load_csv(path, ['target'], 'smiles', dc.feat.DummyFeaturizer())
+    assert data.w[:,0].tolist() == [0,1]
+    with pytest.raises(ValueError, match='ignores weights'):
+        transfer.validate_hf_data((data,data,data), 'classification', 1)
+
+
+def test_hf_rejects_sparse_multitask_and_nonbinary_labels():
+    data = dc.data.NumpyDataset(np.array(['CCO','CCC']), np.ones((2,2)))
+    with pytest.raises(ValueError, match='one task'):
+        transfer.validate_hf_data((data,data,data), 'classification', 2)
+    data = dc.data.NumpyDataset(np.array(['CCO','CCC']), np.array([[0],[2]]))
+    with pytest.raises(ValueError, match='binary'):
+        transfer.validate_hf_data((data,data,data), 'classification', 1)
+
+
+def test_original_unit_regression_and_class_support():
+    data = dc.data.NumpyDataset(np.zeros((3,2)), np.array([[10.],[12.],[14.]]))
+    transformer = dc.trans.NormalizationTransformer(transform_y=True, dataset=data)
+    normalized = transformer.transform(data)
+    class Predictor:
+        def predict(self, dataset, transformers=()):
+            return dc.trans.undo_transforms(np.zeros_like(dataset.y), transformers)
+    scores = _common.evaluate_model(Predictor(), normalized, 'regression', [transformer])
+    assert scores['macro']['mae'] == pytest.approx(4/3)
+    class Logits:
+        def predict(self, dataset, transformers=()):
+            return np.array([[2.,1.],[2.,1.],[1.,2.]])
+    data = dc.data.NumpyDataset(np.zeros((3,2)), np.array([[0.],[0.],[0.]]))
+    scores = _common.evaluate_model(Logits(), data, 'classification', logits=True)
+    assert scores['macro']['accuracy'] == pytest.approx(2/3)
+    assert np.isnan(scores['macro']['roc_auc'])
+    assert scores['contributing_tasks']['roc_auc'] == 0
+
+
+def test_solubility_small_cpu_training_and_prediction(csv_path, tmp_path, monkeypatch):
+    pytest.importorskip('torch')
+    monkeypatch.chdir(tmp_path)
+    model, _, transforms = solubility.train_solubility_model(csv_path, target_col='target', n_epochs=1)
+    prediction = solubility.predict_new_molecules(model, ['CCO','c1ccccc1'], transforms)
+    assert prediction.shape == (2,1)
+    assert np.isfinite(prediction).all()
+    with pytest.raises(ValueError, match='invalid or unsupported'):
+        solubility.predict_new_molecules(model, ['not-a-molecule'], transforms)
+
+
+def test_dmpnn_binary_forward_and_training(tmp_path):
+    pytest.importorskip('torch_geometric')
+    import torch
+    torch.set_num_threads(1)
+    model = graph.create_model('dmpnn', 1, 'classification')
+    features = graph.create_featurizer('dmpnn').featurize(['CCO','CCC','CCN','CCCl'])
+    data = dc.data.NumpyDataset(features, np.array([[0.],[1.],[0.],[1.]]))
+    loss = model.fit(data, nb_epoch=1, checkpoint_interval=0)
+    assert np.isfinite(loss)
+    assert model.predict(data).shape == (4,2)
+    assert _common.evaluate_model(model, data, 'classification')['per_task'][0]['observed'] == 4
+
+
+@pytest.mark.parametrize('task', ['classification','regression'])
+def test_local_hf_model_object_tokenizer_fit_and_score(tmp_path, task):
+    transformers = pytest.importorskip('transformers')
+    pytest.importorskip('torch')
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    tokenizer = Tokenizer(WordLevel({'[UNK]':0,'[PAD]':1,'CCO':2,'CCC':3,'CCN':4,'CCCl':5}, unk_token='[UNK]'))
+    tokenizer.pre_tokenizer = Whitespace()
+    tokenizer = transformers.PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token='[UNK]', pad_token='[PAD]', model_max_length=32)
+    directory = tmp_path / task
+    tokenizer.save_pretrained(directory)
+    config = transformers.RobertaConfig(vocab_size=6, hidden_size=16, num_hidden_layers=1,
+        num_attention_heads=2, intermediate_size=24, max_position_embeddings=64,
+        pad_token_id=1, num_labels=2 if task == 'classification' else 1,
+        problem_type='single_label_classification' if task == 'classification' else 'regression')
+    network = transformers.RobertaForSequenceClassification(config)
+    network.save_pretrained(directory)
+    data = dc.data.NumpyDataset(np.array(['CCO','CCC','CCN','CCCl']), np.array([[0.],[1.],[0.],[1.]]))
+    model, scores = transfer.train_chemberta(data,data,data,task_type=task,n_epochs=1,
+                                            model_id=str(directory),local_files_only=True)
+    assert np.isfinite(model.predict(data)).all()
+    assert scores['Test']['per_task'][0]['observed'] == 4
+
+
+@pytest.mark.parametrize('task', ['classification', 'regression'])
+def test_grover_embedding_restore_and_fit(tmp_path, task):
+    torch = pytest.importorskip('torch')
+    from deepchem.models.torch_models import GroverModel
+    config = dict(hidden_size=16, num_attn_heads=2, depth=1, ffn_hidden_size=16)
+    source = GroverModel(node_fdim=151, edge_fdim=165, features_dim=2048,
+                         task='finetuning', mode=task, n_tasks=1, n_classes=2 if task == 'classification' else None, device='cpu', **config)
+    path = tmp_path / 'embedding.pt'
+    torch.save({'embedding':source.components['embedding'].state_dict()}, path)
+    target = transfer.build_grover(task, 1, config, path)
+    for name, value in source.components['embedding'].state_dict().items():
+        assert torch.equal(value, target.components['embedding'].state_dict()[name])
+    data = dc.data.NumpyDataset(transfer.transfer_featurizer('grover').featurize(['CCO','CCC']), np.array([[0.],[1.]]))
+    loss = target.fit(data, nb_epoch=1, checkpoint_interval=0)
+    assert np.isfinite(loss)
+    assert np.isfinite(target.predict(data)).all()
+    assert _common.evaluate_model(target, data, task)['per_task'][0]['observed'] == 2
+
+
+def test_transfer_refuses_missing_checkpoint_and_unreviewed_code():
+    with pytest.raises(ValueError, match='existing --checkpoint'):
+        transfer.build_grover('regression', 1, {'hidden_size':16}, None)
+    with pytest.raises(ValueError, match='reviewed remote code'):
+        transfer.build_hf_model('molformer', 'classification')
+
+
+def test_numeric_baseline_and_custom_torch_loss():
+    from sklearn.ensemble import RandomForestRegressor
+    data = dc.data.NumpyDataset(dc.feat.CircularFingerprint(size=2048).featurize(SMILES[:6]),
+                               np.arange(6,dtype=float)[:,None],ids=SMILES[:6])
+    model = dc.models.SklearnModel(RandomForestRegressor(n_estimators=8,random_state=7))
+    model.fit(data.select([0,1,2,3]))
+    assert model.predict(data.select([4,5])).shape == (2,)
+    torch = pytest.importorskip('torch')
+    wrapped = dc.models.TorchModel(torch.nn.Linear(2048,1), loss=dc.models.losses.L2Loss(),
+                                   output_types=['prediction'], device='cpu')
+    assert np.isfinite(wrapped.fit(data,nb_epoch=1,checkpoint_interval=0))
+
+
+@pytest.mark.parametrize('revision', [None, '', 'main', 'compat-v4', 'a' * 39, 'g' * 40])
+def test_remote_code_rejects_moving_or_invalid_revisions(revision):
+    with pytest.raises(ValueError, match='40-character commit SHA'):
+        transfer.build_hf_model('molformer', 'classification',
+                                trust_remote_code=True, revision=revision)
+
+
+def test_remote_code_accepts_full_commit_and_builtin_models_allow_branches():
+    transfer.validate_remote_revision(True, '361063d0ad524ef77cf39b08469f6be770dc550f')
+    transfer.validate_remote_revision(False, 'main')
+
+
+def test_grid_search_keyword_builder_and_result_contract(tmp_path):
+    from sklearn.ensemble import RandomForestRegressor
+    data = dc.data.NumpyDataset(np.arange(16).reshape(8,2), np.arange(8)[:,None])
+    def builder(n_estimators, max_depth, model_dir=None):
+        return dc.models.SklearnModel(RandomForestRegressor(n_estimators=n_estimators,
+            max_depth=max_depth,random_state=7),model_dir=model_dir)
+    best, params, scores = dc.hyper.GridHyperparamOpt(builder).hyperparam_search(
+        {'n_estimators':[4,8],'max_depth':[2]},data.select([0,1,2,3,4,5]),
+        data.select([6,7]),dc.metrics.Metric(dc.metrics.mean_absolute_error),
+        output_transformers=[],use_max=False,logdir=str(tmp_path))
+    assert params['n_estimators'] in [4,8]
+    assert len(scores) == 2
+    assert np.isfinite(best.predict(data)).all()
+
+
+def test_cli_conflicting_sources_fail_before_loading(monkeypatch):
+    for module, args in [(graph, ['script','--dataset','bbbp','--data','missing.csv']),
+                         (transfer, ['script','--model','chemberta','--dataset','bbbp','--data','missing.csv'])]:
+        monkeypatch.setattr(sys, 'argv', args)
+        assert module.main() == 1

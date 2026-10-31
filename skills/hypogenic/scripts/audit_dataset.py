@@ -179,6 +179,8 @@ def _bounded_groups(
     cross_split_only: bool,
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
+    if maximum == 0:
+        return result
     for digest in sorted(groups):
         occurrences = groups[digest]
         split_names = sorted({split for split, _ in occurrences})

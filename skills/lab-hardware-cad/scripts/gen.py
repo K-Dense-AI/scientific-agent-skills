@@ -50,10 +50,9 @@ def _build123d_version() -> str:
 def _export_dxf(part, path: Path, build123d, height: float | None) -> float:
     """Slice the part on a horizontal plane and write the profile as DXF.
 
-    ``section()`` is a module-level operation in build123d 0.11.1, not a method on
+    ``section()`` is a module-level operation in build123d 0.13.0, not a method on
     the shape. The default cut height is the middle of the part rather than z = 0,
-    because a part modelled sitting on the build plate has nothing but a degenerate
-    face at z = 0. Returns the height actually used, for the manifest.
+    to avoid ambiguous sections coincident with outer faces. Returns the height actually used, for the manifest.
     """
     if height is None:
         bbox = part.bounding_box()
@@ -97,7 +96,7 @@ def main() -> int:
     parser.add_argument("--tolerance", type=float, default=1e-3,
                         help="STL linear deflection in mm (default: 0.001)")
     parser.add_argument("--angular-tolerance", type=float, default=0.1,
-                        help="STL angular deflection (default: 0.1)")
+                        help="STL angular deflection in radians (default: 0.1)")
     parser.add_argument("--dxf", action="store_true",
                         help="also export a 2D DXF profile, sliced on a horizontal plane")
     parser.add_argument("--dxf-z", type=float, default=None, metavar="MM",

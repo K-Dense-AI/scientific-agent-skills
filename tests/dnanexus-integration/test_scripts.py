@@ -100,6 +100,20 @@ class ValidBaselineTests(unittest.TestCase):
         self.assertEqual(kind, "unknown")
         self.assertEqual([issue.code for issue in issues], ["root-type"])
 
+    def test_malformed_enum_types_are_reported_without_crashing(self) -> None:
+        for value in ([], {}):
+            manifest = valid_app_manifest()
+            manifest["inputSpec"][0]["class"] = value
+            manifest["runSpec"].update({
+                "interpreter": value, "release": value, "restartableEntryPoints": value,
+            })
+            manifest["httpsApp"] = {"ports": [value]}
+            codes = issue_codes(manifest)
+            self.assertTrue({
+                "parameter-class", "interpreter", "release",
+                "restartable-entry-points", "https-ports",
+            }.issubset(codes))
+
 
 class MetadataTests(unittest.TestCase):
     def test_name_is_required_and_character_restricted(self) -> None:
@@ -113,18 +127,23 @@ class MetadataTests(unittest.TestCase):
                 manifest["name"] = bad
                 self.assertIn("invalid-name", issue_codes(manifest))
 
-    def test_app_versions_must_be_semantic(self) -> None:
-        for bad in ("1.2", "v1.2.3", "1.02.3", "1.2.3.4", ""):
+    def test_app_versions_follow_api_freeform_character_contract(self) -> None:
+        for bad in ("", "release/1", "release 1", "release:1", "α"):
             with self.subTest(version=bad):
                 manifest = valid_app_manifest()
                 manifest["version"] = bad
                 self.assertIn("invalid-version", issue_codes(manifest))
 
-        for good in ("0.0.1", "1.2.3-beta.1", "1.2.3+build5", "10.20.30"):
+        for good in ("0.0.1", "1.2.3-beta.1", "1.2.3+build5", "v1", "1.2", "release_2026"):
             with self.subTest(version=good):
                 manifest = valid_app_manifest()
                 manifest["version"] = good
                 self.assertNotIn("invalid-version", issue_codes(manifest))
+
+    def test_app_names_cannot_use_the_reserved_id_prefix(self) -> None:
+        manifest = valid_app_manifest()
+        manifest["name"] = "app-qc"
+        self.assertIn("invalid-name", issue_codes(manifest))
 
     def test_top_level_resources_is_flagged_as_deprecated(self) -> None:
         manifest = valid_app_manifest()
@@ -152,6 +171,11 @@ class ParameterSpecTests(unittest.TestCase):
 
         manifest["inputSpec"][0]["class"] = "array:blob"
         self.assertIn("parameter-class", issue_codes(manifest))
+
+        manifest["inputSpec"][0]["class"] = "array:hash"
+        self.assertIn("parameter-class", issue_codes(manifest))
+        manifest["inputSpec"][0]["class"] = "hash"
+        self.assertNotIn("parameter-class", issue_codes(manifest))
 
     def test_optional_must_be_a_boolean(self) -> None:
         manifest = valid_app_manifest()
@@ -304,19 +328,31 @@ class RegionalOptionTests(unittest.TestCase):
         }
         self.assertNotIn("inconsistent-regional-requirements", issue_codes(manifest))
 
-    def test_resource_selectors_are_mutually_exclusive(self) -> None:
+    def test_fixed_instance_is_valid_with_a_cluster(self) -> None:
         manifest = valid_app_manifest()
         manifest["regionalOptions"] = {
             "aws:us-east-1": {
                 "systemRequirements": {
                     "*": {
                         "instanceType": "mem1_ssd1_v2_x4",
-                        "clusterSpec": {"type": "spark"},
+                        "clusterSpec": {"type": "generic", "initialInstanceCount": 2},
                     }
                 }
             }
         }
+        self.assertNotIn("resource-selector-conflict", issue_codes(manifest))
+        request = manifest["regionalOptions"]["aws:us-east-1"]["systemRequirements"]["*"]
+        request["instanceTypeSelector"] = {"allowedInstanceTypes": ["mem1_ssd1_v2_x4"]}
         self.assertIn("resource-selector-conflict", issue_codes(manifest))
+        del request["instanceType"]
+        self.assertIn("resource-selector-conflict", issue_codes(manifest))
+
+    def test_regional_and_legacy_system_requirements_cannot_coexist(self) -> None:
+        manifest = valid_app_manifest()
+        requirements = {"main": {"instanceType": "mem1_ssd1_v2_x4"}}
+        manifest["runSpec"]["systemRequirements"] = requirements
+        manifest["regionalOptions"] = {"aws:us-east-1": {"systemRequirements": requirements}}
+        self.assertIn("conflicting-system-requirements", issue_codes(manifest))
 
     def test_instance_type_selector_needs_a_non_empty_string_list(self) -> None:
         def with_selector(selector):
@@ -360,8 +396,11 @@ class AccessAndSecretTests(unittest.TestCase):
 
     def test_access_levels_are_checked_against_the_documented_set(self) -> None:
         manifest = valid_app_manifest()
-        manifest["access"] = {"project": "READWRITE"}
-        self.assertIn("access-level", issue_codes(manifest))
+        for field in ("project", "allProjects"):
+            for invalid in ("READWRITE", "NONE", [], {}):
+                with self.subTest(field=field, invalid=invalid):
+                    manifest["access"] = {field: invalid}
+                    self.assertIn("access-level", issue_codes(manifest))
 
     def test_embedded_credentials_are_found_at_any_depth(self) -> None:
         manifest = valid_app_manifest()

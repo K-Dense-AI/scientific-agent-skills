@@ -1,9 +1,9 @@
 """Design-of-experiments (DOE) matrices as labeled, decoded pandas DataFrames.
 
-pyDOE3 returns designs in *coded* units (-1/+1, or 0..k-1). Researchers want the
+pydoe returns designs in *coded* units (-1/+1, or 0..k-1). Researchers want the
 design in *real* factor units (temperature in C, concentration in mM) with named
 columns, randomized run order, and a clear sense of what each design is for. This
-module wraps pyDOE3 to do exactly that.
+module wraps pydoe 1.5.0 to do exactly that.
 
 A `factors` spec maps factor names to their real-world levels:
   - two-level / continuous:  {"temp": (20, 60), "conc": (1, 10)}   # (low, high)
@@ -18,14 +18,40 @@ Functions:
   box_behnken             response-surface design, no extreme corners
   latin_hypercube         space-filling sample for simulation / computer experiments
 
-Each returns a DataFrame in real units; pass randomize=True (default) to also get
-a randomized 'run_order'. Requires: pyDOE3, numpy, pandas.
+Each returns a DataFrame in real units; pass randomize=True to also get a
+randomized 'run_order' (default except for Latin hypercube).
+Requires: pydoe, numpy, pandas.
 """
 
 from __future__ import annotations
 
+import operator
+
 import numpy as np
 import pandas as pd
+
+
+def _factor_names(factors):
+    if not factors or "run_order" in factors:
+        raise ValueError("provide at least one factor; 'run_order' is reserved")
+    return list(factors)
+
+
+def _ranges(factors):
+    """Reject malformed ranges rather than silently discarding a third level."""
+    _factor_names(factors)
+    out = {}
+    for name, levels in factors.items():
+        try:
+            values = np.asarray(levels, dtype=float)
+            valid = (values.shape == (2,) and np.isfinite(values).all()
+                     and values[0] < values[1])
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if not valid:
+            raise ValueError(f"{name!r} needs exactly two finite numeric levels, low < high")
+        out[name] = tuple(values)
+    return out
 
 
 def _decode_two_level(coded, factors):
@@ -57,9 +83,12 @@ def full_factorial(factors, randomize=True, seed=0):
       {"temp": [20, 40, 60], "catalyst": ["A", "B"]}  -> 3*2 = 6 runs.
     Runs = product of level counts, so this explodes quickly with many factors.
     """
-    from pyDOE3 import fullfact
-    names = list(factors)
+    from pydoe import fullfact
+    names = _factor_names(factors)
     levels = [list(factors[n]) for n in names]
+    if any(not level or pd.Series(level, dtype=object).isna().any()
+           or not pd.Series(level, dtype=object).is_unique for level in levels):
+        raise ValueError("each factor needs nonempty, non-missing, distinct levels")
     counts = [len(l) for l in levels]
     coded = fullfact(counts).astype(int)
     data = {n: [levels[j][coded[i, j]] for i in range(len(coded))]
@@ -74,7 +103,8 @@ def two_level_factorial(factors, randomize=True, seed=0):
     run count (2^k) gets expensive — switch to fractional_factorial or
     plackett_burman for screening.
     """
-    from pyDOE3 import ff2n
+    from pydoe import ff2n
+    factors = _ranges(factors)
     coded = ff2n(len(factors))
     return _randomize(_decode_two_level(coded, factors), randomize, seed)
 
@@ -82,13 +112,14 @@ def two_level_factorial(factors, randomize=True, seed=0):
 def fractional_factorial(factors, generator, randomize=True, seed=0):
     """2^(k-p) fractional factorial from a generator string.
 
-    `generator` is pyDOE3's Yates notation, e.g. for 4 factors in 8 runs (one of
-    them aliased): "a b c abc". Each token defines a column; multi-letter tokens
+    `generator` is pydoe's Yates notation, e.g. for 4 factors in 8 runs:
+    "a b c abc" (I=ABCD, resolution IV). Each token defines a column; multi-letter tokens
     alias a factor with an interaction (this is the tradeoff — fewer runs, some
     effects confounded). Choose a higher-resolution generator if you need to
     separate main effects from two-factor interactions.
     """
-    from pyDOE3 import fracfact
+    from pydoe import fracfact
+    factors = _ranges(factors)
     coded = fracfact(generator)
     if coded.shape[1] != len(factors):
         raise ValueError(f"generator defines {coded.shape[1]} factors but "
@@ -99,13 +130,13 @@ def fractional_factorial(factors, generator, randomize=True, seed=0):
 def plackett_burman(factors, randomize=True, seed=0):
     """Plackett-Burman screening design: main effects only, very few runs.
 
-    Ideal for screening many factors (run count is the next multiple of 4 above k)
-    to find the vital few. Two-factor interactions are heavily confounded with main
-    effects, so use it to screen, not to model interactions.
+    The target run count is the next multiple of 4 above k. pydoe 1.5.0 supports
+    counts of form 2^a, 12*2^a, or 20*2^a; other targets (e.g. 28 runs for k=25)
+    raise ValueError. Interactions can confound main effects; inspect aliasing.
     """
-    from pyDOE3 import pbdesign
-    coded = pbdesign(len(factors))  # may include extra dummy columns
-    coded = coded[:, :len(factors)]
+    from pydoe import pbdesign
+    factors = _ranges(factors)
+    coded = pbdesign(len(factors))
     return _randomize(_decode_two_level(coded, factors), randomize, seed)
 
 
@@ -117,9 +148,13 @@ def central_composite(factors, center=(0, 1), alpha="orthogonal",
     a quadratic model and locate an optimum. With face='circumscribed' the axial
     points sit OUTSIDE the (low, high) box (so real levels exceed your stated
     range); use face='inscribed' or 'faced' to keep everything within range.
-    `center` = (n center pts in factorial block, n in axial block).
+    `center` = (n center pts in factorial block, n in axial block). The default
+    supplies just one center run, so it does not estimate pure error. Add true
+    replicate runs when required. Output is globally shuffled: it does not
+    retain block membership for an experiment run in separate batches.
     """
-    from pyDOE3 import ccdesign
+    from pydoe import ccdesign
+    factors = _ranges(factors)
     coded = ccdesign(len(factors), center=center, alpha=alpha, face=face)
     return _randomize(_decode_two_level(coded, factors), randomize, seed)
 
@@ -129,9 +164,11 @@ def box_behnken(factors, center=1, randomize=True, seed=0):
 
     Like a CCD it fits a quadratic, but it never uses the extreme corner
     combinations (all-low or all-high), which is useful when those corners are
-    unsafe or infeasible. More economical than a CCD for 3-5 factors.
+    unsafe or infeasible. Compare actual run counts; it is not always smaller.
+    The default one center run does not supply pure-error replication.
     """
-    from pyDOE3 import bbdesign
+    from pydoe import bbdesign
+    factors = _ranges(factors)
     if len(factors) < 3:
         raise ValueError("box_behnken requires at least 3 factors")
     coded = bbdesign(len(factors), center=center)
@@ -147,12 +184,19 @@ def latin_hypercube(factors, n_samples, criterion="maximin", seed=0,
     (low, high) range. `criterion`: 'maximin' spreads points apart;
     'center'/'centermaximin'/'correlation' are alternatives.
     """
-    from pyDOE3 import lhs
-    # pyDOE3 draws from its own default_rng, so seeding numpy's global RNG has
+    from pydoe import lhs
+    factors = _ranges(factors)
+    try:
+        n_samples = operator.index(n_samples)
+    except TypeError:
+        raise ValueError("n_samples must be a positive integer") from None
+    if n_samples < 1:
+        raise ValueError("n_samples must be a positive integer")
+    # pydoe draws from its own default_rng, so seeding numpy's global RNG has
     # no effect -- the seed has to be handed to lhs itself.
     names = list(factors)
     unit = lhs(  # in [0,1]
-        len(names), samples=n_samples, criterion=criterion, seed=int(seed)
+        len(names), samples=n_samples, criterion=criterion, seed=seed
     )
     out = {}
     for j, n in enumerate(names):

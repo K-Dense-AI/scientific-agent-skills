@@ -85,6 +85,33 @@ class DependencyFreeHelpTests(unittest.TestCase):
 
 
 class CommandPlannerTests(unittest.TestCase):
+    def test_octave_literals_preserve_text_and_scalar_object_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            (root / "analyze.m").write_text("function analyze(x)\nend\n")
+            payload = {"empty": [], "labels": ["a", "b"],
+                       "path": "C:\\new\\it's\\data"}
+            result = run_cli("plan_batch_command.py", "octave", "function",
+                             "analyze.m", "--root", root,
+                             "--arg-json", json.dumps(payload))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            statement = parsed(result)["statement"]
+            self.assertEqual(statement, "analyze(struct('empty', {{}}, "
+                             "'labels', {{'a', 'b'}}, "
+                             "'path', {'C:\\new\\it''s\\data'}))")
+            self.assertNotIn("\n", statement)
+
+    def test_matlab_cell_fields_do_not_expand_structs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            (root / "analyze.m").write_text("function analyze(x)\nend\n")
+            result = run_cli("plan_batch_command.py", "matlab", "function",
+                             "analyze.m", "--root", root,
+                             "--arg-json", '{"empty":[],"mixed":[1,"a"]}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(parsed(result)["statement"],
+                             'analyze(struct("empty", {{}}, "mixed", {{1, "a"}}))')
+
     def test_matlab_script_and_function_plans_never_execute(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -267,6 +294,12 @@ class ManifestAndReproducibilityTests(unittest.TestCase):
 
 
 class PythonCompatibilityTests(unittest.TestCase):
+    def test_newer_release_does_not_reuse_r2026a_engine_pin(self) -> None:
+        result = run_cli("plan_python_compatibility.py", "--matlab-release",
+                         "R2026b", "--python-version", "3.14")
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(parsed(result)["ok"])
+
     def test_r2026a_exact_support_and_engine_version(self) -> None:
         result = run_cli(
             "plan_python_compatibility.py",
@@ -292,6 +325,28 @@ class PythonCompatibilityTests(unittest.TestCase):
 
 
 class MatInventoryTests(unittest.TestCase):
+    def test_optional_h5py_null_and_scalar_shapes_remain_distinct(self) -> None:
+        try:
+            import h5py
+        except ImportError as exc:
+            raise unittest.SkipTest("h5py is optional") from exc
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            path = root / "shapes.mat"
+            with h5py.File(path, "w") as handle:
+                handle.create_dataset("null", dtype="f8")
+                handle.create_dataset("scalar", data=1.0)
+                handle.create_dataset("zero_length", shape=(0,), dtype="f8")
+            result = run_cli("inventory_mat_file.py", path.name, "--root", root,
+                             "--backend", "hdf5")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            records = parsed(result)["records"]
+            self.assertEqual([record["shape"] for record in records],
+                             [None, [], [0]])
+            self.assertEqual([record["null_dataspace"] for record in records],
+                             [True, False, False])
+            self.assertTrue(all(not record["values_loaded"] for record in records))
+
     def test_header_only_inventory_and_pickle_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

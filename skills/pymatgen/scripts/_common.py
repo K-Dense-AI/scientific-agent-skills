@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
-PYMATGEN_VERSION = "2026.5.4"
-PYMATGEN_CORE_VERSION = "2026.7.16"
-MP_API_VERSION = "0.46.4"
+PYMATGEN_VERSION = "2026.9.24"
+PYMATGEN_CORE_VERSION = "2026.9.23"
+MP_API_VERSION = "0.46.5"
 DEFAULT_MAX_INPUT_BYTES = 50 * 1024 * 1024
 DEFAULT_MAX_OUTPUT_BYTES = 20 * 1024 * 1024
 DEFAULT_MAX_SITES = 10_000
@@ -232,6 +232,47 @@ def structure_oxidation_summary(structure: Any) -> dict[str, Any]:
     }
 
 
+def load_structure_json(path: Path, *, max_bytes: int, max_sites: int) -> Any:
+    """Read plain Structure JSON without allowing nested dynamic MSON objects."""
+    from pymatgen.core import Structure
+
+    payload, _ = load_strict_json(path, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise CliError("structure JSON must be an object")
+    if payload.get("@module", "pymatgen.core.structure") != "pymatgen.core.structure":
+        raise CliError("structure JSON has an unsupported @module")
+    if payload.get("@class", "Structure") not in {"Structure", "IStructure"}:
+        raise CliError("structure JSON must describe Structure or IStructure")
+    sites = payload.get("sites")
+    if not isinstance(sites, list) or not sites or len(sites) > max_sites:
+        raise CliError("structure JSON must contain a non-empty, bounded sites array")
+    lattice = payload.get("lattice")
+    if not isinstance(lattice, dict) or "matrix" not in lattice:
+        raise CliError("structure JSON requires a lattice matrix")
+
+    # PeriodicSite.from_dict invokes MontyDecoder on site properties. Only plain
+    # JSON values are accepted there; metadata at the root is checked above.
+    pending = [(value, 1) for key, value in payload.items() if not key.startswith("@")]
+    visited = 0
+    while pending:
+        value, depth = pending.pop()
+        visited += 1
+        if depth > 30 or visited > 1_000_000:
+            raise CliError("structure JSON exceeds nesting or value-count limits")
+        if isinstance(value, dict):
+            if any(key.startswith("@") for key in value):
+                raise CliError("nested MSON metadata is not accepted in structure JSON")
+            pending.extend((item, depth + 1) for item in value.values())
+        elif isinstance(value, list):
+            pending.extend((item, depth + 1) for item in value)
+        elif isinstance(value, float) and not math.isfinite(value):
+            raise CliError("structure JSON contains a non-finite number")
+    try:
+        return Structure.from_dict(payload)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise CliError(f"invalid Structure JSON: {exc}") from exc
+
+
 def load_structure(
     value: str | Path,
     *,
@@ -250,7 +291,15 @@ def load_structure(
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             lower_name = path.name.casefold()
-            if lower_name.endswith((".cif", ".cif.gz", ".cif.bz2", ".mcif")):
+            if ".yaml" in lower_name or ".yml" in lower_name:
+                raise CliError("bundled intake does not accept YAML; supply CIF or plain Structure JSON")
+            if ".json" in lower_name or ".mson" in lower_name:
+                if path.suffix.casefold() not in {".json", ".mson"}:
+                    raise CliError("decompress Structure JSON to a bounded plain .json file first")
+                if structure_index != 0:
+                    raise CliError("JSON intake exposes one structure; use index 0")
+                structure = load_structure_json(path, max_bytes=max_bytes, max_sites=max_sites)
+            elif lower_name.endswith((".cif", ".cif.gz", ".cif.bz2", ".mcif")):
                 from pymatgen.io.cif import CifParser
 
                 parser = CifParser(path)

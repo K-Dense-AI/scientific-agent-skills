@@ -57,6 +57,10 @@ Review all access and dependency fields.
 
 ## Python Entry Point
 
+The following adapter is illustrative: `quality-filter` is a placeholder for
+your tested scientific tool, not a bundled executable. It has not been run on
+a DNAnexus worker during this documentation review.
+
 ```python
 from __future__ import annotations
 

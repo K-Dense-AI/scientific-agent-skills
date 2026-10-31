@@ -1,10 +1,12 @@
 ---
 name: scientific-schematics
-description: Create publication-quality scientific diagrams using Nano Banana 2 AI with smart iterative refinement. Uses Gemini 3.6 Flash for quality review. Only regenerates if quality is below threshold for your document type. Specialized in neural network architectures, system diagrams, flowcharts, biological pathways, and complex scientific visualizations.
+description: Generates scientific diagram drafts using Nano Banana 2 AI with smart iterative refinement. Uses Gemini 3.7 Flash for quality review. Refines when the review requests improvement, with at most two generations. Specialized in neural network architectures, system diagrams, flowcharts, biological pathways, and complex scientific visualizations.
 allowed-tools: Read Write Edit Bash
 license: MIT license
+compatibility: Requires Python 3.10+ with requests, network access, and an OpenRouter API key.
 metadata:
-  version: "1.9"
+  version: "1.10"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -18,17 +20,17 @@ metadata:
 
 ## Overview
 
-Scientific schematics and diagrams transform complex concepts into clear visual representations for publication. **This skill uses Nano Banana 2 AI for diagram generation with Gemini 3.6 Flash quality review.**
+Scientific schematics and diagrams transform complex concepts into clear visual representations for publication. **This skill uses Nano Banana 2 AI for diagram generation with Gemini 3.7 Flash quality review.**
 
 **How it works:**
 - Describe your diagram in natural language
-- Nano Banana 2 generates publication-quality images automatically
-- **Gemini 3.6 Flash reviews quality** against document-type thresholds
-- **Smart iteration**: Only regenerates if quality is below threshold
-- Publication-ready output in minutes
+- Nano Banana 2 generates a PNG draft from the specified components and relationships
+- **Gemini 3.7 Flash reviews quality** against document-type thresholds
+- **Smart iteration**: Refines when the score or verdict requests improvement
+- Saved drafts and a review log for manual verification
 - No coding, templates, or manual drawing required
 
-**Quality Thresholds by Document Type:**
+**Local review thresholds by document type** (heuristics chosen by this helper, not publisher acceptance criteria):
 | Document Type | Threshold | Description |
 |---------------|-----------|-------------|
 | journal | 8.5/10 | Nature, Science, peer-reviewed journals |
@@ -41,7 +43,7 @@ Scientific schematics and diagrams transform complex concepts into clear visual 
 | presentation | 6.5/10 | Slides, talks |
 | default | 7.5/10 | General purpose |
 
-**Simply describe what you want, and Nano Banana 2 creates it.** All diagrams are stored in the figures/ subfolder and referenced in papers/posters.
+Save diagrams under `figures/` using `-o figures/name.png`, then inspect every label and relationship before including them in a paper or poster. The output location is the path you choose.
 
 **What the output is:** a raster PNG at whatever resolution the image model returns. This skill has
 no vector path and no DPI control — if a journal demands PDF, EPS, or 300 dpi TIFF, convert the PNG
@@ -49,7 +51,7 @@ downstream and check the result at final print size.
 
 ## Quick Start: Generate Any Diagram
 
-Create any scientific diagram by simply describing it. Nano Banana 2 handles everything automatically with **smart iteration**:
+Run from this skill directory with `requests` installed and `OPENROUTER_API_KEY` set. The following paid-generation examples are illustrative; the request contracts are tested offline. Supply source-backed labels and relationships rather than asking the image model to invent them:
 
 ```bash
 # Generate for journal paper (highest quality threshold: 8.5/10)
@@ -67,9 +69,9 @@ python scripts/generate_schematic.py "Complex circuit diagram with op-amp, resis
 
 **What happens behind the scenes:**
 1. **Generation 1**: Nano Banana 2 creates initial image following scientific diagram best practices
-2. **Review 1**: **Gemini 3.6 Flash** evaluates quality against document-type threshold
-3. **Decision**: If quality >= threshold → **DONE** (no more iterations needed!)
-4. **If below threshold**: Improved prompt based on critique, regenerate
+2. **Review 1**: **Gemini 3.7 Flash** evaluates quality against document-type threshold
+3. **Decision**: If quality >= threshold and no improvement verdict → **DONE** (no more iterations needed!)
+4. **If below threshold or improvement requested**: Improved prompt based on critique, regenerate
 5. **Repeat**: Until quality meets threshold OR max iterations reached
 
 **Smart Iteration Benefits:**
@@ -78,14 +80,14 @@ python scripts/generate_schematic.py "Complex circuit diagram with op-amp, resis
 - ✅ Faster turnaround for presentations/posters
 - ✅ Appropriate quality for each use case
 
-**Output**: Versioned images (`name_v1.png`, `name_v2.png`), a copy of the winner at the path you
-asked for, and `name_review_log.json` with the score, critique, and early-stop reason per iteration.
+**Output**: Versioned images (`name_v1.png`, `name_v2.png`), a copy of the latest successful version at the path you
+asked for, and `name_review_log.json` with the score, critique, and any early-stop reason.
 
 **When the review cannot run** — a rate limit, a content filter, a reviewer that answers in some
 unexpected shape — the image is still generated and saved, but no score is invented for it. The log
-records `"score": null` and `"reviewed": false` with the reason in `"review_error"`, and the run
-prints `Review unavailable — image kept, quality not verified`. Treat that image as unchecked and
-look at it yourself; re-running is worth a try, since the failure is usually transient.
+records `"score": null` with the reason in `"review_error"`. `"reviewed": false` means the reviewer did not return a usable response; a prose answer with no parsable score can have `"reviewed": true`. `"final_reviewed"` remains false without a numeric score, and the run
+prints `Review unavailable - image kept, quality not verified`. Treat that image as unchecked and
+look at it yourself and diagnose the review error before spending on another generation. A generation failure ends the loop without automatic replay; if an earlier draft exists, it is retained with its score and the failure in the log.
 
 ### Configuration
 
@@ -101,6 +103,14 @@ generated image is sent back to OpenRouter for the quality review. Both are subj
 data policies and those of the underlying model providers. Do not describe unpublished data,
 patient information, or anything under embargo in the prompt.
 
+### Current API contract
+
+The image call uses OpenRouter `POST /api/v1/images` with `model`, `prompt`, and `n: 1`; it reads `data[0].b64_json` and checks the returned MIME type (when supplied) and PNG signature. Quality review separately uses `POST /api/v1/chat/completions` with text and an `image_url` data URL. Both use Bearer authentication. The current chat schema still allows image output; this helper follows the dedicated image-generation guide without assuming the chat route was retired.
+
+Models are `google/gemini-3.1-flash-image` (Nano Banana 2) and `google/gemini-3.7-flash` (review). Their IDs and modalities were checked in public catalogs; this helper's Gemini generation/review calls were validated offline, not with a paid end-to-end run. See [the verified contract and sources](references/iterative_refinement.md#openrouter-contract-reviewed-2026-09-30) before changing models or request fields.
+
+For trial flows, use the [CONSORT 2025 template and item 22a](https://www.consort-spirit.org/item-22a-randomized), reconcile enrollment/allocation/follow-up/analysis counts, and report the specified primary outcome. For reviews, choose the appropriate [PRISMA 2020 template](https://www.prisma-statement.org/prisma-2020-flow-diagram); records, reports, and studies are distinct units. An AI score checks neither accounting system.
+
 ### AI Generation Best Practices
 
 **Effective Prompts for Scientific Diagrams:**
@@ -108,7 +118,7 @@ patient information, or anything under embargo in the prompt.
 ✓ **Good prompts** (specific, detailed):
 - "CONSORT flowchart showing participant flow from screening (n=500) through randomization to final analysis"
 - "Transformer neural network architecture with encoder stack on left, decoder stack on right, showing multi-head attention and cross-attention connections"
-- "Biological signaling cascade: EGFR receptor → RAS → RAF → MEK → ERK → nucleus, with phosphorylation steps labeled"
+- "Simplified EGFR → GRB2/SOS → RAS-GTP → RAF → MEK → ERK pathway; label nucleotide exchange and phosphorylation distinctly"
 - "Block diagram of IoT system: sensors → microcontroller → WiFi module → cloud server → mobile app"
 
 ✗ **Avoid vague prompts**:
@@ -123,7 +133,7 @@ patient information, or anything under embargo in the prompt.
 - **Labels**: Key annotations or text to include
 - **Style**: Any specific visual requirements
 
-**Scientific Quality Guidelines** (automatically applied):
+**Scientific quality instructions** (requested in the prompt; verify the result):
 - Clean white/light background
 - High contrast for readability
 - Clear, readable labels (minimum 10pt)
@@ -153,12 +163,12 @@ This skill should be used when:
 python scripts/generate_schematic.py "your diagram description" -o output.png
 ```
 
-**That's it!** The AI handles:
+The AI attempts:
 - ✓ Layout and composition
 - ✓ Labels and annotations
 - ✓ Colors and styling
 - ✓ Quality review and refinement
-- ✓ Publication-ready output
+- ✓ PNG output for visual and scientific verification
 
 **Works for all diagram types:**
 - Flowcharts (CONSORT, PRISMA, etc.)
@@ -173,7 +183,7 @@ python scripts/generate_schematic.py "your diagram description" -o output.png
 
 ---
 
-# AI Generation Mode (Nano Banana 2 + Gemini 3.6 Flash Review)
+# AI Generation Mode (Nano Banana 2 + Gemini 3.7 Flash Review)
 
 ## Smart Iterative Refinement, Advanced Usage, and Examples
 
@@ -182,8 +192,7 @@ engineering guidance, and four worked examples (CONSORT flowchart, neural networ
 architecture, biological pathway, system architecture) are in
 [references/iterative_refinement.md](references/iterative_refinement.md).
 
-The loop stops as soon as the review passes, so a simple diagram usually costs one
-iteration; only complex figures use the full budget.
+The loop stops when the review passes or is unavailable, or when generation fails. A below-threshold score or an explicit improvement verdict can trigger a second generation; no run makes more than two attempts.
 
 ## Command-Line Usage
 
@@ -200,7 +209,7 @@ python scripts/generate_schematic.py "complex diagram" -o diagram.png --iteratio
 python scripts/generate_schematic.py "diagram" -o out.png -v
 ```
 
-**Note:** The Nano Banana 2 AI generation system includes automatic quality review in its iterative refinement process. Each iteration is evaluated for scientific accuracy, clarity, and accessibility.
+**Review is advisory:** the vision model can miss incorrect counts, topology, or labels. A high score does not establish scientific validity, CONSORT/PRISMA compliance, accessibility conformance, or a journal's acceptance of AI-generated figures.
 
 ## Best Practices Summary
 
@@ -212,7 +221,7 @@ python scripts/generate_schematic.py "diagram" -o out.png -v
 4. **Appropriate typography** - Sans-serif fonts, generously sized labels
 5. **Logical flow** - State the direction (left-to-right, top-to-bottom) explicitly
 
-The generator applies all of these by default, but naming them in your own words for the specific
+The generator includes all of these as prompt instructions by default, but naming them in your own words for the specific
 diagram works better than relying on the built-in guidelines alone.
 
 ### What the pipeline cannot do
@@ -261,12 +270,10 @@ in `<name>_review_log.json`.
 - The threshold, not the score, decides whether it iterates — `--doc-type journal` demands 8.5
 
 **A run stops at a score below the threshold**
-- That is the iteration cap. `--iterations 2` is the maximum; the last image is kept and reported
-  with its real score
+- That can be the iteration cap or a failed second generation. `--iterations 2` is the maximum; the latest successfully generated image is kept with its real score. Check `termination_reason` and each attempt's `error`.
 
 **`"score": null` and `"reviewed": false` in the log**
-- The review call failed or answered in an unusable shape. The image is fine and was kept; only its
-  quality was never measured. Check `"review_error"`, look at the image yourself, and re-run
+- The review call failed or answered in an unusable shape. The image was kept but its quality is unknown. Check `"review_error"` and inspect the image yourself.
 
 ### Setup
 
@@ -276,7 +283,7 @@ in `<name>_review_log.json`.
 **`Error: requests library not found`**
 - `uv pip install requests`
 
-**Any API error** — run with `-v` to see the request, the model slug, and the full error body
+**Any API error** — run with `-v` to see the route, model slug, and a bounded error message. A 401/402 needs credential/credit correction; a timeout does not justify blind paid replay.
 
 ## Resources and References
 
@@ -294,7 +301,7 @@ Load these files for comprehensive information on specific topics:
 **Publication Standards**
 - Nature Figure Guidelines: https://www.nature.com/nature/for-authors/final-submission
 - Science Figure Guidelines: https://www.science.org/content/page/instructions-preparing-initial-manuscript
-- CONSORT Diagram: http://www.consort-statement.org/consort-statement/flow-diagram
+- CONSORT Diagram: https://www.consort-spirit.org/item-22a-randomized
 
 ## Integration with Other Skills
 
@@ -311,8 +318,8 @@ This skill works synergistically with:
 Before submitting diagrams, verify:
 
 ### Read the review log (this is the only automated check there is)
-- [ ] `<name>_review_log.json` exists and `"reviewed"` is `true` on the final iteration
-- [ ] `"final_score"` is a real number, not `null`, and meets the threshold for your document type
+- [ ] `<name>_review_log.json` exists; inspect the successful iteration named by `"final_image"` (a later attempt may have failed)
+- [ ] `"final_reviewed"` and `"quality_met"` are true, then inspect the critique and image yourself
 - [ ] Read the `"critique"` — the reviewer's remaining issues are listed even on a passing score
 - [ ] If more than one version was generated, compare `_v1` and `_v2` and keep the better one
 
@@ -366,7 +373,7 @@ python scripts/generate_schematic.py "your diagram description" -o output.png
 
 ---
 
-Use this skill to create clear, accessible, publication-quality diagrams that effectively communicate complex scientific concepts. The AI-powered workflow with iterative refinement ensures diagrams meet professional standards.
+Use this skill to create clear, accessible, publication-quality diagrams that effectively communicate complex scientific concepts. Iterative refinement can improve the draft; final scientific and publication checks remain the author's responsibility.
 
 ## Citing Scientific Agent Skills
 

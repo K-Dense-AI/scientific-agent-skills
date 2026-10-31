@@ -5,7 +5,7 @@
 # ///
 """Prefix and compact-identifier helpers for Bioregistry and Identifiers.org.
 
-OLS remains the authority for whether a *term* exists and is current. These
+OLS checks whether a term is present and current in its loaded release. These
 services answer a different question: is this prefix real, is the local id
 well-formed, and which landing pages resolve it?
 
@@ -13,7 +13,7 @@ Standard library only. Network access to https://bioregistry.io and
 https://resolver.api.identifiers.org is required for the request functions;
 helpers below the ``--- pure helpers ---`` mark are offline.
 
-Verified against the live APIs in September 2026 (see
+Reviewed against official schemas and live APIs on 2026-10-01 (see
 ``references/companion-apis.md``):
 
 * ``/api/registry/{prefix}`` accepts synonyms (``HPO`` → ``hp``) and returns
@@ -41,7 +41,7 @@ from typing import Any
 BIOREGISTRY_BASE = "https://bioregistry.io/api"
 IDENTIFIERS_RESOLVER = "https://resolver.api.identifiers.org"
 ONTOBEE_TERM = "https://ontobee.org/ontology/{prefix}?iri={iri}"
-USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.2"
+USER_AGENT = "scientific-agent-skills-ontology-term-resolution/1.4"
 TIMEOUT = 30
 MAX_ATTEMPTS = 3
 RETRY_STATUS = {429, 500, 502, 503, 504}
@@ -63,16 +63,27 @@ class NotFoundError(IdError):
         self.url = url
 
 
-def _request(url: str) -> dict:
+def _request(url: str, *, return_rejection: bool = False) -> dict:
     """GET a JSON document, retrying transient failures."""
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     last: Exception | None = None
     for attempt in range(MAX_ATTEMPTS):
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-                return json.load(response)
+                payload = json.load(response)
+            if not isinstance(payload, dict):
+                raise IdError(f"Expected a JSON object from {url}")
+            return payload
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
+            if return_rejection and exc.code == 400:
+                try:
+                    payload = json.loads(body)
+                except json.JSONDecodeError as error:
+                    raise IdError(f"Non-JSON rejection from {url}") from error
+                if isinstance(payload, dict) and payload.get("errorMessage"):
+                    return payload
+                raise IdError(f"Malformed rejection from {url}") from exc
             if exc.code == 404:
                 detail = _detail_from_body(body) or f"HTTP 404 for {url}"
                 raise NotFoundError(detail, url) from exc
@@ -129,20 +140,7 @@ def resolve_identifiers(curie: str) -> dict:
     ``errorMessage`` set and ``payload.resolvedResources`` null — that is
     returned as a dict, not raised, so the caller can report it.
     """
-    url = identifiers_resolver_url(curie)
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        try:
-            payload = json.loads(body)
-        except json.JSONDecodeError:
-            raise IdError(f"Identifiers.org HTTP {exc.code} for {curie}: {body[:200]}") from exc
-        if isinstance(payload, dict):
-            return payload
-        raise IdError(f"Identifiers.org HTTP {exc.code} for {curie}") from exc
+    return _request(identifiers_resolver_url(curie), return_rejection=True)
 
 
 # --- pure helpers -----------------------------------------------------------
@@ -288,7 +286,7 @@ def classify_prefix_query(
     result["example"] = resource.get("example") or ""
     result["name"] = resource.get("name") or ""
     mappings = resource.get("mappings") or {}
-    result["ols_id"] = mappings.get("ols") or canonical_prefix
+    result["ols_id"] = mappings.get("ols") or ""
 
     queried = prefix
     accepted = {canonical_prefix.casefold(), preferred.casefold()} - {""}

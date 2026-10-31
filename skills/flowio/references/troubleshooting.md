@@ -158,6 +158,18 @@ does not apply compensation. If values differ from a higher-level application,
 check whether that application applied compensation, display transforms, or
 vendor-specific scaling.
 
+For integer DATA, `preprocess=False` still contains PnR-masked decoded values.
+Also check `flow.text.get(f"p{n}g")` (with the actual parameter number) against
+`flow.channels[n]["png"]`: a recognized Time channel is forced to gain one.
+
+## Declared Counts Disagree With DATA
+
+`as_array()` infers rows from loaded DATA and does not enforce `$TOT`. Check
+`len(flow.events) == flow.event_count * flow.channel_count` before converting
+and compare the resulting shape. Do not silently replace the declared count
+or trust metadata-only inspection as a DATA validation. The bundled inspector
+rejects this mismatch with `--stats`.
+
 ## Channel Classification Looks Wrong
 
 `scatter_indices`, `fluoro_indices`, and `time_index` are label-based
@@ -197,7 +209,9 @@ PnN values may be duplicated or malformed, and PnS is optional. Validate and
 make names unique before constructing a DataFrame. Retain the original PnN/PnS
 lists in provenance.
 
-See `workflows.md` for a deterministic `unique_labels()` helper.
+See `workflows.md` for a deterministic `unique_labels()` helper that also
+avoids collisions with existing names such as `FL1-A__2`. Keep the original
+PnN mapping for compensation metadata.
 
 ## `create_fcs()` Receives a Path
 
@@ -354,6 +368,10 @@ For files from untrusted uploaders:
 5. Do not overwrite the source.
 6. Log parser version, warnings, and a cryptographic checksum.
 7. Keep dependencies patched and test upgrades against representative files.
+
+Metadata-derived array limits do not cap parser allocation or whole-process
+RSS. The bundled inspector also rejects non-list modes and non-I/F/D types,
+but upstream parsing still runs before those metadata checks.
 
 The bundled inspector defaults to metadata-only parsing and a size limit, but
 it is not a malware sandbox.

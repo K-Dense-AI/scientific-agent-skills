@@ -5,7 +5,8 @@ Complete Single-Cell Analysis Template
 This template provides a complete workflow for single-cell RNA-seq analysis
 using scanpy, from data loading through clustering and cell type annotation.
 
-Customize the parameters and sections as needed for your specific dataset.
+Illustrative template targeting Scanpy 1.12.4. Customize thresholds, metadata,
+and annotation; this file is not an automatically validated biological analysis.
 """
 
 import scanpy as sc
@@ -35,7 +36,7 @@ LEIDEN_RESOLUTION = 0.5  # Clustering resolution
 
 # Scanpy settings
 sc.settings.verbosity = 3
-sc.settings.set_figure_params(dpi=80, facecolor='white')
+sc.set_figure_params(dpi=80, facecolor='white')
 sc.settings.figdir = FIGURES_DIR
 sc.settings.autosave = True
 
@@ -81,7 +82,7 @@ print(f"\nBefore filtering: {adata.n_obs} cells, {adata.n_vars} genes")
 
 sc.pp.filter_cells(adata, min_genes=MIN_GENES)
 sc.pp.filter_genes(adata, min_cells=MIN_CELLS)
-adata = adata[adata.obs.pct_counts_mt < MT_THRESHOLD, :]
+adata = adata[adata.obs.pct_counts_mt < MT_THRESHOLD, :].copy()
 
 print(f"After filtering: {adata.n_obs} cells, {adata.n_vars} genes")
 
@@ -98,6 +99,8 @@ print("\n" + "=" * 80)
 print("NORMALIZATION")
 print("=" * 80)
 
+# Identified raw counts: preserve before any normalization
+adata.layers["counts"] = adata.X.copy()
 # Normalize to 10,000 counts per cell
 sc.pp.normalize_total(adata, target_sum=1e4)
 
@@ -105,7 +108,7 @@ sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 
 # Store normalized data
-adata.raw = adata
+adata.raw = adata.copy()
 
 # ============================================================================
 # 4. FEATURE SELECTION
@@ -123,8 +126,7 @@ sc.pl.highly_variable_genes(adata, save='_hvg')
 
 print(f"Selected {sum(adata.var.highly_variable)} highly variable genes")
 
-# Subset to highly variable genes
-adata = adata[:, adata.var.highly_variable]
+# Keep all genes/counts in the exported object; PCA automatically uses the HVG mask.
 
 # ============================================================================
 # 5. SCALING AND REGRESSION
@@ -135,10 +137,10 @@ print("SCALING AND REGRESSION")
 print("=" * 80)
 
 # Regress out unwanted sources of variation
-sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
+# sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
 
 # Scale data
-sc.pp.scale(adata, max_value=10)
+# sc.pp.scale(adata, max_value=10)  # Optional; may densify sparse data
 
 # ============================================================================
 # 6. DIMENSIONALITY REDUCTION
@@ -149,11 +151,12 @@ print("DIMENSIONALITY REDUCTION")
 print("=" * 80)
 
 # PCA
-sc.tl.pca(adata, svd_solver='arpack')
+n_pcs = min(N_PCS, adata.n_obs - 1, int(adata.var.highly_variable.sum()) - 1)
+sc.pp.pca(adata, n_comps=n_pcs, svd_solver='arpack')
 sc.pl.pca_variance_ratio(adata, log=True, save='_pca_variance')
 
 # Compute neighborhood graph
-sc.pp.neighbors(adata, n_neighbors=N_NEIGHBORS, n_pcs=N_PCS)
+sc.pp.neighbors(adata, n_neighbors=N_NEIGHBORS, n_pcs=n_pcs, use_rep="X_pca")
 
 # UMAP
 sc.tl.umap(adata)
@@ -167,7 +170,7 @@ print("CLUSTERING")
 print("=" * 80)
 
 # Leiden clustering
-sc.tl.leiden(adata, resolution=LEIDEN_RESOLUTION)
+sc.tl.leiden(adata, resolution=LEIDEN_RESOLUTION, flavor="igraph", directed=False, n_iterations=2)
 
 # Visualize
 sc.pl.umap(adata, color='leiden', legend_loc='on data', save='_leiden')
@@ -183,7 +186,8 @@ print("MARKER GENE IDENTIFICATION")
 print("=" * 80)
 
 # Find marker genes (exploratory — pseudobulk + pydeseq2 for rigorous DE)
-sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon')
+sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon', use_raw=True,
+                        reference='rest', corr_method='benjamini-hochberg', tie_correct=True)
 
 # Visualize top markers
 sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False, save='_markers')
@@ -221,18 +225,11 @@ for cell_type, genes in marker_genes.items():
                    save=f'_{cell_type.replace(" ", "_")}')
 
 # Manual annotation based on marker expression (customize this mapping)
-cluster_to_celltype = {
-    '0': 'CD4 T cells',
-    '1': 'CD14+ Monocytes',
-    '2': 'B cells',
-    '3': 'CD8 T cells',
-    '4': 'NK cells',
-    # Add more mappings based on your marker analysis
-}
+cluster_to_celltype = {}  # Fill only after reviewing markers, provenance and uncertainty.
 
 # Apply annotations
-adata.obs['cell_type'] = adata.obs['leiden'].map(cluster_to_celltype)
-adata.obs['cell_type'] = adata.obs['cell_type'].fillna('Unknown')
+adata.obs['cell_type'] = adata.obs['leiden'].astype(str).map(cluster_to_celltype)
+adata.obs['cell_type'] = adata.obs['cell_type'].fillna('Unknown').astype('category')
 
 # Visualize annotated cell types
 sc.pl.umap(adata, color='cell_type', legend_loc='on data', save='_celltypes')
@@ -246,8 +243,8 @@ print("ADDITIONAL ANALYSES")
 print("=" * 80)
 
 # PAGA trajectory analysis (optional)
-sc.tl.paga(adata, groups='leiden')
-sc.pl.paga(adata, color='leiden', save='_paga')
+# sc.tl.paga(adata, groups='leiden')
+# sc.pl.paga(adata, color='leiden', save='_paga')
 
 # Gene set scoring (optional)
 # example_gene_set = ['CD3D', 'CD3E', 'CD3G']

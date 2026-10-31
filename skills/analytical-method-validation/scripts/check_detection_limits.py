@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Estimate DL and QL by every approach ICH Q2(R2) 3.2.3 allows, and compare them.
+"""Estimate DL and QL with supported approaches from ICH Q2(R2) 3.2.3.
 
-The four approaches routinely disagree by a factor of two or more on the same
+Supported estimates can disagree because they use different response-variation
 data. Reporting one number without naming the approach is the finding an
 assessor raises, so this script computes all of the applicable ones side by side
 and checks the answer against the reporting threshold it has to serve.
@@ -14,11 +14,13 @@ and checks the answer against the reporting threshold it has to serve.
 
     # confirm an estimated QL with real data at that level
     python3 check_detection_limits.py --calibration calib.csv \
-        --confirm-ql 0.05 --confirm-data ql_check.csv --reporting-threshold 0.05
+        --confirm-ql 0.05 --confirm-data ql_check.csv --reporting-threshold 0.05 \
+        --confirm-accuracy-limit 10 --confirm-rsd-limit 10
 
 Input:
   --calibration  CSV with `level` and `response` (low-range calibration curve)
   --blanks       CSV with `response` (blank measurements)
+  --intercepts   CSV with `intercept` (independent low-range calibration curves)
   --confirm-data CSV with `measured` (results at or near the claimed QL)
 
 Exit codes: 0 no findings, 1 findings raised, 2 bad input.
@@ -40,6 +42,7 @@ from _common import (  # noqa: E402
     add_common_args,
     emit,
     finding,
+    finite_float,
     fit_linear,
     mean,
     note,
@@ -63,34 +66,39 @@ def main() -> int:
     parser.add_argument("--calibration", required=True,
                         help="CSV/TSV/JSON with `level` and `response`")
     parser.add_argument("--blanks", help="CSV/TSV/JSON with `response` for blank samples")
-    parser.add_argument("--signal-to-noise", type=float, default=None,
+    parser.add_argument("--intercepts", help="CSV/TSV/JSON with `intercept` from independent low-range calibration curves")
+    parser.add_argument("--signal-to-noise", type=finite_float, default=None,
                         help="measured S/N at a stated concentration (use with --sn-level)")
-    parser.add_argument("--sn-level", type=float, default=None,
+    parser.add_argument("--sn-level", type=finite_float, default=None,
                         help="the concentration at which --signal-to-noise was measured")
-    parser.add_argument("--confirm-ql", type=float, default=None,
+    parser.add_argument("--confirm-ql", type=finite_float, default=None,
                         help="the QL being claimed, to be confirmed with --confirm-data")
     parser.add_argument("--confirm-data", help="CSV/TSV/JSON with `measured` at/near the QL")
-    parser.add_argument("--confirm-accuracy-limit", type=float, default=20.0,
-                        help="max %% bias allowed when confirming the QL (default 20)")
-    parser.add_argument("--confirm-rsd-limit", type=float, default=20.0,
-                        help="max %%RSD allowed when confirming the QL (default 20)")
-    parser.add_argument("--reporting-threshold", type=float, default=None,
+    parser.add_argument("--confirm-accuracy-limit", type=finite_float, default=None,
+                        help="pre-stated max %% bias for QL confirmation; no guideline default")
+    parser.add_argument("--confirm-rsd-limit", type=finite_float, default=None,
+                        help="pre-stated max %%RSD for QL confirmation; no guideline default")
+    parser.add_argument("--reporting-threshold", type=finite_float, default=None,
                         help="impurity reporting threshold the QL must be at or below")
     parser.add_argument("--weight", choices=("none", "1/x", "1/x2"), default="none")
     add_common_args(parser)
     args = parser.parse_args()
+    for name in ("signal_to_noise", "sn_level", "confirm_ql", "reporting_threshold",
+                 "confirm_accuracy_limit", "confirm_rsd_limit"):
+        value = getattr(args, name)
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise InputError(f"--{name.replace('_', '-')} must be finite and > 0")
+    if args.weight != "none":
+        raise InputError("DL/QL sigma-and-slope estimates require an unweighted low-range fit; "
+                         "weighted residual scale is not a response SD")
+    if args.confirm_data and (args.confirm_accuracy_limit is None or args.confirm_rsd_limit is None):
+        raise InputError("QL confirmation needs pre-stated --confirm-accuracy-limit and --confirm-rsd-limit")
 
     rows = parse_rows(read_input(args.calibration), args.calibration)
     require_columns(rows, ["level", "response"])
     xs = [to_float(r["level"], "level", i) for i, r in enumerate(rows)]
     ys = [to_float(r["response"], "response", i) for i, r in enumerate(rows)]
-    weights = None
-    if args.weight != "none":
-        if any(x == 0 for x in xs):
-            raise InputError("weighting needs non-zero levels")
-        power = 1 if args.weight == "1/x" else 2
-        weights = [1.0 / (abs(x) ** power) for x in xs]
-    fit = fit_linear(xs, ys, weights)
+    fit = fit_linear(xs, ys)
     slope = fit.slope
     if slope == 0:
         raise InputError("calibration slope is zero; DL/QL cannot be computed")
@@ -110,17 +118,20 @@ def main() -> int:
         }
     )
 
-    # Approach 3.2.3.3, sigma = SD of the y-intercept.
-    results.append(
-        {
-            "approach": "sd-and-slope (sigma = SD of y-intercept)",
-            "sigma": fit.se_intercept,
-            "slope": slope,
-            "DL": DL_FACTOR * fit.se_intercept / abs(slope),
-            "QL": QL_FACTOR * fit.se_intercept / abs(slope),
-            "reference": "Q2(R2) 3.2.3.3",
-        }
-    )
+    # Q2 refers to SD across regression-line intercepts, not the standard error
+    # of the intercept from one line. Do not silently substitute the latter.
+    if args.intercepts:
+        irows = parse_rows(read_input(args.intercepts), args.intercepts)
+        require_columns(irows, ["intercept"])
+        intercepts = [to_float(r["intercept"], "intercept", i) for i, r in enumerate(irows)]
+        if len(intercepts) < 3:
+            raise InputError("intercept SD needs at least 3 independent calibration curves (tool minimum)")
+        sigma = sample_sd(intercepts)
+        results.append({"approach": "sd-and-slope (sigma = SD of independent y-intercepts)",
+                        "sigma": sigma, "slope": slope,
+                        "DL": DL_FACTOR * sigma / abs(slope),
+                        "QL": QL_FACTOR * sigma / abs(slope),
+                        "reference": "Q2(R2) 3.2.3.3"})
 
     # Approach 3.2.3.3, sigma = SD of blank responses.
     if args.blanks:
@@ -165,6 +176,9 @@ def main() -> int:
             "confirm at the resulting level"
         )
 
+    if any(result["QL"] <= 0 for result in results):
+        findings.append("zero estimated response variation cannot establish a physical detection/quantitation limit")
+
     # Spread across approaches: the point of computing all of them.
     qls = [r["QL"] for r in results if math.isfinite(r["QL"])]
     spread_note = ""
@@ -208,13 +222,15 @@ def main() -> int:
                 f"QL confirmation: bias {bias:+.2f}% at the claimed QL exceeds "
                 f"+/-{args.confirm_accuracy_limit:g}%"
             )
-        if math.isfinite(rsd) and rsd > args.confirm_rsd_limit:
+        if not math.isfinite(rsd):
+            findings.append("QL confirmation: RSD is undefined; precision was not demonstrated")
+        elif rsd > args.confirm_rsd_limit:
             findings.append(
                 f"QL confirmation: {rsd:.2f}% RSD at the claimed QL exceeds "
                 f"{args.confirm_rsd_limit:g}%"
             )
     elif args.confirm_ql is not None:
-        note(
+        findings.append(
             "a QL was claimed but no confirmation data supplied. Q2(R2) 3.2.3.5 asks that an "
             "estimated limit be validated by analysing samples at or near it"
         )

@@ -150,7 +150,7 @@ def validate_model(document: Mapping[str, Any], qutip_module: Any | None = None)
         required={"schema_version", "unit_convention", "objects"},
         context="model",
     )
-    if document["schema_version"] != 1:
+    if type(document["schema_version"]) is not int or document["schema_version"] != 1:
         raise CliError("schema_version must be the integer 1")
     convention = document["unit_convention"]
     if convention not in UNIT_CONVENTIONS:

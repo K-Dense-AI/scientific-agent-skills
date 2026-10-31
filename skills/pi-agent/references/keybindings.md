@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/keybindings
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 All shortcuts are customizable in `~/.pi/agent/keybindings.json`, which uses the same namespaced ids Pi uses internally and that extension authors pass to `keyHint()` and the injected `keybindings` manager. Pre-namespaced ids from older configs (`cursorUp`, `expandTools`, …) migrate automatically on startup. Run `/reload` after editing.
 
 ## Key Format
@@ -21,7 +23,7 @@ The dedicated `historyPrevious`/`historyNext` actions always change history entr
 
 **`tui.editor.*` deletion** — `deleteCharBackward` (backspace), `deleteCharForward` (delete, ctrl+d), `deleteWordBackward` (ctrl+w, alt+backspace), `deleteWordForward` (alt+d, alt+delete), `deleteToLineStart` (ctrl+u), `deleteToLineEnd` (ctrl+k).
 
-**`tui.editor.*` kill ring** — `yank` (ctrl+y), `yankPop` (alt+y), `undo` (ctrl+-).
+**`tui.editor.*` kill ring** — `yank` (ctrl+y), `yankPop` (alt+y), `undo` (ctrl+-, ctrl+z on native Windows, alt+z on WSL).
 
 **`tui.input.*`** — `newLine` (shift+enter, ctrl+j), `submit` (enter), `tab` (tab), `copy` (ctrl+c).
 
@@ -31,13 +33,13 @@ The dedicated `historyPrevious`/`historyNext` actions always change history entr
 
 These target the primary transcript scroll region and take precedence over editor bindings, so in fullscreen mode unmodified `home`/`end`/`pageUp`/`pageDown` drive the transcript while their `ctrl` variants still drive the editor; outside fullscreen both variants drive the editor. Rebind normally to change the routing (`"tui.altScreen.pageUp": "ctrl+pageUp"`), or set `[]` to disable a transcript shortcut. Mouse-wheel and two-finger input scroll the region under the pointer, OSC 8 hyperlinks open on click, and primary-button drag selects text and copies it (holding at an edge auto-scrolls).
 
-**`app.*` application** — `interrupt` (escape), `clear` (ctrl+c; clears the editor first, exits on a second press), `exit` (ctrl+d when editor empty), `suspend` (ctrl+z; none on Windows), `editor.external` (ctrl+g), `clipboard.pasteImage` (ctrl+v; alt+v on Windows — pastes images or text).
+**`app.*` application** — `interrupt` (escape), `clear` (ctrl+c; clears the editor first, exits on a second press), `exit` (ctrl+d when editor empty), `suspend` (ctrl+z; none on Windows), `editor.external` (ctrl+g), `clipboard.pasteImage` (ctrl+v; alt+v on Windows and WSL — pastes images or text).
 
 **`app.session.*`** — `new`, `tree`, `fork`, `resume` (no defaults), `togglePath` (ctrl+p), `toggleSort` (ctrl+s), `toggleNamedFilter` (ctrl+n), `rename` (ctrl+r), `delete` (ctrl+d), `deleteNoninvasive` (ctrl+backspace).
 
 **`app.model.*` / `app.thinking.*`** — `model.select` (ctrl+l), `model.cycleForward` (ctrl+p), `model.cycleBackward` (shift+ctrl+p), `thinking.cycle` (shift+tab), `thinking.toggle` (ctrl+t).
 
-**`app.tools.*` / `app.message.*`** — `tools.expand` (ctrl+o), `message.copy` (ctrl+x), `message.followUp` (alt+enter), `message.dequeue` (alt+up).
+**`app.tools.*` / `app.message.*`** — `tools.expand` (ctrl+o), `message.copy` (ctrl+x), `message.followUp` (alt+enter, ctrl+q on Windows/WSL), `message.dequeue` (alt+up, alt+q on Windows/WSL).
 
 **`app.tree.*`** — `foldOrUp` (ctrl+left, alt+left), `unfoldOrDown` (ctrl+right, alt+right), `editLabel` (shift+l), `toggleLabelTimestamp` (shift+t), `filter.default` (ctrl+d), `filter.noTools` (ctrl+t), `filter.userOnly` (ctrl+u), `filter.labeledOnly` (ctrl+l), `filter.all` (ctrl+a), `filter.cycleForward` (ctrl+o), `filter.cycleBackward` (shift+ctrl+o).
 

@@ -94,7 +94,8 @@ required, service versions, canonical identifier/name/category, category-count m
 synonym count, bounded candidate preview, and warnings.
 
 A preflight summary records service versions plus Boolean checks for ARAX identity, `/query`, and
-version compatibility. Neither summary claims graph results.
+version compatibility. Preflight also requires `POST /query` and `GET /entity` in OpenAPI.
+Neither summary claims graph results. Normalization retains preflight version/endpoint warnings.
 
 ## Provenance interpretation
 
@@ -130,9 +131,19 @@ is absent, report `missing` and warn.
 Keep only the first requested number of results in the normalized summary while preserving the
 entire size-bounded raw response.
 
-Federated KP timeout, provider error, or malformed-provider evidence yields `completeness: partial`,
-`result_status: partial`, retained artifacts, and exit 7. Otherwise a valid parsed response is
-`complete`; raw malformed responses produce no summary.
+KP timeout, provider error, or malformed-provider evidence in warning/error logs yields
+`completeness: partial`, `result_status: partial`, retained artifacts, and exit 7 in either lookup
+or federated mode. Informational timeout configuration and advisory CURIE warnings do not alone
+indicate provider failure. This classification depends on returned logs; `complete` means no
+recognized failure was reported, not that every possible biomedical relationship was searched.
+
+HTTP 200 alone is not success. ARAX can return an application error in `status` (for example,
+`InvalidKP` or `QueryNotTraversable`). An explicit status other than `Success` or legacy `OK`
+produces exit 6 with the raw response and failure manifest retained, but no success summary.
+Absent/null status is allowed by TRAPI and still requires the graph/results checks. A valid
+successful `results: []` remains a zero-result lookup. Malformed responses also produce no summary.
+This behavior follows the [ARAX query envelope handling](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/ARAX_query.py)
+and [provider response handling](https://github.com/RTXteam/RTX/blob/master/code/ARAX/ARAXQuery/Expand/trapi_querier.py).
 
 ## Manifest
 
@@ -177,8 +188,8 @@ Exit codes:
 | 3 | Service preflight or unsupported-version failure |
 | 4 | Normalization returned no usable result |
 | 5 | Transport or HTTP failure |
-| 6 | Malformed, oversized, or artifact-integrity failure |
-| 7 | Partial federated response with retained artifacts |
+| 6 | Non-success ARAX status, malformed/oversized response, or artifact-integrity failure |
+| 7 | Partial lookup or federated response with retained artifacts |
 
 Text output prints at most the bounded result set and ten publication IDs per edge, labels every
 position unscored, includes all source-role IDs, and points to `summary.json` and `response.json`.

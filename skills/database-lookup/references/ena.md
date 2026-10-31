@@ -24,9 +24,8 @@ GET /search?result={result_type}&query={query}&fields={fields}&limit={N}&format=
 | `result` | string | **Required.** Data type to search. See Result Types below. |
 | `query` | string | Search query using ENA query syntax. |
 | `fields` | string | Comma-separated list of fields to return. Use `/returnFields` to see available fields per result type. |
-| `limit` | int | Max results to return (default 100000). |
-| `offset` | int | Pagination offset. |
-| `format` | string | `json` (default), `tsv`. |
+| `limit` | int | Bound results explicitly; 0 or omission can request the entire result set. |
+| `format` | string | `json`, `tsv` (default). |
 
 **Query syntax:**
 ```
@@ -326,7 +325,7 @@ https://www.ebi.ac.uk/ena/cram/md5/b1eba5b6e4440e22e1e02f7e0febd2da
 GET /sha1/{sha1}
 ```
 
-Returns the reference sequence in FASTA format.
+Inspect the CRAM registry response: checksum retrieval can return raw sequence rather than FASTA. Do not pass an unverified body to a FASTA parser. Verify the checksum of the normalized sequence against the requested registry identifier.
 
 ---
 
@@ -360,7 +359,7 @@ result=coding&query=description="*BRCA1*" AND tax_id=9606
 
 - No authentication required
 - No formal published rate limit, but be courteous: avoid more than ~5 concurrent requests
-- Large result sets: use `limit` and `offset` for pagination
+- Portal `/search` has no documented `offset`. A limit can truncate results; use `/count` to check size and retrieve a complete bounded query or partition by supported indexed fields. Do not repeatedly request an ignored offset.
 - For bulk downloads of sequence data (FASTQ, etc.), use ENA's FTP/Aspera services rather than the REST API
 
 ## Tips

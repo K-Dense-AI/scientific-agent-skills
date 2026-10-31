@@ -152,11 +152,11 @@ class FitResult:
 
     @property
     def aic(self) -> float:
-        return self.n * math.log(self.wssr / self.n) + 2 * self.p
+        return self.n * math.log(max(self.wssr / self.n, np.finfo(float).tiny)) + 2 * self.p
 
     @property
     def bic(self) -> float:
-        return self.n * math.log(self.wssr / self.n) + self.p * math.log(self.n)
+        return self.n * math.log(max(self.wssr / self.n, np.finfo(float).tiny)) + self.p * math.log(self.n)
 
 
 def _weights(y: np.ndarray, yhat: np.ndarray, scheme: str) -> np.ndarray:
@@ -272,7 +272,9 @@ def fit_one(
         # Covariance on the log scale from the Gauss-Newton approximation.
         _, s, vt = np.linalg.svd(jac, full_matrices=False)
         threshold = np.finfo(float).eps * max(jac.shape) * (s[0] if s.size else 0.0)
-        s_inv = np.array([1.0 / x if x > threshold else 0.0 for x in s])
+        if np.count_nonzero(s > threshold) < p:
+            raise np.linalg.LinAlgError("rank-deficient sensitivity matrix; covariance is not identifiable")
+        s_inv = 1.0 / s
         cov = (vt.T * s_inv**2) @ vt * sigma2
         se_log = np.sqrt(np.maximum(np.diag(cov), 0.0))
         outer = np.outer(se_log, se_log)
@@ -406,7 +408,7 @@ def _fit_and_report(spec: FitSpec, args, subject: str, time, conc, report: Repor
                 "estimate": result.theta[i],
                 "rse_pct": 100.0 * se if math.isfinite(se) else float("nan"),
                 "ci95_low": result.theta[i] * math.exp(-crit * se) if math.isfinite(se) else float("nan"),
-                "ci95_high": result.theta[i] * math.exp(crit * se) if math.isfinite(se) else float("nan"),
+                "ci95_high": result.theta[i] * float(np.exp(min(crit * se, 709.0))) if math.isfinite(se) else float("nan"),
             }
         )
         if math.isfinite(se) and 100.0 * se > args.max_rse:
@@ -451,16 +453,16 @@ def _fit_and_report(spec: FitSpec, args, subject: str, time, conc, report: Repor
                         f"{label}: {result.names[i]} and {result.names[j]} are correlated at "
                         f"{rho:+.3f} - the data cannot separate them; consider a simpler model"
                     )
-    if math.isfinite(result.condition) and result.condition > 1000:
+    if not math.isfinite(result.condition) or result.condition > 1000:
         report.finding(
             f"{label}: condition number {result.condition:.0f} exceeds 1000 - the model is "
-            "over-parameterised for these data and the standard errors are unreliable"
+            "ill-conditioned or rank deficient; standard errors do not establish identifiability"
         )
     runs_p = runs_test_p(result.weighted_residuals)
     if math.isfinite(runs_p) and runs_p < 0.05:
         report.finding(
             f"{label}: residual signs are not random (runs test p = {runs_p:.4f}) - a structural "
-            "misspecification, which no amount of reweighting will fix"
+            "pattern needing review of structure, time ordering, serial dependence and error model"
         )
     if not result.success:
         report.finding(f"{label}: optimiser did not report convergence ({result.message})")
@@ -484,7 +486,13 @@ def _fit_and_report(spec: FitSpec, args, subject: str, time, conc, report: Repor
 
 def run(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.route == "iv-infusion" and not args.tinf:
+    from _common import validate_numeric_args
+    validate_numeric_args(args)
+    if args.weight in {"1/yhat", "1/yhat2"}:
+        raise InputError("prediction-dependent WLS omits the likelihood variance term; use a full likelihood/error-model tool")
+    if args.dose <= 0 or args.n_doses < 1 or (args.interval is not None and args.interval <= 0):
+        raise InputError("dose, dose count and interval must be positive")
+    if args.route == "iv-infusion" and (args.tinf is None or args.tinf <= 0):
         print("error: --route iv-infusion needs --tinf", file=sys.stderr)
         return EXIT_INPUT
 
@@ -494,7 +502,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     report = Report()
     report.note(f"weighting: {args.weight} ({WEIGHTS[args.weight]})")
-    report.note("parameters estimated on the log scale; confidence intervals are therefore asymmetric")
+    report.note("parameters estimated on the log scale; intervals are local Gauss-Newton approximations, not profile likelihood intervals")
+    report.note("Observed-concentration weights can bias estimates; compare error models. AIC/BIC here are weighted-SSR scores, conditional on fixed weights. Compartment F p-values are exploratory: boundary/nonidentifiability invalidate a general nominal F-test.")
     if args.route == "oral":
         report.note(
             "extravascular data alone identify CL/F and V/F, never CL and V separately. "

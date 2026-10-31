@@ -17,6 +17,7 @@ MAX_FILES = 500
 MAX_JSON_ITEMS = 20_000
 MAX_JSON_DEPTH = 24
 MAX_PATH_CHARS = 4096
+# Conservative helper portability subset, not modern MATLAB's namelengthmax.
 MATLAB_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,62}$")
 MATLAB_RELEASE = re.compile(r"^R(20[0-9]{2})([ab])$")
 URL_LIKE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
@@ -206,7 +207,7 @@ def bounded_int(
 def validate_identifier(value: str, *, name: str = "identifier") -> str:
     if not MATLAB_IDENTIFIER.fullmatch(value):
         raise CliError(
-            f"{name} must be a MATLAB identifier of at most 63 characters"
+            f"{name} must use the helper's MATLAB identifier subset (at most 63 characters)"
         )
     return value
 

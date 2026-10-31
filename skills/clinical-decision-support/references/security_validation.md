@@ -23,7 +23,7 @@ The affected external schematic wrappers were the now-deleted files
 - Added bounded local JSON handling, person-level-key rejection, output limits, and deterministic schemas.
 - Added static AST tests that reject network libraries, dynamic code execution, credential access, and executable serialization.
 
-## Post-Refresh Results
+## Historical July 2026 Scan Results
 
 - Direct behavioral scan: **SAFE, 0 findings**.
 - Pull-request gate with `--fail-on HIGH`: **passed** with 0 CRITICAL and
@@ -47,6 +47,10 @@ these LOW observations:
    path and passes.
 
 None of the accepted findings permits network access, sensitive-data handling, or clinical action.
+
+## September 2026 Maintenance
+
+The 2.4 refresh keeps all runtime helpers offline. Invalid aggregate/matrix inputs now withhold results or exports; denominator checks run before suppression; undefined balanced accuracy stays null; CSV text is escaped and dangling output symlinks are rejected. Synthetic regression tests cover these cases and the updated GRADE imprecision label. The July scanner results above are historical, not a claim about a new scan of version 2.4.
 
 ## Reproduction
 

@@ -22,10 +22,10 @@ Effective data visualization in presentations differs fundamentally from journal
 - ❌ Dense tick marks and minor labels
 
 **Focus on Key Message**:
-- Show only the data supporting your current point
-- Subset data if full dataset is overwhelming
+- Focus the view on the current comparison while retaining controls and results that could change its interpretation
+- Disclose selection criteria when subsetting data
 - Highlight the specific comparison you're discussing
-- Remove context that isn't immediately relevant
+- Keep essential uncertainty, sample sizes, and limitations visible
 
 **Example Transformation**:
 ```
@@ -230,7 +230,7 @@ After: Top 6 categories only, large fonts, direct labels, key bar highlighted
 ```
 
 **First Use**:
-If your audience may be unfamiliar, briefly explain: "Box shows middle 50% of data, line is median, whiskers show range"
+If your audience may be unfamiliar, briefly explain: "Box shows middle 50% of data, line is median, whiskers follow the plotted convention (commonly the most extreme values within 1.5 IQR; outliers are separate)"
 
 ### Heatmaps
 
@@ -333,7 +333,7 @@ If your audience may be unfamiliar, briefly explain: "Box shows middle 50% of da
 - Blues: Light blue → Dark blue
 - Greens: Light green → Dark green  
 - Grays: Light gray → Black
-- Viridis: Yellow → Purple (perceptually uniform)
+- Viridis: Purple → Yellow (perceptually uniform)
 
 **Avoid**:
 - Rainbow scales (non-uniform perception)
@@ -555,7 +555,7 @@ Slide 3: Highlight specific points in zoomed view
 
 **For Published Figures**:
 - Request high-resolution versions from authors/publishers
-- Recreate if source not available
+- Recreate only from available data; label digitized approximations and never invent missing values
 - Check reuse permissions
 
 ### Step 2: Simplify for Presentation

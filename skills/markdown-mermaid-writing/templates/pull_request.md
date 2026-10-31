@@ -2,17 +2,15 @@
 
 # Pull Request Documentation Template
 
-> **Back to [Markdown Style Guide](../markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
+> **Back to [Markdown Style Guide](../references/markdown_style_guide.md)** — Read the style guide first for formatting, citation, and emoji rules.
 
-**Use this template for:** Documenting pull requests as persistent, searchable markdown records. This file IS the PR — not a companion document. It captures everything: what changed, why, how to verify, security impact, deployment strategy, and what was learned.
+**Use this template for:** Documenting pull requests as persistent, searchable markdown records. It can serve as a companion record or the PR body, according to project conventions. It captures everything: what changed, why, how to verify, security impact, deployment strategy, and what was learned.
 
 **Key features:** Summary with impact classification, change inventory with before/after, testing evidence, security review, breaking change documentation, deployment strategy, observability plan, rollback plan, and reviewer checklist.
 
-**Philosophy:** This file IS the PR description — not a companion, not a supplement, not a copy. The GitHub PR is a thin pointer: humans go there to comment on diffs, approve, and watch CI. But the actual record — what changed, why it changed, testing evidence, rollback plan, and lessons learned — lives HERE, committed to the repo.
-
-When someone asks "what was PR #123 about?" six months from now, they `grep docs/project/pr/`, not the GitHub API. When you migrate from GitHub to GitLab, every PR record comes with you. When an AI agent needs to understand the history of a module, it reads these files locally — no tokens, no rate limits, no platform dependency.
-
-This is the [Everything is Code](../markdown_style_guide.md#-everything-is-code) philosophy: project management data lives in the repo, versioned and portable. Don't capture information in GitHub's UI that should be captured in this file. Invest the 10 minutes. A great PR file eliminates the "what was this PR about?" Slack message and the "can someone check the GitHub PR?" context switch — the answer is already in the repo.
+**Project convention:** Use this optional file-based record only when the project requests
+it. Preserve the established tracker/PR workflow, link the live record, and replace all
+example paths. Editing this Markdown file does not update a hosted issue, PR, or board.
 
 ---
 
@@ -27,13 +25,15 @@ docs/project/pr/pr-00000125-refactor-ci-stage-order.md
 - **Directory:** `docs/project/pr/`
 - **Naming:** `pr-` + PR number zero-padded to 8 digits + `-` + short lowercase hyphenated description
 - **Cross-reference:** Link to the live PR in the metadata table
-- **GitHub PR body:** Use only the full branch URL to this file (for example, `https://github.com/<org>/<repo>/blob/<branch>/docs/project/pr/pr-00000123-fix-auth-timeout.md`)
+- **GitHub PR body:** Follow the repository template and include the actual summary and validation; optionally link this file (for example, `https://github.com/<org>/<repo>/blob/<branch>/docs/project/pr/pr-00000123-fix-auth-timeout.md`)
 
 ---
 
 ## The Template
 
-Everything below the line is the template. Copy from here:
+Everything below the line is the template. Copy from here; commands, API routes,
+versions, thresholds, and numerical values are illustrative placeholders. Verify them
+against the actual project before publishing. Follow its existing tracker and PR conventions.
 
 ---
 
@@ -46,7 +46,7 @@ Everything below the line is the template. Copy from here:
 | **Date**            | [YYYY-MM-DD]                                                                                                                                                                                  |
 | **Status**          | [Open / Merged / Closed]                                                                                                                                                                      |
 | **Branch**          | `[feature/branch-name]` → `main`                                                                                                                                                              |
-| **Related issues**  | [#ISSUE](../../docs/project/issues/issue-00000001-agentic-documentation-system.md), [#ISSUE2](../../docs/project/issues/issue-00000002-provider-priority-fail-fast-review-cost-visibility.md) |
+| **Related issues**  | #ISSUE (replace with the project link), #ISSUE2 (replace with the project link) |
 | **Deploy strategy** | [Standard / Canary / Blue-green / Feature flag]                                                                                                                                               |
 
 ---
@@ -131,9 +131,9 @@ flowchart LR
 
 | Test type         | Status      | Notes                              |
 | ----------------- | ----------- | ---------------------------------- |
-| Unit tests        | ✅ Passing  | [N new / N modified]               |
-| Integration tests | ✅ Passing  | [Details]                          |
-| Manual testing    | ✅ Verified | [What was tested manually]         |
+| Unit tests        | [Run result or Not run]  | [N new / N modified]               |
+| Integration tests | [Run result or Not run]  | [Details]                          |
+| Manual testing    | [Verified with evidence or Not run] | [What was tested manually]         |
 | Performance       | ⬜ N/A      | [Or benchmark results if relevant] |
 
 ### Edge cases considered
@@ -303,15 +303,15 @@ git revert [commit-sha]
 
 ### Follow-up items
 
-- [ ] [Task that should happen after merge but isn't blocking](../../docs/project/issues/issue-00000003-local-review-context-pack-and-resilience.md)
-- [ ] [Technical debt to address later](../../docs/project/issues/issue-00000004-memory-backend-self-hosted-and-sql-seed.md)
+- [ ] Task that should happen after merge but isn't blocking (replace with the project link)
+- [ ] Technical debt to address later (replace with the project link)
 
 ---
 
 ## 🔗 References
 
-- [Design document or ADR](../adr/ADR-001-agent-optimized-documentation-system.md)
-- [Related issue](../../docs/project/issues/issue-00000001-agentic-documentation-system.md)
+- Design document or ADR (replace with the project link)
+- Related issue (replace with the project link)
 - [Relevant documentation](https://example.com)
 
 ---

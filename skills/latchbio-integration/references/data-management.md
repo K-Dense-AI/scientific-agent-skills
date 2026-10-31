@@ -66,14 +66,18 @@ if root.exists():
     print(root.node_id())
     print(root.name())
     print(root.is_dir())
-    print(root.size_recursive())
+    # size_recursive() can be slow for large directory trees.
 
     for child in root.iterdir():
-        print(child.path, child.content_type(), child.size())
+        print(child.path, child.content_type(), child.size(), child.modify_time())
 ```
 
 `iterdir()` is shallow. It returns an iterator of child `LPath` objects and
 does not recursively traverse nested directories.
+
+`modify_time()` (added in 2.76.9) returns a `datetime` or `None`; it is not a
+content checksum. `size_recursive()` can be expensive on large directories.
+Use ordinary file sizes unless recursive totals are needed.
 
 Metadata is cached for the lifetime of the object after a lookup. Call
 `fetch_metadata()` after an external rename or modification when fresh values
@@ -99,7 +103,11 @@ rely on that path after process termination.
 
 With `cache=True`, the SDK uses the remote version identifier and local extended
 attributes where supported. Explicit paths plus caching are especially
-important in long-lived Pods and Plots.
+important in long-lived Pods and Plots. SDK 2.77.1 removed the `pyxattr`
+dependency: on macOS it invokes the system `xattr` command; on Linux it uses
+`os.*xattr`. Use a filesystem supporting extended attributes. Setting
+`cache=False` does not disable the post-download attribute write in this release,
+so it is not a workaround for an unsupported filesystem.
 
 ### Upload
 
@@ -254,4 +262,4 @@ were deprecated.
 - Latch URLs: https://wiki.latch.bio/workflows/sdk/python/latch-urls
 - Data CLI: https://wiki.latch.bio/data/data-command-line
 - Data overview: https://wiki.latch.bio/data/overview
-- `LPath` source in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch/ldata/path.py
+- `LPath` source in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch/ldata/path.py

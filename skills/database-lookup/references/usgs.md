@@ -2,7 +2,15 @@
 
 ## Part A: Earthquake Hazards Program
 
-### Base URL
+### Water Services migration
+
+USGS announces that WaterServices will be decommissioned in early 2027. The NWIS
+examples below target the legacy service. For new water-data applications, use
+https://api.waterdata.usgs.gov and its documented collections; do not translate
+NWIS query parameters mechanically. Earthquake APIs have a separate lifecycle.
+Source: https://waterservices.usgs.gov/
+
+## Base URL
 ```
 https://earthquake.usgs.gov/fdsnws/event/1
 ```

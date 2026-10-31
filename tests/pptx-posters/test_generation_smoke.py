@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from synthetic_posters import build_manifest  # noqa: E402
 EXPECTED = {
     "python-pptx": "1.0.2",
     "Pillow": "12.3.0",
-    "lxml": "6.1.1",
+    "lxml": "6.1.3",
 }
 
 
@@ -46,6 +47,28 @@ def exact_dependencies_available() -> bool:
     "run with the exact pins in assets/generation_dependencies.json",
 )
 class GenerationSmokeTests(unittest.TestCase):
+    def test_non_utc_approval_is_serialized_as_the_same_utc_instant(self) -> None:
+        from pptx import Presentation
+
+        cases = (
+            ("2026-10-01T23:30:00-07:00", datetime(2026, 10, 2, 6, 30)),
+            ("2026-10-01T23:30:00+05:30", datetime(2026, 10, 1, 18, 0)),
+        )
+        for approved_at, expected_utc in cases:
+            with self.subTest(approved_at=approved_at), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = build_manifest(manifest_content_hash)
+                manifest["approval"]["approved_at"] = approved_at
+                path = root / "poster.json"
+                path.write_text(json.dumps(manifest), encoding="utf-8")
+                output = root / "poster.pptx"
+                generate_poster(path, output)
+                reopened = Presentation(output)
+                self.assertEqual(reopened.core_properties.created, expected_utc)
+                self.assertEqual(reopened.core_properties.modified, expected_utc)
+                self.assertEqual(reopened.core_properties.title, manifest["document"]["title"])
+                self.assertEqual(reopened.core_properties.author, "; ".join(manifest["document"]["authors"]))
+
     def test_hidden_image_metadata_is_a_release_blocker(self) -> None:
         from PIL import Image, PngImagePlugin
 
@@ -161,6 +184,9 @@ class GenerationSmokeTests(unittest.TestCase):
                 placement["minimum_effective_dpi_final"],
                 100.0,
             )
+            self.assertEqual(placement["placed_width_in_design"], 5.0)
+            self.assertEqual(placement["placed_height_in_design"], 4.0)
+            self.assertEqual(placement["minimum_effective_dpi_final"], 120.0)
 
             with zipfile.ZipFile(output, "r") as archive:
                 self.assertFalse(
@@ -188,6 +214,12 @@ class GenerationSmokeTests(unittest.TestCase):
                 reopened.slides[0].shapes.title.text,
                 "Synthetic layout test",
             )
+            picture = reopened.slides[0].shapes[-1]
+            for actual, expected_inches in (
+                (picture.left, 4.5), (picture.top, 2.5),
+                (picture.width, 5.0), (picture.height, 4.0),
+            ):
+                self.assertLessEqual(abs(actual - expected_inches * 914400), 1)
 
             second_output = root / "poster-second.pptx"
             second_generation = generate_poster(manifest_path, second_output)

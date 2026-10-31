@@ -5,6 +5,9 @@ analysis evaluation, evidence quality assessment, logical fallacy identification
 research design guidance, and claim evaluation — each with the questions to ask and what
 the answers imply.
 
+Use [review_sources.md](review_sources.md) for current framework versions and primary
+sources. Keep missing reporting, risk of bias, applicability, and certainty distinct.
+
 ## Core Capabilities
 
 ### 1. Methodology Critique
@@ -129,6 +132,7 @@ Critically assess statistical methods, interpretation, and reporting.
    - Were test assumptions checked and met?
    - Are parametric tests justified, or should non-parametric alternatives be used?
    - Is the analysis matched to study design (e.g., paired vs. independent)?
+   - Is n the number of independent units rather than technical replicates or time points?
 
 3. **Multiple Comparisons**
    - Were multiple hypotheses tested?
@@ -137,7 +141,8 @@ Critically assess statistical methods, interpretation, and reporting.
    - Could findings be false positives from multiple testing?
 
 4. **P-Value Interpretation**
-   - Are p-values interpreted correctly (probability of data if null is true)?
+   - Are p-values interpreted as test-statistic tail probabilities under the null model
+     and analysis procedure, rather than hypothesis probabilities?
    - Is non-significance incorrectly interpreted as "no effect"?
    - Is statistical significance conflated with practical importance?
    - Are exact p-values reported, or only "p < .05"?
@@ -160,6 +165,8 @@ Critically assess statistical methods, interpretation, and reporting.
    - Are predictions made outside the data range (extrapolation)?
    - Are multicollinearity issues addressed?
    - Are model assumptions checked?
+   - Does the model identify the claimed parameter, or do rank deficiencies, symmetries,
+     flat profiles, constraints, or prior sensitivity leave it unresolved despite good fit?
 
 8. **Common Pitfalls**
    - Correlation treated as causation
@@ -183,7 +190,7 @@ Evaluate the strength and quality of evidence systematically.
 **Evidence evaluation framework:**
 
 1. **Study Design Hierarchy**
-   - Systematic reviews/meta-analyses (highest for intervention effects)
+   - Systematic reviews/meta-analyses (synthesize the certainty of their underlying evidence)
    - Randomized controlled trials
    - Cohort studies
    - Case-control studies
@@ -191,16 +198,21 @@ Evaluate the strength and quality of evidence systematically.
    - Case series/reports
    - Expert opinion (lowest)
 
-   **Important:** Higher-level designs aren't always better quality. A well-designed observational study can be stronger than a poorly-conducted RCT.
+   **Important:** This is an intervention-oriented shorthand, not a universal ranking.
+   Match the design to the question; a review does not become high certainty by pooling.
 
 2. **Quality Within Design Type**
-   - Risk of bias assessment (use appropriate tool: Cochrane RoB 2 for RCTs, ROBINS-I for non-randomized studies, Newcastle-Ottawa, etc.)
+   - Result-specific risk of bias: RoB 2 for randomized intervention results, ROBINS-I
+     for non-randomized intervention effects, QUADAS-3 for diagnostic accuracy estimates;
+     record the exact version and use the matching scope
    - Methodological rigor
    - Transparency and reporting completeness
    - Conflicts of interest
 
 3. **GRADE Considerations (if applicable)**
-   - Start with design type (RCT = high, observational = low)
+   - Define the outcome/comparison and GRADE application. For intervention evidence,
+     specify traditional design-based or ROBINS-I-integrated starting certainty; avoid
+     double-counting non-randomization (see `references/evidence_hierarchy.md`).
    - **Downgrade for:**
      - Risk of bias
      - Inconsistency across studies
@@ -208,9 +220,8 @@ Evaluate the strength and quality of evidence systematically.
      - Imprecision (wide confidence intervals, small samples)
      - Publication bias
    - **Upgrade for:**
-     - Large effect sizes
-     - Dose-response relationships
-     - Confounders would reduce (not increase) effect
+     - Justified large effects, dose response, or plausible confounding opposing the
+       observed effect under the applicable GRADE approach; not automatic bonuses
 
 4. **Convergence of Evidence**
    - **Stronger when:**
@@ -308,7 +319,7 @@ Provide constructive guidance for planning rigorous studies.
    - Define variables operationally
 
 2. **Design Selection**
-   - Match design to question (causal → experimental; associational → observational)
+   - Match design and identification assumptions to descriptive, predictive, or causal question
    - Consider feasibility and ethical constraints
    - Choose between-subjects, within-subjects, or mixed designs
    - Plan factorial designs if testing multiple factors
@@ -344,7 +355,7 @@ Provide constructive guidance for planning rigorous studies.
 
 7. **Transparency and Rigor**
    - Preregister study and analysis plan
-   - Use reporting guidelines (CONSORT, STROBE, PRISMA)
+   - Use reporting guidelines (CONSORT 2025/SPIRIT 2025, STROBE, PRISMA 2020 as applicable)
    - Plan to report all outcomes, not just significant ones
    - Distinguish confirmatory from exploratory analyses
    - Commit to data/code sharing
@@ -393,7 +404,7 @@ Systematically evaluate scientific claims for validity and support.
    - Are caveats about generalization included?
 
 6. **Red Flags**
-   - Causal language from correlational studies
+   - Causal language without an explicit estimand and defensible identifying assumptions
    - "Proves" or absolute certainty
    - Cherry-picked citations
    - Ignoring contradictory evidence

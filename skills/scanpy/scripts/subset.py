@@ -13,7 +13,7 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_scanpy, die, info, load_anndata, save_anndata
+from _common import add_io_args, configure_scanpy, die, info, load_anndata, save_anndata, clear_graph
 
 
 def main():
@@ -52,10 +52,11 @@ def main():
         info(f"Restricted to {adata.n_vars} genes")
 
     if args.recompute_hvg:
-        for k in ("X_pca", "X_umap", "X_tsne"):
-            adata.obsm.pop(k, None)
-        adata.uns.pop("neighbors", None)
-        info("Cleared PCA/UMAP/neighbors; re-run preprocess/reduce_dimensions on the subset")
+        clear_graph(adata, clear_pca=True)
+        for key in list(adata.var):
+            if key.startswith("highly_variable"):
+                del adata.var[key]
+        info("Cleared standard HVG/embedding/graph results. Recompute HVGs on the existing log-normalized X; do not normalize it again.")
 
     save_anndata(adata, args.output)
 

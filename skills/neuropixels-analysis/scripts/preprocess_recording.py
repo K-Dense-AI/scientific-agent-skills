@@ -10,6 +10,7 @@ import argparse
 from pathlib import Path
 
 import spikeinterface.full as si
+from _common import validate_recording, apply_phase_correction, reference_by_shank
 
 
 def preprocess_recording(
@@ -28,19 +29,31 @@ def preprocess_recording(
 
     print(f"Loading recording from: {input_path}")
 
-    # Load recording
-    if format == 'spikeglx' or (format == 'auto' and 'imec' in str(input_path).lower()):
+    # Identify acquisition format explicitly; do not hide reader errors as fallback loads.
+    source = Path(input_path)
+    if format == 'auto':
+        if source.suffix.lower() == '.nwb':
+            format = 'nwb'
+        elif any(source.rglob('*.ap.meta')):
+            format = 'spikeglx'
+        elif any(source.rglob('*.oebin')):
+            format = 'openephys'
+        else:
+            format = 'saved'
+    if format == 'spikeglx':
         recording = si.read_spikeglx(input_path, stream_name=stream_name or 'imec0.ap')
     elif format == 'openephys':
-        recording = si.read_openephys(input_path)
+        recording = si.read_openephys(input_path, stream_name=stream_name)
     elif format == 'nwb':
         recording = si.read_nwb(input_path)
+    elif format == 'saved':
+        recording = si.load(input_path)
     else:
-        # Try auto-detection
-        try:
-            recording = si.read_spikeglx(input_path, stream_name=stream_name or 'imec0.ap')
-        except Exception:
-            recording = si.load_extractor(input_path)
+        raise ValueError(f"Unknown format: {format}")
+
+    validate_recording(recording)
+    if not 0 < freq_min < freq_max < recording.get_sampling_frequency() / 2:
+        raise ValueError("Require 0 < freq_min < freq_max < Nyquist frequency.")
 
     print(f"Recording: {recording.get_num_channels()} channels, {recording.get_total_duration():.1f}s")
 
@@ -54,7 +67,7 @@ def preprocess_recording(
     # Phase shift correction (for Neuropixels ADC)
     if phase_shift:
         print("Applying phase shift correction...")
-        rec = si.phase_shift(rec)
+        rec = apply_phase_correction(rec)
 
     # Bad channel detection
     if detect_bad:
@@ -67,14 +80,14 @@ def preprocess_recording(
     # Common median reference
     if common_ref:
         print("Applying common median reference...")
-        rec = si.common_reference(rec, operator='median', reference='global')
+        rec = reference_by_shank(rec)
 
     # Save preprocessed
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     print(f"Saving preprocessed recording to: {output_path}")
-    rec.save(folder=output_path / 'preprocessed', n_jobs=n_jobs)
+    rec = rec.save(folder=output_path / 'preprocessed', n_jobs=n_jobs)
 
     # Save probe info
     probe = rec.get_probe()

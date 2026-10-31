@@ -124,7 +124,7 @@ whether safe access or metadata alternatives are provided.
 
 The template uses an ordinal 0–4 scale:
 
-- **0 — no assessable evidence**
+- **0 — observed lack of support**
 - **1 — limited support**
 - **2 — mixed support**
 - **3 — substantial support**
@@ -153,9 +153,16 @@ Each criterion has exactly one status:
 - `not_applicable`: the criterion does not apply to this work under a documented
   rationale; score and uncertainty are null.
 
-Do not encode missing or not-applicable as zero.
+A rated zero must cite inspected evidence demonstrating lack of support or a
+contradiction. An inaccessible section or unassessed evidence is `missing`, not
+zero. Do not encode missing or not-applicable as zero.
 
 ## Transparent score math
+
+Numeric averaging additionally assumes meaningful spacing between anchors and
+compensatory tradeoffs between criteria. Ordinal labels alone do not justify
+these assumptions. Use a composite only when the local rubric owner documents
+them for the stated developmental purpose; otherwise retain criterion findings.
 
 For rated criteria \(R\), score \(s_i\), and predeclared weight \(w_i\):
 
@@ -212,8 +219,10 @@ At minimum:
 9. monitor drift over time; and
 10. retrain, revise, or suspend the rubric when evidence warrants.
 
-The bundled agreement script reports exact agreement, within-one-step agreement,
-and mean absolute difference. Those summaries do not replace a
+The bundled agreement script compares raters only within the same criterion,
+work, and evaluation round. It reports exact agreement, within-one-step agreement,
+and mean absolute difference, pooling rater pairs. More heavily rated rounds
+contribute more pairs; pairs sharing a rater/work are dependent observations. Those summaries do not replace a
 design-appropriate reliability analysis. The rubric therefore separately
 records `inter_rater_reliability_status` and
 `inter_rater_reliability_ref`; the template leaves reliability not established.
@@ -241,7 +250,9 @@ Weights are value judgments. Predeclare and justify them. Run
 
 The script increases and decreases one weight at a time and renormalizes the
 weights. It reports score ranges and whether pairwise ordinal relationships
-among scholarly works change. Instability is evidence that an apparent order
+among scholarly works change, using unrounded scores and a stated numerical
+tolerance. Tied pairs are explicit. Different applicable or rated criterion sets
+limit comparability even at 100% applicable coverage. Instability is evidence that an apparent order
 depends on contestable weights.
 
 The output must not be used to rank people or decide a high-impact outcome.

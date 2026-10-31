@@ -14,9 +14,10 @@ short summary to stdout.
 
 | flag | type | required | default | description |
 | --- | --- | --- | --- | --- |
+| `--timeout` | float | no | 30 | Positive finite seconds per RPC. Whole-fetch retries and pagination can exceed this overall. |
 | `--output` | path | no | temp file | Write full JSON here; otherwise a `onekgpd_<cmd>_*.json` temp file is created and its path printed. |
 
-There is no endpoint, credential, assembly, or timeout flag: the skill targets
+There is no endpoint, credential, or assembly override: the skill targets
 the public 1000 Genomes instance on GRCh38 only.
 
 ### Region input (count/select variants and samples)
@@ -68,12 +69,16 @@ combine with **AND**; multiple CSV values within one field combine with **OR**.
 
 Mutual exclusions enforced: `--biallelic-only`/`--multiallelic-only`,
 `--exclude-males`/`--exclude-females`, and `--alpha-missense-class` vs the
-AlphaMissense score bounds. Setting a `*-gt` ≥ its matching `*-lt` defines an
-empty range and returns nothing.
+AlphaMissense score bounds. Every numeric AF/AlphaMissense bound must be finite,
+in `(0, 1]`, and remain nonzero when encoded as float32. **Zero means unset in
+the protobuf API**; the wrapper rejects it rather than silently dropping the
+filter. Setting a positive `*-gt` ≥ its matching `*-lt` defines an empty range.
 
-The `--gnomad-exomes-af-lt` / `--gnomad-genomes-af-lt` bounds **include** unannotated
-variants: "AF < X in gnomAD" includes variants with gnomAD AF = 0, i.e. unannotated;
-pair it with `--gnomad-*-af-gt 0` to require presence in gnomAD.
+The gnomAD `< X` bounds include unannotated variants, represented by AF = 0.
+Choose a scientifically meaningful positive lower bound to exclude those zeros;
+this also excludes annotated values at or below that bound. For exact annotation
+presence, retrieve complete variants and post-filter the relevant AF > 0 locally.
+Do not substitute an arbitrary epsilon without documenting its effect.
 
 ---
 
@@ -81,7 +86,7 @@ pair it with `--gnomad-*-af-gt 0` to require presence in gnomAD.
 
 ### `dataset-info`
 
-No flags beyond `--output`. Returns dataset totals (sample count, sex split,
+No flags beyond `--output` / `--timeout`. Returns dataset totals (sample count, sex split,
 variant total, assembly) and the cohort breakdown. Doubles as a connectivity
 check.
 
@@ -108,12 +113,15 @@ Region + zygosity + annotation flags, plus pagination:
 JSON: `{command, count_returned, truncated, request, result_incomplete,
 variants:[…]}`. `truncated` is true when the count hit `--limit` (more may
 exist; raise `--limit` or use `--page-size`). Empty `variants` array if no
-matches.
+matches. Paging accumulates the complete result in memory. Check
+`result_incomplete` separately from `truncated`; a count taken before selection
+is not a transactional snapshot.
 
 ### `count-variants-in-samples`
 
 As `count-variants`, plus `--samples CSV` (required) — counts variants carried
-by the named individuals.
+by the named individuals. Blank/empty CSV is rejected before connecting, because
+the SDK otherwise routes an empty sample list to the cohort-wide endpoint.
 
 ### `select-variants-in-samples`
 
@@ -147,16 +155,21 @@ if no matches.
 | `--position` | int | yes | 1-based position. |
 
 Counts individuals with a homozygous-reference (0/0) call at the position. JSON:
-`{command, count, variant_present, request}`. The count is a **sentinel**:
+`{command, count, variant_present, request, result_incomplete}`. For a complete
+response the count uses a **sentinel**:
 
 - `-1` → no variant exists at the position at all (`variant_present=false`).
 - `0` → a variant exists, but no individual is homozygous reference.
 - `>0` → number of homozygous-reference individuals.
 
+If `result_incomplete=true`, `variant_present=null` and the count is not
+definitive. No variant record does not imply all samples are callable reference.
+
 ### `select-samples-hom-ref`
 
 Same `--chrom`/`--position` as above. Lists the individuals with a homozygous-
-reference call at the position. JSON: `{command, count, samples:[…], request}`.
+reference call at the position. JSON:
+`{command, count, samples:[…], request, result_incomplete}`.
 
 ### `kinship`
 
@@ -187,8 +200,8 @@ and VEP consequence are **not** echoed back on a returned variant):
 | `end` | int | 1-based inclusive end. |
 | `ref` | str | Reference allele. |
 | `alt` | str | Alternate allele. |
-| `af` | float | Dataset allele frequency. |
-| `ac` | float | Dataset allele count (0.5 for male non-PAR het calls on on X and Y chromosomes). |
+| `af` | float | Whole-dataset allele frequency, not recalculated for `--samples`. |
+| `ac` | float | Dataset allele count (0.5 for male non-PAR het calls on X and Y chromosomes). |
 | `an` | int | Dataset allele number. |
 | `hom_samples` | int | Number of all samples with a homozygous genotype. |
 | `het_samples` | int | Number of all samples with a heterozygous genotype. |
@@ -199,10 +212,10 @@ and VEP consequence are **not** echoed back on a returned variant):
 | `hom_samples_mxy` | int | Number of male samples with a homozygous genotype, X & Y chromosomes only (0 outside X and Y). |
 | `het_samples_mxy` | int | Number of male samples with a heterozygous genotype, X & Y chromosomes only (0 outside X and Y). |
 | `mis_samples_mxy` | int | Number of male samples with a missing (no-call) genotype, X & Y chromosomes only (0 outside X and Y). |
-| `gnomad_exomes_af` | float | gnomAD v4.1 exomes AF. `0.0` = absent from gnomAD exomes. |
-| `gnomad_genomes_af` | float | gnomAD v4.1 genomes AF. `0.0` = absent from gnomAD genomes. |
+| `gnomad_exomes_af` | float | gnomAD v4.1 exomes AF. `0.0` = not annotated in this service snapshot. |
+| `gnomad_genomes_af` | float | gnomAD v4.1 genomes AF. `0.0` = not annotated in this service snapshot. |
 | `am_score` | float | AlphaMissense score. `0.0` = not annotated. |
-| `amino_acids` | str | HGVSp Amino-acid substitution. |
+| `amino_acids` | str | HGVSp annotation string; may contain multiple transcript entries, canonical first. |
 | `biallelic` | bool | Whether the site was biallelic in the input VCFs. |
 
 ---
@@ -294,3 +307,51 @@ At least one of `--population` / `--superpopulation` is required; when both are
 given the results are intersected (AND). JSON: `{command, count, samples:[ids],
 request:{population, superpopulation, skip, limit}}`, sample IDs ordered
 ascending then paginated by `skip`/`limit`.
+
+
+## Verified API contract
+
+Reviewed 2026-09-30 against released `dnaerys 0.2.1`, protobuf **R1.20.0**,
+and public TLS gRPC `db.dnaerys.org:443`. The service prefix is
+`org.dnaerys.cluster.grpc.DnaerysService/`; do not append REST routes to the host.
+All routes below were exercised with small read-only queries. Health and dataset
+metadata also succeeded: 3,202 samples, GRCh38, 138,044,723 variants, eight rings,
+and a 5,000-variant cap per ring. These are observed snapshot totals, not constants
+that clients may assume forever.
+
+| Wrapper operation / input | gRPC method suffix |
+| --- | --- |
+| `dataset-info` | `DatasetInfo` |
+| `count-variants`, single / multiple regions | `CountVariantsInRegion` / `CountVariantsInMultiRegions` |
+| `count-variants-in-samples`, single / multiple | `CountVariantsInRegionInSamples` / `CountVariantsInMultiRegionsInSamples` |
+| `select-variants`, single / multiple | `SelectVariantsInRegion` / `SelectVariantsInMultiRegions` |
+| `select-variants-in-samples`, single / multiple | `SelectVariantsInRegionInSamples` / `SelectVariantsInMultiRegionsInSamples` |
+| `count-samples`, single / multiple | `CountSamplesInRegion` / `CountSamplesInMultiRegions` |
+| `select-samples`, single / multiple | `SelectSamplesInRegion` / `SelectSamplesInMultiRegions` |
+| `count-samples-hom-ref` / `select-samples-hom-ref` | `CountSamplesHomReference` / `SelectSamplesHomReference` |
+| `kinship` | `KinshipDuo` |
+
+The SDK reuses variant routes for pagination and discovers the per-ring cap via
+`DatasetInfo`; do not reproduce per-ring offsets as global pagination. Small
+paginated results reconciled with the count. Large multi-ring exports and outage
+recovery were not stress-tested; incompleteness/retry behavior is covered by mocks.
+
+The protobuf and live service take precedence over prose when they disagree:
+`gnomad_exomes_af_gt=0` returned 15 variants including two zero annotations in
+a small test region; a positive bound of `1e-12` returned 13 with none missing.
+The latter is a positive threshold, not a universal definition of presence.
+
+Sources:
+
+- [Released SDK](https://pypi.org/project/dnaerys/0.2.1/) and
+  [official source](https://github.com/dnaerys/dnaerys-python).
+- [RPC definitions and zero-filter semantics](https://github.com/dnaerys/dnaerys-python/blob/master/proto/dnaerys.proto).
+- [Timeout/TLS options](https://github.com/dnaerys/dnaerys-python/blob/master/docs/source/connection.rst),
+  [pagination](https://github.com/dnaerys/dnaerys-python/blob/master/docs/source/pagination.rst),
+  and [missing-annotation convention](https://github.com/dnaerys/dnaerys-python/blob/master/docs/source/caveats.rst).
+- [Hosted cohort and annotation versions](https://github.com/dnaerys/onekgpd-mcp),
+  [annotation composition](https://github.com/dnaerys/onekgpd-mcp/blob/master/docs/annotations.md),
+  and [offline metadata source](https://github.com/dnaerys/onekgpd-mcp/blob/master/src/main/resources/kgpe.json).
+  The bundled 3,202 records matched this source on review; they are not live metadata.
+- [BRCA1 coordinate source](https://www.ncbi.nlm.nih.gov/gene/672): Gene 672,
+  GRCh38.p14, NC_000017.11:43044295-43170327, annotation RS_2025_08.

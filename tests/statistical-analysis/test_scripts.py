@@ -1,16 +1,9 @@
-"""Tests for the statistical-analysis assumption checks.
+"""Numerical and boundary tests for descriptive statistical diagnostics.
 
-These functions decide whether a parametric test is defensible, so the
-assertions are constructed against data whose answer is known by construction:
-a normal sample must pass Shapiro-Wilk, a lognormal one must fail; groups drawn
-with equal variance must pass Levene, groups with a 10x spread must fail. A
-check that quietly returns "assumption met" for skewed data is worse than no
-check at all.
-
-Most of these functions default to `plot=True` and draw with matplotlib, so the
-suite forces the Agg backend and passes `plot=False` where the parameter exists
-(`check_linearity` and `comprehensive_assumption_check` do not take one). These
-are numeric assertions, not rendering ones.
+Seeded samples exercise upstream decisions without claiming that any finite
+sample proves a population distribution. Boundary regressions cover invalid
+inputs, missing-row identity, within-group screening and OLS requirements.
+Agg checks exercise plotting mechanics, not scientific visual interpretation.
 """
 
 from __future__ import annotations
@@ -207,6 +200,139 @@ class ComprehensiveCheckTests(unittest.TestCase):
         )
         self.assertIsInstance(result, dict)
         self.assertTrue(result)
+
+
+class DiagnosticBoundaryTests(unittest.TestCase):
+    def test_invalid_normality_inputs_are_not_certified(self):
+        for sample in ([], [1, 2], [1, 1, 1], [1, np.inf, 2], [[1, 2, 3]]):
+            with self.subTest(sample=sample), self.assertRaises(ValueError):
+                assumption_checks.check_normality(sample, plot=False)
+        for alpha in (0, 1, -0.1, np.nan):
+            with self.assertRaises(ValueError):
+                assumption_checks.check_normality(NORMAL, alpha=alpha, plot=False)
+
+    def test_large_shapiro_sample_has_no_binary_verdict(self):
+        with pytest.warns(UserWarning, match='5000'):
+            result = assumption_checks.check_normality(np.linspace(-2, 2, 5001), plot=False)
+        self.assertIsNone(result['is_normal'])
+        self.assertFalse(result['p_value_reliable'])
+
+    def test_missing_positions_and_series_labels_are_preserved(self):
+        sample = pd.Series([np.nan, 0, 0, 0, 0, 100], index=list('abcdef'))
+        result = assumption_checks.detect_outliers(sample, plot=False)
+        np.testing.assert_array_equal(result['outlier_indices'], [5])
+        np.testing.assert_array_equal(result['outlier_labels'], ['f'])
+        self.assertEqual(result['n_missing'], 1)
+        self.assertEqual(result['pct_outliers'], 20)
+
+    def test_zscore_default_is_three_and_constant_input_is_unflagged(self):
+        result = assumption_checks.detect_outliers([2, 2, 2], method='zscore', plot=False)
+        self.assertEqual(result['threshold'], 3)
+        self.assertEqual(result['n_outliers'], 0)
+        for threshold in (0, -1, np.inf):
+            with self.assertRaises(ValueError):
+                assumption_checks.detect_outliers(NORMAL, threshold=threshold, plot=False)
+
+    def test_group_labels_variances_and_missing_counts_align(self):
+        frame = pd.DataFrame({'g': pd.Categorical(['z'] * 5 + ['a'] * 5,
+                              categories=['a', 'unused', 'z']),
+                              'v': [1, 2, 4, 8, np.nan, 10, 20, 40, 80, np.nan]})
+        result = assumption_checks.check_homogeneity_of_variance(frame, 'v', 'g', plot=False)
+        self.assertEqual(result['groups'], ['z', 'a'])
+        self.assertEqual(result['n_missing'], 2)
+        np.testing.assert_allclose(result['variances'][1] / result['variances'][0], 100)
+        normality = assumption_checks.check_normality_per_group(frame, 'v', 'g', plot=False)
+        self.assertEqual(normality['N_missing'].tolist(), [1, 1])
+        frame.loc[0, 'g'] = None
+        with self.assertRaises(ValueError):
+            assumption_checks.check_normality_per_group(frame, 'v', 'g', plot=False)
+
+    def test_degenerate_variance_diagnostic_rejects(self):
+        for frame in (pd.DataFrame({'g': ['a'] * 3, 'v': [1, 2, 3]}),
+                      pd.DataFrame({'g': ['a'] * 3 + ['b'] * 3, 'v': [1] * 3 + [2] * 3})):
+            with self.assertRaises(ValueError):
+                assumption_checks.check_homogeneity_of_variance(frame, 'v', 'g', plot=False)
+
+    def test_linearity_uses_complete_pairs(self):
+        result = assumption_checks.check_linearity([0, 1, np.nan, 3, 4],
+                                                   [0, 2, 999, np.nan, 8], plot=False)
+        self.assertEqual(result['n'], 3)
+        self.assertEqual(result['n_missing'], 2)
+        self.assertAlmostEqual(result['r'], 1)
+        with self.assertRaises(ValueError):
+            assumption_checks.check_linearity([0, 1], [1, 2, 3], plot=False)
+
+    def test_group_outliers_do_not_compare_against_pooled_location(self):
+        frame = pd.DataFrame({'g': ['a'] * 50 + ['b'] * 5,
+                              'v': np.r_[np.arange(50), np.arange(1000, 1005)]})
+        result = assumption_checks.comprehensive_assumption_check(frame, 'v', 'g', plot=False)
+        self.assertEqual(result['outliers_per_group']['b']['n_outliers'], 0)
+
+
+class RegressionDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        self.sm = pytest.importorskip('statsmodels.api')
+        self.x = np.linspace(-3, 3, 80)
+        self.y = 1 + 2 * self.x + np.random.default_rng(71).normal(size=80)
+
+    def test_native_ols_diagnostics_match_upstream_and_do_not_test_independence(self):
+        from statsmodels.stats.diagnostic import het_breuschpagan
+        from statsmodels.stats.stattools import durbin_watson
+        model = self.sm.OLS(self.y, self.sm.add_constant(self.x)).fit()
+        result = assumption_checks.check_regression_diagnostics(model, plot=False)
+        np.testing.assert_allclose(result['heteroscedasticity']['p_value'],
+                                   het_breuschpagan(model.resid, model.model.exog)[1])
+        self.assertIsNone(result['autocorrelation']['statistic'])
+        ordered = assumption_checks.check_regression_diagnostics(model, ordered=True, plot=False)
+        self.assertAlmostEqual(ordered['autocorrelation']['statistic'], durbin_watson(model.resid))
+        self.assertIsNone(ordered['autocorrelation']['ok'])
+        self.assertEqual(len(result['vif']), 1)
+
+    def test_invalid_regression_designs_reject(self):
+        designs = [self.x[:, None], np.column_stack([np.ones(80), self.x, self.x])]
+        for design in designs:
+            with self.assertRaises(ValueError):
+                assumption_checks.check_regression_diagnostics(self.sm.OLS(self.y, design).fit(), plot=False)
+        with self.assertRaises(ValueError):
+            assumption_checks.check_regression_diagnostics(
+                self.sm.OLS(1 + self.x, self.sm.add_constant(self.x)).fit(), plot=False)
+
+    def test_plotting_paths_close_their_figure(self):
+        import matplotlib.pyplot as plt
+        before = plt.get_fignums()
+        model = self.sm.OLS(self.y, self.sm.add_constant(self.x)).fit()
+        assumption_checks.check_regression_diagnostics(model, plot=True)
+        assumption_checks.detect_outliers(NORMAL, plot=True)
+        self.assertEqual(plt.get_fignums(), before)
+
+
+class CurrentEffectApiTests(unittest.TestCase):
+    def test_signed_pooled_and_paired_effects_match_definitions(self):
+        pg = pytest.importorskip('pingouin')
+        from scipy import stats
+        x, y = np.array([1., 2, 3, 5]), np.array([4., 5, 7, 9, 12])
+        sp = np.sqrt(((len(x) - 1) * x.var(ddof=1) + (len(y) - 1) * y.var(ddof=1))
+                     / (len(x) + len(y) - 2))
+        signed = pg.compute_effsize(x, y, eftype='cohen')
+        self.assertAlmostEqual(signed, (x.mean() - y.mean()) / sp)
+        self.assertAlmostEqual(pg.ttest(x, y)['cohen_d'].iloc[0], abs(signed))
+        post = np.array([2., 4, 3, 8])
+        dz = pg.compute_effsize(x, post, paired=True, eftype='cohen_dz')
+        self.assertAlmostEqual(dz, stats.ttest_rel(x, post).statistic / np.sqrt(len(x)))
+        self.assertNotAlmostEqual(dz, pg.compute_effsize(x, post, paired=True, eftype='cohen'))
+
+    def test_welch_and_one_sided_bayesfactor_contracts(self):
+        pg = pytest.importorskip('pingouin')
+        from scipy import stats
+        x, y = np.array([1., 2, 3, 5]), np.array([1., 4, 20, 21])
+        result = pg.ttest(x, y, correction=True)
+        self.assertAlmostEqual(result['T'].iloc[0], stats.ttest_ind(x, y, equal_var=False).statistic)
+        self.assertNotIn('BF10', pg.ttest(x, y, alternative='greater'))
+        with self.assertRaises((ValueError, AssertionError)):
+            pg.bayesfactor_ttest(1., 4, 4, alternative='greater')
+
+
+DemoBlockTests = skill_contract.cli.demo_test_case(SKILL_ROOT, ('assumption_checks.py',))
 
 
 if __name__ == "__main__":

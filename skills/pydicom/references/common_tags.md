@@ -95,6 +95,25 @@ Do not sort a series only by `SliceLocation` or assume `SliceThickness` equals
 inter-slice spacing. Reconstruct geometry from the applicable IOD, orientation,
 position, frame functional groups, and validated series membership.
 
+For the Image Plane Module with BIPED or absent Anatomical Orientation Type,
+patient coordinates increase left, posterior, and toward the head (LPS).
+`PixelSpacing = [row_spacing, column_spacing]` in mm. For zero-based NumPy
+indices `[row, column]`, the pixel center is:
+
+```text
+ImagePositionPatient
+  + column * PixelSpacing[1] * ImageOrientationPatient[:3]
+  + row    * PixelSpacing[0] * ImageOrientationPatient[3:]
+```
+
+For a consistent parallel stack, sort positions projected onto the cross product
+of the two orientation vectors, then check duplicates, spacing, orientation,
+Frame of Reference, and acquisition dimensions. Series membership alone does
+not separate time points/echoes/diffusion directions. Enhanced multi-frame
+ordering uses Dimension Index Values and frame functional groups. A PNG does
+not retain patient geometry; resampling/rotation requires corresponding affine
+updates and interpolation appropriate to the data. QUADRUPED conventions differ.
+
 ## Direct and quasi-identifiers
 
 The following examples are not exhaustive. PS3.15 Table E.1-1 and the chosen
@@ -187,6 +206,7 @@ Often instance/reference linkage requiring profile-directed, consistent
 replacement:
 
 - Study, Series, SOP Instance, and Frame of Reference UIDs
+- Device UID (PS3.15 default action U; explicit retention options may apply)
 - Referenced SOP Instance UIDs in sequences
 - synchronization, concatenation, tracking, specimen, and transaction UIDs
 
@@ -263,15 +283,17 @@ Therefore:
 
 Use `scripts/extract_metadata.py` for allowlisted aggregate inventory.
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-10-01)
 
 - [pydicom 3.0.2 dataset basics](https://pydicom.github.io/pydicom/stable/tutorials/dataset_basics.html)
 - [pydicom core elements](https://pydicom.github.io/pydicom/stable/guides/user/base_element.html)
 - [pydicom private elements](https://pydicom.github.io/pydicom/stable/guides/user/private_data_elements.html)
 - [pydicom DICOM JSON tutorial](https://pydicom.github.io/pydicom/stable/tutorials/dicom_json.html)
-- [DICOM PS3.3 2026c, Information Object Definitions](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/PS3.3.html)
+- [DICOM PS3.3 2026d, Information Object Definitions](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/PS3.3.html)
 - [DICOM PS3.3 Image Pixel Module](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.6.3.html)
+- [DICOM PS3.3 Image Plane Module](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.6.2.html)
+- [DICOM PS3.15 Table E.1-1 actions](https://dicom.nema.org/medical/dicom/current/output/chtml/part15/chapter_E.html)
 - [DICOM PS3.5, Data Structures and Encoding](https://dicom.nema.org/medical/dicom/current/output/chtml/part05/PS3.5.html)
 - [DICOM PS3.5 private elements](https://dicom.nema.org/medical/dicom/current/output/chtml/part05/sect_7.8.2.html)
 - [DICOM PS3.6, Data Dictionary](https://dicom.nema.org/medical/dicom/current/output/chtml/part06/PS3.6.html)
-- [DICOM PS3.15 2026c, Annex E confidentiality profiles](https://dicom.nema.org/medical/dicom/current/output/html/part15.html)
+- [DICOM PS3.15 2026d, Annex E confidentiality profiles](https://dicom.nema.org/medical/dicom/current/output/html/part15.html)

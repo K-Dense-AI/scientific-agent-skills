@@ -88,7 +88,7 @@ def _validate_entry(entry: Any, index: int) -> tuple[str, str, str, str, list[st
         f"entries[{index}].source_fact_id",
     )
     status = entry.get("coding_status")
-    if status not in CODING_STATUSES:
+    if not isinstance(status, str) or status not in CODING_STATUSES:
         raise ValidationError(f"entries[{index}].coding_status is invalid")
     warnings: list[str] = []
     if status == "verified_by_qualified_reviewer":

@@ -22,7 +22,7 @@ GET /series
 |-------------|----------|------------------------------------|
 | series_id   | Yes      | FRED series ID (e.g., `FEDFUNDS`) |
 | api_key     | Yes      | Your API key                       |
-| file_type   | No       | `json` (default), `xml`           |
+| file_type   | No       | `json`, `xml` (default)           |
 
 Example:
 ```

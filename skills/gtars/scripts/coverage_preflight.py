@@ -20,6 +20,7 @@ from _common import (
     load_chrom_sizes,
     local_path,
     print_json,
+    prefix_collision_count,
     sha256_file,
 )
 
@@ -31,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Check a sorted local BED/narrowPeak input, chromosome sizes, bounds, "
-            "and output budget for gtars uniwig 0.9.0. Nothing is generated."
+            "and output budget for gtars uniwig 0.10.0. Nothing is generated."
         )
     )
     parser.add_argument("--input", required=True)
@@ -145,6 +146,9 @@ def preflight(args: argparse.Namespace) -> tuple[dict, int]:
         errors["narrowpeak_requires_ten_columns"] = 1
     if output_prefix.exists():
         errors["output_prefix_already_exists"] = 1
+    collisions = prefix_collision_count(output_prefix)
+    if collisions:
+        errors["output_prefix_collisions"] = collisions
     if args.streaming and args.output_type not in {"wig", "bedgraph"}:
         errors["streaming_output_type_unsupported"] = 1
     if args.streaming and args.input_type != "bed":
@@ -152,7 +156,9 @@ def preflight(args: argparse.Namespace) -> tuple[dict, int]:
 
     count_outputs = 3 if args.count_type == "all" else 1
     genome_span = sum(chrom_sizes.values())
-    estimated_values = math.ceil(genome_span / args.step_size) * count_outputs
+    estimated_values = sum(
+        math.ceil(length / args.step_size) for length in chrom_sizes.values()
+    ) * count_outputs
     estimated_uncompressed_bytes = estimated_values * 8
     if estimated_uncompressed_bytes > args.max_estimated_bytes:
         errors["estimated_dense_coverage_exceeds_budget"] = 1
@@ -195,7 +201,7 @@ def preflight(args: argparse.Namespace) -> tuple[dict, int]:
         "contract": {
             "assembly": assembly,
             "coordinate_system": "0-based-half-open",
-            "gtars_cli_version": "0.9.0",
+            "gtars_cli_version": "0.10.0",
             "commands_executed": False,
             "files_written": False,
             "network_used": False,

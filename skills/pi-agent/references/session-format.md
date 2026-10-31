@@ -1,90 +1,66 @@
 # Session File Format
 
-Source: https://pi.dev/docs/latest/session-format
+Sources: https://pi.dev/docs/latest/session-format and https://pi.dev/docs/latest/message-types
 
-Sessions are JSONL files. Each line is a JSON object with a `type`. Entries form a tree through `id` / `parentId`, enabling in-place branching without new files.
+Reviewed against Pi 0.99.2 documentation, declarations, and local session projection on 2026-09-30.
 
-## Location
+## Storage and framing
 
-```text
-~/.pi/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl
-```
+Pi stores a JSON object per LF-delimited line under `~/.pi/agent/sessions/`, grouped by working directory. The first record is a `session` header with `version`, session `id`, ISO `timestamp`, `cwd`, and optional `parentSession`. The header has a session ID but no tree `parentId`. Subsequent entries have their own short `id`, `parentId` (null at a root), and ISO `timestamp`.
 
-`<path>` is the working directory with `/` replaced by `-`. Delete sessions by removing the `.jsonl` file, or from `/resume` with Ctrl+D (Pi uses the `trash` CLI when available).
+Format version remains **3**. v1 linear sessions and v2 trees migrate on load. Version 3 does not imply a frozen set of entry/message types: tolerate unknown types. Message timestamps are Unix milliseconds, unlike entry timestamps.
 
-## Versions
+## Messages
 
-- v1: linear entry sequence (legacy, auto-migrated on load)
-- v2: tree structure with `id`/`parentId`
-- v3: renamed the `hookMessage` role to `custom` (extensions unification)
+The coding-agent `AgentMessage` union contains:
 
-Existing sessions auto-migrate to v3 when loaded.
+- `system`: `content`, optional `sections`, `toolsAdded`, `toolsRemoved`, `replace`, and `timestamp`.
+- `user`: string or text/image `content`, `timestamp`.
+- `assistant`: text/thinking/tool-call `content`, `api`, `provider`, `model`, `usage`, `stopReason`, `timestamp`, plus optional response model/ID, thinking metadata and diagnostics.
+- `toolResult`: `toolCallId`, `toolName`, text/image `content`, `isError`, `timestamp`, optional JSON-compatible `details`, `usage`, and bounded `nestedCalls` metadata.
+- `bashExecution`: direct shell `command`, `output`, `exitCode`, `cancelled`, `truncated`, optional `fullOutputPath` and `excludeFromContext`.
+- `custom`: `customType`, `content`, `display`, optional `details`.
+- `branchSummary`: `summary`, `fromId` (nullable).
+- `compactionSummary`: `summary`, `tokensBefore`.
 
-## Content Blocks
+`TextContent` uses `{ type: "text", text }`; images use base64 `{ type: "image", data, mimeType }`; thinking uses `{ type: "thinking", thinking }` with opaque optional signatures/redaction. `ToolCall` uses `{ type: "toolCall", id, name, arguments }` and optional namespace/signature. Preserve opaque provider replay metadata.
 
-`TextContent { type: "text", text }`, `ImageContent { type: "image", data (base64), mimeType }`, `ThinkingContent { type: "thinking", thinking }`, `ToolCall { type: "toolCall", id, name, arguments }`.
+Assistant stop reasons include `stop`, `length`, `toolUse`, `error`, `aborted`, and `deferred`; `pending` is for streaming partials and must not persist as a completed assistant response. Deferred responses carry a provider-specific `deferred` handle. Applications can augment the message union; parsers must tolerate unknown custom roles.
 
-## Message Types
+`Usage` contains `input`, `output`, `cacheRead`, `cacheWrite`, `totalTokens`, and `cost` (the four component costs and `total`). Optional `reasoning` is already included in `output`; optional `cacheWrite1h` is a subset of `cacheWrite`. Never add those subsets twice. Tool and summary usage contributes to session totals.
 
-Base (from `pi-ai`):
+## Entry types
 
-- `UserMessage` — `role: "user"`, `content` string or `(Text|Image)[]`, `timestamp` (Unix ms)
-- `AssistantMessage` — `content: (Text|Thinking|ToolCall)[]`, `api`, `provider`, `model`, `usage`, `stopReason` ∈ `stop`/`length`/`toolUse`/`error`/`aborted`, optional `errorMessage`, `timestamp`
-- `ToolResultMessage` — `toolCallId`, `toolName`, `content: (Text|Image)[]`, optional `details`, optional `usage` (nested LLM work performed by the tool), `isError`, `timestamp`
-- `Usage` — `input`, `output`, `cacheRead`, `cacheWrite`, `totalTokens`, and `cost` with the same four fields plus `total`
+| Type | Content and effect |
+|---|---|
+| `message` | Wraps an `AgentMessage`; system messages also persist prompt/tool changes |
+| `model_change` | `provider`, `modelId`; selected model may be virtual, while assistant messages identify the physical model |
+| `thinking_level_change` | `thinkingLevel` |
+| `usage` | `kind`, `provider`, `model`, `usage`, optional note; contributes to totals, excluded from model context |
+| `compaction` | `summary`, required `firstKeptEntryId`, `tokensBefore`, optional complete `systemMessage`, `usage`, `details`, `fromHook` |
+| `context_edit` | `targetId`, `replacement`; null omits the target from future model context |
+| `branch_summary` | `summary`, `fromId`, optional `usage`, `details`, `fromHook` |
+| `custom` | `customType`, `data`; persisted extension state excluded from model context |
+| `custom_message` | `customType`, `content`, `display`, optional `details`; sent to the model |
+| `label` | `targetId`, optional `label`; absent label clears it |
+| `session_info` | Session `name` |
 
-The exported pi-ai `StopReason` type also includes `"pending"`, but that value is reserved for partial messages in streaming events. Terminal `done`/`error` messages replace it with a completion reason before Pi persists the assistant message, so `"pending"` should never appear in session JSONL.
+System messages replay named prompt `sections` (`null` removes), tool additions/removals, and optional complete replacement. The first request records a complete baseline; later requests append deltas. Do not strip system messages when exporting or restoring history.
 
-Extended (from `pi-coding-agent`):
+## Projected context, compaction, and branching
 
-- `BashExecutionMessage` — `command`, `output`, `exitCode`, `cancelled`, `truncated`, optional `fullOutputPath`, optional `excludeFromContext` (true for `!!`)
-- `CustomMessage` — `customType`, `content`, `display`, optional `details`
-- `BranchSummaryMessage` — `summary`, `fromId`
-- `CompactionSummaryMessage` — `summary`, `tokensBefore`
+`SessionManager` owns the entry tree and is authoritative for finalized context. Changing `agent.state.messages` does not replace this history.
 
-`AgentMessage` is the union of all seven.
+`buildContextEntries()` walks the active branch and applies its latest compaction: compaction entry, kept non-system entries beginning at `firstKeptEntryId`, then later entries. A retain-none compaction uses its own ID as `firstKeptEntryId`. The optional `systemMessage` checkpoint replaces pre-compaction prompt/tool state. **Pi 0.99.2 does not use `retainedTail` as its compaction contract.**
 
-## Entry Types
+`buildSessionProjection()` applies the latest branch-relative `context_edit` to each selected target. Edits may replace only content or omit user, assistant, tool-result, or custom-message entries. They do not mutate raw history, UI/export data, or usage accounting. `buildSessionContext()` converts the projection into messages and obtains selected model/thinking state from the full path. Never reconstruct the model's context by concatenating every line of the session file.
 
-All entries except the header extend `SessionEntryBase { type, id (8-char hex), parentId (null for the first entry), timestamp (ISO string) }`.
-
-- `session` — header, first line, metadata only (no `id`/`parentId`): `version`, `id`, `timestamp`, `cwd`, plus `parentSession` for sessions created via `/fork`, `/clone`, or `newSession({ parentSession })`
-- `message` — wraps an `AgentMessage` in `message`
-- `model_change` — `provider`, `modelId`
-- `thinking_level_change` — `thinkingLevel`
-- `compaction` — `summary`, `tokensBefore`, plus optional `usage`, `details`, `fromHook`, `firstKeptEntryId` (old format), and `retainedTail`
-- `branch_summary` — `summary`, `fromId`, plus optional `usage`, `details`, `fromHook`
-- `custom` — `customType`, `data`; extension state, **not** in LLM context. Renderable in the transcript via `pi.registerEntryRenderer(customType, renderer)`
-- `custom_message` — `customType`, `content`, `display`, optional `details`; extension-injected and **in** LLM context
-- `label` — `targetId`, `label` (set `label` to `undefined` to clear)
-- `session_info` — `name`; set via `/name`, `--name`/`-n`, or `pi.setSessionName()`. Shown in `/resume` instead of the first message
-
-`retainedTail` is a materialized `AgentMessage[]` kept after compaction. Newer harness-generated compactions include it so context rebuilds from that checkpoint without walking entries before the compaction. It is optional only for backward compatibility with sessions that store only `firstKeptEntryId`.
-
-## Context Building
-
-`buildContextEntries()` walks from the current leaf to the root and produces the active entry list honoring compaction:
-
-1. Collect all entries on the path.
-2. If a `CompactionEntry` is on the path: include the compaction entry first; if `retainedTail` is present it acts as a self-contained checkpoint and entries after the compaction are included; otherwise include entries from `firstKeptEntryId` to the compaction, then entries after it.
-3. Preserve non-message entries in the selected range so interactive mode can render them.
-
-`buildSessionContext()` builds the LLM message list on top of that: it extracts the current model and thinking level from the full path, then converts entries — `message` → stored `AgentMessage`, `compaction` → `compactionSummary` plus `retainedTail` when present, `branch_summary` → `branchSummary`, `custom_message` → `CustomMessage`, `custom` → no context message.
+`getEntries()` includes abandoned branches; `getBranch()` follows one branch. `resetLeaf()` and `branchWithSummary(null, ...)` can create multiple roots. Preserve raw history when branching or omitting failed attempts.
 
 ## SessionManager API
 
-Static creation: `create(cwd, sessionDir?)`, `open(path, sessionDir?)`, `continueRecent(cwd, sessionDir?)`, `inMemory(cwd?)`, `forkFrom(sourcePath, targetCwd, sessionDir?)`.
+Creation: `create(cwd, sessionDir?, options?)`, `open(path, sessionDir?)`, `continueRecent(cwd, sessionDir?)`, `inMemory(cwd?, options?, entries?)`, `forkFrom(sourcePath, targetCwd, sessionDir?)`. Listing: async `list(cwd, sessionDir?, onProgress?)`, `listAll(onProgress?)`.
 
-Static listing: `list(cwd, sessionDir?, onProgress?)`, `listAll(onProgress?)`.
+Use `appendMessage`, `appendModelChange`, `appendThinkingLevelChange`, `appendUsage`, `appendContextEdit`, `appendCustomEntry`, `appendCustomMessageEntry`, `appendSessionInfo`, and `appendLabelChange` to preserve append-only history. `appendCompaction(summary, firstKeptEntryId, tokensBefore, details?, fromHook?, usage?)` and `branchWithSummary` create summary boundaries. For exact optional arguments use installed `dist/core/session-manager.d.ts`.
 
-Session management: `newSession({ parentSession? })`, `setSessionFile(path)`, `createBranchedSession(leafId)`.
-
-Appending (each returns an entry ID): `appendMessage`, `appendThinkingLevelChange`, `appendModelChange`, `appendCompaction(summary, firstKeptEntryId, tokensBefore, details?, fromHook?)`, `appendCustomEntry(customType, data?)`, `appendSessionInfo(name)`, `appendCustomMessageEntry(customType, content, display, details?)`, `appendLabelChange(targetId, label)`.
-
-Tree navigation: `getLeafId`, `getLeafEntry`, `getEntry`, `getBranch(fromId?)`, `getTree`, `getChildren`, `getLabel`, `branch(entryId)`, `resetLeaf()`, `branchWithSummary(entryId, summary, details?, fromHook?)`.
-
-Context and info: `buildContextEntries`, `buildSessionContext`, `getEntries`, `getHeader`, `getSessionName`, `getCwd`, `getSessionDir`, `getSessionId`, `getSessionFile` (undefined in memory), `isPersisted`.
-
-## Parsing
-
-Read the file line by line and switch on `entry.type`; treat `entry.version ?? 1` on the header, and ignore unknown types for forward compatibility. For TypeScript definitions inspect `node_modules/@earendil-works/pi-coding-agent/dist/` and `node_modules/@earendil-works/pi-ai/dist/`.
+Local verification exercised context replacement/omission, raw-history preservation, compaction, branching, restoring entries with `inMemory`, and session accounting without a hosted model call.

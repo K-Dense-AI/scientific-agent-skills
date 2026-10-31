@@ -1,184 +1,131 @@
-# Slide Management
+# Slide management (Histolab 0.7.0)
 
-## Overview
+Examples using `slide.svs` are illustrative until a real slide is supplied.
+The API operations below are also exercised on tiny local fixtures in the skill
+suite. Source: [0.7.0 Slide implementation](https://github.com/histolab/histolab/blob/v0.7.0/histolab/slide.py).
 
-The `Slide` class is the primary interface for working with whole slide images (WSI) in histolab. It provides methods to load, inspect, and process large histopathology images stored in various formats.
-
-## Initialization
-
-```python
-from histolab.slide import Slide
-
-# Initialize a slide with a WSI file and output directory
-slide = Slide("path/to/slide.svs", processed_path="path/to/processed/output")
-```
-
-**Parameters:**
-- `path`: Path to the whole slide image file (supports multiple formats: SVS, TIFF, NDPI, etc.)
-- `processed_path`: Directory where processed outputs (tiles, thumbnails, etc.) will be saved
-- `use_largeimage` (optional): Use `large_image` for multi-format backends and mpp-based extraction
-
-## Loading Sample Data
-
-Histolab provides built-in sample datasets from TCGA for testing and demonstration. Install `pooch` to download them:
-
-```bash
-uv pip install pooch
-```
-
-```python
-from histolab.data import prostate_tissue, ovarian_tissue, breast_tissue, heart_tissue, kidney_tissue
-
-# Load prostate tissue sample
-prostate_svs, prostate_path = prostate_tissue()
-slide = Slide(prostate_path, processed_path="output/")
-```
-
-Available sample datasets:
-- `prostate_tissue()`: Prostate tissue sample
-- `ovarian_tissue()`: Ovarian tissue sample
-- `breast_tissue()`: Breast tissue sample
-- `heart_tissue()`: Heart tissue sample
-- `kidney_tissue()`: Kidney tissue sample
-
-## Key Properties
-
-### Slide Dimensions
-```python
-# Get slide dimensions at level 0 (highest resolution)
-width, height = slide.dimensions
-
-# Get dimensions at specific pyramid level
-level_dimensions = slide.level_dimensions
-# Returns tuple of (width, height) for each level
-```
-
-### Magnification Information
-```python
-# Get base magnification (e.g., 40x, 20x)
-base_mag = slide.base_mpp  # Microns per pixel at level 0
-
-# Get all available levels
-num_levels = slide.levels  # Number of pyramid levels
-```
-
-### Slide Properties
-```python
-# Access OpenSlide properties dictionary
-properties = slide.properties
-
-# Common properties include:
-# - slide.properties['openslide.objective-power']: Objective power
-# - slide.properties['openslide.mpp-x']: Microns per pixel in X
-# - slide.properties['openslide.mpp-y']: Microns per pixel in Y
-# - slide.properties['openslide.vendor']: Scanner vendor
-```
-
-## Thumbnail Generation
+## Load and inspect
 
 ```python
 from pathlib import Path
+from histolab.slide import Slide
 
-# Get thumbnail at default size
-thumbnail = slide.thumbnail
-
-# Save thumbnail to processed_path
-Path(slide.processed_path).mkdir(parents=True, exist_ok=True)
-slide.thumbnail.save(Path(slide.processed_path) / f"{slide.name}_thumbnail.png")
-
-# Get scaled thumbnail
-scaled_thumbnail = slide.scaled_image(scale_factor=32)
+output = Path("output/inspection")
+output.mkdir(parents=True, exist_ok=True)
+slide = Slide("slide.svs", processed_path=output)
+print(slide.name, slide.dimensions)
+print("Available levels:", slide.levels)
+print("Number of levels:", len(slide.levels))
+for level in slide.levels:
+    print(level, slide.level_dimensions(level))
+slide.thumbnail.save(output / "thumbnail.png")
+slide.scaled_image(scale_factor=32).save(output / "downsampled.png")
 ```
 
-## Slide Visualization
+`slide.levels` is a list such as `[0, 1, 2]`, not a count.
+`slide.level_dimensions(level)` is a method, not an indexable tuple.
+Histolab has no public `slide.level_downsamples` attribute. To read the actual
+backend factors, use the documented OpenSlide API with a separate managed handle:
 
 ```python
-# Display slide thumbnail with matplotlib
-import matplotlib.pyplot as plt
+import openslide
 
-plt.figure(figsize=(10, 10))
-plt.imshow(slide.thumbnail)
-plt.title(f"Slide: {slide.name}")
-plt.axis('off')
-plt.show()
+with openslide.open_slide("slide.svs") as wsi:
+    downsamples = tuple(wsi.level_downsamples)
+    print(wsi.level_dimensions, downsamples)
 ```
 
-## Extracting Regions
+`openslide.open_slide` may fall back to a Pillow `ImageSlide` for ordinary raster
+files. Those are useful for software tests but have no scanner MPP calibration.
+Histolab `Slide` does not expose a public close/context-manager API in 0.7.0;
+avoid keeping a whole cohort of lazy open slides alive simultaneously.
+
+## Physical scale and metadata
+
+`slide.properties` exposes OpenSlide metadata. Check `openslide.mpp-x` and
+`openslide.mpp-y` independently; values are strings and can be missing.
+`slide.base_mpp` is micrometers per pixel, **not** optical objective power. It
+uses the X resolution and some vendor fallbacks, and raises when calibration
+cannot be inferred. Do not assume that this scalar proves isotropic pixels.
+
+For a level with downsample `d`, a `(w, h)` tile covers approximately
+`(w * d * mpp_x, h * d * mpp_y)` micrometers. Record native metadata,
+actual downsample, output size and any resampling. Missing or inconsistent MPP
+requires review; a level number or "20x" filename cannot supply calibration.
+
+`mpp` takes precedence over `level` in extraction. Exact-MPP reads use
+`large_image`, even though level reads always use OpenSlide. Install the
+[`large-image` package and a matching tile source](https://girder.github.io/large_image/)
+(e.g. `large-image-source-openslide`) into a compatible isolated environment and
+construct `Slide(..., use_largeimage=True)`. This optional path is source-verified
+only here; its current dependency stack was not installed or executed.
+Do not install every backend merely to access one slide format. Histolab 0.7.0
+mutates internal tile dimensions and grid overlap during MPP extraction;
+construct a fresh tiler per run and do not assume an MPP preview before extraction
+matches saved coordinates. Check output geometry against saved bounds.
+
+```python
+# Illustrative: requires the optional large_image backend and calibrated metadata.
+from histolab.slide import Slide
+from histolab.tiler import GridTiler
+from histolab.masks import TissueMask
+
+slide = Slide("slide.svs", processed_path="output/mpp", use_largeimage=True)
+tiler = GridTiler(tile_size=(256, 256), mpp=0.5, check_tissue=True)
+tiler.extract(slide, extraction_mask=TissueMask())
+```
+
+## Explicit coordinate extraction
+
+`CoordinatePair` contains `(x_ul, y_ul, x_br, y_br)` **in level-0 pixels**.
+`tile_size` is the output width/height at the requested level. Never pass a
+2-tuple in place of a bounding box.
 
 ```python
 from histolab.types import CoordinatePair
 
-# Extract a tile at specific coordinates and level
-tile = slide.extract_tile(
-    coords=CoordinatePair(x_ul=x, y_ul=y, x_br=x + width, y_br=y + height),
-    tile_size=(width, height),
-    level=0,
-)
-region = tile.image
+# A 256 x 256 level-0 patch (must lie inside this slide).
+coords = CoordinatePair(100, 200, 356, 456)
+tile = slide.extract_tile(coords=coords, tile_size=(256, 256), level=0)
+assert tile.image.size == (256, 256)
+print(tile.coords, tile.level)
 ```
 
-## Working with Pyramid Levels
+For coarser levels, expand the level-0 box by the actual downsample. The level
+path reads `tile_size` starting from the upper-left point; it does not crop to
+an arbitrarily supplied lower-right corner. Keep the box consistent with the
+size and level so provenance and previews describe the pixels actually read.
 
-WSI files use a pyramidal structure with multiple resolution levels:
-- Level 0: Highest resolution (native scan resolution)
-- Level 1+: Progressively lower resolutions for faster access
+## Sample data
 
-```python
-# Check available levels
-for level in range(slide.levels):
-    dims = slide.level_dimensions[level]
-    downsample = slide.level_downsamples[level]
-    print(f"Level {level}: {dims}, downsample: {downsample}x")
-```
-
-## Slide Name and Path
+The [data API](https://histolab.readthedocs.io/en/latest/api/data.html) returns
+`(openslide_handle, local_path)`, not just an image. Close that handle when only
+the path is needed. This tiny SVS is bundled with the distribution:
 
 ```python
-# Get slide filename without extension
-slide_name = slide.name
-
-# Get output directory for processed artifacts
-output_dir = slide.processed_path
-```
-
-## Best Practices
-
-1. **Always specify processed_path**: Organize outputs in dedicated directories
-2. **Check dimensions before processing**: Large slides can exceed memory limits
-3. **Use appropriate pyramid levels**: Extract tiles at levels matching your analysis resolution
-4. **Preview with thumbnails**: Use thumbnails for quick visualization before heavy processing
-5. **Monitor memory usage**: Level 0 operations on large slides require significant RAM
-
-## Common Workflows
-
-### Slide Inspection Workflow
-```python
+from histolab.data import cmu_small_region
 from histolab.slide import Slide
 
-# Load slide
-slide = Slide("slide.svs", processed_path="output/")
-
-# Inspect properties
-print(f"Dimensions: {slide.dimensions}")
-print(f"Levels: {slide.levels}")
-print(f"Magnification: {slide.properties.get('openslide.objective-power', 'N/A')}")
-
-# Save thumbnail for review
-from pathlib import Path
-Path(slide.processed_path).mkdir(parents=True, exist_ok=True)
-slide.thumbnail.save(Path(slide.processed_path) / f"{slide.name}_thumbnail.png")
+sample_handle, sample_path = cmu_small_region()
+sample_handle.close()
+slide = Slide(sample_path, processed_path="output/sample")
 ```
 
-### Multi-Slide Processing
-```python
-import os
-from pathlib import Path
+Other examples include `prostate_tissue`, `ovarian_tissue`, `breast_tissue`,
+`heart_tissue`, and **`ihc_kidney`** (there is no `kidney_tissue`). Prostate,
+ovarian and breast samples use public TCGA/GDC downloads; heart uses the
+OpenSlide test repository; kidney is an IHC image from IDR. They are not all
+TCGA or H&E data. `pooch` fetches and checks hashes against the release registry.
+Review download sizes before invoking these functions; no large remote samples
+were fetched in this review. Legacy remote URLs can move independently of the
+release; preserve provenance and never silently substitute a different slide.
+At this review, GDC metadata confirmed the three listed TCGA files as open and
+released, and a header-only heart-file probe redirected to HTTPS successfully.
+The IDR kidney download URL entered a redirect loop; `ihc_kidney()` was therefore
+not verified usable. Obtain a provenance-matched local image if that helper fails.
+These metadata/header probes do not verify complete download bytes or hashes.
 
-slide_dir = Path("slides/")
-output_dir = Path("processed/")
-
-for slide_path in slide_dir.glob("*.svs"):
-    slide = Slide(slide_path, processed_path=output_dir / slide_path.stem)
-    # Process each slide
-    print(f"Processing: {slide.name}")
-```
+See the [release data source](https://github.com/histolab/histolab/blob/v0.7.0/histolab/data/__init__.py)
+and [URL/hash registry](https://github.com/histolab/histolab/blob/v0.7.0/histolab/data/_registry.py)
+for the actual sample mappings. Histolab core processing has no remote service,
+authentication, pagination or REST request body.

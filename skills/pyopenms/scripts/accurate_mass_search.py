@@ -47,19 +47,11 @@ def main():
         ms.FeatureXMLFile().load(args.input, fmap)
     print(f"Loaded {fmap.size()} features")
 
-    # The pip wheel ships HMDBMappingFile.tsv but NOT HMDB2StructMapping.tsv.
-    # Verify the structure DB is resolvable before init() to give a clear error.
-    struct_path = args.db_struct or "CHEMISTRY/HMDB2StructMapping.tsv"
-    resolved = struct_path if os.path.isabs(struct_path) else \
-        os.path.join(ms.File.getOpenMSDataPath(), struct_path)
-    if not os.path.exists(resolved):
-        print(f"Error: structure database not found: {struct_path}")
-        print("The pyOpenMS pip wheel does not bundle HMDB2StructMapping.tsv.")
-        print("Download it from the OpenMS repository and pass --db-struct:")
-        print("  https://github.com/OpenMS/OpenMS/blob/develop/share/OpenMS/CHEMISTRY/HMDB2StructMapping.tsv")
-        print(f"  (place alongside the mapping file in {ms.File.getOpenMSDataPath()}/CHEMISTRY/")
-        print("   or pass --db-struct /path/to/HMDB2StructMapping.tsv --db-mapping /path/to/HMDBMappingFile.tsv)")
-        sys.exit(2)
+    if args.ppm <= 0:
+        parser.error("--ppm must be positive")
+    for supplied in (args.db_mapping, args.db_struct):
+        if supplied and not os.path.isfile(supplied):
+            parser.error(f"database file not found: {supplied}")
 
     engine = ms.AccurateMassSearchEngine()
     p = engine.getDefaults()
@@ -67,9 +59,9 @@ def main():
     p.setValue("mass_error_unit", "ppm")
     p.setValue("ionization_mode", "negative" if args.negative else "positive")
     if args.db_mapping:
-        p.setValue("db:mapping", [args.db_mapping.encode()])
+        p.setValue("db:mapping", [os.path.abspath(args.db_mapping)])
     if args.db_struct:
-        p.setValue("db:struct", [args.db_struct.encode()])
+        p.setValue("db:struct", [os.path.abspath(args.db_struct)])
     engine.setParameters(p)
     engine.init()
 

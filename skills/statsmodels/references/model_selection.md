@@ -33,6 +33,10 @@ results = smf.poisson('count ~ x1 + x2', data=df).fit()
 
 ## Model Selection and Comparison
 
+Use identical response definitions and observations with comparable likelihoods. Formula missing-value handling can silently change the sample: select/record common rows first. Compare fixed effects in mixed models under ML, not REML. GLM likelihood BIC is `bic_llf`; deviance BIC is a different convention. Regular LR chi-square inference excludes boundary cases such as Poisson vs NB alpha=0, separation and unidentified parameters.
+
+Do not interpret a p-value after model/variable selection as though the model were prespecified.
+
 ### Information Criteria
 
 ```python
@@ -50,7 +54,7 @@ comparison = pd.DataFrame({
 })
 
 print(comparison.sort_values('AIC'))
-# Lower AIC/BIC indicates better model
+# Lower values rank comparable candidates; they do not establish absolute adequacy
 ```
 
 ### Likelihood Ratio Test (Nested Models)
@@ -60,19 +64,23 @@ print(comparison.sort_values('AIC'))
 from scipy import stats
 
 lr_stat = 2 * (full_model.llf - reduced_model.llf)
-df = full_model.df_model - reduced_model.df_model
-p_value = 1 - stats.chi2.cdf(lr_stat, df)
+df_diff = full_model.df_model - reduced_model.df_model
+if df_diff <= 0:
+    raise ValueError("Expected a larger full model")
+p_value = stats.chi2.sf(lr_stat, df_diff)
 
 print(f"LR statistic: {lr_stat:.4f}")
 print(f"p-value: {p_value:.4f}")
 
 if p_value < 0.05:
-    print("Full model significantly better")
+    print("Reject the specified restrictions under regular LR assumptions")
 else:
-    print("Reduced model preferred (parsimony)")
+    print("No rejection of the specified restrictions; this is not equivalence")
 ```
 
 ### Cross-Validation
+
+The example assumes independent observations and a numeric pandas design with an intercept. Use grouped or time-ordered splits for dependent data and fit preprocessing within each training fold. Scikit-learn LogisticRegression is regularized by default and is not an interchangeable statsmodels MLE wrapper.
 
 ```python
 from sklearn.model_selection import KFold

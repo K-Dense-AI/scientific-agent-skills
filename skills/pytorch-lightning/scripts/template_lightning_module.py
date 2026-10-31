@@ -81,8 +81,8 @@ class TemplateLightningModule(L.LightningModule):
         acc = (preds == y).float().mean()
 
         # Log metrics
-        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log("train/acc", acc, on_step=True, on_epoch=True)
+        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=y.size(0), sync_dist=True)
+        self.log("train/acc", acc, on_step=True, on_epoch=True, batch_size=y.size(0), sync_dist=True)
         self.log("learning_rate", self.optimizers().param_groups[0]["lr"])
 
         return loss
@@ -106,8 +106,8 @@ class TemplateLightningModule(L.LightningModule):
         acc = (preds == y).float().mean()
 
         # Log metrics (automatically aggregated across batches)
-        self.log("val/loss", loss, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log("val/acc", acc, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("val/loss", loss, on_epoch=True, prog_bar=True, batch_size=y.size(0), sync_dist=True)
+        self.log("val/acc", acc, on_epoch=True, prog_bar=True, batch_size=y.size(0), sync_dist=True)
 
     def test_step(self, batch, batch_idx):
         """
@@ -128,8 +128,8 @@ class TemplateLightningModule(L.LightningModule):
         acc = (preds == y).float().mean()
 
         # Log metrics
-        self.log("test/loss", loss, on_epoch=True)
-        self.log("test/acc", acc, on_epoch=True)
+        self.log("test/loss", loss, on_epoch=True, batch_size=y.size(0), sync_dist=True)
+        self.log("test/acc", acc, on_epoch=True, batch_size=y.size(0), sync_dist=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """
@@ -208,8 +208,8 @@ if __name__ == "__main__":
     trainer = L.Trainer(
         max_epochs=10,
         accelerator="auto",
-        devices="auto",
-        logger=True,
+        devices=1,
+        logger=False,
     )
 
     # Train (you need to provide train_dataloader and val_dataloader)

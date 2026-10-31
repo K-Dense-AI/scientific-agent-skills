@@ -184,6 +184,7 @@ def validate_structure(structure: Any, args: argparse.Namespace) -> dict[str, An
         "oxidation_states": oxidation,
         "minimum_periodic_distance_angstrom": distance,
         "minimum_distance_pair": pair,
+        "minimum_distance_includes_self_images": False,
         "minimum_allowed_distance_angstrom": args.min_distance,
         "errors": errors,
         "warnings": warnings_list,

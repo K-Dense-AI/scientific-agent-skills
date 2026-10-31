@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/skills
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Pi implements the [Agent Skills standard](https://agentskills.io/specification). Skills are self-contained capability packages loaded on demand, providing workflows, setup instructions, helper scripts, and reference documentation. Pi warns about most spec violations but stays lenient — notably it allows a skill name that differs from its parent directory, because the standard's matching rule is awkward for skill directories shared across harnesses.
 
 ## Locations
@@ -68,6 +70,8 @@ Use relative paths from the skill directory.
 | `disable-model-invocation` | No | `true` hides the skill from the system prompt; users must call `/skill:name`. |
 
 Name rules: 1–64 characters, lowercase letters/numbers/hyphens, no leading or trailing hyphen, no consecutive hyphens. Valid: `pdf-processing`. Invalid: `PDF-Processing`, `-pdf`, `pdf--processing`.
+
+`disable-model-invocation` and lenient directory-name handling are Pi-specific behavior, not portable Agent Skills conformance. Skills in this repository must use only the six standard fields and must match the parent directory name; do not add that Pi-only field here.
 
 ## Validation
 

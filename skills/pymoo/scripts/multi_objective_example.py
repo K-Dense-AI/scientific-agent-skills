@@ -20,7 +20,7 @@ def run_multi_objective_optimization():
 
     # Configure NSGA-II algorithm
     algorithm = NSGA2(
-        pop_size=100,
+        pop_size=40,
         eliminate_duplicates=True
     )
 
@@ -28,7 +28,7 @@ def run_multi_objective_optimization():
     result = minimize(
         problem,
         algorithm,
-        ('n_gen', 200),
+        ('n_gen', 50),
         seed=1,
         verbose=True
     )
@@ -37,8 +37,8 @@ def run_multi_objective_optimization():
     print("\n" + "="*60)
     print("MULTI-OBJECTIVE OPTIMIZATION RESULTS")
     print("="*60)
-    print(f"Number of solutions in Pareto front: {len(result.F)}")
-    print(f"Number of generations: {result.algorithm.n_gen}")
+    print(f"Number of solutions in approximate Pareto front: {len(result.F)}")
+    print(f"Completed generations: {result.algorithm.n_gen - 1}")
     print(f"Number of function evaluations: {result.algorithm.evaluator.n_eval}")
     print("\nFirst 5 solutions (decision variables):")
     print(result.X[:5])
@@ -48,11 +48,11 @@ def run_multi_objective_optimization():
 
     # Visualize results
     plot = Scatter(title="ZDT1 - NSGA-II Results")
-    plot.add(result.F, color="red", alpha=0.7, s=30, label="Obtained Pareto Front")
+    plot.add(result.F, color="red", alpha=0.7, s=30, label="Approximate Front")
 
-    # Add true Pareto front for comparison
+    # Add true approximate Pareto front for comparison
     pf = problem.pareto_front()
-    plot.add(pf, color="black", alpha=0.3, label="True Pareto Front")
+    plot.add(pf, color="black", alpha=0.3, label="Analytic Pareto Front")
 
     plot.show()
 

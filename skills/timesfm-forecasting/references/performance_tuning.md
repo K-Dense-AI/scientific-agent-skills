@@ -1,80 +1,27 @@
-# Performance Tuning
+# Tune the actual workload
 
-GPU detection and TF32 settings, choosing `per_core_batch_size` for the memory you have,
-and memory management strategies for large series counts.
+Start with `per_core_batch_size=1`, a context such as 512 and a horizon rounded
+to 128. Record wall time and peak resident/device memory for representative
+lengths before increasing batch size. No table can guarantee a batch size from
+VRAM alone: contexts, horizon, copies, backend, compiler and concurrent work matter.
 
-## ⚙️ Performance Tuning
+The 2.5 `torch_compile` loader option defaults True. Use False for first-load
+smokes; separately benchmark whether compilation pays off for repeated calls.
+`model.compile(ForecastConfig(...))` is still needed with either setting.
+The continuous quantile head supports <=1,024 horizon. Symmetric flip averaging
+adds a second decode pass. Reduce context only after evaluating its accuracy cost.
 
-### GPU Acceleration
+For CUDA float32 matmul, `torch.set_float32_matmul_precision("high")` can trade
+internal precision for speed on supported hardware; it is not a universal
+accuracy-preserving setting and does not make CPU/MPS use CUDA. Use
+`torch.cuda.get_device_properties(0).total_memory`, not `.total_mem`.
 
-```python
-import torch
+Process many series in outer chunks if input/output arrays are large; persist
+outputs as you go instead of retaining every array. Passing a copied list avoids
+2.5's in-place padding-list growth. `gc.collect()` or `torch.cuda.empty_cache()`
+does not free live model tensors or fix an oversized workload. After OOM,
+reduce the actual context/batch/horizon allocation and rerun the representative
+smoke, then reassess forecast quality.
 
-# Check GPU availability
-if torch.cuda.is_available():
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
-elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    print("Apple Silicon MPS available")
-else:
-    print("CPU only — inference will be slower but still works")
-
-# Always set this for Ampere+ GPUs (A100, RTX 3090, etc.)
-torch.set_float32_matmul_precision("high")
-```
-
-### Batch Size Tuning
-
-```python
-# Start conservative, increase until OOM
-# GPU with 8 GB VRAM:  per_core_batch_size=64
-# GPU with 16 GB VRAM: per_core_batch_size=128
-# GPU with 24 GB VRAM: per_core_batch_size=256
-# CPU with 8 GB RAM:   per_core_batch_size=8
-# CPU with 16 GB RAM:  per_core_batch_size=32
-# CPU with 32 GB RAM:  per_core_batch_size=64
-
-model.compile(timesfm.ForecastConfig(
-    max_context=1024,
-    max_horizon=256,
-    per_core_batch_size=32,  # <-- tune this
-    normalize_inputs=True,
-    use_continuous_quantile_head=True,
-    fix_quantile_crossing=True,
-))
-```
-
-### Memory-Constrained Environments
-
-```python
-import gc, torch
-
-# Force garbage collection before loading
-gc.collect()
-if torch.cuda.is_available():
-    torch.cuda.empty_cache()
-
-# Load model
-model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
-    "google/timesfm-2.5-200m-pytorch"
-)
-
-# Use small batch size on low-memory machines
-model.compile(timesfm.ForecastConfig(
-    max_context=512,        # Reduce context if needed
-    max_horizon=128,        # Reduce horizon if needed
-    per_core_batch_size=4,  # Small batches
-    normalize_inputs=True,
-    use_continuous_quantile_head=True,
-    fix_quantile_crossing=True,
-))
-
-# Process series in chunks to avoid OOM
-CHUNK = 50
-all_results = []
-for i in range(0, len(inputs), CHUNK):
-    chunk = inputs[i:i+CHUNK]
-    p, q = model.forecast(horizon=H, inputs=chunk)
-    all_results.append((p, q))
-    gc.collect()  # Clean up between chunks
-```
+Backend details: [TimesFM torch source](https://github.com/google-research/timesfm/blob/e51928e27119cb17bebc005be2696b75e0a9e688/src/timesfm/timesfm_2p5/timesfm_2p5_torch.py),
+[PyTorch precision API](https://docs.pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html).

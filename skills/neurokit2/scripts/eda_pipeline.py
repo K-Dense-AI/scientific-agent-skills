@@ -114,8 +114,8 @@ def main() -> None:
         raise CliError(f"--max-rows must be between 1 and {MAX_ROWS}")
     if not 0 <= args.scr_number <= 10_000:
         raise CliError("--scr-number must be between 0 and 10000")
-    if not -(2**31) <= args.seed < 2**31:
-        raise CliError("--seed must be a signed 32-bit integer")
+    if not 0 <= args.seed < 2**32:
+        raise CliError("--seed must be an unsigned 32-bit integer")
     if not args.unit or len(args.unit) > 32:
         raise CliError("--unit must be a nonempty string of at most 32 characters")
 
@@ -161,6 +161,7 @@ def main() -> None:
             raise CliError(f"synthetic row count must be between 1 and {args.max_rows}")
         try:
             raw = nk.eda_simulate(
+                duration=row_count / sampling_rate,
                 length=row_count,
                 sampling_rate=int(sampling_rate),
                 scr_number=args.scr_number,
@@ -203,6 +204,11 @@ def main() -> None:
     amplitudes = _finite_values(peak_info.get("SCR_Amplitude", []))
     scr_count = len(peak_info.get("SCR_Peaks", []))
     warnings: list[str] = []
+    threshold_applied = args.peak_method in {"neurokit", "kim2004"}
+    if not threshold_applied:
+        warnings.append(
+            "--amplitude-min is ignored by the selected NeuroKit2 peak detector"
+        )
     if args.phasic_method == "cvxeda":
         warnings.append(
             "cvxEDA requires the optional cvxopt dependency; report its version "
@@ -219,9 +225,9 @@ def main() -> None:
         )
     sympathetic: dict[str, float | int | None] | None = None
     if args.sympathetic_method != "none":
-        if duration_s < 64:
+        if duration_s <= 64:
             warnings.append(
-                "EDA sympathetic index skipped: this CLI requires at least 64 seconds"
+                "EDA sympathetic index skipped: this CLI requires more than 64 seconds"
             )
         else:
             try:
@@ -244,7 +250,14 @@ def main() -> None:
             "clean": args.clean_method,
             "decomposition": args.phasic_method,
             "peak_detection": args.peak_method,
-            "peak_threshold_relative_to_largest": amplitude_min,
+            "peak_threshold_relative_to_largest": (
+                amplitude_min if threshold_applied else None
+            ),
+            "peak_threshold_applied": threshold_applied,
+            "peak_threshold_reference": {
+                "neurokit": "maximum_candidate_prominence",
+                "kim2004": "maximum_candidate_phasic_peak_height",
+            }.get(args.peak_method),
             "sympathetic": args.sympathetic_method,
         },
         "neurokit2_version": installed,

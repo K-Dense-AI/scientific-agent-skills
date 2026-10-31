@@ -45,6 +45,9 @@ def reconstruct(inverted_index: dict[str, list[int]]) -> tuple[str, list[str]]:
             if not isinstance(position, int) or isinstance(position, bool):
                 anomalies.append(f"non-integer position {position!r} for {word!r}")
                 continue
+            if position < 0:
+                anomalies.append(f"negative position {position} for {word!r}")
+                continue
             buckets.setdefault(position, []).append(word)
 
     if not buckets:
@@ -57,8 +60,7 @@ def reconstruct(inverted_index: dict[str, list[int]]) -> tuple[str, list[str]]:
         )
 
     ordered = sorted(buckets)
-    expected = list(range(ordered[0], ordered[-1] + 1))
-    missing = len(expected) - len(ordered)
+    missing = ordered[-1] - ordered[0] + 1 - len(ordered)
     if missing:
         anomalies.append(f"{missing} position(s) absent from the index; the abstract has gaps")
     if ordered[0] != 0:
@@ -71,8 +73,12 @@ def reconstruct(inverted_index: dict[str, list[int]]) -> tuple[str, list[str]]:
 def works_from(payload: Any) -> list[dict[str, Any]]:
     """Accept a single work, a bare list, or a `/works` list response."""
     if isinstance(payload, dict):
+        if "error" in payload or ("message" in payload and "id" not in payload and "results" not in payload):
+            raise InputError("OpenAlex returned an error object, not a work")
         if isinstance(payload.get("results"), list):
             return [w for w in payload["results"] if isinstance(w, dict)]
+        if not payload.get("id"):
+            raise InputError("OpenAlex object lacks a work id/results array")
         return [payload]
     if isinstance(payload, list):
         return [w for w in payload if isinstance(w, dict)]

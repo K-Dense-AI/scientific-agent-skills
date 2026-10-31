@@ -1,5 +1,9 @@
 # Logical Fallacies in Scientific Discourse
 
+The examples are illustrative arguments, not clinical claims or evidence about a named
+study. Critique the inferential step; a fallacious argument does not make its conclusion
+false. Methodological sources are in [review_sources.md](review_sources.md).
+
 ## Fallacies of Causation
 
 ### 1. Post Hoc Ergo Propter Hoc (After This, Therefore Because of This)
@@ -30,7 +34,8 @@
 - "Depression is associated with inflammation, so inflammation causes depression." (Could be: depression causes inflammation)
 - "Wealthy people are healthier, so wealth causes health." (Could be: health enables wealth accumulation)
 
-**Solution:** Longitudinal studies and experimental designs to establish temporal order.
+**Solution:** Establish temporal order and assess confounding, selection, and measurement;
+longitudinal observation alone does not identify a causal direction.
 
 ### 4. Single Cause Fallacy
 **Description:** Attributing complex phenomena to one cause when multiple factors contribute.
@@ -60,7 +65,9 @@
 - "I know someone who survived cancer using alternative medicine, so it works."
 - "My grandmother never exercised and lived to 100, so exercise is unnecessary."
 
-**Why fallacious:** Anecdotes are unreliable due to selection bias, memory bias, and confounding. Plural of anecdote ≠ data.
+**Why fallacious:** Anecdotes are observations, but selection, memory, and missing comparators
+usually prevent the claimed general or causal inference. Do not dismiss a safety signal
+merely because it begins with a case report.
 
 ### 7. Cherry Picking (Suppressing Evidence)
 **Description:** Selecting only evidence that supports your position while ignoring contradictory evidence.
@@ -77,7 +84,7 @@
 
 **Example:**
 - "Average income in this neighborhood is high, so this person must be wealthy."
-- "This country has low disease rates, so any individual from there is unlikely to have disease."
+- "This country is richer and has less disease, so its richer individuals must have less disease."
 
 **Why fallacious:** Group-level patterns don't necessarily apply to individuals.
 
@@ -155,7 +162,7 @@
 
 **Why fallacious:** Reality is independent of what we wish were true.
 
-### 16. Appeal to Nature (Naturalistic Fallacy)
+### 16. Appeal to Nature
 **Description:** Assuming "natural" means good, safe, or effective.
 
 **Examples:**
@@ -244,9 +251,11 @@
 **Description:** Ignoring prior probability when evaluating evidence.
 
 **Example:**
-- Disease affects 0.1% of population; test is 99% accurate
+- Disease prevalence is 0.1%; test sensitivity and specificity are both 99%
 - Positive test ≠ 99% probability of disease
-- Actually ~9% probability (due to false positives exceeding true positives)
+- Positive predictive value is `0.99*0.001 / (0.99*0.001 + 0.01*0.999) = 0.0902`
+  (9.02%), assuming these parameters apply to the tested population. Overall accuracy
+  alone would not determine this probability.
 
 **Solution:** Use Bayesian reasoning; consider base rates.
 
@@ -271,7 +280,8 @@
 **Description:** Not accounting for increased false positive rate when testing many hypotheses.
 
 **Example:**
-- Testing 20 hypotheses at p < .05 gives ~65% chance of at least one false positive
+- Twenty independent true-null tests at alpha .05 give `1 - 0.95**20 = 0.6415`
+  probability of at least one false rejection; correlated tests need a different calculation
 - Claiming jellybean color X causes acne after testing 20 colors
 
 **Solution:** Correct for multiple comparisons (Bonferroni, FDR).

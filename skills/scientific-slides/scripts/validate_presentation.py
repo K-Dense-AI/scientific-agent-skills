@@ -75,7 +75,9 @@ class PresentationValidator:
         # Type-specific validation
         if self.file_type == '.pdf':
             self._validate_pdf()
-        elif self.file_type in ['.pptx', '.ppt']:
+        elif self.file_type == '.ppt':
+            self.issues.append('Legacy .ppt is unsupported; convert it to .pptx or PDF first.')
+        elif self.file_type == '.pptx':
             self._validate_pptx()
         elif self.file_type in ['.tex']:
             self._validate_latex()
@@ -112,6 +114,9 @@ class PresentationValidator:
             with open(self.filepath, 'rb') as f:
                 reader = PdfReader(f)
                 num_pages = len(reader.pages)
+                if num_pages == 0:
+                    self.issues.append("PDF has no pages")
+                    return
                 
                 self.info.append(f"Number of slides: {num_pages}")
                 
@@ -131,7 +136,7 @@ class PresentationValidator:
                 aspect = width / height
                 
                 self.info.append(
-                    f"Slide dimensions: {width_in:.1f}\" × {height_in:.1f}\" "
+                    f"Slide dimensions: {width_in:.1f}\" x {height_in:.1f}\" "
                     f"(aspect ratio: {aspect:.2f})"
                 )
                 
@@ -173,7 +178,7 @@ class PresentationValidator:
             aspect = prs.slide_width / prs.slide_height
             
             self.info.append(
-                f"Slide dimensions: {width_inches:.1f}\" × {height_inches:.1f}\" "
+                f"Slide dimensions: {width_inches:.1f}\" x {height_inches:.1f}\" "
                 f"(aspect ratio: {aspect:.2f})"
             )
             
@@ -316,19 +321,19 @@ def print_results(results: Dict):
     if results['info']:
         print("\nInformation:")
         for item in results['info']:
-            print(f"  • {item}")
+            print(f"  - {item}")
     
     # Print warnings
     if results['warnings']:
         print("\n[WARN]  Warnings:")
         for item in results['warnings']:
-            print(f"  • {item}")
+            print(f"  - {item}")
     
     # Print issues
     if results['issues']:
         print("\n[FAIL] Issues:")
         for item in results['issues']:
-            print(f"  • {item}")
+            print(f"  - {item}")
     
     # Overall status
     print("\n" + "=" * 60)
@@ -354,7 +359,7 @@ Examples:
 
 Supported file types:
   - PDF (.pdf)
-  - PowerPoint (.pptx, .ppt)
+  - PowerPoint (.pptx; convert legacy .ppt first)
   - LaTeX Beamer (.tex)
 
 Validation checks:

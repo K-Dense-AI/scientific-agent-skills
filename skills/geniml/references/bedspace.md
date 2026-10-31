@@ -1,7 +1,7 @@
 # BEDspace
 
 Verified against `geniml==0.8.4` release source, the official BEDbase tutorial,
-and the archived StarSpace repository on 2026-07-23.
+and the archived StarSpace repository on 2026-10-01.
 
 ## Status
 
@@ -20,6 +20,11 @@ workflow**:
 - `facebookresearch/StarSpace` is archived.
 - Geniml does not state or enforce a compatible StarSpace version.
 - several official examples and 0.8.4 CLI/API details disagree;
+- with Gtars 0.10.0, `data_preparation` calls the removed
+  `unknown_token_id()` API and assumes token objects instead of BatchEncoding;
+  its broad exception handler prints an error and returns a blank document;
+- the eight-worker preprocessing pool passes a Rust Tokenizer between workers;
+  native pickling/process compatibility needs separate verification;
 - the 0.8.4 `bedspace search` dispatcher imports a `main` function that is
   absent from `geniml.bedspace.search`.
 
@@ -71,13 +76,18 @@ geniml bedspace distances
 geniml bedspace search
 ```
 
-Use installed `--help` as the final authority. Source-backed flags follow.
+The following are source/parser-checked reproduction templates, not a working
+pipeline on the current stack. The synthetic `data_preparation` call was
+executed and returned a blank document for valid input. Resolve that upstream
+compatibility failure and verify nonempty documents before training; a zero
+exit status or file presence is insufficient. StarSpace was not built or run.
+Use installed `--help` as the final authority for flags.
 
 ### Preprocess
 
 ```bash
 geniml bedspace preprocess \
-  --input /absolute/project/beds \
+  --input /absolute/project/beds/ \
   --metadata /absolute/project/train.csv \
   --universe /absolute/project/universe.bed \
   --labels "cell_type,target" \
@@ -92,7 +102,10 @@ hard-coded pool of eight processes, and writes:
 ```
 
 The code joins this filename by string concatenation, not `os.path.join`, so
-the output argument must end in a path separator. Create and validate the
+the output argument must end in a path separator. The metadata helper also
+concatenates the input directory and `file_name`, so `--input` and `--files`
+need trailing separators. Use the exact `file_name` metadata column; commas
+in path/label values are not preserved by its split-based representation. Create and validate the
 directory first. The preprocessing text contains labels and tokenized genomic
 content; protect it as sensitive derived data.
 
@@ -152,7 +165,7 @@ geniml bedspace distances \
   --metadata-test /absolute/project/test.csv \
   --universe /absolute/project/universe.bed \
   --project-name heldout \
-  --files /absolute/project/beds \
+  --files /absolute/project/beds/ \
   --labels "cell_type,target" \
   --output /absolute/project/distances/ \
   --threshold 0.5
@@ -167,7 +180,7 @@ The current outputs are CSV/text files, not a single pickle:
 - `<project>_train_starspace_embed.txt`
 
 The implementation also uses `~/.bedspace/test_documents.txt` and
-`~/.bedspace/train_documents.txt`. Isolate `HOME` or review that cache before
+`~/.bedspace/train_documents.txt`. Use an isolated user account/environment or review that cache before
 running on sensitive data. Output CSVs contain filenames and labels; never
 paste unredacted rows into chat or CI logs.
 
@@ -257,11 +270,11 @@ StarSpace, but it is not automatically method-equivalent to BEDspace.
 ## Official sources
 
 - [Official BEDspace tutorial](https://docs.bedbase.org/geniml/tutorials/bedspace/)
-  (undated; accessed 2026-07-23)
+  (undated; accessed 2026-10-01)
 - [Geniml v0.8.4 BEDspace source](https://github.com/databio/geniml/tree/v0.8.4/geniml/bedspace)
-  (released 2026-01-14; accessed 2026-07-23)
+  (released 2026-01-14; accessed 2026-10-01)
 - [Archived StarSpace repository](https://github.com/facebookresearch/StarSpace)
   (final default-branch commit dated 2019-12-13; repository archived; accessed
-  2026-07-23)
+  2026-10-01)
 - [Primary BEDspace paper](https://doi.org/10.3390/bioengineering11030263)
   (2024)

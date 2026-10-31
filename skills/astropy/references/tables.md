@@ -210,7 +210,10 @@ high_snr = t[np.abs(t['flux'] / t['error']) > 5]
 
 ### Supported Formats
 
-FITS, HDF5, ASCII (CSV, ECSV, IPAC, etc.), VOTable, Parquet, ASDF
+FITS, HDF5, ASCII (CSV, ECSV, IPAC, etc.), VOTable, Parquet. HDF5 needs h5py;
+Parquet needs PyArrow. ASDF integration is supplied by separate packages, not
+a guaranteed core `Table.read` format. Check `Table.read.list_formats()`.
+File-based fragments are illustrative recipes requiring the indicated inputs.
 
 ### Reading Files
 
@@ -258,6 +261,14 @@ t.write('output.tbl', format='ascii.ipac')
 # LaTeX table
 t.write('table.tex', format='ascii.latex')
 ```
+
+For scientific round trips, prefer ECSV or an appropriate FITS representation
+over plain CSV. Compare units, masks, metadata and mixin columns after reading.
+Astropy 8 can persist indices with `write_indices=True` for ECSV/FITS/HDF5.
+FITS `Time` mixins should be read with `astropy_native=True`; choose
+`serialize_method={"flux": "data_mask", "time": "jd1_jd2"}` for a table with
+masked `flux` and `Time` columns. A global `"data_mask"` method is invalid for
+Time; choose per-column methods when types differ.
 
 ## Table Operations
 
@@ -317,10 +328,11 @@ for group in g.groups:
 
 ```python
 # Get unique rows
-t_unique = t.unique('id')
+from astropy.table import unique
+t_unique = unique(t, keys='id')
 
 # Multiple columns
-t_unique = t.unique(['ra', 'dec'])
+t_unique = unique(t, keys=['ra', 'dec'])
 ```
 
 ## Units and Quantities
@@ -390,8 +402,7 @@ t.meta['FILTER'] = 'F814W'
 t.meta['EXPTIME'] = 300.0
 
 # Set column-level metadata
-t['ra'].meta['unit'] = 'deg'
-t['ra'].meta['description'] = 'Right Ascension'
+t['ra'].unit = u.deg  # Attach the actual column unit, not an arbitrary meta key
 t['ra'].description = 'Right Ascension'  # Shortcut
 ```
 
@@ -413,21 +424,23 @@ t = Table(rows=rows, names=['a', 'b'])
 ### Memory-Mapped FITS Tables
 
 ```python
-# Don't load entire table into memory
+# Memory mapping can reduce reads for compatible FITS columns
 t = Table.read('huge_catalog.fits', memmap=True)
 
-# Only loads data when accessed
-subset = t[10000:10100]  # Efficient
+# String decoding, scaling and conversion can still materialize entire columns.
+subset = t[10000:10100]
 ```
 
 ### Copy vs. View
 
 ```python
-# Create view (shares data, fast)
-t_view = t['ra', 'dec']
+# Row slices share ordinary column data.
+t_view = t[1:3]
 
-# Create copy (independent data)
-t_copy = t['ra', 'dec'].copy()
+# Selecting multiple columns copies ordinary column data.
+t_copy = t['ra', 'dec']
+# Explicit independent copy of a row slice:
+t_independent = t[1:3].copy(copy_data=True)
 ```
 
 ## Displaying Tables
@@ -454,7 +467,8 @@ t['ra'].format = '{:.6f}'
 # To NumPy array
 arr = np.array(t)
 
-# To Pandas DataFrame
+# To Pandas DataFrame; units, SkyCoord frame and Time scale/precision do not
+# round-trip as Astropy metadata. Keep an ECSV/FITS source for scientific reuse.
 df = t.to_pandas()
 
 # To dictionary
@@ -472,7 +486,8 @@ from astropy.coordinates import SkyCoord, match_coordinates_sky
 coords1 = SkyCoord(t1['ra'], t1['dec'], unit='deg')
 coords2 = SkyCoord(t2['ra'], t2['dec'], unit='deg')
 
-# Find matches
+# Verify units, frame and reference epoch before matching; nearest neighbors
+# are candidate associations and may reuse the same catalog row.
 idx, sep, _ = coords1.match_to_catalog_sky(coords2)
 
 # Filter by separation

@@ -138,7 +138,7 @@ def make_plan(args: argparse.Namespace) -> dict[str, Any]:
         if not minimum <= value <= maximum:
             raise CliError(f"{name} must be between {minimum} and {maximum}")
         checked[name] = value
-    if dtype not in DTYPE_BYTES:
+    if not isinstance(dtype, str) or dtype not in DTYPE_BYTES:
         raise CliError(
             "--dtype must be one of: " + ", ".join(sorted(DTYPE_BYTES))
         )

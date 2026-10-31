@@ -16,8 +16,10 @@ branches without needing the SDK.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -259,6 +261,46 @@ class ExitCodeTests(unittest.TestCase):
             self.skipTest("latch is not installed; run under --isolated")
         result = self._run()
         self.assertIn(result.returncode, (0, 1), result.stderr)
+
+
+class WorkflowExampleTests(unittest.TestCase):
+    """Exercise documented graphs locally; never register or launch compute."""
+
+    def test_quickstart_workflows_run_without_network(self) -> None:
+        try:
+            import latch  # noqa: F401
+        except ImportError:
+            self.skipTest("latch is not installed; run under --isolated")
+
+        examples = (
+            (SKILL_ROOT / "SKILL.md", "reverse_complement_workflow(sequence='ACgt')", "acGT"),
+            (
+                SKILL_ROOT / "references" / "workflow-creation.md",
+                "normalize_sample(sample_name=' Sample A ')",
+                "Sample_A",
+            ),
+        )
+        for source, invocation, expected in examples:
+            with self.subTest(example=source.name), tempfile.TemporaryDirectory() as temp:
+                code = re.findall(r"```python\n(.*?)\n```", source.read_text(), re.S)[0]
+                # Actual files are necessary because task decorators inspect source.
+                script = Path(temp) / "example.py"
+                script.write_text(
+                    "import socket\n"
+                    "from unittest.mock import patch\n"
+                    "patch.object(socket.socket, 'connect', "
+                    "side_effect=AssertionError('network disabled')).start()\n"
+                    + code
+                    + f"\nassert {invocation} == {expected!r}\n",
+                    encoding="utf-8",
+                )
+                result = subprocess.run(
+                    [sys.executable, str(script)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

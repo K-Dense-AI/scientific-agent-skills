@@ -18,7 +18,7 @@ authoritative source BEFORE querying.
 Examples
 --------
     uv run scripts/onekgpd_api.py dataset-info
-    uv run scripts/onekgpd_api.py count-samples --chrom chr17 --start 43044292 --end 43170245 \
+    uv run scripts/onekgpd_api.py count-samples --chrom chr17 --start 43044295 --end 43170327 \
         --consequence MISSENSE_VARIANT --alpha-missense-class AM_LIKELY_PATHOGENIC
     uv run scripts/onekgpd_api.py kinship --sample1 NA19238 --sample2 NA19240
 
@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import struct
 import os
 import sys
 import tempfile
@@ -49,6 +51,7 @@ from dnaerys import (
 # ---------------------------------------------------------------------------
 
 DEFAULT_ENDPOINT = "db.dnaerys.org:443"   # public 1000 Genomes instance (fixed)
+DEFAULT_TIMEOUT = 30.0                   # seconds per RPC, including internal paging calls
 DEFAULT_VARIANT_LIMIT = 200               # hard cap when neither --limit nor --page-size given
 MAX_RETRIES = 3                           # bounded retry attempts on retryable errors
 RETRY_BASE_DELAY = 1.0                    # seconds; exponential backoff: 1, 2, ...
@@ -71,6 +74,28 @@ def _fail(msg: str) -> NoReturn:
 def _split_csv(s: str) -> list[str]:
     """Split a comma-separated value into a list of non-empty trimmed tokens."""
     return [part.strip() for part in s.split(",") if part.strip()]
+
+
+def _positive_finite(value: str | float) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive finite number")
+    return number
+
+
+def _client(args) -> DnaerysClient:
+    """Keep the public TLS endpoint and GRCh38 explicit; bound each RPC."""
+    return DnaerysClient(
+        DEFAULT_ENDPOINT, tls=True, assembly="GRCh38",
+        default_timeout=getattr(args, "timeout", DEFAULT_TIMEOUT),
+    )
+
+
+def _sample_names(csv: str) -> list[str]:
+    names = _split_csv(csv)
+    if not names:
+        raise ValueError("--samples must name at least one individual; an empty list would query the whole cohort")
+    return names
 
 
 def _save_json(data: Any, prefix: str, output_path: str | None = None) -> str:
@@ -124,7 +149,7 @@ def _parse_region_str(s: str) -> Region:
     except ValueError:
         raise ValueError(
             f"invalid --region {s!r}; expected CHR:START-END, "
-            "e.g. chr17:43044292-43170245"
+            "e.g. chr17:43044295-43170327"
         )
     return Region(chrom, start, end)
 
@@ -196,11 +221,22 @@ def _build_annotation_filter(args) -> AnnotationFilter | None:
     kwargs: dict[str, Any] = {}
     for arg_name, field in _CSV_FIELDS:
         raw = getattr(args, arg_name, None)
-        if raw:
-            kwargs[field] = _split_csv(raw)
+        if raw is not None:
+            values = _split_csv(raw)
+            if not values:
+                raise ValueError(f"--{arg_name.replace('_', '-')} must contain at least one term")
+            kwargs[field] = values
     for arg_name, field in _FLOAT_FIELDS:
         val = getattr(args, arg_name, None)
         if val is not None:
+            if not math.isfinite(val) or not 0 < val <= 1:
+                raise ValueError(
+                    f"--{arg_name.replace('_', '-')} must be finite and in (0, 1]; "
+                    "zero means an unset server filter. Use an explicit positive bound "
+                    "or post-filter complete variant results for exact > 0."
+                )
+            if struct.unpack("!f", struct.pack("!f", val))[0] == 0:
+                raise ValueError(f"--{arg_name.replace('_', '-')} underflows the API float32 bound to zero")
             kwargs[field] = val
     for arg_name, field in _BOOL_FIELDS:
         if getattr(args, arg_name, False):
@@ -326,7 +362,7 @@ def _run_count_variants(args, samples: list[str] | None) -> None:
     ann = _build_annotation_filter(args)
 
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.count_variants(
                 region=region,
                 regions=regions,
@@ -365,7 +401,7 @@ def _run_select_variants(args, samples: list[str] | None) -> None:
     limit = args.limit
 
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             if page_size is not None:
                 pq = client.paginate_variants(
                     page_size=page_size,
@@ -440,7 +476,7 @@ def cmd_count_variants(args) -> None:
 
 
 def cmd_count_variants_in_samples(args) -> None:
-    _run_count_variants(args, samples=_split_csv(args.samples))
+    _run_count_variants(args, samples=_sample_names(args.samples))
 
 
 def cmd_select_variants(args) -> None:
@@ -448,7 +484,7 @@ def cmd_select_variants(args) -> None:
 
 
 def cmd_select_variants_in_samples(args) -> None:
-    _run_select_variants(args, samples=_split_csv(args.samples))
+    _run_select_variants(args, samples=_sample_names(args.samples))
 
 
 def cmd_count_samples(args) -> None:
@@ -457,7 +493,7 @@ def cmd_count_samples(args) -> None:
     ann = _build_annotation_filter(args)
 
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.count_samples(
                 region=region,
                 regions=regions,
@@ -493,7 +529,7 @@ def cmd_select_samples(args) -> None:
     ann = _build_annotation_filter(args)
 
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.select_samples(
                 region=region,
                 regions=regions,
@@ -537,21 +573,26 @@ def cmd_select_samples(args) -> None:
 
 
 def cmd_count_samples_hom_ref(args) -> None:
+    Region(args.chrom, args.position, args.position)  # validate 1-based position
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.count_samples_hom_ref(chr=args.chrom, position=args.position)
 
     result = _call_with_retry(fetch)
     count = result.count
-    present = count != -1
+    incomplete = result.metadata.affected
+    present = None if incomplete else count != -1
     pos = f"{args.chrom}:{args.position}"
     data = {
         "command": args.command,
         "count": count,
         "variant_present": present,
+        "result_incomplete": incomplete,
         "request": {"chrom": args.chrom, "position": args.position},
     }
-    if count == -1:
+    if incomplete:
+        summary = [f"Homozygous-reference response at {pos}: {count}; presence and count are not definitive.", INCOMPLETE_NOTE]
+    elif count == -1:
         summary = [
             f"No variant exists at {pos} in the dataset; "
             "homozygous-reference count is undefined here."
@@ -566,15 +607,18 @@ def cmd_count_samples_hom_ref(args) -> None:
 
 
 def cmd_select_samples_hom_ref(args) -> None:
+    Region(args.chrom, args.position, args.position)  # validate 1-based position
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.select_samples_hom_ref(chr=args.chrom, position=args.position)
 
     result = _call_with_retry(fetch)
     names = list(result.samples)
+    incomplete = result.metadata.affected
     pos = f"{args.chrom}:{args.position}"
     data = {
         "command": args.command,
+        "result_incomplete": incomplete,
         "count": len(names),
         "samples": names,
         "request": {"chrom": args.chrom, "position": args.position},
@@ -584,12 +628,14 @@ def cmd_select_samples_hom_ref(args) -> None:
         summary.append(f"  {name}")
     if not names:
         summary.append("  (none)")
+    if incomplete:
+        summary.append(INCOMPLETE_NOTE)
     _emit(data, "select_samples_hom_ref", summary, args.output)
 
 
 def cmd_kinship(args) -> None:
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.kinship_duo(sample1=args.sample1, sample2=args.sample2)
 
     result = _call_with_retry(fetch)
@@ -618,7 +664,7 @@ def cmd_kinship(args) -> None:
 
 def cmd_dataset_info(args) -> None:
     def fetch():
-        with DnaerysClient(DEFAULT_ENDPOINT) as client:
+        with _client(args) as client:
             return client.dataset_info()
 
     info = _call_with_retry(fetch)
@@ -691,6 +737,10 @@ def _add_annotation_flags(p: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     conn_parser = argparse.ArgumentParser(add_help=False)
+    conn_parser.add_argument(
+        "--timeout", type=_positive_finite, default=DEFAULT_TIMEOUT,
+        help="Positive finite seconds per RPC (default 30); paging and retries may take longer overall.",
+    )
     conn_parser.add_argument(
         "--output",
         help="Write full JSON to this path (default: a temp file in the system temp dir).",
@@ -786,7 +836,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
-    except (DnaerysError, ValueError) as e:
+    except (DnaerysError, ValueError, OSError) as e:
         _fail(f"Error: {e}")
 
 

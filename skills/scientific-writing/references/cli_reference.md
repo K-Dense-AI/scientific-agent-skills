@@ -63,7 +63,11 @@ Separate multiple evidence IDs with semicolons in CSV. Use inline Markdown marke
 [claim:C001] [evidence:E001,E002]
 ```
 
-The audit also flags numeric content without a claim marker.
+Use exactly one claim per physical line. The audit checks the SHA-256 digest against
+that line after removing `[claim:...]`, `[evidence:...]`, and `[@E...]` markers
+and collapsing whitespace.
+It also validates source-manifest verification metadata and flags numeric content
+without a claim marker. See `evidence_workflow.md` for normalization and limits.
 
 ## Numeric and methods-results consistency
 
@@ -92,8 +96,11 @@ python3 scripts/validate_authorship.py authorship.json
 ```
 
 The command checks human authorship criteria, exact CRediT role names, corresponding
-author and guarantor IDs, final approval, hashed declarations, AI disclosure, human
+author and guarantor IDs, final approval, declaration-hash syntax, AI disclosure, human
 verification, journal-policy review, and authorization gates for restricted material.
+Its authorship criteria are ICMJE-style local gates, not all journals' criteria.
+Declaration hashes are not compared with manuscript text; manually reconcile the
+actual statements. Recorded dates must be valid calendar dates in YYYY-MM-DD form.
 
 ## Language, placeholder, and confidentiality lint
 

@@ -95,13 +95,13 @@ Required action:
 3. Route to institutional dual-use/biosecurity review, funder, legal/export-control, and other required authorities.
 4. Follow current policy, award terms, and jurisdiction-specific controls.
 
-### U.S. policy status checked 2026-07-23
+### U.S. policy status checked 2026-10-01
 
-- Executive Order 14292 of May 5, 2025 directed revision/replacement of the 2024 U.S. Government DURC/PEPP policy and paused federally funded research meeting its “dangerous gain-of-function” definition pending the replacement policy.
-- NIH Notice NOT-OD-25-112 stated that the Executive Order superseded NIH implementation of the 2024 DURC/PEPP policy and rescinded NOT-OD-25-061.
-- The HHS/ASPR policy page still stated at the verification date that federal departments and agencies would revise or replace the 2024 policy and that the page would be updated when the revised policy became available.
+- The July 2026 [USG Policy for Stopping High-Risk Life Sciences Research](https://www.whitehouse.gov/wp-content/uploads/2026/07/USG-Policy-for-Stopping-High-Risk-Life-Sciences-Research_July-2026.pdf) has been issued; it is no longer an awaited replacement for the 2024 DURC/PEPP framework.
+- NIH [NOT-OD-26-101](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-26-101.html), issued July 28, 2026, describes federal funding prohibitions and oversight for dangerous gain-of-function research and international research of concern. It states that activities previously identified as potential dangerous gain-of-function research remain paused until NIH-specific implementation requirements are established. Do not infer that policy publication authorizes resumption.
+- The [NIH biosafety/biosecurity portal](https://osp.od.nih.gov/policies/biosafety-and-biosecurity-policy/) still directs researchers to the April 2024 NIH Guidelines. Its separately proposed [Draft NIH Biosafety Policy](https://grants.nih.gov/grants/guide/notice-files/NOT-OD-26-112.html), released August 19 with comments due October 19, 2026, would replace those Guidelines only when finalized. The draft is not an effective replacement.
 
-Do not use the superseded 2024 implementation as current clearance. Recheck the official policy and award terms for every project because this status is time-sensitive.
+Check the current agency implementation notices, award terms, and institutional determination for every project; neither a historical policy nor a pending proposal is clearance.
 
 WHO’s *Global Guidance Framework for the Responsible Use of the Life Sciences* provides an international risk-governance framework; it does not replace national or local rules.
 

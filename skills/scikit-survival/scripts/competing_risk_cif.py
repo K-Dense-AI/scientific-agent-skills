@@ -73,6 +73,8 @@ def normalize_competing_event(values: Any):
         raise CliError("event codes must be finite non-negative integers")
     if not np.equal(numeric, np.floor(numeric)).all():
         raise CliError("event codes must be integers")
+    if (numeric > MAX_CAUSES).any():
+        raise CliError(f"cause codes must not exceed {MAX_CAUSES}")
     event = numeric.astype(int)
     causes = sorted(set(event.tolist()) - {0})
     if len(causes) < 2:
@@ -108,6 +110,8 @@ def horizon_values(
     for horizon in horizons:
         if horizon <= 0 or not np.isfinite(horizon):
             raise CliError("horizons must be finite and strictly positive")
+        if horizon > unique_times[-1]:
+            raise CliError("report horizons must not exceed observed follow-up")
         index = int(np.searchsorted(unique_times, horizon, side="right") - 1)
         values = (
             np.zeros(cumulative_incidence.shape[0], dtype=float)
@@ -141,7 +145,10 @@ def estimate_cif(
 
     try:
         import numpy as np
-        from sksurv.nonparametric import cumulative_incidence_competing_risks
+        from sksurv.nonparametric import (
+            cumulative_incidence_competing_risks,
+            kaplan_meier_estimator,
+        )
     except ImportError as exc:
         raise CliError("the pinned scikit-survival stack is required") from exc
     checked_event = normalize_competing_event(event)
@@ -156,6 +163,13 @@ def estimate_cif(
         not np.isfinite(time_min) or time_min < 0 or time_min >= checked_time.max()
     ):
         raise CliError("time_min must be finite, non-negative, and below max time")
+    if time_min is not None and time_min > checked_time.min():
+        raise CliError(
+            "scikit-survival 0.28.0 has a conditional CIF shape defect; "
+            "time_min that removes observed times is unsupported"
+        )
+    if not np.isfinite(confidence_level) or not 0 < confidence_level < 1:
+        raise CliError("confidence_level must be strictly between zero and one")
 
     result = cumulative_incidence_competing_risks(
         checked_event,
@@ -167,9 +181,26 @@ def estimate_cif(
     )
     if confidence:
         unique_times, cumulative_incidence, intervals = result
+        # 0.28.0 reverses the total-CIF endpoints and ignores conf_level for
+        # that row. Reconstruct it from the public all-event KM estimator.
+        km_times, _, km_intervals = kaplan_meier_estimator(
+            checked_event > 0,
+            checked_time,
+            conf_type="log-log",
+            conf_level=confidence_level,
+        )
+        if not np.array_equal(km_times, unique_times):
+            raise CliError("total-risk confidence grid differs from the CIF grid")
+        intervals[0] = 1.0 - km_intervals[::-1]
+        if not np.isfinite(intervals).all() or (intervals[:, 0] > intervals[:, 1]).any():
+            raise CliError("CIF confidence intervals are non-finite or reversed")
     else:
         unique_times, cumulative_incidence = result
         intervals = None
+    if not np.isfinite(cumulative_incidence).all() or (
+        (cumulative_incidence < -1e-10) | (cumulative_incidence > 1 + 1e-10)
+    ).any():
+        raise CliError("CIF estimates must be finite probabilities")
     if (np.diff(cumulative_incidence, axis=1) < -1e-10).any():
         raise CliError("estimated cumulative incidence unexpectedly decreased")
     if not np.allclose(

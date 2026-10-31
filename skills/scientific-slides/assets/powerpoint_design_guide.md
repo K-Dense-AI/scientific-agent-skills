@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides comprehensive instructions for creating professional scientific presentations using PowerPoint, with emphasis on integration with the pptx skill for programmatic creation and best practices for scientific content.
+This guide provides comprehensive instructions for creating professional scientific presentations using PowerPoint, with emphasis on programmatic creation with PptxGenJS and best practices for scientific content.
 
 **CRITICAL**: Avoid dry, text-heavy presentations. Scientific slides should be:
 - **Visually engaging**: High-quality images, figures, diagrams on EVERY slide
@@ -13,13 +13,17 @@ This guide provides comprehensive instructions for creating professional scienti
 
 **Anti-Pattern Warning**: All-bullet-point slides with black text on white background = instant boredom and forgotten science.
 
-## Using the PPTX Skill
+The examples target [PptxGenJS 4.0.1](https://gitbrent.github.io/PptxGenJS/docs/)
+(reviewed 2026-09-30). Use Node.js with `pptxgenjs` installed in a task-local project.
+Code fragments assume supplied images and verified research claims; example numbers
+and citations are placeholders. Native slide composition preserves quantitative
+figures; generative image attachments do not guarantee unchanged data.
 
-### Reference
+## Building the Deck
 
-For complete technical documentation on PowerPoint creation, refer to:
-- **Main documentation**: the `pptx` skill's `SKILL.md`, which covers creation,
-  template editing, and the OOXML round-trip in one place
+New decks are built with PptxGenJS; existing templates are filled with
+[python-pptx](https://python-pptx.readthedocs.io/) 1.0.2. Either way, render the result
+through LibreOffice and inspect the images before delivery.
 
 ### Two Approaches to PowerPoint Creation
 
@@ -28,16 +32,31 @@ For complete technical documentation on PowerPoint creation, refer to:
 **Best for**: Creating presentations from scratch with custom designs and data visualizations.
 
 **Workflow**:
-1. Read the `pptx` skill's `SKILL.md` completely — its "Creating with pptxgenjs" section lists the footguns
+1. Read the PptxGenJS documentation (linked above) for each API call you use
 2. Set `pres.layout` before adding slides (`LAYOUT_16x9` is 10" × 5.625"; coordinates are inches)
 3. Create a JavaScript file that builds the deck with the PptxGenJS API
 4. Add charts and tables using the PptxGenJS API
-5. Generate thumbnails and validate visually
+5. Render the deck to images and validate visually (see Visual Validation Workflow)
 6. Iterate based on visual inspection
+
+**Image dimensions:** `1000, 500` below are illustrative source pixel dimensions.
+Replace them with the actual dimensions of each asset. PptxGenJS 4.0.1 has no
+`imageSizingContain` method; its native `sizing` also relies on supplied source
+`w`/`h`. The small `fitImage` function instead computes explicit placement.
 
 **Example Structure**:
 ```javascript
+const PptxGenJS = require("pptxgenjs");
 const pptx = new PptxGenJS();
+pptx.layout = "LAYOUT_16x9";
+
+// Supply the original pixel dimensions (for example from Pillow/identify).
+// Explicit geometry preserves the source aspect ratio without API sizing helpers.
+function fitImage(widthPx, heightPx, x, y, w, h) {
+  const scale = Math.min(w / widthPx, h / heightPx);
+  const width = widthPx * scale, height = heightPx * scale;
+  return { x: x + (w - width) / 2, y: y + (h - height) / 2, w: width, h: height };
+}
 
 // Add title slide
 const slide1 = pptx.addSlide();
@@ -49,7 +68,7 @@ slide1.addText("Your Title", {
 // Add content slide with figure
 const slide2 = pptx.addSlide();
 slide2.addText("Results", { x: 0.5, y: 0.5, fontSize: 32 });
-slide2.addImage({ path: "figure.png", x: 1, y: 1.5, w: 8, h: 4 });
+slide2.addImage({ path: "figure.png", ...fitImage(1000, 500, 1, 1.5, 8, 4) });
 
 pptx.writeFile({ fileName: "presentation.pptx" });
 ```
@@ -58,20 +77,29 @@ pptx.writeFile({ fileName: "presentation.pptx" });
 
 **Best for**: Using existing PowerPoint templates or editing existing presentations.
 
-**Workflow** (all scripts live in the `pptx` skill; run them from the repository root):
+**Workflow** (python-pptx 1.0.2):
 1. Start with template.pptx
-2. Render a thumbnail grid to see which layouts the template offers
+2. List the template's layouts and placeholders, and render it to images to see each layout
 3. Read the existing text with `markitdown` to plan replacements
-4. Unzip the deck, edit `ppt/slides/slideN.xml` directly, and zip it back up
-5. Duplicate slides with `add_slide.py`, then drop orphaned parts with `clean.py`
-6. Validate the result and re-render thumbnails
+4. Add slides from the layouts you need and fill their placeholders
+5. Save, run `validate_presentation.py`, and re-render to check the result
 
-**Key Scripts** (under `skills/pptx/scripts/`):
-- `thumbnail.py`: Labeled grid of every slide — for picking template layouts and visual validation
-- `add_slide.py`: Duplicate a slide or layout with the package bookkeeping handled
-- `clean.py`: Delete slides, media, and rels that are no longer referenced
-- `office/validate.py`: Schema, relationship, and content-type checks; pass `--original` for template-derived decks
-- `office/soffice.py`: LibreOffice wrapper for converting to PDF
+```python
+from pptx import Presentation
+
+prs = Presentation("template.pptx")
+for index, layout in enumerate(prs.slide_layouts):
+    print(index, layout.name, [p.placeholder_format.idx for p in layout.placeholders])
+
+slide = prs.slides.add_slide(prs.slide_layouts[1])  # choose by the printed name
+slide.shapes.title.text = "Results"
+slide.placeholders[1].text = "Response rate doubled in cohort B"
+prs.save("output.pptx")
+```
+
+Layout indices and placeholder `idx` values differ between templates, so read them from
+the printout rather than reusing the numbers above. python-pptx has no slide-duplication
+API: build each new slide from a layout instead of copying an existing slide.
 
 Text extraction uses `markitdown` rather than a dedicated script:
 
@@ -248,7 +276,7 @@ Consider your subject matter and audience:
 - Avoid: 3D rotations, complex effects
 - Duration: Very fast (0.3-0.5 seconds)
 
-## Creating Presentations with PPTX Skill
+## Creating Presentations with PptxGenJS
 
 ### Design-First Workflow
 
@@ -264,7 +292,7 @@ Consider your subject matter and audience:
 - **Medicine/Healthcare**: Teal (#5EA8A7), Coral (#FE4447), White (#FFFFFF)
 - **Environmental Science**: Sage (#87A96B), Terracotta (#E07A5F), Cream (#F4F1DE)
 
-See full palette options in pptx skill SKILL.md (lines 76-94).
+Use your supplied template or a palette whose actual text/background pairs pass contrast checks.
 
 **Step 1: Plan Design System** (With Modern Palette)
 ```javascript
@@ -277,10 +305,10 @@ const DESIGN = {
     background: "FFFFFF"  // White (clean)
   },
   fonts: {
-    title: { size: 40, bold: true, face: "Arial" },
-    heading: { size: 28, bold: true, face: "Arial" },
-    body: { size: 24, face: "Arial" },
-    caption: { size: 16, face: "Arial" }
+    title: { fontSize: 40, bold: true, fontFace: "Arial" },
+    heading: { fontSize: 28, bold: true, fontFace: "Arial" },
+    body: { fontSize: 24, fontFace: "Arial" },
+    caption: { fontSize: 16, fontFace: "Arial" }
   },
   layout: {
     margin: 0.5,
@@ -292,6 +320,14 @@ const DESIGN = {
 
 **Step 2: Create Reusable Functions**
 ```javascript
+// Supply the original pixel dimensions (for example from Pillow/identify).
+// Explicit geometry preserves the source aspect ratio without API sizing helpers.
+function fitImage(widthPx, heightPx, x, y, w, h) {
+  const scale = Math.min(w / widthPx, h / heightPx);
+  const width = widthPx * scale, height = heightPx * scale;
+  return { x: x + (w - width) / 2, y: y + (h - height) / 2, w: width, h: height };
+}
+
 function addTitleSlide(pptx, title, subtitle, author) {
   const slide = pptx.addSlide();
   slide.background = { color: DESIGN.colors.primary };
@@ -329,7 +365,7 @@ function addContentSlide(pptx, title, bullets) {
     color: DESIGN.colors.primary
   });
   
-  slide.addText(bullets, {
+  slide.addText(bullets.join("\n"), {
     x: DESIGN.layout.margin,
     y: DESIGN.layout.contentY,
     w: 9,
@@ -348,8 +384,6 @@ const pptx = new PptxGenJS();
 pptx.layout = "LAYOUT_16x9";
 
 // Title slide with background image or color block
-const titleSlide = pptx.addSlide();
-titleSlide.background = { color: DESIGN.colors.primary }; // Bold color background
 addTitleSlide(
   pptx,
   "Research Title",
@@ -361,14 +395,14 @@ addTitleSlide(
 const introSlide = pptx.addSlide();
 introSlide.addImage({
   path: "concept_image.png",  // Visual representation of concept
-  x: 5, y: 1.5, w: 4, h: 3
+  ...fitImage(1000, 500, 5, 1.5, 4, 3)
 });
 introSlide.addText("Background", { x: 0.5, y: 0.5, fontSize: 36, bold: true });
 introSlide.addText([
   "Key context point 1 (AuthorA, 2023)",
   "Key context point 2 (AuthorB, 2022)",
   "Research gap identified (AuthorC, 2021)"
-], {
+].join("\n"), {
   x: 0.5, y: 1.5, w: 4, h: 2,
   fontSize: 24, bullet: true
 });
@@ -378,11 +412,12 @@ const resultsSlide = pptx.addSlide();
 resultsSlide.addText("Main Finding", { x: 0.5, y: 0.5, fontSize: 32, bold: true });
 resultsSlide.addImage({
   path: "results_figure.png",  // Large, clear figure
-  x: 0.5, y: 1.5, w: 9, h: 4   // Nearly full slide
+  ...fitImage(1000, 500, 0.5, 1.6, 9, 3.7),
+  altText: "Describe the measured comparison and uncertainty from the source figure"
 });
 // Minimal text annotation only
-resultsSlide.addText("34% improvement (p < 0.001)", {
-  x: 7, y: 1, fontSize: 20, color: DESIGN.colors.accent, bold: true
+resultsSlide.addText("Verified effect estimate and uncertainty", {
+  x: 0.5, y: 1, w: 9, h: 0.4, fontSize: 20, color: DESIGN.colors.text, bold: true
 });
 
 // Save
@@ -404,7 +439,7 @@ pptx.writeFile({ fileName: "presentation.pptx" });
 // Then add to slide
 slide.addImage({
   path: "equation.png",
-  x: 2, y: 3, w: 6, h: 1
+  ...fitImage(1000, 500, 2, 3, 6, 1)  // Replace with actual equation image dimensions
 });
 ```
 
@@ -446,23 +481,24 @@ slide.addChart(pptx.ChartType.bar, [
   chartColors: [DESIGN.colors.primary, DESIGN.colors.accent],
   showTitle: false,
   showLegend: true,
-  fontSize: 18
+  catAxisLabelFontSize: 18, valAxisLabelFontSize: 18, legendFontSize: 18
 });
 ```
 
 ## Visual Validation Workflow
 
-### Generate Thumbnails
+### Render Slides to Images
 
-After creating presentation:
+After creating the presentation, export it to PDF with LibreOffice and render each page
+with the bundled script (run from the repository root):
 
 ```bash
-# Create thumbnail grid for quick review
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/thumbnails --cols 4
-
-# Or a single-column strip for per-slide detail
-python skills/pptx/scripts/thumbnail.py presentation.pptx review/slide --cols 1
+soffice --headless --convert-to pdf --outdir review presentation.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py review/presentation.pdf review/slide --dpi 100
 ```
+
+LibreOffice substitutes fonts that are not installed, so line breaks can differ from
+PowerPoint. Confirm final text fit in PowerPoint itself.
 
 ### Inspection Checklist
 
@@ -502,23 +538,20 @@ If you have an existing template:
 markitdown template.pptx > inventory.md
 ```
 
-2. **Create thumbnail grid**:
+2. **Render the template** to see its layouts:
 ```bash
-python skills/pptx/scripts/thumbnail.py template.pptx template_review
+soffice --headless --convert-to pdf --outdir template_review template.pptx
+python skills/scientific-slides/scripts/pdf_to_images.py template_review/template.pdf template_review/slide
 ```
 
 3. **Analyze layouts** and document which slides to use
 
-4. **Duplicate the layouts you need**, then drop what you don't:
-```bash
-python skills/pptx/scripts/add_slide.py template.pptx slide2.xml -o working.pptx
-python skills/pptx/scripts/clean.py unpacked/
-```
+4. **Add slides from the layouts you need** with python-pptx (see Template-Based
+   Creation above)
 
-5. **Replace content** by editing `ppt/slides/slideN.xml` in the unzipped deck, then
-   zip it back up and check the result:
+5. **Replace content** in the placeholders, save, and check the result:
 ```bash
-python skills/pptx/scripts/office/validate.py output.pptx --original template.pptx
+python skills/scientific-slides/scripts/validate_presentation.py output.pptx --duration 15
 ```
 
 ## Best Practices Summary
@@ -602,9 +635,10 @@ python skills/pptx/scripts/office/validate.py output.pptx --original template.pp
 - Icon libraries (Noun Project)
 - Image editing (PowerPoint built-in, external tools)
 
-**PPTX Skill Documentation**:
-- `skills/pptx/SKILL.md`: Main documentation — creation, template editing, and OOXML
-- `skills/pptx/scripts/`: Utility scripts
+**PowerPoint Tooling Documentation**:
+- [PptxGenJS](https://gitbrent.github.io/PptxGenJS/docs/): programmatic creation
+- [python-pptx](https://python-pptx.readthedocs.io/): template editing
+- `scripts/pdf_to_images.py` and `scripts/validate_presentation.py`: rendering and checks bundled with this skill
 
 ## Quick Reference
 
@@ -664,5 +698,5 @@ Effective PowerPoint presentations for science require:
 5. Visual validation
 6. Accessibility considerations
 
-Use the pptx skill for programmatic creation and the visual review workflow to ensure professional quality before presenting.
+Use PptxGenJS for programmatic creation and the visual review workflow to ensure professional quality before presenting.
 

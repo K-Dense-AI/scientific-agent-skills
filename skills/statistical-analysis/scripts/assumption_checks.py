@@ -1,652 +1,352 @@
-"""
-Comprehensive statistical assumption checking utilities.
+"""Descriptive diagnostics, not an automatic test selector or proof of assumptions.
 
-This module provides functions to check common statistical assumptions:
-- Normality
-- Homogeneity of variance
-- Independence
-- Linearity
-- Outliers
+NaNs are omitted with counts; infinities, malformed arrays, insufficient samples
+and undefined diagnostics raise ValueError. Independence requires study-design
+review. Legacy ``is_normal``/``is_homogeneous`` fields mean only non-rejection.
 """
 
+from typing import Dict, List, Optional, Union
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import Dict, List, Tuple, Optional, Union
+
+
+def _alpha(alpha):
+    if not np.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError("alpha must be finite and between 0 and 1")
+
+
+def _array(data):
+    if np.iscomplexobj(data) or np.ma.isMaskedArray(data):
+        raise ValueError("data must be real and unmasked; encode missing values as NaN")
+    if isinstance(data, pd.Series):
+        values = data.to_numpy(dtype=float, na_value=np.nan)
+    else:
+        values = np.asarray(data, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("data must be one-dimensional")
+    if np.isinf(values).any():
+        raise ValueError("data must not contain infinite values")
+    return values
+
+
+def _clean(data, minimum=1, variable=False):
+    values = _array(data)
+    positions = np.flatnonzero(~np.isnan(values))
+    clean = values[positions]
+    if clean.size < minimum:
+        raise ValueError(f"at least {minimum} non-missing observations are required")
+    if variable and np.ptp(clean) == 0:
+        raise ValueError("constant data do not support this diagnostic")
+    return clean, positions, len(values) - len(clean)
+
+
+def _groups(data, value_col, group_col, minimum=1):
+    if data.empty or data[group_col].isna().any():
+        raise ValueError("group labels must be non-missing and data nonempty")
+    groups = []
+    for label, frame in data.groupby(group_col, sort=False, observed=True):
+        clean, positions, omitted = _clean(frame[value_col], minimum=minimum)
+        groups.append((label, clean, omitted, frame, positions))
+    return groups
+
+
+def _finish_plot():
+    plt.tight_layout()
+    plt.show()
+    plt.close()
 
 
 def check_normality(
-    data: Union[np.ndarray, pd.Series, List],
-    name: str = "data",
-    alpha: float = 0.05,
-    plot: bool = True
+    data: Union[np.ndarray, pd.Series, List], name: str = "data",
+    alpha: float = 0.05, plot: bool = True
 ) -> Dict:
+    """Shapiro-Wilk screen with Q-Q/histogram; n>5000 has no binary verdict.
+
+    ``is_normal`` is a legacy alias for ``normality_not_rejected`` and never
+    establishes normality. NaN omissions are returned as ``n_missing``.
     """
-    Check normality assumption using Shapiro-Wilk test and visualizations.
-
-    Parameters
-    ----------
-    data : array-like
-        Data to check for normality
-    name : str
-        Name of the variable (for labeling)
-    alpha : float
-        Significance level for Shapiro-Wilk test
-    plot : bool
-        Whether to create Q-Q plot and histogram
-
-    Returns
-    -------
-    dict
-        Results including test statistic, p-value, and interpretation
-    """
-    data = np.asarray(data)
-    data_clean = data[~np.isnan(data)]
-
-    # Shapiro-Wilk test
-    statistic, p_value = stats.shapiro(data_clean)
-
-    # Interpretation
-    is_normal = p_value > alpha
-    interpretation = (
-        f"Data {'appear' if is_normal else 'do not appear'} normally distributed "
-        f"(W = {statistic:.3f}, p = {p_value:.3f})"
-    )
-
-    # Visual checks
+    _alpha(alpha)
+    clean, _, missing = _clean(data, minimum=3, variable=True)
+    statistic, p_value = stats.shapiro(clean)
+    if not np.isfinite([statistic, p_value]).all():
+        raise ValueError("Shapiro-Wilk returned a non-finite result")
+    reliable = len(clean) <= 5000
+    decision = bool(p_value > alpha) if reliable else None
+    finding = ("not rejected" if decision else "rejected") if reliable else "not assessed by p-value (n > 5000)"
+    interpretation = f"Normality {finding} (W = {statistic:.3f}, p = {p_value:.3g}); this does not verify assumptions."
     if plot:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-        # Q-Q plot
-        stats.probplot(data_clean, dist="norm", plot=ax1)
+        _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        stats.probplot(clean, dist="norm", plot=ax1)
         ax1.set_title(f"Q-Q Plot: {name}")
         ax1.grid(alpha=0.3)
-
-        # Histogram with normal curve
-        ax2.hist(data_clean, bins='auto', density=True, alpha=0.7, color='steelblue', edgecolor='black')
-        mu, sigma = data_clean.mean(), data_clean.std()
-        x = np.linspace(data_clean.min(), data_clean.max(), 100)
-        ax2.plot(x, stats.norm.pdf(x, mu, sigma), 'r-', linewidth=2, label='Normal curve')
-        ax2.set_xlabel('Value')
-        ax2.set_ylabel('Density')
-        ax2.set_title(f'Histogram: {name}')
+        ax2.hist(clean, bins='auto', density=True, alpha=0.7, color='steelblue', edgecolor='black')
+        grid = np.linspace(clean.min(), clean.max(), 100)
+        ax2.plot(grid, stats.norm.pdf(grid, clean.mean(), clean.std()), 'r-', label='Normal curve')
+        ax2.set(xlabel='Value', ylabel='Density', title=f'Histogram: {name}')
         ax2.legend()
-        ax2.grid(alpha=0.3)
-
-        plt.tight_layout()
-        plt.show()
-
+        _finish_plot()
     return {
-        'test': 'Shapiro-Wilk',
-        'statistic': statistic,
-        'p_value': p_value,
-        'is_normal': is_normal,
-        'interpretation': interpretation,
-        'n': len(data_clean),
-        'recommendation': (
-            "Proceed with parametric test" if is_normal
-            else "Consider non-parametric alternative or transformation"
-        )
+        'test': 'Shapiro-Wilk', 'statistic': statistic, 'p_value': p_value,
+        'is_normal': decision, 'normality_not_rejected': decision,
+        'p_value_reliable': reliable, 'interpretation': interpretation,
+        'n': len(clean), 'n_missing': missing,
+        'recommendation': "Review the Q-Q plot, tails, design and estimand. Neither parametric nor non-parametric inference is selected by this p-value.",
     }
 
 
-def check_normality_per_group(
-    data: pd.DataFrame,
-    value_col: str,
-    group_col: str,
-    alpha: float = 0.05,
-    plot: bool = True
-) -> pd.DataFrame:
-    """
-    Check normality assumption for each group separately.
+def check_normality_per_group(data: pd.DataFrame, value_col: str, group_col: str,
+                              alpha: float = 0.05, plot: bool = True) -> pd.DataFrame:
+    """One Shapiro-Wilk screen per observed group; 'Normal' is a legacy label.
 
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Data containing values and group labels
-    value_col : str
-        Column name for values to check
-    group_col : str
-        Column name for group labels
-    alpha : float
-        Significance level
-    plot : bool
-        Whether to create Q-Q plots for each group
-
-    Returns
-    -------
-    pd.DataFrame
-        Results for each group
+    Yes means not rejected, No means rejected, and Unassessed means n>5000.
+    Missing group labels are rejected; unused categorical levels are ignored.
     """
-    groups = data[group_col].unique()
+    _alpha(alpha)
+    groups = _groups(data, value_col, group_col, minimum=3)
     results = []
-
     if plot:
-        n_groups = len(groups)
-        fig, axes = plt.subplots(1, n_groups, figsize=(5 * n_groups, 4))
-        if n_groups == 1:
-            axes = [axes]
-
-    for idx, group in enumerate(groups):
-        group_data = data[data[group_col] == group][value_col].dropna()
-        stat, p = stats.shapiro(group_data)
-
-        results.append({
-            'Group': group,
-            'N': len(group_data),
-            'W': stat,
-            'p-value': p,
-            'Normal': 'Yes' if p > alpha else 'No'
-        })
-
+        _, axes = plt.subplots(1, len(groups), figsize=(5 * len(groups), 4), squeeze=False)
+    for i, (label, clean, missing, _, _) in enumerate(groups):
+        result = check_normality(clean, alpha=alpha, plot=False)
+        decision = result['normality_not_rejected']
+        results.append({'Group': label, 'N': len(clean), 'N_missing': missing,
+                        'W': result['statistic'], 'p-value': result['p_value'],
+                        'Normal': 'Unassessed' if decision is None else ('Yes' if decision else 'No')})
         if plot:
-            stats.probplot(group_data, dist="norm", plot=axes[idx])
-            axes[idx].set_title(f"Q-Q Plot: {group}")
-            axes[idx].grid(alpha=0.3)
-
+            stats.probplot(clean, dist="norm", plot=axes[0, i])
+            axes[0, i].set_title(f"Q-Q Plot: {label}")
     if plot:
-        plt.tight_layout()
-        plt.show()
-
+        _finish_plot()
     return pd.DataFrame(results)
 
 
-def check_homogeneity_of_variance(
-    data: pd.DataFrame,
-    value_col: str,
-    group_col: str,
-    alpha: float = 0.05,
-    plot: bool = True
-) -> Dict:
-    """
-    Check homogeneity of variance using Levene's test.
-
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Data containing values and group labels
-    value_col : str
-        Column name for values
-    group_col : str
-        Column name for group labels
-    alpha : float
-        Significance level
-    plot : bool
-        Whether to create box plots
-
-    Returns
-    -------
-    dict
-        Results including test statistic, p-value, and interpretation
-    """
-    groups = [group[value_col].values for name, group in data.groupby(group_col)]
-
-    # Levene's test (robust to non-normality)
-    statistic, p_value = stats.levene(*groups)
-
-    # Variance ratio (max/min)
-    variances = [np.var(g, ddof=1) for g in groups]
-    var_ratio = max(variances) / min(variances)
-
-    is_homogeneous = p_value > alpha
-    interpretation = (
-        f"Variances {'appear' if is_homogeneous else 'do not appear'} homogeneous "
-        f"(F = {statistic:.3f}, p = {p_value:.3f}, variance ratio = {var_ratio:.2f})"
-    )
-
+def check_homogeneity_of_variance(data: pd.DataFrame, value_col: str, group_col: str,
+                                  alpha: float = 0.05, plot: bool = True) -> Dict:
+    """Median-centered Levene (Brown-Forsythe) screen; does not select a test."""
+    _alpha(alpha)
+    groups = _groups(data, value_col, group_col, minimum=2)
+    if len(groups) < 2:
+        raise ValueError("at least two observed groups are required")
+    arrays = [g[1] for g in groups]
+    # All within-group absolute deviations constant makes Levene undefined.
+    deviations = [np.abs(g - np.median(g)) for g in arrays]
+    if all(np.ptp(z) == 0 for z in deviations):
+        raise ValueError("Levene diagnostic is undefined for these within-group deviations")
+    statistic, p_value = stats.levene(*arrays, center='median')
+    if not np.isfinite([statistic, p_value]).all():
+        raise ValueError("Levene returned a non-finite result")
+    variances = np.array([np.var(g, ddof=1) for g in arrays])
+    if not np.isfinite(variances).all():
+        raise ValueError("variances overflowed; rescale values before diagnostics")
+    ratio = float(variances.max() / variances.min()) if variances.min() else np.inf
+    decision = bool(p_value > alpha)
     if plot:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-        # Box plot
-        data.boxplot(column=value_col, by=group_col, ax=ax1)
-        ax1.set_title('Box Plots by Group')
-        ax1.set_xlabel(group_col)
-        ax1.set_ylabel(value_col)
-        plt.sca(ax1)
-        plt.xticks(rotation=45)
-
-        # Variance plot
-        group_names = data[group_col].unique()
-        ax2.bar(range(len(variances)), variances, color='steelblue', edgecolor='black')
-        ax2.set_xticks(range(len(variances)))
-        ax2.set_xticklabels(group_names, rotation=45)
-        ax2.set_ylabel('Variance')
-        ax2.set_title('Variance by Group')
-        ax2.grid(alpha=0.3, axis='y')
-
-        plt.tight_layout()
-        plt.show()
-
+        _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        labels = [str(g[0]) for g in groups]
+        ax1.boxplot(arrays, tick_labels=labels)
+        ax1.set(xlabel=group_col, ylabel=value_col, title='Box Plots by Group')
+        ax2.bar(np.arange(len(groups)), variances, color='steelblue')
+        ax2.set_xticks(np.arange(len(groups)), labels, rotation=45)
+        ax2.set(ylabel='Variance', title='Variance by Group')
+        _finish_plot()
     return {
-        'test': 'Levene',
-        'statistic': statistic,
-        'p_value': p_value,
-        'is_homogeneous': is_homogeneous,
-        'variance_ratio': var_ratio,
-        'interpretation': interpretation,
-        'recommendation': (
-            "Proceed with standard test" if is_homogeneous
-            else "Consider Welch's correction or transformation"
-        )
+        'test': 'Levene', 'center': 'median', 'statistic': statistic,
+        'p_value': p_value, 'is_homogeneous': decision,
+        'variance_equality_not_rejected': decision, 'variance_ratio': ratio,
+        'groups': [g[0] for g in groups], 'variances': variances,
+        'n_missing': sum(g[2] for g in groups),
+        'interpretation': f"Equal variances {'not rejected' if decision else 'rejected'} (F = {statistic:.3f}, p = {p_value:.3g}); non-rejection is not evidence of equality.",
+        'recommendation': "For independent mean comparisons, prespecify Welch inference rather than choosing pooled versus Welch by a variance pretest.",
     }
 
 
-def check_linearity(
-    x: Union[np.ndarray, pd.Series],
-    y: Union[np.ndarray, pd.Series],
-    x_name: str = "X",
-    y_name: str = "Y"
-) -> Dict:
+def check_linearity(x: Union[np.ndarray, pd.Series], y: Union[np.ndarray, pd.Series],
+                    x_name: str = "X", y_name: str = "Y", plot: bool = True) -> Dict:
+    """Simple-regression scatter/residual plots; Pearson r does not test linearity.
+
+    Rows missing either variable are omitted together, preserving pairing.
     """
-    Check linearity assumption for regression.
-
-    Parameters
-    ----------
-    x : array-like
-        Predictor variable
-    y : array-like
-        Outcome variable
-    x_name : str
-        Name of predictor
-    y_name : str
-        Name of outcome
-
-    Returns
-    -------
-    dict
-        Visualization and recommendations
-    """
-    x = np.asarray(x)
-    y = np.asarray(y)
-
-    # Fit linear regression
-    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    x, y = _array(x), _array(y)
+    if len(x) != len(y):
+        raise ValueError("x and y must have the same length and aligned rows")
+    keep = ~np.isnan(x) & ~np.isnan(y)
+    missing = int((~keep).sum())
+    x, y = x[keep], y[keep]
+    _clean(x, minimum=3, variable=True)
+    _clean(y, minimum=3, variable=True)
+    slope, intercept, r_value, _, _ = stats.linregress(x, y)
     y_pred = intercept + slope * x
-
-    # Calculate residuals
     residuals = y - y_pred
-
-    # Visualization
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-    # Scatter plot with regression line
-    ax1.scatter(x, y, alpha=0.6, s=50, edgecolors='black', linewidths=0.5)
-    ax1.plot(x, y_pred, 'r-', linewidth=2, label=f'y = {intercept:.2f} + {slope:.2f}x')
-    ax1.set_xlabel(x_name)
-    ax1.set_ylabel(y_name)
-    ax1.set_title('Scatter Plot with Regression Line')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-
-    # Residuals vs fitted
-    ax2.scatter(y_pred, residuals, alpha=0.6, s=50, edgecolors='black', linewidths=0.5)
-    ax2.axhline(y=0, color='r', linestyle='--', linewidth=2)
-    ax2.set_xlabel('Fitted values')
-    ax2.set_ylabel('Residuals')
-    ax2.set_title('Residuals vs Fitted Values')
-    ax2.grid(alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
-
-    return {
-        'r': r_value,
-        'r_squared': r_value ** 2,
-        'interpretation': (
-            "Examine residual plot. Points should be randomly scattered around zero. "
-            "Patterns (curves, funnels) suggest non-linearity or heteroscedasticity."
-        ),
-        'recommendation': (
-            "If non-linear pattern detected: Consider polynomial terms, "
-            "transformations, or non-linear models"
-        )
-    }
-
-
-def detect_outliers(
-    data: Union[np.ndarray, pd.Series, List],
-    name: str = "data",
-    method: str = "iqr",
-    threshold: float = 1.5,
-    plot: bool = True
-) -> Dict:
-    """
-    Detect outliers using IQR method or z-score method.
-
-    Parameters
-    ----------
-    data : array-like
-        Data to check for outliers
-    name : str
-        Name of variable
-    method : str
-        Method to use: 'iqr' or 'zscore'
-    threshold : float
-        Threshold for outlier detection
-        For IQR: typically 1.5 (mild) or 3 (extreme)
-        For z-score: typically 3
-    plot : bool
-        Whether to create visualizations
-
-    Returns
-    -------
-    dict
-        Outlier indices, values, and visualizations
-    """
-    data = np.asarray(data)
-    data_clean = data[~np.isnan(data)]
-
-    if method == "iqr":
-        q1 = np.percentile(data_clean, 25)
-        q3 = np.percentile(data_clean, 75)
-        iqr = q3 - q1
-        lower_bound = q1 - threshold * iqr
-        upper_bound = q3 + threshold * iqr
-        outlier_mask = (data_clean < lower_bound) | (data_clean > upper_bound)
-
-    elif method == "zscore":
-        z_scores = np.abs(stats.zscore(data_clean))
-        outlier_mask = z_scores > threshold
-        lower_bound = data_clean.mean() - threshold * data_clean.std()
-        upper_bound = data_clean.mean() + threshold * data_clean.std()
-
-    else:
-        raise ValueError("method must be 'iqr' or 'zscore'")
-
-    outlier_indices = np.where(outlier_mask)[0]
-    outlier_values = data_clean[outlier_mask]
-    n_outliers = len(outlier_indices)
-    pct_outliers = (n_outliers / len(data_clean)) * 100
-
+    if not np.isfinite([slope, intercept, r_value]).all():
+        raise ValueError("linear fit returned non-finite results; review/rescale the data")
     if plot:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-        # Box plot
-        bp = ax1.boxplot(data_clean, vert=True, patch_artist=True)
-        bp['boxes'][0].set_facecolor('steelblue')
-        ax1.set_ylabel('Value')
-        ax1.set_title(f'Box Plot: {name}')
-        ax1.grid(alpha=0.3, axis='y')
-
-        # Scatter plot highlighting outliers
-        x_coords = np.arange(len(data_clean))
-        ax2.scatter(x_coords[~outlier_mask], data_clean[~outlier_mask],
-                   alpha=0.6, s=50, color='steelblue', label='Normal', edgecolors='black', linewidths=0.5)
-        if n_outliers > 0:
-            ax2.scatter(x_coords[outlier_mask], data_clean[outlier_mask],
-                       alpha=0.8, s=100, color='red', label='Outliers', marker='D', edgecolors='black', linewidths=0.5)
-        ax2.axhline(y=lower_bound, color='orange', linestyle='--', linewidth=1.5, label='Bounds')
-        ax2.axhline(y=upper_bound, color='orange', linestyle='--', linewidth=1.5)
-        ax2.set_xlabel('Index')
-        ax2.set_ylabel('Value')
-        ax2.set_title(f'Outlier Detection: {name}')
-        ax2.legend()
-        ax2.grid(alpha=0.3)
-
-        plt.tight_layout()
-        plt.show()
-
+        _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        ax1.scatter(x, y, alpha=0.6)
+        order = np.argsort(x)
+        ax1.plot(x[order], y_pred[order], 'r-', label=f'y = {intercept:.2f} + {slope:.2f}x')
+        ax1.set(xlabel=x_name, ylabel=y_name, title='Scatter Plot with Regression Line')
+        ax1.legend()
+        ax2.scatter(y_pred, residuals, alpha=0.6)
+        ax2.axhline(0, color='r', linestyle='--')
+        ax2.set(xlabel='Fitted values', ylabel='Residuals', title='Residuals vs Fitted Values')
+        _finish_plot()
     return {
-        'method': method,
-        'threshold': threshold,
-        'n_outliers': n_outliers,
-        'pct_outliers': pct_outliers,
-        'outlier_indices': outlier_indices,
-        'outlier_values': outlier_values,
-        'lower_bound': lower_bound,
-        'upper_bound': upper_bound,
-        'interpretation': f"Found {n_outliers} outliers ({pct_outliers:.1f}% of data)",
-        'recommendation': (
-            "Investigate outliers for data entry errors. "
-            "Consider: (1) removing if errors, (2) winsorizing, "
-            "(3) keeping if legitimate, (4) using robust methods"
-        )
+        'r': r_value, 'r_squared': r_value ** 2, 'n': len(x), 'n_missing': missing,
+        'interpretation': "Examine residual plots for curvature and changing spread; correlation magnitude does not establish linearity.",
+        'recommendation': "Review the conditional mean model and design; consider justified nonlinear terms or variance/dependence models.",
     }
 
 
-def check_regression_diagnostics(
-    model,
-    alpha: float = 0.05,
-    plot: bool = True
-) -> Dict:
+def detect_outliers(data: Union[np.ndarray, pd.Series, List], name: str = "data",
+                    method: str = "iqr", threshold: Optional[float] = None,
+                    plot: bool = True) -> Dict:
+    """Flag values for review; return original zero-based positions and labels.
+
+    Defaults: IQR multiplier 1.5; population-SD z-score threshold 3. A flag is
+    not permission to exclude/winsorize a legitimate observation.
     """
-    Run standard diagnostics on a fitted statsmodels OLS model.
+    if method not in ('iqr', 'zscore'):
+        raise ValueError("method must be 'iqr' or 'zscore'")
+    threshold = (1.5 if method == 'iqr' else 3.0) if threshold is None else threshold
+    if not np.isfinite(threshold) or threshold <= 0:
+        raise ValueError("threshold must be finite and positive")
+    clean, positions, missing = _clean(data)
+    if method == 'iqr':
+        q1, q3 = np.percentile(clean, [25, 75])
+        lower, upper = q1 - threshold * (q3 - q1), q3 + threshold * (q3 - q1)
+    else:
+        mean, sd = clean.mean(), clean.std()
+        lower, upper = mean - threshold * sd, mean + threshold * sd
+    if not np.isfinite([lower, upper]).all():
+        raise ValueError("outlier bounds overflowed; rescale values")
+    mask = (clean < lower) | (clean > upper)
+    indices = positions[mask]
+    labels = np.asarray(data.index)[indices] if isinstance(data, pd.Series) else indices.copy()
+    if plot:
+        _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+        ax1.boxplot(clean, orientation='vertical', patch_artist=True)
+        ax1.set(ylabel='Value', title=f'Box Plot: {name}')
+        ax2.scatter(positions[~mask], clean[~mask], label='Unflagged', alpha=0.6)
+        ax2.scatter(indices, clean[mask], label='Flagged', marker='D', color='red')
+        ax2.axhline(lower, linestyle='--', color='orange', label='Bounds')
+        ax2.axhline(upper, linestyle='--', color='orange')
+        ax2.set(xlabel='Original row position', ylabel='Value', title=f'Outlier Screen: {name}')
+        ax2.legend()
+        _finish_plot()
+    count = int(mask.sum())
+    pct = 100 * count / len(clean)
+    return {
+        'method': method, 'threshold': threshold, 'n': len(clean), 'n_missing': missing,
+        'n_outliers': count, 'pct_outliers': pct, 'outlier_indices': indices,
+        'outlier_labels': labels, 'outlier_values': clean[mask],
+        'lower_bound': lower, 'upper_bound': upper,
+        'interpretation': f"Flagged {count} observations ({pct:.1f}% of non-missing data)",
+        'recommendation': "Investigate provenance and data-entry errors. Retain valid observations; justify exclusions and report prespecified sensitivity/robust analyses.",
+    }
 
-    Produces the classic 4-panel diagnostic plot (residuals vs fitted,
-    Q-Q, scale-location, residual histogram) plus formal tests:
-    normality of residuals (Shapiro-Wilk), heteroscedasticity
-    (Breusch-Pagan), autocorrelation (Durbin-Watson), and
-    multicollinearity (VIF per predictor).
 
-    Parameters
-    ----------
-    model : statsmodels regression results
-        A fitted model from ``sm.OLS(y, X).fit()`` where X includes
-        a constant (``sm.add_constant``).
-    alpha : float
-        Significance level for the formal tests.
-    plot : bool
-        Whether to create the 4-panel diagnostic figure.
+def check_regression_diagnostics(model, alpha: float = 0.05, plot: bool = True,
+                                 ordered: bool = False) -> Dict:
+    """Diagnostics for full-rank OLS with intercept, positive residual df/spread.
 
-    Returns
-    -------
-    dict
-        Test results, VIF table, and per-assumption interpretations.
+    Durbin-Watson is reported only for meaningfully ordered rows (ordered=True)
+    and has no universal pass threshold. Dependence/causal design is not tested.
     """
+    from statsmodels.regression.linear_model import OLS
     from statsmodels.stats.diagnostic import het_breuschpagan
     from statsmodels.stats.stattools import durbin_watson
     from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-    residuals = np.asarray(model.resid)
-    fitted = np.asarray(model.fittedvalues)
-    exog = model.model.exog
-    exog_names = list(model.model.exog_names)
-
-    # Normality of residuals
-    sw_stat, sw_p = stats.shapiro(residuals)
-
-    # Heteroscedasticity (Breusch-Pagan)
-    bp_lm, bp_p, _, _ = het_breuschpagan(residuals, exog)
-
-    # Autocorrelation (Durbin-Watson: ~2 = none, <1.5 or >2.5 = concern)
-    dw = durbin_watson(residuals)
-
-    # Multicollinearity (VIF, skipping the constant)
-    vif_rows = []
-    for i, name in enumerate(exog_names):
-        if name.lower() in ("const", "intercept"):
-            continue
-        vif_rows.append({'Variable': name,
-                         'VIF': variance_inflation_factor(exog, i)})
-    vif_table = pd.DataFrame(vif_rows)
-    max_vif = vif_table['VIF'].max() if not vif_table.empty else np.nan
-
+    _alpha(alpha)
+    if not isinstance(model.model, OLS):
+        raise ValueError("this helper requires fitted OLS results")
+    residuals = _array(model.resid)
+    fitted = _array(model.fittedvalues)
+    exog = np.asarray(model.model.exog, dtype=float)
+    if not all(np.isfinite(x).all() for x in (residuals, fitted, exog)):
+        raise ValueError("fitted data must be finite")
+    constants = np.flatnonzero((np.ptp(exog, axis=0) == 0) & (exog[0] != 0))
+    if len(constants) != 1 or exog.shape[1] < 2:
+        raise ValueError("OLS must have an explicit nonzero intercept and at least one predictor")
+    if np.linalg.matrix_rank(exog) != exog.shape[1] or model.df_resid <= 0:
+        raise ValueError("OLS design must be full rank with positive residual degrees of freedom")
+    if np.linalg.norm(residuals) <= np.finfo(float).eps * max(1, np.linalg.norm(model.model.endog)) * len(residuals):
+        raise ValueError("near-perfect fit does not support residual diagnostics")
+    normality = check_normality(residuals, alpha=alpha, plot=False)
+    normality['ok'] = normality['normality_not_rejected']  # legacy non-rejection alias
+    lm, lm_p, f_value, f_p = het_breuschpagan(residuals, exog, robust=True)
+    if not np.isfinite([lm, lm_p, f_value, f_p]).all():
+        raise ValueError("heteroscedasticity diagnostic is undefined")
+    dw = float(durbin_watson(residuals)) if ordered else None
+    vif_table = pd.DataFrame([
+        {'Variable': name, 'VIF': variance_inflation_factor(exog, i)}
+        for i, name in enumerate(model.model.exog_names) if i not in constants
+    ])
+    max_vif = float(vif_table['VIF'].max())
     if plot:
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-
-        axes[0, 0].scatter(fitted, residuals, alpha=0.6, edgecolors='black', linewidths=0.5)
-        axes[0, 0].axhline(y=0, color='r', linestyle='--')
-        axes[0, 0].set_xlabel('Fitted values')
-        axes[0, 0].set_ylabel('Residuals')
-        axes[0, 0].set_title('Residuals vs Fitted')
-        axes[0, 0].grid(alpha=0.3)
-
-        stats.probplot(residuals, dist="norm", plot=axes[0, 1])
+        _, axes = plt.subplots(2, 2, figsize=(12, 10))
+        axes[0, 0].scatter(fitted, residuals, alpha=0.6)
+        axes[0, 0].axhline(0, color='r', linestyle='--')
+        axes[0, 0].set(xlabel='Fitted values', ylabel='Residuals', title='Residuals vs Fitted')
+        stats.probplot(residuals, dist='norm', plot=axes[0, 1])
         axes[0, 1].set_title('Normal Q-Q')
-        axes[0, 1].grid(alpha=0.3)
-
-        std_resid = residuals / residuals.std()
-        axes[1, 0].scatter(fitted, np.sqrt(np.abs(std_resid)), alpha=0.6,
-                           edgecolors='black', linewidths=0.5)
-        axes[1, 0].set_xlabel('Fitted values')
-        axes[1, 0].set_ylabel('√|Standardized residuals|')
-        axes[1, 0].set_title('Scale-Location')
-        axes[1, 0].grid(alpha=0.3)
-
-        axes[1, 1].hist(residuals, bins='auto', edgecolor='black', alpha=0.7)
-        axes[1, 1].set_xlabel('Residuals')
-        axes[1, 1].set_ylabel('Frequency')
-        axes[1, 1].set_title('Histogram of Residuals')
-        axes[1, 1].grid(alpha=0.3, axis='y')
-
-        plt.tight_layout()
-        plt.show()
-
+        standardized = model.get_influence().resid_studentized_internal
+        axes[1, 0].scatter(fitted, np.sqrt(np.abs(standardized)), alpha=0.6)
+        axes[1, 0].set(xlabel='Fitted values', ylabel='sqrt(|Studentized residual|)', title='Scale-Location')
+        axes[1, 1].hist(residuals, bins='auto', edgecolor='black')
+        axes[1, 1].set(xlabel='Residuals', ylabel='Frequency', title='Residual Histogram')
+        _finish_plot()
     issues = []
-    if sw_p <= alpha:
-        issues.append("non-normal residuals (consider transformation or robust/bootstrap inference)")
-    if bp_p <= alpha:
-        issues.append("heteroscedasticity (consider robust SEs, e.g. model.get_robustcov_results('HC3'), or WLS)")
-    if dw < 1.5 or dw > 2.5:
-        issues.append("possible autocorrelation (if data are ordered/temporal, use time-series methods or cluster-robust SEs)")
-    if not np.isnan(max_vif) and max_vif > 5:
-        issues.append("multicollinearity (VIF > 5; consider dropping/combining predictors)")
-
+    if normality['normality_not_rejected'] is False:
+        issues.append('residual normality rejected; review tails and inference robustness')
+    if normality['normality_not_rejected'] is None:
+        issues.append('Shapiro p-value unreliable above 5000 observations; inspect residual plots')
+    if lm_p <= alpha:
+        issues.append('heteroscedasticity screen rejected; consider justified HC3 or variance modeling')
+    if not np.isfinite(max_vif) or max_vif > 5:
+        issues.append('large VIF; examine identifiability and precision without automatically removing adjustment covariates')
     return {
-        'residual_normality': {'test': 'Shapiro-Wilk', 'statistic': sw_stat,
-                               'p_value': sw_p, 'ok': sw_p > alpha},
-        'heteroscedasticity': {'test': 'Breusch-Pagan', 'statistic': bp_lm,
-                               'p_value': bp_p, 'ok': bp_p > alpha},
-        'autocorrelation': {'test': 'Durbin-Watson', 'statistic': dw,
-                            'ok': 1.5 <= dw <= 2.5},
-        'vif': vif_table,
-        'max_vif': max_vif,
-        'issues': issues,
-        'interpretation': ("No assumption concerns detected." if not issues
-                           else "Concerns: " + "; ".join(issues))
+        'residual_normality': normality,
+        'heteroscedasticity': {'test': 'Koenker Breusch-Pagan', 'statistic': lm,
+                              'p_value': lm_p, 'f_statistic': f_value, 'f_p_value': f_p,
+                              'ok': bool(lm_p > alpha)},
+        'autocorrelation': {'test': 'Durbin-Watson', 'statistic': dw, 'ok': None,
+                            'interpretation': 'Requires meaningful row order and design-specific inference; cannot establish independence.'},
+        'vif': vif_table, 'max_vif': max_vif, 'issues': issues,
+        'interpretation': ('Screen flags: ' + '; '.join(issues) if issues else 'No flags in these numerical screens.') + ' Review plots, sampling units, dependence, exogeneity and model specification separately.',
     }
 
 
-def comprehensive_assumption_check(
-    data: pd.DataFrame,
-    value_col: str,
-    group_col: Optional[str] = None,
-    alpha: float = 0.05
-) -> Dict:
+def comprehensive_assumption_check(data: pd.DataFrame, value_col: str,
+                                    group_col: Optional[str] = None,
+                                    alpha: float = 0.05, plot: bool = True) -> Dict:
+    """Grouped descriptive screens; does not handle pairing/clustering itself.
+
+    For paired tests pass aligned difference scores without group_col. Review
+    regression residuals using check_regression_diagnostics instead.
     """
-    Perform comprehensive assumption checking for common statistical tests.
-
-    Parameters
-    ----------
-    data : pd.DataFrame
-        Data to check
-    value_col : str
-        Column name for dependent variable
-    group_col : str, optional
-        Column name for grouping variable (if applicable)
-    alpha : float
-        Significance level
-
-    Returns
-    -------
-    dict
-        Summary of all assumption checks
-    """
-    print("=" * 70)
-    print("COMPREHENSIVE ASSUMPTION CHECK")
-    print("=" * 70)
-
-    results = {}
-
-    # Outlier detection
-    print("\n1. OUTLIER DETECTION")
-    print("-" * 70)
-    outlier_results = detect_outliers(
-        data[value_col].dropna(),
-        name=value_col,
-        method='iqr',
-        plot=True
-    )
-    results['outliers'] = outlier_results
-    print(f"   {outlier_results['interpretation']}")
-    print(f"   {outlier_results['recommendation']}")
-
-    # Check if grouped data
+    _alpha(alpha)
     if group_col is not None:
-        # Normality per group
-        print(f"\n2. NORMALITY CHECK (by {group_col})")
-        print("-" * 70)
-        normality_results = check_normality_per_group(
-            data, value_col, group_col, alpha=alpha, plot=True
-        )
-        results['normality_per_group'] = normality_results
-        print(normality_results.to_string(index=False))
-
-        all_normal = normality_results['Normal'].eq('Yes').all()
-        print(f"\n   All groups normal: {'Yes' if all_normal else 'No'}")
-        if not all_normal:
-            print("   -> Consider non-parametric alternative (Mann-Whitney, Kruskal-Wallis)")
-
-        # Homogeneity of variance
-        print(f"\n3. HOMOGENEITY OF VARIANCE")
-        print("-" * 70)
-        homogeneity_results = check_homogeneity_of_variance(
-            data, value_col, group_col, alpha=alpha, plot=True
-        )
-        results['homogeneity'] = homogeneity_results
-        print(f"   {homogeneity_results['interpretation']}")
-        print(f"   {homogeneity_results['recommendation']}")
-
+        groups = _groups(data, value_col, group_col, minimum=3)
+        results = {
+            'outliers_per_group': {label: detect_outliers(frame[value_col], name=str(label), plot=plot)
+                                  for label, _, _, frame, _ in groups},
+            'normality_per_group': check_normality_per_group(data, value_col, group_col, alpha, plot),
+            'homogeneity': check_homogeneity_of_variance(data, value_col, group_col, alpha, plot),
+        }
     else:
-        # Overall normality
-        print(f"\n2. NORMALITY CHECK")
-        print("-" * 70)
-        normality_results = check_normality(
-            data[value_col].dropna(),
-            name=value_col,
-            alpha=alpha,
-            plot=True
-        )
-        results['normality'] = normality_results
-        print(f"   {normality_results['interpretation']}")
-        print(f"   {normality_results['recommendation']}")
-
-    # Summary
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-
-    if group_col is not None:
-        all_normal = results.get('normality_per_group', pd.DataFrame()).get('Normal', pd.Series()).eq('Yes').all()
-        is_homogeneous = results.get('homogeneity', {}).get('is_homogeneous', False)
-
-        if all_normal and is_homogeneous:
-            print("[OK] All assumptions met. Proceed with parametric test (t-test, ANOVA).")
-        elif not all_normal:
-            print("[FAIL] Normality violated. Use non-parametric alternative.")
-        elif not is_homogeneous:
-            print("[FAIL] Homogeneity violated. Use Welch's correction or transformation.")
-    else:
-        is_normal = results.get('normality', {}).get('is_normal', False)
-        if is_normal:
-            print("[OK] Normality assumption met.")
-        else:
-            print("[FAIL] Normality violated. Consider transformation or non-parametric method.")
-
-    print("=" * 70)
-
+        results = {'outliers': detect_outliers(data[value_col], name=value_col, plot=plot),
+                   'normality': check_normality(data[value_col], name=value_col, alpha=alpha, plot=plot)}
+    print('[OK] Diagnostic calculations completed. Missing-value counts are in each result.')
+    print('-> These screens do not establish assumptions or select a test. Review design, estimand and plots.')
     return results
 
 
-if __name__ == "__main__":
-    # Example usage
-    np.random.seed(42)
-
-    # Simulate data
-    group_a = np.random.normal(75, 8, 50)
-    group_b = np.random.normal(68, 10, 50)
-
-    df = pd.DataFrame({
-        'score': np.concatenate([group_a, group_b]),
-        'group': ['A'] * 50 + ['B'] * 50
-    })
-
-    # Run comprehensive check
-    results = comprehensive_assumption_check(
-        df,
-        value_col='score',
-        group_col='group',
-        alpha=0.05
-    )
+if __name__ == '__main__':
+    rng = np.random.default_rng(42)
+    df = pd.DataFrame({'score': np.r_[rng.normal(75, 8, 50), rng.normal(68, 10, 50)],
+                       'group': ['A'] * 50 + ['B'] * 50})
+    results = comprehensive_assumption_check(df, 'score', 'group')

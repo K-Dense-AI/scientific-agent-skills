@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-AI-powered infographic generation using Nano Banana Pro.
+AI-powered infographic generation using Nano Banana 2.
 
 This script uses a smart iterative refinement approach:
 1. (Optional) Research phase - gather facts and data using Perplexity Sonar
-2. Generate initial infographic with Nano Banana Pro
-3. AI quality review using Gemini 3.6 Flash for infographic critique
+2. Generate initial infographic with Nano Banana 2
+3. AI quality review using Gemini 3.7 Flash for infographic critique
 4. Only regenerate if quality is below threshold for document type
 5. Repeat until quality meets standards (max iterations)
 
@@ -27,6 +27,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from datetime import date
 from typing import Optional, Dict, Any, List, NamedTuple
 
 try:
@@ -331,15 +332,15 @@ STYLE_PRESETS = {
 PALETTE_PRESETS = {
     "wong": {
         "name": "Wong's Palette",
-        "colors": "orange (#E69F00), sky blue (#56B4E9), bluish green (#009E73), blue (#0072B2), vermillion (#D55E00)",
+        "colors": "orange (#E69F00), sky blue (#56B4E9), bluish green (#009E73), yellow (#F0E442), blue (#0072B2), vermillion (#D55E00), reddish purple (#CC79A7), black (#000000)",
     },
     "ibm": {
         "name": "IBM Colorblind-Safe",
         "colors": "ultramarine (#648FFF), indigo (#785EF0), magenta (#DC267F), orange (#FE6100), gold (#FFB000)",
     },
     "tol": {
-        "name": "Tol's Qualitative",
-        "colors": "indigo (#332288), cyan (#88CCEE), teal (#44AA99), green (#117733), sand (#DDCC77), rose (#CC6677)",
+        "name": "Tol's Muted Qualitative",
+        "colors": "rose (#CC6677), indigo (#332288), sand (#DDCC77), green (#117733), cyan (#88CCEE), wine (#882255), teal (#44AA99), olive (#999933), purple (#AA4499); pale gray (#DDDDDD) only for missing data",
     },
 }
 
@@ -347,14 +348,14 @@ PALETTE_PRESETS = {
 class InfographicGenerator:
     """Generate infographics using AI with smart iterative refinement.
     
-    Uses Gemini 3.6 Flash for quality review to determine if regeneration is needed.
+    Uses Gemini 3.7 Flash for quality review to determine if regeneration is needed.
     Multiple passes only occur if the generated infographic doesn't meet the
     quality threshold for the target document type.
     """
     
     # Quality thresholds by document type (score out of 10)
     QUALITY_THRESHOLDS = {
-        "marketing": 8.0,     # Marketing materials - must be compelling
+        "marketing": 8.5,     # Marketing materials - must be compelling
         "report": 8.0,        # Business reports - professional quality
         "presentation": 7.5,  # Slides/talks - clear and engaging
         "social": 7.0,        # Social media - eye-catching
@@ -427,13 +428,14 @@ IMPORTANT - NO META CONTENT:
         self.verbose = verbose
         self._last_error = None
         self.base_url = "https://openrouter.ai/api/v1"
-        # Nano Banana Pro for image generation. The slug must be an image-output
+        # Nano Banana 2 for image generation. The slug must be an image-output
         # model; a text-only chat model is rejected with "No endpoints found that
         # support the requested output modalities".
         # https://openrouter.ai/google/gemini-3.1-flash-image
         self.image_model = "google/gemini-3.1-flash-image"
-        # Gemini 3.6 Flash for quality review - reads the image, answers in text
+        # Gemini 3.7 Flash for quality review - reads the image, answers in text
         self.review_model = "google/gemini-3.7-flash"
+        self.research_model = "perplexity/sonar-pro"
         
     def _log(self, message: str):
         """Log message if verbose mode is enabled."""
@@ -482,76 +484,77 @@ TOPIC: {topic}
 Please provide:
 1. KEY FACTS: 5-8 key facts or statistics about this topic (with specific numbers where possible)
 2. CONTEXT: Brief background context (2-3 sentences)
-3. SOURCES: Mention any major sources or studies
+3. SOURCES: Provide primary-source URLs, publication dates, and which claims they support
 4. DATA POINTS: Any specific data points that would make good visualizations
 
 Format your response as structured data that can be easily incorporated into an infographic.
 Be specific with numbers, percentages, and dates.
-Prioritize recent information (2023-2026).
-Include citation hints where possible."""
+As of {date.today().isoformat()}, prioritize relevant recent evidence; retain original dates for historical events.
+Do not invent missing numbers. Include units, populations, denominators, and source URLs."""
 
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert research assistant. Provide accurate, well-sourced information formatted for infographic creation. Always include specific numbers, dates, and statistics."
+                "content": "You are an expert research assistant. Provide accurate, well-sourced information formatted for infographic creation. Include numbers, dates, and statistics only when supported by cited evidence."
             },
             {"role": "user", "content": research_prompt}
         ]
         
-        try:
-            # Use Perplexity Sonar Pro for research
-            research_model = "perplexity/sonar-pro"
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/scientific-writer",
-                "X-Title": "Infographic Research"
-            }
-            
-            payload = {
-                "model": research_model,
-                "messages": messages,
-                "max_tokens": 2000,
-                "temperature": 0.1,
-                "search_mode": "academic",
-                "search_context_size": "high"
-            }
-            
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
+        return self._research_request(messages, max_tokens=2000, search_context="high")
+
+    @staticmethod
+    def _text_content(message: Dict[str, Any]) -> str:
+        """Read returned answer text without treating internal reasoning as an answer."""
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "\n".join(
+                block["text"] for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
             )
-            
-            if response.status_code != 200:
-                self._log(f"Research request failed: {response.status_code}")
-                return {"success": False, "error": f"API error: {response.status_code}"}
-            
-            result = response.json()
-            
-            if "choices" in result and len(result["choices"]) > 0:
-                content = result["choices"][0].get("message", {}).get("content", "")
-                
-                # Extract any sources from the response
-                sources = result.get("search_results", [])
-                
-                self._log(f"Research complete: {len(content)} chars")
-                
-                return {
-                    "success": True,
-                    "content": content,
-                    "sources": sources,
-                    "model": research_model
-                }
-            else:
-                return {"success": False, "error": "No response from research model"}
-                
-        except Exception as e:
-            self._log(f"Research failed: {str(e)}")
-            return {"success": False, "error": str(e)}
-    
+        return ""
+
+    def _research_request(self, messages: List[Dict[str, Any]], max_tokens: int,
+                          search_context: str = "medium") -> Dict[str, Any]:
+        """Preserve normalized citations from OpenRouter's Sonar response."""
+        try:
+            result = self._post_request("chat/completions", {
+                "model": self.research_model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": 0.1,
+                "web_search_options": {"search_context_size": search_context},
+            })
+            choices = result.get("choices", [])
+            if not choices:
+                raise RuntimeError("No response from research model")
+            message = choices[0].get("message", {})
+            content = self._text_content(message)
+            if not content.strip():
+                raise RuntimeError("Research response contained no answer text")
+            annotations = message.get("annotations") or []
+            sources = [
+                item["url_citation"] for item in annotations
+                if isinstance(item, dict) and item.get("type") == "url_citation"
+                and isinstance(item.get("url_citation"), dict)
+            ]
+            return {
+                "success": True, "content": content, "sources": sources,
+                "annotations": annotations,
+                # Preserve provider fields if present; normalized citations above
+                # are the documented OpenRouter response contract.
+                "search_results": result.get("search_results", []),
+                "citations": result.get("citations", []),
+                "model": self.research_model,
+                "retrieved_on": date.today().isoformat(),
+            }
+        except Exception as exc:
+            detail = str(exc).replace(self.api_key, "[redacted]")
+            self._log(f"Research failed: {detail}")
+            return {"success": False, "error": detail, "model": self.research_model}
+
     def web_search(self, query: str) -> Dict[str, Any]:
         """
         Perform a quick web search for current information.
@@ -582,50 +585,8 @@ Be concise and factual. Focus on information useful for an infographic."""
             {"role": "user", "content": search_prompt}
         ]
         
-        try:
-            # Use Perplexity Sonar for web search
-            search_model = "perplexity/sonar-pro"
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/scientific-writer",
-                "X-Title": "Infographic Web Search"
-            }
-            
-            payload = {
-                "model": search_model,
-                "messages": messages,
-                "max_tokens": 1000,
-                "temperature": 0.1
-            }
-            
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code != 200:
-                return {"success": False, "error": f"API error: {response.status_code}"}
-            
-            result = response.json()
-            
-            if "choices" in result and len(result["choices"]) > 0:
-                content = result["choices"][0].get("message", {}).get("content", "")
-                return {
-                    "success": True,
-                    "content": content,
-                    "sources": result.get("search_results", [])
-                }
-            else:
-                return {"success": False, "error": "No response from search"}
-                
-        except Exception as e:
-            self._log(f"Web search failed: {str(e)}")
-            return {"success": False, "error": str(e)}
-    
+        return self._research_request(messages, max_tokens=1000)
+
     def _enhance_prompt_with_research(self, user_prompt: str, research_data: Dict[str, Any]) -> str:
         """
         Enhance the user prompt with researched information.
@@ -642,8 +603,11 @@ Be concise and factual. Focus on information useful for an infographic."""
         
         enhanced = f"""{user_prompt}
 
-RESEARCHED DATA AND FACTS (use these in the infographic):
+RESEARCH CANDIDATES (check cited evidence before publication; do not invent additional claims):
 {research_data['content']}
+
+SOURCE RECORDS:
+{json.dumps(research_data.get('sources', []), ensure_ascii=False)}
 
 Use the above researched facts, statistics, and data points to create an accurate, informative infographic.
 Incorporate specific numbers, percentages, and dates from the research."""
@@ -652,114 +616,78 @@ Incorporate specific numbers, percentages, and dates from the research."""
     
     # ========== END RESEARCH METHODS ==========
     
-    def _make_request(self, model: str, messages: List[Dict[str, Any]], 
-                     modalities: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Make a request to OpenRouter API."""
+    def _post_request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Send one non-streaming request; never automatically replay a paid call."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/scientific-writer",
-            "X-Title": "Infographic Generator"
+            "X-OpenRouter-Title": "Infographic Generator",
         }
-        
-        payload = {
-            "model": model,
-            "messages": messages
-        }
-        
-        if modalities:
-            payload["modalities"] = modalities
-        
-        self._log(f"Making request to {model}...")
-        
+        self._log(f"POST {endpoint} using {payload['model']}")
         try:
             response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=120
+                f"{self.base_url}/{endpoint}", headers=headers,
+                json=payload, timeout=120,
             )
-            
             try:
                 response_json = response.json()
-            except json.JSONDecodeError:
-                response_json = {"raw_text": response.text[:500]}
-            
-            if response.status_code != 200:
-                error_detail = response_json.get("error", response_json)
-                self._log(f"HTTP {response.status_code}: {error_detail}")
-                raise RuntimeError(f"API request failed (HTTP {response.status_code}): {error_detail}")
-            
+            except ValueError:
+                raise RuntimeError(
+                    f"API returned non-JSON data (HTTP {response.status_code})"
+                ) from None
+            if not isinstance(response_json, dict):
+                raise RuntimeError("API response must be a JSON object")
+            if response.status_code != 200 or "error" in response_json:
+                error = response_json.get("error", {})
+                detail = error.get("message", "request rejected") if isinstance(error, dict) else str(error)
+                # Providers occasionally echo input; do not dump whole bodies or credentials.
+                detail = str(detail).replace(self.api_key, "[redacted]")[:500]
+                raise RuntimeError(f"API request failed (HTTP {response.status_code}): {detail}")
             return response_json
         except requests.exceptions.Timeout:
-            raise RuntimeError("API request timed out after 120 seconds")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"API request failed: {str(e)}")
-    
-    def _extract_image_from_response(self, response: Dict[str, Any]) -> Optional[bytes]:
-        """Extract base64-encoded image from API response."""
+            raise RuntimeError("API request timed out after 120 seconds") from None
+        except requests.exceptions.RequestException as exc:
+            detail = str(exc).replace(self.api_key, "[redacted]")
+            raise RuntimeError(f"API request failed: {detail}") from None
+
+    def _make_request(self, model: str, messages: List[Dict[str, Any]],
+                      modalities: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Use chat completions for the text-and-image vision review."""
+        payload = {"model": model, "messages": messages}
+        if modalities:
+            payload["modalities"] = modalities
+        return self._post_request("chat/completions", payload)
+
+    def _extract_image_from_response(self, response: Dict[str, Any]) -> bytes:
+        """Decode the dedicated Image API response and enforce this helper's PNG contract.
+
+        The provider may omit media_type; the PNG signature still has to match.
+        This is a format check, not a full image-decoder or scientific-content check.
+        """
+        data = response.get("data")
+        if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+            raise RuntimeError("Image API returned no data[0] image")
+        item = data[0]
+        if item.get("media_type") not in (None, "image/png"):
+            raise RuntimeError(f"Expected PNG output; received {item['media_type']}")
+        encoded = item.get("b64_json")
+        if not isinstance(encoded, str) or not encoded:
+            raise RuntimeError("Image API returned no b64_json image")
         try:
-            choices = response.get("choices", [])
-            if not choices:
-                self._log("No choices in response")
-                return None
-            
-            message = choices[0].get("message", {})
-            
-            # Nano Banana Pro returns images in 'images' field
-            images = message.get("images", [])
-            if images and len(images) > 0:
-                self._log(f"Found {len(images)} image(s) in 'images' field")
-                
-                first_image = images[0]
-                if isinstance(first_image, dict):
-                    if first_image.get("type") == "image_url":
-                        url = first_image.get("image_url", {})
-                        if isinstance(url, dict):
-                            url = url.get("url", "")
-                        
-                        if url and url.startswith("data:image"):
-                            if "," in url:
-                                base64_str = url.split(",", 1)[1]
-                                base64_str = base64_str.replace('\n', '').replace('\r', '').replace(' ', '')
-                                self._log(f"Extracted base64 data (length: {len(base64_str)})")
-                                return base64.b64decode(base64_str)
-            
-            # Fallback: check content field
-            content = message.get("content", "")
-            
-            if isinstance(content, str) and "data:image" in content:
-                import re
-                match = re.search(r'data:image/[^;]+;base64,([A-Za-z0-9+/=\n\r]+)', content, re.DOTALL)
-                if match:
-                    base64_str = match.group(1).replace('\n', '').replace('\r', '').replace(' ', '')
-                    self._log(f"Found image in content field (length: {len(base64_str)})")
-                    return base64.b64decode(base64_str)
-            
-            if isinstance(content, list):
-                for i, block in enumerate(content):
-                    if isinstance(block, dict) and block.get("type") == "image_url":
-                        url = block.get("image_url", {})
-                        if isinstance(url, dict):
-                            url = url.get("url", "")
-                        if url and url.startswith("data:image") and "," in url:
-                            base64_str = url.split(",", 1)[1].replace('\n', '').replace('\r', '').replace(' ', '')
-                            self._log(f"Found image in content block {i}")
-                            return base64.b64decode(base64_str)
-            
-            self._log("No image data found in response")
-            return None
-            
-        except Exception as e:
-            self._log(f"Error extracting image: {str(e)}")
-            return None
-    
+            image_data = base64.b64decode(encoded, validate=True)
+        except ValueError:
+            raise RuntimeError("Image API returned invalid base64 image data") from None
+        if not image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise RuntimeError("Image API output does not have a PNG signature")
+        return image_data
+
     def _image_to_base64(self, image_path: str) -> str:
         """Convert image file to base64 data URL."""
+        ext = Path(image_path).suffix.lower()
+        if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+            raise ValueError("Reference images must be PNG, JPEG, GIF, or WebP")
         with open(image_path, "rb") as f:
             image_data = f.read()
-        
-        ext = Path(image_path).suffix.lower()
         mime_type = {
             ".png": "image/png",
             ".jpg": "image/jpeg",
@@ -818,73 +746,35 @@ Incorporate specific numbers, percentages, and dates from the research."""
         return "\n".join(parts)
     
     def generate_image(self, prompt: str, context_images: Optional[List[str]] = None) -> Optional[bytes]:
-        """Generate an image using Nano Banana Pro."""
+        """Generate a PNG with the dedicated Image API and optional references."""
         self._last_error = None
         context_images = context_images or []
-        
+        if len(context_images) > 14:
+            raise ValueError("Gemini 3.1 Flash Image accepts at most 14 reference images")
+        payload = {"model": self.image_model, "prompt": prompt, "n": 1}
         if context_images:
-            content: Any = [{"type": "text", "text": prompt}]
-            for image_path in context_images:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": self._image_to_base64(image_path)
-                    }
-                })
-            self._log(f"Added {len(context_images)} context image(s) to generation request")
-        else:
-            content = prompt
-        
-        messages = [
-            {
-                "role": "user",
-                "content": content
-            }
-        ]
-        
+            payload["input_references"] = [
+                {"type": "image_url", "image_url": {"url": self._image_to_base64(path)}}
+                for path in context_images
+            ]
         try:
-            response = self._make_request(
-                model=self.image_model,
-                messages=messages,
-                modalities=["image", "text"]
-            )
-            
-            if self.verbose:
-                self._log(f"Response keys: {response.keys()}")
-                if "error" in response:
-                    self._log(f"API Error: {response['error']}")
-            
-            if "error" in response:
-                error_msg = response["error"]
-                if isinstance(error_msg, dict):
-                    error_msg = error_msg.get("message", str(error_msg))
-                self._last_error = f"API Error: {error_msg}"
-                print(f"[FAIL] {self._last_error}")
-                return None
-            
+            # Current Gemini endpoints do not advertise output_format. Accept
+            # their default only after checking the returned PNG MIME/signature.
+            response = self._post_request("images", payload)
             image_data = self._extract_image_from_response(response)
-            if image_data:
-                self._log(f"[OK] Generated image ({len(image_data)} bytes)")
-            else:
-                self._last_error = "No image data in API response"
-                self._log(f"[FAIL] {self._last_error}")
-            
+            self._log(f"[OK] Generated PNG ({len(image_data)} bytes)")
             return image_data
-        except RuntimeError as e:
-            self._last_error = str(e)
+        except RuntimeError as exc:
+            self._last_error = str(exc)
             self._log(f"[FAIL] Generation failed: {self._last_error}")
             return None
-        except Exception as e:
-            self._last_error = f"Unexpected error: {str(e)}"
-            self._log(f"[FAIL] Generation failed: {self._last_error}")
-            return None
-    
+
     def review_image(self, image_path: str, original_prompt: str,
                     infographic_type: Optional[str],
                     iteration: int, doc_type: str = "default",
                     max_iterations: int = 3) -> ReviewResult:
         """
-        Review generated infographic using Gemini 3.6 Flash for quality analysis.
+        Review generated infographic using Gemini 3.7 Flash for quality analysis.
         
         Evaluates the infographic on multiple criteria specific to good
         infographic design and determines if regeneration is needed.
@@ -995,18 +885,7 @@ If score < {threshold}, mark as NEEDS_IMPROVEMENT with specific suggestions."""
                 )
 
             message = choices[0].get("message", {})
-            content = message.get("content", "")
-
-            reasoning = message.get("reasoning", "")
-            if reasoning and not content:
-                content = reasoning
-
-            if isinstance(content, list):
-                text_parts = []
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text_parts.append(block.get("text", ""))
-                content = "\n".join(text_parts)
+            content = self._text_content(message)
 
             score = _parse_score(content)
             verdict = _parse_verdict(content)
@@ -1125,7 +1004,20 @@ Generate an improved version that:
             research: If True, research the topic first for better data
             context_images: Optional image paths to attach as generation context
         """
+        if isinstance(iterations, bool) or not isinstance(iterations, int) or iterations < 1:
+            raise ValueError("iterations must be a positive integer")
+        if doc_type not in self.QUALITY_THRESHOLDS:
+            raise ValueError(f"Unknown document type: {doc_type}")
+        for name, value, choices in (("type", infographic_type, INFOGRAPHIC_TYPES),
+                                     ("style", style, STYLE_PRESETS),
+                                     ("palette", palette, PALETTE_PRESETS)):
+            if value is not None and value not in choices:
+                raise ValueError(f"Unknown {name}: {value}")
         output_path = Path(output_path)
+        if output_path.suffix.lower() != ".png":
+            raise ValueError("Output path must end in .png")
+        if len(context_images or []) > 14:
+            raise ValueError("Gemini 3.1 Flash Image accepts at most 14 reference images")
         output_dir = output_path.parent
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -1133,6 +1025,8 @@ Generate an improved version that:
         for image_path in context_images:
             if not Path(image_path).is_file():
                 raise FileNotFoundError(f"Context image not found: {image_path}")
+            if Path(image_path).suffix.lower() not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+                raise ValueError("Reference images must be PNG, JPEG, GIF, or WebP")
         
         base_name = output_path.stem
         extension = output_path.suffix or ".png"
@@ -1151,6 +1045,11 @@ Generate an improved version that:
             "doc_type": doc_type,
             "quality_threshold": threshold,
             "research_enabled": research,
+            "image_model": self.image_model,
+            "review_model": self.review_model,
+            "research_model": self.research_model if research else None,
+            "quality_met": False,
+            "termination_reason": None,
             "research_data": None,
             "context_images": context_images,
             "iterations": [],
@@ -1165,7 +1064,7 @@ Generate an improved version that:
         }
         
         print(f"\n{'='*60}")
-        print(f"Generating Infographic with Nano Banana Pro")
+        print(f"Generating Infographic with Nano Banana 2")
         print(f"{'='*60}")
         print(f"Content: {user_prompt}")
         print(f"Type: {type_name}")
@@ -1185,17 +1084,17 @@ Generate an improved version that:
             print(f"Researching topic for accurate data...")
             
             research_result = self.research_topic(user_prompt, infographic_type)
+            results["research_data"] = research_result
             
             if research_result.get("success"):
                 print(f"[OK] Research complete - gathered facts and statistics")
-                results["research_data"] = research_result
                 
                 # Enhance the prompt with researched data
                 enhanced_prompt = self._enhance_prompt_with_research(user_prompt, research_result)
                 
                 # Save research data to file
                 research_path = output_dir / f"{base_name}_research.json"
-                with open(research_path, "w") as f:
+                with open(research_path, "w", encoding="utf-8") as f:
                     json.dump(research_result, f, indent=2)
                 print(f"[OK] Research saved: {research_path}")
             else:
@@ -1212,7 +1111,7 @@ Generate an improved version that:
             print("-" * 40)
             
             # Generate image
-            print(f"Generating infographic with Nano Banana Pro...")
+            print(f"Generating infographic with Nano Banana 2...")
             image_data = self.generate_image(current_prompt, context_images)
             
             if not image_data:
@@ -1223,7 +1122,8 @@ Generate an improved version that:
                     "success": False,
                     "error": error_msg
                 })
-                continue
+                results["termination_reason"] = "generation_failed"
+                break
             
             # Save iteration image
             iter_path = output_dir / f"{base_name}_v{i}{extension}"
@@ -1234,12 +1134,12 @@ Generate an improved version that:
             # Review the image with the vision review model
             print(f"Reviewing with {self.review_model}...")
             review = self.review_image(
-                str(iter_path), user_prompt, infographic_type, i, doc_type, iterations
+                str(iter_path), enhanced_prompt, infographic_type, i, doc_type, iterations
             )
             if review.score is not None:
                 print(f"[OK] Score: {review.score}/10 (threshold: {threshold}/10)")
             else:
-                print(f"[WARN] Review unavailable — image kept, quality not verified")
+                print(f"[WARN] Review unavailable - image kept, quality not verified")
                 print(f"  Reason: {review.error}")
 
             # Save iteration results
@@ -1255,16 +1155,25 @@ Generate an improved version that:
                 "success": True
             }
             results["iterations"].append(iteration_result)
+            # Retain each saved draft if a later generation fails.
+            results["final_image"] = str(iter_path)
+            results["final_score"] = review.score
+            results["final_reviewed"] = review.reviewed and review.score is not None
+            results["success"] = True
+            results["quality_met"] = (
+                results["final_reviewed"] and review.score >= threshold
+                and not review.needs_improvement
+            )
 
             # Check if quality is acceptable
             if not review.needs_improvement:
-                if review.score is not None:
+                if results["quality_met"]:
                     print(f"\n[OK] Quality meets threshold ({review.score} >= {threshold})")
                     print(f"  No further iterations needed!")
                     reason = f"Quality score {review.score} meets threshold {threshold}"
                 else:
                     # Regenerating cannot fix a reviewer that did not answer.
-                    print(f"\n[WARN] Stopping without a verified score — review the image yourself")
+                    print(f"\n[WARN] Stopping without a verified score - review the image yourself")
                     reason = f"Review did not produce a score: {review.error}"
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
@@ -1272,10 +1181,12 @@ Generate an improved version that:
                 results["success"] = True
                 results["early_stop"] = True
                 results["early_stop_reason"] = reason
+                results["termination_reason"] = "quality_met" if results["quality_met"] else "review_unavailable"
                 break
 
-            # If this is the last iteration, we're done
+            # If this is the last iteration, keep the draft without claiming a pass.
             if i == iterations:
+                results["termination_reason"] = "max_iterations"
                 print(f"\n[WARN] Maximum iterations reached")
                 results["final_image"] = str(iter_path)
                 results["final_score"] = review.score
@@ -1284,10 +1195,10 @@ Generate an improved version that:
                 break
 
             # Quality below threshold - improve prompt
-            print(f"\n[WARN] Quality below threshold ({review.score} < {threshold})")
+            print("\n[WARN] Reviewer requested improvements")
             print(f"Improving prompt based on feedback...")
             current_prompt = self.improve_prompt(
-                user_prompt, review.critique, infographic_type, style, palette, background, i + 1,
+                enhanced_prompt, review.critique, infographic_type, style, palette, background, i + 1,
                 len(context_images)
             )
         
@@ -1301,7 +1212,7 @@ Generate an improved version that:
         
         # Save review log
         log_path = output_dir / f"{base_name}_review_log.json"
-        with open(log_path, "w") as f:
+        with open(log_path, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
         print(f"[OK] Review log: {log_path}")
         
@@ -1322,7 +1233,7 @@ Generate an improved version that:
 def main():
     """Command-line interface."""
     parser = argparse.ArgumentParser(
-        description="Generate infographics using Nano Banana Pro with smart iterative refinement",
+        description="Generate infographics using Nano Banana 2 with smart iterative refinement",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1363,7 +1274,7 @@ Colorblind-Safe Palettes:
   wong, ibm, tol
 
 Document Types (quality thresholds):
-  marketing     8.0/10  - Marketing materials
+  marketing     8.5/10  - Marketing materials
   report        8.0/10  - Business reports
   presentation  7.5/10  - Slides/talks
   social        7.0/10  - Social media
@@ -1399,11 +1310,16 @@ Environment:
     parser.add_argument("--research", "-r", action="store_true",
                        help="Research the topic first using Perplexity Sonar for accurate data")
     parser.add_argument("--context-image", action="append", default=[],
-                       help="Reference image path to include as Nano Banana Pro context; repeat for multiple images")
+                       help="Reference image path to include as Nano Banana 2 context; repeat for multiple images")
     
     args = parser.parse_args()
     
-    # Check for API key — resolves --api-key, the environment, then any .env file
+    if args.iterations < 1:
+        parser.error("--iterations must be at least 1")
+    if Path(args.output).suffix.lower() != ".png":
+        parser.error("--output must end in .png")
+
+    # Check for API key - resolves --api-key, the environment, then any .env file
     api_key = _resolve_api_key(args.api_key)
     if not api_key:
         print("Error: OPENROUTER_API_KEY not found")
@@ -1430,9 +1346,11 @@ Environment:
         
         if results["success"]:
             print(f"\n[OK] Success! Infographic saved to: {args.output}")
-            if results.get("early_stop"):
+            if results.get("quality_met"):
                 iterations_used = len([r for r in results['iterations'] if r.get('success')])
                 print(f"  (Completed in {iterations_used} iteration(s) - quality threshold met)")
+            else:
+                print(f"  [WARN] Draft retained; quality not verified as passing ({results['termination_reason']})")
             sys.exit(0)
         else:
             print(f"\n[FAIL] Generation failed. Check review log for details.")

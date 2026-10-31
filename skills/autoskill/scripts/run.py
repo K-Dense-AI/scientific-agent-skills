@@ -84,6 +84,7 @@ def run(config, *, start_time, end_time, out_dir,
     for e in events:
         e["text"] = redact(e.get("text", ""))
         e["window_title"] = redact(e.get("window_title", ""))
+        e["app"] = redact(e.get("app", ""))
 
     cluster_cfg = config.get("cluster", {})
     idle_gap = cluster_cfg.get("idle_gap_minutes", 10) * 60
@@ -175,7 +176,8 @@ def main(argv=None):
         backend = make_backend(config)
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(
-            config.get("embeddings", {}).get("model", "sentence-transformers/all-MiniLM-L6-v2")
+            config.get("embeddings", {}).get("model", "sentence-transformers/all-MiniLM-L6-v2"),
+            local_files_only=config.get("embeddings", {}).get("local_files_only", False),
         )
 
         def embedder(text: str):

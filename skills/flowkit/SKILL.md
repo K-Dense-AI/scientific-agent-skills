@@ -4,7 +4,7 @@ description: Analyzes flow cytometry data with FlowKit, including spillover comp
 license: MIT
 compatibility: Requires Python 3.13 with flowkit==1.3.2 for the tested environment. Dependencies include FlowIO, FlowUtils, NumPy, pandas, SciPy, lxml, and Bokeh. Installation needs network access; analysis uses local FCS/XML/WSP files without credentials. FlowUtils needs a C compiler if a compatible wheel is unavailable.
 metadata:
-  version: "1.0"
+  version: "1.1"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ not establish agreement with FlowJo.
 The examples and bundled helper target **FlowKit 1.3.2 on Python 3.13**.
 Upstream supports additional Python versions; those were not exercised here.
 The helper and examples were tested on synthetic FCS data, including a public
-FlowJo 10.6.1 synthetic workspace fixture. They are not biological validation.
+FlowJo 10.7.1 synthetic workspace fixture. They are not biological validation.
 
 ## Install
 
@@ -84,6 +84,9 @@ uv run --no-project --python 3.13 --with "flowkit==1.3.2" \
 ```
 
 The helper writes `gate_report.csv` and `provenance.json` to a new directory.
+Each row includes `sample_event_count`, `parent_event_count`, and a full
+`population_path`; empty-parent percentages are blank and flagged with
+`relative_percent_defined=False`.
 It rejects duplicate sample IDs, missing/extra workspace-group samples,
 zero-event samples, and strategies without gates. It uses explicit input files,
 does not follow paths embedded in the workspace, and runs without
@@ -151,12 +154,14 @@ A single template export does not preserve every sample-specific override.
 - `count` is the number of events passing the gate and its ancestors.
 - `absolute_percent` is percent of all sample events; `relative_percent` is
   percent of the immediate parent. These are percentages, not fractions.
-- Gate names can repeat under different parents. Use `(gate_name, gate_path)`
-  as the identifier, not the name alone. The helper serializes paths as JSON
-  arrays inside CSV cells to preserve names containing separators.
+- Gate names can repeat under different parents. In the helper's output use
+  `(sample_id, population_path)` as the identifier. Paths are JSON arrays
+  inside CSV cells. FlowKit's native report stores a quadrant's owner
+  separately in `quadrant_parent`; its `gate_path` alone omits that owner.
 - A zero-event parent makes a child percentage biologically undefined;
-  FlowKit may report zero. Report the denominator and mark that comparison
-  unavailable rather than interpreting it as absence of a phenotype.
+  FlowKit 1.3.2 reports zero for ordinary children and NaN for quadrants.
+  The helper exports both as blank with an explicit false flag. This differs
+  from a defined 0% for an empty gate whose parent contains events.
 - Compensated negative fluorescence is legitimate. Do not clip it to zero or
   discard those events merely to permit a logarithmic transform.
 - Define whether “MFI” means mean or median and name the event source.

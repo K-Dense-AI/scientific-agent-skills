@@ -1,13 +1,13 @@
 ---
 name: pymatgen
-description: Analyze, validate, convert, and transform materials structures and computed materials data with current pymatgen APIs, including local phase diagrams, symmetry sensitivity, electronic-structure I/O, and explicitly bounded Materials Project queries.
+description: Analyzes, validates, converts, and transforms materials structures and computed materials data with pymatgen. Use for local phase diagrams, symmetry sensitivity, electronic-structure I/O, and bounded Materials Project queries.
 license: MIT
-compatibility: Python 3.11+ with uv. The verified snapshot uses pymatgen 2026.5.4, pymatgen-core 2026.7.16, and mp-api 0.46.4. Bundled help and planning CLIs use only the standard library; local scientific execution lazily requires the pinned pymatgen packages. Materials Project access additionally requires explicit network approval and the single named secret MP_API_KEY.
+compatibility: Python 3.11+ with uv. The verified snapshot uses pymatgen 2026.9.24, pymatgen-core 2026.9.23, and mp-api 0.46.5. Bundled help and planning CLIs use only the standard library; local scientific execution lazily requires the pinned pymatgen packages. Materials Project access additionally requires explicit network approval and the single named secret MP_API_KEY.
 allowed-tools: Read Write Bash Glob Python
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: "K-Dense Inc."
-  last-reviewed: "2026-07-23"
+  last-reviewed: "2026-09-30"
 ---
 
 # pymatgen
@@ -23,28 +23,33 @@ The MIT frontmatter license covers this skill. `pymatgen` and
 data is generally CC BY 4.0, while contributed data remains owned by its
 contributors. Check the exact artifact and data terms before redistribution.
 
-## Verified snapshot (2026-07-23)
+## Verified snapshot (2026-09-30)
 
-- `pymatgen==2026.5.4` is the latest stable wrapper release (2026-05-04).
+- `pymatgen==2026.9.24` is the latest stable wrapper release (uploaded 2026-09-23).
   Package metadata requires Python 3.11+ and directly requires
-  `pymatgen-core>=2026.4.16`.
-- `pymatgen-core==2026.7.16` is the latest stable core release (2026-07-16).
+  `pymatgen-core>=2026.9.23`.
+- `pymatgen-core==2026.9.23` is the latest stable core release (2026-09-23).
   It now contains core objects, symmetry/lattice operations, and the I/O layer,
   all under the existing `pymatgen.*` namespace.
-- `mp-api==0.46.4` is the latest stable Materials Project client
-  (2026-06-15), requires Python 3.11+, and depends on
+- `mp-api==0.46.5` is the latest stable Materials Project client
+  (2026-08-18), requires Python 3.11+, and depends on
   `pymatgen>2024.2.20`.
-- The current API site is built from 2026.7.16 core documentation. Pinning both
-  distributions prevents `pymatgen==2026.5.4` from silently resolving to a
+- The current API site is built from 2026.9.23 core documentation. Pinning both
+  distributions prevents `pymatgen==2026.9.24` from silently resolving to a
   different future core.
 - Pymatgen uses date-based versions. PyPI renders the date with dots; do not
   infer semantic-version compatibility from the numbers.
+
+The local CLI suite and synthetic examples were executed on this snapshot.
+File-dependent VASP/Q-Chem parses and authenticated API examples below are
+illustrative: their signatures and current SDK source were checked, but no
+licensed calculation or authenticated service retrieval was performed.
 
 Create a project lock for reproducibility:
 
 ```bash
 uv init --python 3.11
-uv add "pymatgen==2026.5.4" "pymatgen-core==2026.7.16" "mp-api==0.46.4"
+uv add "pymatgen==2026.9.24" "pymatgen-core==2026.9.23" "mp-api==0.46.5"
 uv lock
 uv sync --frozen
 ```
@@ -54,7 +59,7 @@ For a disposable reviewed environment:
 ```bash
 uv venv --python 3.11 .venv-pymatgen
 uv pip install --python .venv-pymatgen/bin/python \
-  "pymatgen==2026.5.4" "pymatgen-core==2026.7.16" "mp-api==0.46.4"
+  "pymatgen==2026.9.24" "pymatgen-core==2026.9.23" "mp-api==0.46.5"
 ```
 
 Direct pins do not freeze all transitive wheels. Preserve `uv.lock`, platform,
@@ -130,6 +135,11 @@ python scripts/composition_structure_validator.py composition "Fe2O3"
 python scripts/composition_structure_validator.py structure structure.cif
 python scripts/structure_analyzer.py structure.cif --symmetry
 ```
+
+The distance report compares distinct sites under PBC; it excludes images of
+the same site and returns null for a one-site cell. It is not a complete check
+for contacts across very short lattice vectors. Plain Structure JSON is read
+strictly; nested MSON objects, YAML, and compressed JSON are refused.
 
 For direct CIF work, use the current parser method and inspect both warning
 channels:
@@ -251,6 +261,14 @@ total eV per entry and provenance:
       "composition": "Li",
       "energy_eV": -1.0,
       "provenance": {"source": "calculation manifest sha256:..."}
+    },
+    {
+      "entry_id": "local-O2", "composition": "O2", "energy_eV": -2.0,
+      "provenance": {"source": "synthetic demonstration"}
+    },
+    {
+      "entry_id": "local-Li2O", "composition": "Li2O", "energy_eV": -4.0,
+      "provenance": {"source": "synthetic demonstration"}
     }
   ]
 }
@@ -259,6 +277,9 @@ total eV per entry and provenance:
 ```bash
 python scripts/phase_diagram_generator.py entries.json --analyze Li2O
 ```
+
+These invented energies demonstrate the total-energy schema, not material
+predictions. `--plot phase.new.svg` uses the local Matplotlib backend.
 
 Elemental endpoints and all competing phases must be present. Do not mix raw
 energies from different functionals, pseudopotentials, magnetic states, or
@@ -324,7 +345,7 @@ Use only:
 from mp_api.client import MPRester
 ```
 
-The client reads `MP_API_KEY` when constructed. Supply only that named
+The client accepts `MP_API_KEY` when constructed. Supply only that named
 environment variable through the user's shell or secret manager. Do not accept
 the key as a CLI argument, traverse `.env` files, dump environment variables,
 or print exception data without redaction.
@@ -350,13 +371,17 @@ python scripts/mp_query.py \
 
 The CLI sets `num_chunks=1`, requires explicit fields and filters, caps results,
 does not implement an implicit result cache, and never overwrites output.
+Both legacy IDs (`mp-149`) and AlphaIDs (`mp-aaaaaaft`) are accepted; the SDK
+normalizes equivalent spellings. The CLI fixes the official API endpoint.
 `MPRester` initialization also performs compatibility/heartbeat metadata
 requests; the plan discloses these, disables the platform-detail user agent and
 local database-version notification log, and records the returned database
 version. The summary workflow does not request full-dataset cache downloads.
-`mp-api` 0.46.4 retries HTTP 429/502/504 according to its own configured policy
+`mp-api` 0.46.5 retries HTTP 429/502/504 according to its own configured policy
 and respects `Retry-After`; do not invent a numeric service quota or add an
-unbounded retry loop.
+unbounded retry loop. Initialization heartbeat calls use a separate transport
+without a timeout in this SDK; use an outer process deadline when needed.
+The JSON byte cap bounds the saved artifact, not bytes already downloaded.
 
 Materials Project core values are computed, method-dependent data—not
 experimental truth. PBE commonly overestimates lattice parameters and
@@ -398,13 +423,13 @@ python scripts/artifact_manifest.py \
 - [Transformations and workflows](references/transformations_workflows.md)
 - [Materials Project API, provenance, license, and limits](references/materials_project_api.md)
 
-## Sources (verified 2026-07-23)
+## Sources (verified 2026-09-30)
 
-- [pymatgen 2026.5.4 on PyPI](https://pypi.org/project/pymatgen/)
-- [pymatgen-core 2026.7.16 on PyPI](https://pypi.org/project/pymatgen-core/)
+- [pymatgen 2026.9.24 on PyPI](https://pypi.org/project/pymatgen/)
+- [pymatgen-core 2026.9.23 on PyPI](https://pypi.org/project/pymatgen-core/)
 - [pymatgen API documentation](https://pymatgen.org/)
 - [pymatgen changelog](https://pymatgen.org/CHANGES.html)
-- [mp-api 0.46.4 on PyPI](https://pypi.org/project/mp-api/)
+- [mp-api 0.46.5 on PyPI](https://pypi.org/project/mp-api/)
 - [Materials Project API getting started](https://docs.materialsproject.org/downloading-data/using-the-api/getting-started)
 - [Materials Project query guide](https://docs.materialsproject.org/downloading-data/using-the-api/querying-data)
 - [Materials Project FAQ and computed-data caveats](https://docs.materialsproject.org/frequently-asked-questions)

@@ -1,6 +1,6 @@
 # Liquid handling
 
-Verified against **PyLabRobot 0.2.1** on **2026-07-23**. Examples in this
+Verified against **PyLabRobot 0.2.2** on **2026-10-01**. Examples in this
 reference are planning or chatterbox-only. They are not authorization to connect
 to a robot.
 
@@ -18,7 +18,7 @@ lh = LiquidHandler(
 await lh.setup()  # prints operations; no hardware transport
 ```
 
-For 0.2.1, the important frontend signatures are:
+For 0.2.2, the important frontend signatures are:
 
 ```text
 pick_up_tips(tip_spots, use_channels=None, offsets=None, **backend_kwargs)
@@ -45,6 +45,7 @@ With the software-only backend and already assigned resources:
 
 ```python
 source.get_well("A1").tracker.set_volume(100.0)  # bookkeeping only
+destination.get_well("A1").tracker.set_volume(0.0)
 
 await lh.pick_up_tips(tips["A1"])
 await lh.aspirate(
@@ -83,7 +84,7 @@ CSV row.
 
 ## `transfer()` is not the old plate-copy API
 
-In 0.2.1 the verified signature is:
+In 0.2.2 the verified signature is:
 
 ```text
 transfer(source: Well, targets: List[Well], source_vol=None, ratios=None,
@@ -126,6 +127,11 @@ used_uL = well.tracker.get_used_volume()
 free_uL = well.tracker.get_free_volume()
 ```
 
+`set_volume()` and `load_state()` do not validate the initial physical value
+against capacity. Validate finite, nonnegative starting volumes and capacity
+before seeding trackers. The tracker does not track chemical composition:
+deprecated `get_liquids()` returns unknown liquid identity.
+
 The `VolumeTracker` updates planned volumes and can reject under-aspiration,
 tip overfill, or well overfill. It does **not** measure a meniscus or confirm
 liquid identity. Initial state must come from a trusted preparation record and
@@ -149,7 +155,7 @@ before considering it.
 There is no stable generic import:
 
 ```python
-# Invalid in 0.2.1:
+# Invalid in 0.2.2:
 # from pylabrobot.liquid_handling import LiquidClass
 ```
 
@@ -170,7 +176,8 @@ await lh.aspirate(
 )
 ```
 
-The keyword above is a STAR backend kwarg, not a universal frontend contract.
+This STAR example is **illustrative and source-verified only**; it was not
+executed on hardware. The keyword is not a universal frontend contract.
 `TecanLiquidClass` and `get_liquid_class` exist under
 `pylabrobot.liquid_handling.liquid_classes.tecan`, but are a different
 vendor-specific system.
@@ -201,23 +208,22 @@ python3 skills/pylabrobot/scripts/plan_transfers.py \
 ```
 
 The CSV header is exact and fixed. Unknown columns, duplicate IDs, unsupported
-tip policies, missing source volumes, non-finite numbers, out-of-grid wells,
+tip policies, missing source or destination starting volumes, non-finite numbers, out-of-grid wells,
 unallowlisted liquid classes/tips, excess rates/heights/volumes, channel
 mismatches, dead-volume violations, destination overflow, and insufficient tips
 fail closed.
 
 ## Sources
 
-Checked **2026-07-23**:
+Checked **2026-10-01**:
 
-- [Stable basic Hamilton tutorial](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/basic.html)
-  — current imports, rails, tips, channels, and `uL` operations (page metadata
-  surfaced 2025-01-01; docs version 0.2.1).
-- [Stable liquid-handling API](https://docs.pylabrobot.org/stable/api/pylabrobot.liquid_handling.html)
+- [Hosted basic Hamilton tutorial](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/basic.html)
+  — 0.2.1 historical guide; 0.2.2 signatures verified from released source.
+- [Hosted liquid-handling API](https://docs.pylabrobot.org/stable/api/pylabrobot.liquid_handling.html)
   — frontend/backend split and `LiquidHandlerChatterboxBackend`.
-- [Stable tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
-  — tip/volume tracker behavior (page metadata surfaced 2025-01-01).
-- [Stable Hamilton liquid classes](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/hamilton-liquid-classes.html)
+- [Hosted tracker guide](https://docs.pylabrobot.org/stable/user_guide/machine-agnostic-features/using-trackers.html)
+  — tip/volume tracker behavior.
+- [Hosted Hamilton liquid classes](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/hamilton-liquid-classes.html)
   and [STAR liquid-level detection](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/hamilton-star/star_lld.html).
-- [`v0.2.1` liquid-handler source](https://github.com/PyLabRobot/pylabrobot/tree/v0.2.1/pylabrobot/liquid_handling)
-  — signatures and import verification; tag dated 2026-03-23.
+- [released 0.2.2 liquid-handler source](https://pypi.org/project/PyLabRobot/0.2.2/#files)
+  — signatures and import verification; released 2026-07-30.

@@ -348,6 +348,31 @@ def test_real_blast_circular_binding_and_product(tmp_path):
     assert report["pairs"][0]["products"][0]["classification"] == "intended"
 
 
+@pytest.mark.parametrize("engine", ["exhaustive", pytest.param("blast", marks=pytest.mark.skipif(
+    not HAS_BLAST, reason="Requires local NCBI BLAST+ executables"))])
+def test_reference_reverse_complement_preserves_product_and_swaps_roles(tmp_path, engine):
+    # Unequal flanks ensure the transformed interval cannot accidentally match itself.
+    sequence = "AAAAAAA" + TARGET + "CCCCCCCCCCCCC"
+    length = len(sequence)
+    args = inputs(tmp_path, {"target": sequence}) + ["--engine", engine]
+    expected_path = tmp_path / "expected.tsv"
+    expected_path.write_text("pair_id\trecord_id\tstart\tend\np1\ttarget\t7\t127\n")
+    original, code = execute(args)
+    assert code == 0, original["issues"]
+    (tmp_path / "reference.fa").write_text(f">target\n{revcomp(sequence)}\n")
+    expected_path.write_text(
+        f"pair_id\trecord_id\tstart\tend\np1\ttarget\t{length - 127}\t{length - 7}\n")
+    transformed, code = execute(args)
+    assert code == 0, transformed["issues"]
+    before, = original["pairs"][0]["products"]
+    after, = transformed["pairs"][0]["products"]
+    assert after["start"] == length - before["end"]
+    assert after["end"] == length - before["start"]
+    assert after["length"] == before["length"] == 120
+    assert (before["primer_roles"], after["primer_roles"]) == ("F/R", "R/F")
+    assert before["classification"] == after["classification"] == "intended"
+
+
 def test_missing_blast_executable_fails_closed(tmp_path):
     report, code = execute(inputs(tmp_path) + ["--engine", "blast", "--blastn", "nonexistent-primer-test-blastn"])
     assert code == 2

@@ -57,7 +57,9 @@ After the local check, a human must compare each identifier with the opened sour
 For biomedical references, use *Citing Medicine* and NLM's sample references for the
 relevant source type [SW-S20, SW-S21]. These cover articles, books, datasets, software,
 and online material. The current target journal's instructions override generic style
-examples.
+examples. JAMA currently advises against using AI/LLMs to generate or format
+references; use a standard reference manager and manually verify its output for that
+venue [SW-S25].
 
 For APA, AMA, Chicago, IEEE, ACS, Vancouver-derived, or publisher-specific styles:
 

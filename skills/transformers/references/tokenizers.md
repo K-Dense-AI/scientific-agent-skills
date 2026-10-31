@@ -1,5 +1,7 @@
 # Tokenizers
 
+Targets Transformers 5.18.0. Tokenizer behavior was exercised with a local BERT vocabulary and a local chat template; Hub examples remain illustrative. See [review evidence](review.md).
+
 ## Overview
 
 Tokenizers convert text into numerical representations (tokens) that models can process. They handle special tokens, padding, truncation, and attention masks.
@@ -13,7 +15,7 @@ Automatically load the correct tokenizer for a model:
 ```python
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
 ```
 
 Load from local path:
@@ -41,7 +43,7 @@ print(tokens)  # ['hello', ',', 'how', 'are', 'you', '?']
 ```python
 token_ids = [101, 7592, 1010, 2129, 2024, 2017, 1029, 102]
 text = tokenizer.decode(token_ids)
-print(text)  # "hello, how are you?"
+print(text)  # Includes [CLS]/[SEP] unless skip_special_tokens=True
 
 # Skip special tokens
 text = tokenizer.decode(token_ids, skip_special_tokens=True)
@@ -56,7 +58,8 @@ Primary tokenization interface:
 # Single text
 inputs = tokenizer("Hello, how are you?")
 
-# Returns dictionary with input_ids, attention_mask
+# Returns BatchEncoding: input_ids, attention_mask, and tokenizer-dependent fields
+# (BERT also emits token_type_ids).
 print(inputs)
 # {
 #   'input_ids': [101, 7592, 1010, 2129, 2024, 2017, 1029, 102],
@@ -76,7 +79,7 @@ inputs = tokenizer(texts, padding=True, truncation=True)
 
 **return_tensors**: Output format (`"pt"` for PyTorch, `"np"` for NumPy)
 ```python
-# PyTorch tensors (default for Transformers v5 workflows)
+# PyTorch tensors (without return_tensors, the default output is Python lists)
 inputs = tokenizer("text", return_tensors="pt")
 
 # NumPy arrays
@@ -182,7 +185,7 @@ inputs = tokenizer(text, add_special_tokens=False)
 
 ```python
 special_tokens_dict = {
-    "additional_special_tokens": ["<CUSTOM>", "<SPECIAL>"]
+    "extra_special_tokens": ["<CUSTOM>", "<SPECIAL>"]
 }
 
 num_added = tokenizer.add_special_tokens(special_tokens_dict)
@@ -222,24 +225,12 @@ for i in range(len(texts)):
     attention_mask = batch["attention_mask"][i]
 ```
 
-## Fast Tokenizers
+## Tokenizer Backends
 
-Use Rust-based tokenizers for speed:
+v5 uses one implementation per model backed by `TokenizersBackend`, `SentencePieceBackend`, `PythonBackend`, or `MistralCommonBackend`. `AutoTokenizer` selects based on files/dependencies. In 5.18.0 its old `use_fast` argument is ignored; `use_fast=False` does not force the former Python tokenizer. Inspect `tokenizer.is_fast` before using offset/word alignment, and use the checkpoint's actual backend rather than substituting a tokenizer.
 
 ```python
-from transformers import AutoTokenizer
-
-# Automatically loads Fast version if available
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-
-# Check if Fast
-print(tokenizer.is_fast)  # True
-
-# Force Fast tokenizer
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True)
-
-# Force slow (Python) tokenizer
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=False)
+print(type(tokenizer).__name__, tokenizer.is_fast)
 ```
 
 ### Fast Tokenizer Features
@@ -301,19 +292,19 @@ sequence_ids = encoding.sequence_ids()
 
 ### Custom Preprocessing
 
-Subclass for custom behavior:
+`AutoTokenizer` is a factory, not an instantiable tokenizer base class. Apply preprocessing explicitly and consistently instead of subclassing it. Lowercasing is appropriate only when the checkpoint/training protocol expects it:
 
 ```python
-class CustomTokenizer(AutoTokenizer):
-    def __call__(self, text, **kwargs):
-        # Custom preprocessing
-        text = text.lower().strip()
-        return super().__call__(text, **kwargs)
+def tokenize_normalized(texts, tokenizer):
+    normalized = [text.strip() for text in texts]
+    return tokenizer(normalized, truncation=True, max_length=128)
 ```
+
+Preserve the original text if you need original-coordinate spans: normalization changes offset meaning.
 
 ## Chat Templates
 
-For conversational models:
+Use a chat checkpoint with a saved `chat_template`; BERT/GPT-2 examples above are not chat templates. `tokenize=True` returns a `BatchEncoding` dictionary in v5. Pass `**inputs` to generation. For training use `add_generation_prompt=False`; preserve labels/loss masks appropriate to the training objective. Do not combine `add_generation_prompt=True` with `continue_final_message=True`.
 
 ```python
 messages = [
@@ -326,6 +317,7 @@ messages = [
 # Format for display or preprocessing
 text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 print(text)
+# If tokenizing this formatted string later, use add_special_tokens=False.
 
 # Tokenize directly for generation
 inputs = tokenizer.apply_chat_template(
@@ -341,6 +333,8 @@ inputs = tokenizer.apply_chat_template(
 ### Pattern 1: Simple Text Classification
 
 ```python
+import torch
+
 texts = ["I love this!", "I hate this!"]
 labels = [1, 0]
 
@@ -353,7 +347,8 @@ inputs = tokenizer(
 )
 
 # Use with model
-outputs = model(**inputs, labels=torch.tensor(labels))
+inputs = inputs.to(model.device)
+outputs = model(**inputs, labels=torch.tensor(labels, device=model.device))
 ```
 
 ### Pattern 2: Question Answering
@@ -366,7 +361,7 @@ inputs = tokenizer(
     question,
     context,
     padding=True,
-    truncation=True,
+    truncation="only_second",
     max_length=384,
     return_tensors="pt"
 )
@@ -381,7 +376,7 @@ inputs = tokenizer(prompt, return_tensors="pt")
 
 # Generate
 outputs = model.generate(
-    inputs["input_ids"],
+    **inputs.to(model.device),
     max_new_tokens=50,
     pad_token_id=tokenizer.eos_token_id
 )
@@ -411,8 +406,8 @@ tokenized_dataset = dataset.map(tokenize_function, batched=True)
 2. **Use padding and truncation**: For batch processing
 3. **Set max_length explicitly**: Prevent memory issues
 4. **Use Fast tokenizers**: When available for speed
-5. **Handle pad_token**: Set to eos_token if None for generation
-6. **Add special tokens**: Leave enabled (default) unless specific reason
+5. **Handle pad_token**: For compatible causal-LM inference, use EOS if needed and retain attention_mask; do not mask genuine EOS training labels just because PAD shares its ID
+6. **Add special tokens once**: Chat templates already contain them; do not duplicate them
 7. **Resize embeddings**: After adding custom tokens
 8. **Decode with skip_special_tokens**: For cleaner output
 9. **Use batched processing**: For efficiency with datasets

@@ -1,70 +1,47 @@
 # DHDNA Profiler — Advanced Reference
 
-## Domain-Specific Profiling Presets
+## Genre lenses
 
-### Academic Writing
+These are local reading prompts, not empirically established genre norms or expected profiles. Review all twelve dimensions; a focus list never justifies filling the others with low scores. Do not assume a topology from the genre.
 
-**Focus dimensions:** Analytical Depth (1), Linguistic Precision (4), Domain Expertise (9), Metacognition (12)
-**Look for:** Citation patterns, argument structure, hedging language, methodological rigor
-**Typical topology:** Linear or Dialectic
+| Context | Useful dimensions | Evidence to inspect |
+| --- | --- | --- |
+| Academic writing | Analytical Depth, Linguistic Precision, Domain Expertise, Metacognition | Argument structure, defined terms, justified methods, limitations; check cited sources separately |
+| Creative writing | Creative Range, Emotional Processing, Linguistic Precision, Intuitive Reasoning | Analogies, narrative structure, expressed affect, explicitly intuitive choices; separate narrator, character, and author |
+| Business communication | Strategic Thinking, Social Intelligence, Temporal Orientation, Analytical Depth | Alternatives, stakeholders, contingencies, and time horizons |
+| Technical documentation | Analytical Depth, Domain Expertise, Linguistic Precision, Metacognition | Explanations, disambiguation, prerequisites, and acknowledged failure modes; verify technical correctness independently |
+| Personal reflection | Emotional Processing, Metacognition, Memory Integration, Temporal Orientation | Expressed affect, revisions, recollections, and time references; do not infer health status |
 
-### Creative Writing
+## Dispersion of annotated scores
 
-**Focus dimensions:** Creative Range (2), Emotional Processing (3), Linguistic Precision (4), Intuitive Reasoning (10)
-**Look for:** Metaphor density, narrative structure, emotional arc, sensory language
-**Typical topology:** Spiral or Web
+Prefer showing the per-dimension observations and missing entries. The local 1–10 scores are ordinal and cover different constructs; equal spacing and cross-dimension comparability have not been established. Their mean or standard deviation can change with arbitrary coding choices and should not be presented as a psychological summary.
 
-### Business / Executive Communication
+If a user explicitly requests arithmetic dispersion, state this assumption and list the included dimensions, N/A exclusions, and whether population or sample SD was used. Never substitute zero for N/A. A single observed dimension cannot supply sample SD; an empty set supplies neither mean nor SD. No 1.5/3.0 cutoff establishes specialization, innovation, vulnerability, or blind spots. Standard deviation is not information-theoretic entropy.
 
-**Focus dimensions:** Strategic Thinking (6), Social Intelligence (8), Temporal Orientation (11), Analytical Depth (1)
-**Look for:** Decision framing, stakeholder awareness, time-horizon language, competitive positioning
-**Typical topology:** Linear or Fractal
+## Repeated samples and the 4D-DHDNA proposal
 
-### Technical Documentation
+The [IDNA v2 preprint](https://doi.org/10.5281/zenodo.18807387), section **2**, introduces the fourth-string temporal-attractor theory. This theoretical extension is not a validated longitudinal measurement or forecasting procedure. A time series of this skill's annotations does not implement its model or estimate its parameters.
 
-**Focus dimensions:** Analytical Depth (1), Domain Expertise (9), Linguistic Precision (4), Metacognition (12)
-**Look for:** Precision vs. ambiguity ratio, abstraction levels, error acknowledgment
-**Typical topology:** Linear
+For requested repeated-sample reflection:
 
-### Personal Journaling / Reflection
+1. Record the dates, designated source passages, prompt, genre, length, language, editing context, and annotation convention.
+2. Describe each sample's evidence separately before comparing it.
+3. Compare only dimensions with suitable evidence in both samples; preserve missingness.
+4. Discuss context and rater changes that could explain the difference. When multiple raters are used, retain their separate annotations and disagreements rather than hiding them in a mean.
+5. State changes as changes in the observed writing. Do not extrapolate a future psychological state, cognitive growth, or decline.
 
-**Focus dimensions:** Emotional Processing (3), Metacognition (12), Memory Integration (7), Temporal Orientation (11)
-**Look for:** Self-awareness language, temporal references, emotional vocabulary range, growth signals
-**Typical topology:** Spiral
+## Compact notation
 
-## Dispersion of Annotated Scores
+Prefer dimension numbers from the main skill to avoid ambiguity between local labels and the publisher's updated names. Include a legend and sample identifier. The following is a **synthetic notation example**, not a psychological result:
 
-Standard deviation describes dispersion on the chosen 1–10 rubric; it is not
-information-theoretic entropy or a validated measure of specialization, innovation,
-vulnerability, or blind spots. If reported, identify the rated dimensions, missing
-(N/A) dimensions, and scoring convention. Do not turn the old 1.5/3.0 cutoffs into
-person categories or compare dispersion across differently elicited samples.
-
-## The 4D-DHDNA Extension
-
-For longitudinal analysis (profiling the same person over time), add the temporal dimension:
-
-**String 4: The Temporal Attractor**
-
-- How has this person's cognitive profile shifted over the analyzed time period?
-- Which dimensions are growing? Which are shrinking?
-- Could changes in genre, task, sample length, editing, or rater explain the apparent trend?
-
-The temporal-attractor language belongs to the framework's theory, not an established forecasting mechanism. Report changes in observed samples; do not extrapolate a future psychological state from rubric scores.
-
-Reference: [IDNA Consolidation v2, Section 3: 4D-DHDNA (DOI: 10.5281/zenodo.18807387)](https://doi.org/10.5281/zenodo.18807387)
-
-## Notation System
-
-For quick reference in notes or comparisons:
-
-```
-DHDNA Signature: [A9 C7 E3 L8 Et5 S8 M4 So6 D9 I3 T7 Mc8]
-
-Where:
-A = Analytical, C = Creative, E = Emotional, L = Linguistic
-Et = Ethical, S = Strategic, M = Memory, So = Social
-D = Domain, I = Intuitive, T = Temporal, Mc = Metacognitive
+```text
+Sample S1; local ordinal rubric; scores supplied for illustration
+D1=7 D2=NA D3=NA D4=6 D5=NA D6=7
+D7=NA D8=NA D9=NA D10=NA D11=5 D12=7
 ```
 
-Example: `[A9 C4 E2 L7 Et3 S9 M:NA So:NA D8 I3 T8 Mc6]` records 12 dimensions, including two unobserved dimensions. It describes sample annotations; it does not identify an occupation or establish deficits in emotional processing.
+The notation is only a compact record of annotations. It does not replace quotations, per-dimension confidence, source context, or a rationale. It cannot identify an occupation or individual.
+
+## Review provenance
+
+Reviewed September 30, 2026 against the [publisher's twelve public dimensions](https://www.ahkstrategies.net/dhdna), the [DHDNA preprint record](https://zenodo.org/records/18736629) and PDF (section 6.3), and the [IDNA v2 record](https://zenodo.org/records/18807387) and PDF (section 2 and section 4.3/Table 3). Both Zenodo records describe preprints; the IDNA file is `AHK_IDNA_Consolidation_v2.pdf`. The source proposals establish terminology, not the validity of this skill's local score anchors. No public MindBook scoring API is used or specified here.

@@ -1,10 +1,11 @@
 ---
 name: clinical-decision-support
-description: Prepare and validate research-only clinical decision-support evaluation, evidence-profile, cohort, survival, biomarker/model, privacy, and governance artifacts. Use for aggregate or synthetic research documentation and traceability—not patient care or live clinical operation.
+description: Prepares and validates research-only clinical decision-support evaluation, evidence-profile, cohort, survival, biomarker/model, privacy, and governance artifacts. Supports aggregate or synthetic research documentation and traceability, excluding patient care and live clinical operation.
 license: MIT
 compatibility: Python 3.11+; local files only; bundled scripts use the standard library and require no network, credentials, API keys, LLMs, or image services.
 metadata:
-  version: "2.3"
+  version: "2.4"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -44,7 +45,7 @@ Outputs remain drafts until qualified humans approve them. Reporting guidance im
 
 Before any script:
 
-1. Confirm input is synthetic or aggregate.
+1. Have the responsible human reviewer confirm and document that input is synthetic or aggregate. Scripts cannot establish this from field names or declared metadata.
 2. Reject patient rows, records, narratives, identifiers, free text, dates tied to people, images, waveforms, or genomic sequences.
 3. Keep source files local. Do not fetch URLs, call APIs, read environment variables, or send data to a model.
 4. Set disclosure thresholds before producing tables.
@@ -92,7 +93,7 @@ Start from `assets/artifact_intended_use_template.json`.
 
 ### 3. Run Locally
 
-All helpers are dependency-free:
+All helpers are dependency-free. Run the following commands from the skill directory:
 
 ```bash
 python3 scripts/validate_cds_artifact.py --help
@@ -129,7 +130,7 @@ For each important outcome, a human panel must document:
 - inconsistency;
 - indirectness;
 - imprecision;
-- publication bias;
+- dissemination/publication bias;
 - any applicable upgrading considerations;
 - effect estimate and uncertainty;
 - rationale and source IDs for every judgment;
@@ -141,7 +142,7 @@ The checker validates completeness and citation links only. It never calculates 
 
 Do not derive thresholds, assign molecular or disease classes, match therapies, or emit person-level predictions.
 
-The evaluator accepts only aggregate confusion counts and calibration bins. It reports bounded descriptive metrics with Wilson intervals, calibration gaps, subgroup differences, and explicit suppression. It does not determine fairness, clinical utility, or fitness for use. Require:
+The evaluator accepts only aggregate confusion counts and calibration bins. Undefined proportions are `null`; balanced accuracy is `null` when either observed outcome class is absent. Invalid inputs produce diagnostics without partial evaluation results. It reports bounded descriptive metrics with Wilson intervals, calibration gaps, subgroup differences, and explicit suppression. It does not determine fairness, clinical utility, or fitness for use. Require:
 
 - locked model/assay/version and pre-specified threshold provenance;
 - representative internal validation and independent external validation;
@@ -194,7 +195,7 @@ The helper inventories documented human work. It never reads a dataset. Escalate
 ## Reporting-Guideline Selection
 
 - Cohort/case-control/cross-sectional: STROBE; add RECORD for routinely collected data.
-- Prediction model development/evaluation: TRIPOD+AI and PROBAST+AI.
+- Prediction model development/evaluation: TRIPOD+AI and PROBAST+AI; use TRIPOD-LLM for LLM-specific research reporting.
 - Tumor prognostic marker study: REMARK.
 - AI diagnostic accuracy: STARD-AI with STARD.
 - AI trial protocol: SPIRIT-AI with the current SPIRIT base statement.
@@ -211,10 +212,11 @@ Use `references/regulatory_and_governance.md` for dated context. Obtain qualifie
 
 ## Verification
 
-Run the test suite from the repository root:
+Run the test suite from the repository root (pytest loads the shared CLI contract):
 
 ```bash
-python3 -m unittest discover -s tests/clinical-decision-support -p 'test_*.py'
+uv run --with pytest python -m pytest tests/clinical-decision-support -q
+python tests/run_all.py --isolated clinical-decision-support
 ```
 
 From the skill directory, run AST compilation without bytecode:

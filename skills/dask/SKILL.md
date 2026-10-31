@@ -1,11 +1,12 @@
 ---
 name: dask
-description: Distributed computing for larger-than-RAM pandas/NumPy workflows. Use when you need to scale existing pandas/NumPy code beyond memory or across clusters. Best for parallel file processing, distributed ML, integration with existing pandas code. For out-of-core analytics on single machine use vaex; for in-memory speed use polars.
+description: Scales pandas, NumPy, and custom Python research workflows beyond memory or across clusters with Dask. Covers DataFrames, Arrays, Bags, Futures, chunking, schedulers, and distributed diagnostics. Use for partitioned file processing, scientific array computation, or parallel tasks whose memory and dependency structure require Dask.
 allowed-tools: Read Write Edit Bash
 license: BSD-3-Clause license
-compatibility: Requires Python 3.10+ and dask 2025.1+. DataFrame workflows need pandas 2+ and PyArrow 16+. Cloud paths (s3://, gcs://) need s3fs or gcsfs. Cluster deployment uses dask.distributed (included with dask[complete]).
+compatibility: Requires Python 3.10+ and dask 2026.8.0; current Zarr 3.4 needs Python 3.12+. DataFrame workflows need pandas 2+ and PyArrow 16+. Cloud paths (s3://, gcs://) need s3fs or gcsfs. Cluster deployment uses dask.distributed (included with dask[complete]).
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
 
@@ -18,32 +19,32 @@ Dask is a Python library for parallel and distributed computing that enables thr
 - **Parallel processing** for improved computational speed across multiple cores
 - **Distributed computation** supporting terabyte-scale datasets across multiple machines
 
-Dask scales from laptops (processing ~100 GiB) to clusters (processing ~100 TiB) while maintaining familiar Python APIs.
+Capacity depends on partition sizes, intermediate data, concurrency, storage, and available memory.
 
-**Current upstream:** dask **2026.3.0** (PyPI, March 2026). Docs: [docs.dask.org](https://docs.dask.org/en/stable/). Since **2025.1.0**, the expression-based DataFrame API with query planning is the only implementation — do not install `dask-expr` separately or set `dataframe.query-planning: False`.
+**Reviewed release:** dask/distributed **2026.8.0** (September 30, 2026 review). Docs: [docs.dask.org](https://docs.dask.org/en/stable/). Since **2025.1.0**, the expression-based DataFrame API with query planning is the only implementation — do not install `dask-expr` separately or set `dataframe.query-planning: False`.
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-uv pip install "dask>=2025.1"
+uv pip install "dask[array,dataframe]==2026.8.0"
 ```
 
 For a typical pandas/NumPy workflow with the distributed scheduler and dashboard:
 
 ```bash
-uv pip install "dask[complete]"
+uv pip install "dask[complete]==2026.8.0"
 ```
 
-Remote object storage (S3, GCS, Azure):
+Remote object storage (requires provider credentials for private data):
 
 ```bash
 uv pip install s3fs    # s3:// paths
 uv pip install gcsfs   # gs:// paths
 ```
 
-Requires **Python 3.10+** (3.9 support dropped in 2024.12). DataFrame I/O requires **PyArrow 16+** (as of dask 2026.1.2).
+Requires **Python 3.10+**, pandas 2+, PyArrow 16+. Zarr, HDF5, SciPy, Xarray, Dask-ML, and cluster deployment packages are separate optional dependencies. See [review and validation](references/review.md) for tested versions, source links, and limits. File paths and undefined application functions below are illustrative. Put process scheduler/`Client()` execution in a `main()` guarded by `if __name__ == "__main__":` in scripts; close clients and clusters afterward.
 
 ## When to Use This Skill
 
@@ -85,7 +86,7 @@ ddf = dd.read_csv('data/2024-*.csv')
 
 # Operations are lazy until compute()
 filtered = ddf[ddf['value'] > 100]
-result = filtered.groupby('category').mean().compute()
+result = filtered.groupby('category')['value'].mean().compute()
 ```
 
 **Key Points**:
@@ -114,8 +115,8 @@ result = filtered.groupby('category').mean().compute()
 ```python
 import dask.array as da
 
-# Create large array with chunks
-x = da.random.random((100000, 100000), chunks=(10000, 10000))
+# Small executable example; size chunks from uncompressed memory before scaling
+x = da.random.default_rng(42).random((1000, 1000), chunks=(250, 250))
 
 # Operations are lazy
 y = x + 100
@@ -126,7 +127,7 @@ result = z.compute()
 ```
 
 **Key Points**:
-- Chunk size is critical (aim for ~100 MB per chunk)
+- Chunk size is critical (aim for ~100 MiB per chunk, adjusted to memory and operation)
 - Operations work on chunks in parallel
 - Rechunk data when needed for efficient operations
 - Use `map_blocks` for operations not available in Dask
@@ -161,7 +162,7 @@ valid = bag.filter(lambda x: x['status'] == 'valid')
 processed = valid.map(lambda x: {'id': x['id'], 'value': x['value']})
 
 # Convert to DataFrame for analysis
-ddf = processed.to_dataframe()
+ddf = processed.to_dataframe(meta={'id': 'int64', 'value': 'float64'})
 ```
 
 **Key Points**:
@@ -194,7 +195,7 @@ from dask.distributed import Client
 
 client = Client()  # Create local cluster
 
-# Submit tasks (executes immediately)
+# Submit tasks (scheduled without compute())
 def process(x):
     return x ** 2
 
@@ -208,7 +209,7 @@ client.close()
 
 **Key Points**:
 - Requires distributed client (even for single machine)
-- Tasks execute immediately when submitted
+- Submitted tasks run when dependencies and worker resources are ready
 - Pre-scatter large data to avoid repeated transfers
 - ~1ms overhead per task (not suitable for millions of tiny tasks)
 - Use actors for stateful workflows
@@ -237,7 +238,7 @@ import dask.dataframe as dd
 
 # Use threads for DataFrame (default, good for numeric)
 ddf = dd.read_csv('data.csv')
-result1 = ddf.mean().compute()  # Uses threads
+result1 = ddf['value'].mean().compute()  # Threads unless a client/config overrides it
 
 # Use processes for Python-heavy work
 import dask.bag as db
@@ -255,8 +256,8 @@ result4 = computation.compute()  # Uses distributed with dashboard
 ```
 
 **Key Points**:
-- Threads: Lowest overhead (~10 µs/task), best for numeric work
-- Processes: Avoids GIL (~10 ms/task), best for Python work
+- Threads: Low overhead (benchmark task granularity), best for numeric work
+- Processes: Avoids GIL; includes serialization costs, best for Python work
 - Distributed: Monitoring dashboard (~1 ms/task), scales to clusters
 - Can switch schedulers per computation or globally
 
@@ -302,7 +303,7 @@ results = dask.compute(*computations)
 - Check task graph size: `len(ddf.__dask_graph__())`
 
 **4. Choose Appropriate Chunk Sizes**
-- Target: ~100 MB per chunk (or 10 chunks per core in worker memory)
+- Target: chunks and concurrent input/output/temporary buffers must fit worker memory
 - Too large: Memory overflow
 - Too small: Scheduling overhead
 
@@ -328,7 +329,7 @@ ddf['amount'] = ddf['amount'].astype('float64')
 ddf = ddf.dropna(subset=['important_col'])
 
 # Load: Aggregate and save
-summary = ddf.groupby('category').agg({'amount': ['sum', 'mean']})
+summary = ddf.groupby('category').agg(amount_sum=('amount', 'sum'), amount_mean=('amount', 'mean'))
 summary.to_parquet('output/summary.parquet')
 ```
 
@@ -343,7 +344,7 @@ bag = bag.filter(lambda x: x['status'] == 'valid')
 
 # Convert to DataFrame for structured analysis
 ddf = bag.to_dataframe()
-result = ddf.groupby('category').mean().compute()
+result = ddf.groupby('category')['value'].mean().compute()
 ```
 
 ### Large-Scale Array Computation
@@ -354,10 +355,11 @@ import dask.array as da
 x = da.from_zarr('large_dataset.zarr')
 
 # Process in chunks
-normalized = (x - x.mean()) / x.std()
+scale = x.std()
+normalized = (x - x.mean()) / da.where(scale > 0, scale, 1)
 
-# Save result (use mode= for overwrite; zarr_array_kwargs for compression)
-da.to_zarr(normalized, 'normalized.zarr', mode='w')
+# Create a new store; Zarr creation options are direct keyword arguments
+da.to_zarr(normalized, 'normalized.zarr', mode='w-')
 ```
 
 ### Custom Parallel Workflow
@@ -367,7 +369,7 @@ from dask.distributed import Client
 client = Client()
 
 # Scatter large dataset once
-data = client.scatter(large_dataset)
+[data] = client.scatter([large_dataset])  # Preserve a list/dict as one object
 
 # Process in parallel with dependencies
 futures = []
@@ -395,18 +397,10 @@ Use this decision guide to choose the appropriate Dask component:
 - Custom parallel tasks → **Futures**
 - Text processing/ETL → **Bags**
 
-**Control Level**:
-- High-level, automatic → **DataFrames/Arrays**
-- Low-level, manual → **Futures**
-
-**Workflow Type**:
-- Static computation graph → **DataFrames/Arrays/Bags**
-- Dynamic, evolving → **Futures**
-
 ## Integration Considerations
 
 ### File Formats
-- **Efficient**: Parquet, HDF5, Zarr (columnar, compressed, parallel-friendly)
+- **Efficient**: Parquet for tables; Zarr/HDF5 for chunked arrays (HDF5 handle restrictions apply)
 - **Compatible but slower**: CSV (use for initial ingestion only)
 - **For Arrays**: HDF5, Zarr, NetCDF
 
@@ -439,7 +433,7 @@ result = computation.compute()  # Can use pdb, easy debugging
 
 2. **Validate with threads on sample**:
 ```python
-sample = ddf.head(1000)  # Small sample
+sample = ddf.head(1000)  # First partition only by default; may return fewer rows
 # Test logic, then scale to full dataset
 ```
 
@@ -476,7 +470,8 @@ All reference documentation files can be read as needed for detailed information
 - `references/bags.md` - Complete Dask Bag guide
 - `references/futures.md` - Complete Dask Futures and distributed computing guide
 - `references/schedulers.md` - Complete scheduler selection and configuration guide
-- `references/best-practices.md` - Comprehensive performance optimization and troubleshooting
+- `references/best-practices.md` - Performance optimization and troubleshooting
+- `references/review.md` - Current upstream sources and executed validation
 
 Load these files when users need detailed information about specific Dask components, operations, or patterns beyond the quick guidance provided here.
 

@@ -75,8 +75,8 @@ from aeon.distances import dtw_cost_matrix, dtw_alignment_path
 cost_matrix = dtw_cost_matrix(x, y)
 
 # Get optimal alignment path
-path = dtw_alignment_path(x, y)
-# Returns indices: [(0,0), (1,1), (2,1), (2,2), ...]
+path, cost = dtw_alignment_path(x, y)
+# path is a list of index pairs; cost equals dtw_distance(x, y)
 ```
 
 ### Using with Estimators
@@ -103,22 +103,28 @@ Limit warping path deviation (improves speed and prevents pathological warping):
 # Sakoe-Chiba band: window as fraction of series length
 dtw_distance(x, y, window=0.1)  # Allow 10% deviation
 
-# Itakura parallelogram: slopes constrain path
-dtw_distance(x, y, itakura_max_slope=2.0)
+# Itakura parameter is a fraction in [0, 1], not a raw slope
+dtw_distance(x, y, itakura_max_slope=0.5)
 ```
 
 ### Normalization
 
-Control whether to z-normalize series before distance computation:
+Normalize explicitly when shape rather than amplitude is the scientific target. `dtw_distance` has no `normalize` argument; it returns the accumulated squared local cost, without a final square root:
 
 ```python
-# Most elastic distances support normalization
-distance = dtw_distance(x, y, normalize=True)
+import numpy as np
+from aeon.transformations.collection import Normalizer
+
+# x and y are equal-length univariate arrays here
+xy = Normalizer().fit_transform(np.stack([x, y])[:, None, :])
+distance = dtw_distance(xy[0], xy[1])
 ```
 
 ### Distance-Specific Parameters
 
 ```python
+from aeon.distances import erp_distance, twe_distance, lcss_distance
+
 # ERP: penalty for gaps
 distance = erp_distance(x, y, g=0.5)
 
@@ -212,11 +218,11 @@ if series_aligned:
 elif need_speed:
     use_distance = "dtw"  # with window constraint
 elif temporal_shifts_expected:
-    use_distance = "dtw" or "shape_dtw"
+    use_distance = "dtw"  # compare with "shape_dtw" by validation
 elif outliers_present:
-    use_distance = "lcss" or "manhattan"
+    use_distance = "lcss"  # compare with "manhattan" by validation
 elif derivatives_matter:
-    use_distance = "ddtw" or "wddtw"
+    use_distance = "ddtw"  # compare with "wddtw" by validation
 ```
 
 ## Integration with scikit-learn
@@ -233,6 +239,8 @@ X_train_distances = dtw_pairwise_distance(X_train)
 # Use with sklearn
 clf = KNeighborsClassifier(metric='precomputed')
 clf.fit(X_train_distances, y_train)
+X_test_distances = dtw_pairwise_distance(X_test, X_train)
+predictions = clf.predict(X_test_distances)  # shape: test cases by train cases
 ```
 
 ## Available Distance Functions

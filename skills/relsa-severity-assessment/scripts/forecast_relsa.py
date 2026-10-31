@@ -1,29 +1,11 @@
 #!/usr/bin/env python3
 """foRcast — ARIMA forecasting of RELSA severity trajectories.
 
-Port of the foRcast tool of Lutscher et al. (2026), Front. Physiol. 17:1869563:
-an ARIMA model fitted per animal to its RELSA trajectory, forecasting the score
-at the next (or the humane-endpoint) time point with a 95% prediction interval,
-scored by RMSE, PICP, and MPIW.
-
-Three design choices carried over from the paper:
-
-* **Interpolation.** Animal experiments usually yield one measurement per day,
-  far short of the ~50 points classically wanted for ARIMA. The paper linearly
-  interpolates between observations at 0.1-day increments to feed the model.
-  This is a deliberate alteration: it raises autocorrelation and narrows the
-  prediction interval, buying coverage at the cost of honest uncertainty. Turn
-  it off with ``interpolate_step=None`` once continuous home-cage monitoring
-  makes it unnecessary.
-* **Direct beats indirect.** Forecasting the RELSA score itself (direct)
-  outperformed forecasting each variable and then computing RELSA from the
-  forecasts (indirect, median deviation -0.240, d = 1.42), because
-  single-parameter errors accumulate through the score. ``direct=True`` is the
-  default; the indirect path is provided for comparison.
-* **ARIMA cannot see cliffs.** The model assumes stationarity and linearity, so
-  an abrupt collapse in the last hours before an endpoint is not predictable
-  from a smooth prior trajectory — the paper's own failure case (Figure 1C).
-  Treat a forecast as a watch-list trigger, never as a licence to wait.
+Independent nonseasonal approximation of the published foRcast methodology
+(Lutscher et al., 2026, Front. Physiol. 17:1869563), using statsmodels SARIMAX.
+Predicts a score at a specified future observation time, not time-to-endpoint.
+Interpolation adds no independent information and may understate uncertainty.
+A forecast cannot override observed welfare signs or approved humane endpoints.
 """
 
 from __future__ import annotations
@@ -46,10 +28,23 @@ from _common import (  # noqa: E402
     ForecastMetrics,
     forecast_metrics,
     parse_list,
+    read_relsa_table,
+    validate,
 )
 
 DEFAULT_STEP = 0.1
 MIN_TRAIN_POINTS = 4
+
+
+def _trajectory(times, values) -> tuple[np.ndarray, np.ndarray]:
+    t, y = np.asarray(list(times), dtype=float), np.asarray(list(values), dtype=float)
+    if t.ndim != 1 or t.shape != y.shape or not np.isfinite(t).all() or np.isinf(y).any():
+        raise ValueError("times/values must be matching vectors; times finite, values finite or NaN")
+    order = np.argsort(t)
+    t, y = t[order], y[order]
+    if np.any(np.diff(t) <= 0):
+        raise ValueError("duplicate observation times")
+    return t, y
 
 
 # --------------------------------------------------------------------------- #
@@ -65,15 +60,21 @@ def interpolate_series(
     Leading and trailing missing values are dropped rather than extrapolated.
     Returns the grid times and interpolated values.
     """
-    t = np.asarray(list(times), dtype=float)
-    y = np.asarray(list(values), dtype=float)
+    t, y = _trajectory(times, values)
+    if not np.isfinite(step) or step <= 0:
+        raise ValueError("interpolation step must be finite and positive")
     ok = np.isfinite(t) & np.isfinite(y)
     t, y = t[ok], y[ok]
     if t.size < 2:
         raise ValueError("need at least 2 observed points to interpolate")
     order = np.argsort(t)
     t, y = t[order], y[order]
-    grid = np.arange(t[0], t[-1] + step / 2, step)
+    offsets = (t - t[0]) / step
+    if not np.allclose(offsets, np.round(offsets), rtol=0, atol=1e-7):
+        raise ValueError("observation times must align with the interpolation grid")
+    if offsets[-1] > 100000:
+        raise ValueError("interpolation grid exceeds 100000 steps")
+    grid = t[0] + np.arange(int(round(offsets[-1])) + 1) * step
     return grid, np.interp(grid, t, y)
 
 
@@ -93,7 +94,8 @@ class ArimaFit:
 
     def label(self) -> str:
         p, d, q = self.order
-        return f"ARIMA({p},{d},{q})" + (" with drift" if self.drift else "")
+        term = " with intercept" if d == 0 else " with drift"
+        return f"ARIMA({p},{d},{q})" + (term if self.drift else "")
 
 
 def _select_d(y: np.ndarray, max_d: int) -> int:
@@ -134,15 +136,14 @@ def _fit_one(
                 enforce_stationarity=True,
                 enforce_invertibility=True,
             )
-            res = model.fit(disp=False)
+            res = model.fit(disp=False, maxiter=200)
     except Exception:
         return None
-    aic = float(res.aic)
-    if not np.isfinite(aic):
+    aic, aicc = float(res.aic), float(res.aicc)
+    if not res.mle_retvals.get("converged", False) or not np.isfinite([aic, aicc]).all():
         return None
     n = int(res.nobs)
-    penalty = 2 * k * (k + 1) / (n - k - 1) if n - k - 1 > 0 else np.inf
-    return ArimaFit(order=order, drift=drift, aicc=aic + penalty, aic=aic,
+    return ArimaFit(order=order, drift=drift, aicc=aicc, aic=aic,
                     n_obs=n, results=res)
 
 
@@ -157,7 +158,7 @@ def auto_arima(
 ) -> ArimaFit:
     """Select an ARIMA model by minimising AICc (Hyndman–Khandakar stepwise).
 
-    Mirrors ``forecast::auto.arima``: differencing order from KPSS tests, then
+    Approximates the nonseasonal search in ``forecast::auto.arima``: KPSS, then
     four seed models — (2,d,2), (0,d,0), (1,d,0), (0,d,1) — followed by a
     hill-climb over neighbouring (p, q) and the drift term. ``stepwise=False``
     searches the full grid, which is slower and rarely changes the answer.
@@ -167,14 +168,19 @@ def auto_arima(
     limitation of the approach rather than of one implementation.
     """
     series = np.asarray(list(y), dtype=float)
-    series = series[np.isfinite(series)]
+    if series.ndim != 1 or not np.isfinite(series).all():
+        raise ValueError("ARIMA input must be a finite, regular series")
+    if any(int(v) != v or v < 0 for v in (max_p, max_q, max_d)):
+        raise ValueError("ARIMA maximum orders must be nonnegative integers")
+    if d is not None and (int(d) != d or d < 0 or d > max_d):
+        raise ValueError("d must be an integer between zero and max_d")
     if series.size < MIN_TRAIN_POINTS:
         raise ValueError(
             f"need at least {MIN_TRAIN_POINTS} finite points to fit ARIMA, got {series.size}"
         )
 
     order_d = _select_d(series, max_d) if d is None else int(d)
-    drifts = (True, False) if allow_drift else (False,)
+    drifts = (True, False) if allow_drift and order_d <= 1 else (False,)
 
     tried: dict[tuple[tuple[int, int, int], bool], ArimaFit | None] = {}
 
@@ -217,7 +223,7 @@ def auto_arima(
                     ((p, dd, q), not best.drift),
                 ]
                 for order, drift in neighbours:
-                    if drift and not allow_drift:
+                    if drift and (not allow_drift or order_d > 1):
                         continue
                     fit = attempt(order, drift)
                     if fit and fit.aicc < best.aicc - 1e-8:
@@ -227,8 +233,8 @@ def auto_arima(
 
     if not candidates:
         # Nothing converged (usually a near-constant or very short series):
-        # fall back to a random walk, which always fits.
-        fit = _fit_one(series, (0, min(1, max_d), 0), False)
+        # Try the simplest model at the selected differencing order.
+        fit = _fit_one(series, (0, order_d, 0), False)
         if fit is None:
             raise RuntimeError("no ARIMA model could be fitted to this series")
         return fit
@@ -268,6 +274,10 @@ class Forecast:
             "lower": self.lower,
             "upper": self.upper,
             "model": self.fit.label(),
+            "alpha": self.alpha,
+            "interpolated": self.interpolated,
+            "n_observed": len(self.train_times) if self.train_times is not None else None,
+            "notes": "; ".join(self.warnings),
         }
         if self.actual is not None:
             data["actual"] = self.actual
@@ -289,13 +299,18 @@ def forecast_animal(
     ``target_times`` defaults to one observation-spacing step beyond the last
     training point. With ``interpolate_step`` set, the model is fitted on the
     interpolated grid and the horizon is converted to grid steps, so targets
-    must lie on (or near) that grid.
+    must lie exactly on that grid.
 
     ``clip_at_zero`` floors the forecast and its interval at 0, since RELSA is
     non-negative by construction; the raw Gaussian interval can dip below.
     """
-    t = np.asarray(list(times), dtype=float)
-    y = np.asarray(list(values), dtype=float)
+    t, y = _trajectory(times, values)
+    if not np.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError("alpha must be between zero and one")
+    if clip_at_zero and np.any(y < 0):
+        raise ValueError("observed RELSA scores must be nonnegative")
+    if interpolate_step is not None and (not np.isfinite(interpolate_step) or interpolate_step <= 0):
+        raise ValueError("interpolate_step must be positive or None")
     ok = np.isfinite(t) & np.isfinite(y)
     t, y = t[ok], y[ok]
     order = np.argsort(t)
@@ -310,6 +325,8 @@ def forecast_animal(
         targets = np.array([t[-1] + spacing], dtype=float)
     else:
         targets = np.asarray(list(target_times), dtype=float)
+    if targets.ndim != 1 or not targets.size or not np.isfinite(targets).all():
+        raise ValueError("target times must be a nonempty finite vector")
     if np.any(targets <= t[-1]):
         raise ValueError(
             f"animal {animal!r}: target times must be after the last training point "
@@ -323,14 +340,11 @@ def forecast_animal(
         notes.append(
             f"fitted on {series.size} points interpolated at {interpolate_step} "
             f"time units from {t.size} observations; prediction intervals are "
-            "narrower than the observation density alone would justify"
+            "conditional on the interpolated series, not independent observations"
         )
     else:
         if not np.allclose(np.diff(t), spacing, rtol=1e-6, atol=1e-9):
-            notes.append(
-                "observation times are unevenly spaced and interpolation is off; "
-                "ARIMA treats them as a regular series, so horizons are approximate"
-            )
+            raise ValueError("uneven observation times require an explicit regular interpolation grid")
         series = y
         step = spacing
         origin = t[-1]
@@ -342,15 +356,18 @@ def forecast_animal(
             "interval, not the point estimate, as the message"
         )
 
+    offsets = (targets - origin) / step
+    if not np.allclose(offsets, np.round(offsets), rtol=0, atol=1e-7):
+        raise ValueError("target times must align exactly with forecast grid steps")
+    steps = int(round(offsets.max()))
+    if steps > 100000:
+        raise ValueError("forecast horizon exceeds 100000 steps")
     fit = auto_arima(series, **arima_kwargs)
-    steps = int(np.ceil((targets.max() - origin) / step - 1e-9))
-    steps = max(steps, 1)
     forecast = fit.results.get_forecast(steps=steps)  # type: ignore[union-attr]
     mean = np.asarray(forecast.predicted_mean, dtype=float)
     conf = np.asarray(forecast.conf_int(alpha=alpha), dtype=float)
-    grid_times = origin + step * np.arange(1, steps + 1)
 
-    idx = [int(np.argmin(np.abs(grid_times - target))) for target in targets]
+    idx = np.round(offsets).astype(int) - 1
     predicted, lower, upper = mean[idx], conf[idx, 0], conf[idx, 1]
     if clip_at_zero:
         predicted = np.clip(predicted, 0.0, None)
@@ -389,6 +406,13 @@ def predict_endpoint(
     compared. ``endpoints`` maps animal id to endpoint time; omit it to use each
     animal's last observed time point.
     """
+    validate(scores, [score_col])
+    if endpoints is not None:
+        unknown = set(endpoints) - set(scores[ID_COL].astype(str))
+        if unknown or not np.isfinite(list(endpoints.values())).all():
+            raise ValueError("endpoint IDs must exist and endpoint times must be finite")
+    else:
+        warnings.warn("using last observed times as evaluation targets; these are not verified humane endpoints", stacklevel=2)
     out: list[Forecast] = []
     for animal, block in scores.groupby(ID_COL, sort=False):
         block = block.dropna(subset=[score_col]).sort_values(TIME_COL)
@@ -403,7 +427,7 @@ def predict_endpoint(
         if endpoint is None:
             continue
         train = block[block[TIME_COL] < endpoint]
-        truth = block[np.isclose(block[TIME_COL], endpoint)]
+        truth = block[block[TIME_COL] == endpoint]
         if len(train) < 2:
             warnings.warn(
                 f"animal {animal}: only {len(train)} points before the endpoint, skipping",
@@ -442,7 +466,11 @@ def forecast_indirect(
     """
     from relsa_score import relsa_scores
 
+    validate(prepared, list(reference.variables))
+    if prepared[ID_COL].nunique() != 1:
+        raise ValueError("indirect forecasting requires exactly one animal")
     block = prepared.sort_values(TIME_COL)
+    animal = animal or str(block[ID_COL].iloc[0])
     train = block[block[TIME_COL] < target_time]
     row: dict[str, object] = {ID_COL: animal, TIME_COL: target_time}
     predicted_row = {ID_COL: animal, TIME_COL: target_time}
@@ -457,7 +485,8 @@ def forecast_indirect(
                 animal=f"{animal}:{var}", clip_at_zero=False, **kwargs,
             )
             predicted_row[var] = float(forecast.predicted[0])
-        except Exception:
+        except Exception as exc:
+            warnings.warn(f"indirect variable {var!r} failed: {exc}", stacklevel=2)
             predicted_row[var] = np.nan
     scored = relsa_scores(pd.DataFrame([predicted_row]), reference, keep_meta=False)
     row["predicted"] = float(scored[score_col].iloc[0])
@@ -483,8 +512,9 @@ def rolling_forecast(
     (Figure 2): at each time point, forecast the next one and record the
     deviation from what actually happened.
     """
-    t = np.asarray(list(times), dtype=float)
-    y = np.asarray(list(values), dtype=float)
+    t, y = _trajectory(times, values)
+    if min_train < 2:
+        raise ValueError("min_train must be at least two")
     rows: list[dict[str, object]] = []
     for cut in range(min_train, len(t)):
         train_t, train_y = t[:cut], y[:cut]
@@ -507,6 +537,10 @@ def rolling_forecast(
             "upper": float(forecast.upper[0]),
             "actual": float(y[cut]),
             "model": forecast.fit.label(),
+            "alpha": forecast.alpha,
+            "interpolated": forecast.interpolated,
+            "n_observed": len(forecast.train_times) if forecast.train_times is not None else cut,
+            "notes": "; ".join(forecast.warnings),
         })
     return pd.DataFrame(rows)
 
@@ -526,7 +560,7 @@ def summarize(forecasts: Sequence[Forecast], group: dict[str, str] | None = None
             "group": (group or {}).get(forecast.animal, ""),
             ID_COL: forecast.animal,
             "model": forecast.fit.label(),
-            "n": metrics.n,
+            "n": metrics.n, "n_interval": metrics.n_interval,
             "rmse": round(metrics.rmse, 4),
             "picp": round(metrics.picp, 1),
             "mpiw": round(metrics.mpiw, 3),
@@ -553,12 +587,12 @@ def summarize(forecasts: Sequence[Forecast], group: dict[str, str] | None = None
             )
             frame = pd.concat([frame, pd.DataFrame([{
                 "group": label, ID_COL: f"-- {label} --", "model": "",
-                "n": agg.n, "rmse": round(agg.rmse, 4),
+                "n": agg.n, "n_interval": agg.n_interval, "rmse": round(agg.rmse, 4),
                 "picp": round(agg.picp, 1), "mpiw": round(agg.mpiw, 3),
             }])], ignore_index=True)
     return pd.concat([frame, pd.DataFrame([{
         "group": "", ID_COL: "OVERALL", "model": "",
-        "n": overall.n, "rmse": round(overall.rmse, 4),
+        "n": overall.n, "n_interval": overall.n_interval, "rmse": round(overall.rmse, 4),
         "picp": round(overall.picp, 1), "mpiw": round(overall.mpiw, 3),
     }])], ignore_index=True)
 
@@ -593,7 +627,7 @@ def plot_forecast(
         ax.plot(forecast.times, forecast.actual, "o", color="black", ms=5)
     if endpoint_threshold is not None:
         ax.axhline(endpoint_threshold, ls="--", color="#c1453b", lw=1.2)
-        ax.annotate("individual endpoint", xy=(0.02, endpoint_threshold),
+        ax.annotate("user-supplied comparison line", xy=(0.02, endpoint_threshold),
                     xycoords=("axes fraction", "data"), xytext=(0, 4),
                     textcoords="offset points", color="#c1453b", fontsize=8)
     for zone in zones:
@@ -615,7 +649,7 @@ def plot_forecast(
 # --------------------------------------------------------------------------- #
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Forecast RELSA trajectories with ARIMA (the foRcast tool).",
+        description="Explore RELSA forecasts with nonseasonal ARIMA (foRcast-style).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("scores", help="CSV of RELSA scores (output of relsa_score.py)")
@@ -628,7 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--endpoints", metavar="ID=TIME", action="append", default=[],
         help="humane-endpoint time per animal, repeatable "
-        "(default: each animal's last time point)",
+        "(default: last-observation evaluation only, not a verified endpoint)",
     )
     parser.add_argument("--animals", help="comma-separated ids to restrict to")
     parser.add_argument(
@@ -647,18 +681,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--summary-out", help="write the metric summary to this CSV")
     parser.add_argument("--plot-dir", help="write one figure per animal into this directory")
     parser.add_argument("--endpoint-line", type=float, default=None,
-                        help="RELSA value to draw as the individual endpoint in plots")
+                        help="user-supplied comparison line; not an automatically inferred endpoint")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    frame = pd.read_csv(args.scores)
+    frame = read_relsa_table(args.scores)
     for col in (ID_COL, TIME_COL):
         if col not in frame.columns:
             raise SystemExit(f"column {col!r} missing from {args.scores}")
     if args.score_col not in frame.columns:
         raise SystemExit(f"score column {args.score_col!r} missing from {args.scores}")
+    validate(frame, [args.score_col])
 
     keep = parse_list(args.animals)
     if keep:
@@ -712,7 +747,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(table.to_string(index=False))
         print(
-            f"\nrolling one-step-ahead: n={metrics.n}  RMSE={metrics.rmse:.4f}  "
+            f"\nrolling one-step-ahead: n={metrics.n} n_interval={metrics.n_interval}  RMSE={metrics.rmse:.4f}  "
             f"PICP={metrics.picp:.1f}%  MPIW={metrics.mpiw:.3f}"
         )
         if args.out:
@@ -744,9 +779,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.plot_dir:
         directory = Path(args.plot_dir)
         directory.mkdir(parents=True, exist_ok=True)
-        for forecast in forecasts:
+        for index, forecast in enumerate(forecasts, 1):
+            safe_id = "".join(c if c.isalnum() or c in "-_." else "_" for c in forecast.animal)
             written = plot_forecast(
-                forecast, directory / f"{forecast.animal}.png",
+                forecast, directory / f"{index}-{safe_id}.png",
                 endpoint_threshold=args.endpoint_line,
             )
             print(f"wrote {written}", file=sys.stderr)

@@ -40,8 +40,8 @@ Content-Type: `application/json`
 | Field            | Required | V1  | V2  | Description                                          |
 |------------------|----------|-----|-----|------------------------------------------------------|
 | seriesid         | Yes      | Yes | Yes | Array of series IDs (max 25 v1 / 50 v2)            |
-| startyear        | Yes      | Yes | Yes | 4-digit start year                                  |
-| endyear          | Yes      | Yes | Yes | 4-digit end year                                    |
+| startyear        | No       | Yes | Yes | 4-digit start year                                  |
+| endyear          | No       | Yes | Yes | 4-digit end year                                    |
 | registrationkey  | No       | No  | Yes | API key (required for v2 features)                  |
 | catalog          | No       | No  | Yes | `true` to include series metadata                   |
 | calculations     | No       | No  | Yes | `true` to include net/pct changes                   |
@@ -127,7 +127,7 @@ BLS series IDs encode survey, seasonal adjustment, area, industry, and item info
 | LN     | Current Population Survey (Labor Force)         |
 | CE     | Current Employment Statistics                   |
 | WP     | Producer Price Index                            |
-| EI     | Employment Cost Index / National Compensation   |
+| CI     | Employment Cost Index / National Compensation   |
 | OE     | Occupational Employment & Wage Statistics       |
 | LA     | Local Area Unemployment Statistics              |
 | SM     | State and Metro Area Employment (CES)           |

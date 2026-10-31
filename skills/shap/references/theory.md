@@ -207,8 +207,13 @@ For one row:
 - the full matrix sums to the prediction difference from baseline.
 
 ```python
-interaction = explainer.shap_interaction_values(X_eval)
+interaction_explainer = shap.TreeExplainer(
+    model, model_output="raw", feature_perturbation="tree_path_dependent",
+)
+interaction = interaction_explainer.shap_interaction_values(X_eval)
 ```
+
+In 0.52.0, do not reuse an interventional/probability explainer for this operation; that path either rejects it or does not implement interactions. Each symmetric off-diagonal entry is half the pair contribution. Validate row sums against the same path-dependent ordinary SHAP values.
 
 An interaction value describes non-additivity in the fitted model under the chosen game. It does not prove biological, physical, or causal interaction.
 

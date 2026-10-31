@@ -1,10 +1,12 @@
 ---
 name: scientific-slides
-description: Build slide decks and presentations for research talks. Use this for making PowerPoint slides, conference presentations, seminar talks, research presentations, thesis defense slides, or any scientific talk. Provides slide structure, design templates, timing guidance, and visual validation. Works with PowerPoint and LaTeX Beamer.
+description: Builds slide decks and presentations for research talks. Used for making PowerPoint slides, conference presentations, seminar talks, research presentations, thesis defense slides, or any scientific talk. Provides slide structure, design templates, timing guidance, and visual validation. Works with PowerPoint and LaTeX Beamer.
 allowed-tools: Read Write Edit Bash
 license: MIT license
+compatibility: Python 3.12+; requests for OpenRouter generation, Pillow for image PDFs, PyMuPDF for rendering, pypdf and python-pptx for validation and template editing. Generation needs network and OPENROUTER_API_KEY. Beamer needs TeX Live/MiKTeX; programmatic PPTX needs Node.js and PptxGenJS; rendering PPTX for review needs LibreOffice.
 metadata:
-  version: "1.10"
+  version: "1.12"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: OPENROUTER_API_KEY
@@ -42,19 +44,22 @@ This skill should be used when:
 - Giving research talks at institutions or companies
 - Teaching or tutorial presentations on scientific topics
 
-## Slide Generation with Nano Banana Pro
+## Slide Generation with Nano Banana 2
 
-**This skill uses Nano Banana Pro AI to generate stunning presentation slides automatically.**
+The bundled image helper uses `google/gemini-3.1-flash-image` (Nano Banana 2),
+with `google/gemini-3.7-flash` for visual review. API contracts, setup, and limitations
+are in [references/script_reference.md](references/script_reference.md). Generated
+images are drafts: verify every claim, label, citation, and scientific relationship.
 
 There are two workflows depending on output format:
 
-### Default Workflow: PDF Slides (Recommended)
+### Image Workflow: PDF Slides
 
-Generate each slide as a complete image using Nano Banana Pro, then combine into a PDF. This produces the most visually stunning results.
+Generate conceptual or overview slides as complete images, then combine them into a PDF. Use editable PowerPoint or Beamer for quantitative results, exact equations, accessible text, or a user-supplied template.
 
 **How it works:**
 1. **Plan the deck**: Create a detailed plan for each slide (title, key points, visual elements)
-2. **Generate slides**: Call Nano Banana Pro for each slide to create complete slide images
+2. **Generate slides**: Call Nano Banana 2 for each slide to create complete slide images
 3. **Combine to PDF**: Assemble slide images into a single PDF presentation
 
 **Step 1: Plan Each Slide**
@@ -98,11 +103,11 @@ To ensure unified formatting across all slides in a presentation:
    - Layout approach (e.g., "generous white space, left-aligned content")
 
 2. **Always attach the previous slide** when generating subsequent slides using `--attach`:
-   - This allows Nano Banana Pro to see and match the existing style
+   - This allows Nano Banana 2 to see and match the existing style
    - Creates visual continuity throughout the deck
    - Ensures consistent colors, fonts, and design language
 
-3. **Default author is "K-Dense"** unless another name is specified
+3. **Use the supplied presenter name and affiliation**; omit them if unknown.
 
 4. **Include citations directly in the prompt** for slides that reference research:
    - Add citations in the prompt text so they appear on the generated slide
@@ -110,27 +115,17 @@ To ensure unified formatting across all slides in a presentation:
    - For multiple citations, list them all in the prompt
    - Citations should appear in small text at the bottom of the slide or near relevant content
 
-5. **Attach existing figures/data for results slides** (CRITICAL for data-driven presentations):
-   - When creating slides about results, ALWAYS check for existing figures in:
-     - The working directory (e.g., `figures/`, `results/`, `plots/`, `images/`)
-     - User-provided input files or directories
-     - Any data visualizations, charts, or graphs relevant to the presentation
-   - Use `--attach` to include these figures so Nano Banana Pro can incorporate them:
-     - Attach the actual data figure/chart for results slides
-     - Attach relevant diagrams for methodology slides
-     - Attach logos or institutional images for title slides
-   - When attaching data figures, describe what you want in the prompt:
-     - "Create a slide presenting the attached results chart with key findings highlighted"
-     - "Build a slide around this attached figure, add title and bullet points explaining the data"
-     - "Incorporate the attached graph into a results slide with interpretation"
-   - **Before generating results slides**: List files in the working directory to find relevant figures
-   - Multiple figures can be attached: `--attach fig1.png --attach fig2.png`
+5. **Preserve scientific figures as original assets**:
+   - Locate the user's figures and underlying data before composing results slides.
+   - Embed the original chart unchanged in PowerPoint/Beamer, or regenerate it deterministically from the source data.
+   - `--attach` guides the image model; it can redraw points, axes, labels, and logos. It does not paste the original pixels or guarantee quantitative fidelity.
+   - Use attachments for style or conceptual layout drafts. For final results, add the original figure and verified text with a deterministic layout tool.
 
 **Example with formatting consistency, citations, and figure attachments:**
 
 ```bash
 # Title slide (first slide - establishes the style)
-python scripts/generate_slide_image.py "Title slide for presentation: 'Machine Learning: From Theory to Practice'. Subtitle: 'AI Conference 2025'. Speaker: K-Dense. FORMATTING GOAL: Dark blue background (#1a237e), white text, gold accents (#ffc107), minimal design, sans-serif fonts, generous margins, no decorative elements." -o slides/01_title.png
+python scripts/generate_slide_image.py "Title slide for presentation: 'Machine Learning: From Theory to Practice'. Subtitle: '[Conference name and date]'. Speaker: '[Supplied presenter name]'. FORMATTING GOAL: Dark blue background (#1a237e), white text, gold accents (#ffc107), minimal design, sans-serif fonts, generous margins, no decorative elements." -o slides/01_title.png
 
 # Content slide with citations (attach previous slide for consistency)
 python scripts/generate_slide_image.py "Presentation slide titled 'Why Machine Learning Matters'. Three key points with simple icons: 1) Industry adoption, 2) Breakthrough applications, 3) Future potential. CITATIONS: Include at bottom in small text: (LeCun et al., 2015; Goodfellow et al., 2016). FORMATTING GOAL: Match attached slide style - dark blue background, white text, gold accents, minimal professional design, no visual clutter." -o slides/02_intro.png --attach slides/01_title.png
@@ -138,22 +133,17 @@ python scripts/generate_slide_image.py "Presentation slide titled 'Why Machine L
 # Background slide with multiple citations
 python scripts/generate_slide_image.py "Presentation slide titled 'Deep Learning Revolution'. Key milestones: ImageNet breakthrough (2012), transformer architecture (2017), GPT models (2018-present). CITATIONS: Show references at bottom: (Krizhevsky et al., 2012; Vaswani et al., 2017; Brown et al., 2020). FORMATTING GOAL: Match attached slide style exactly - same colors, fonts, minimal design." -o slides/03_background.png --attach slides/02_intro.png
 
-# RESULTS SLIDE - Attach actual data figure from working directory
-# First, check what figures exist: ls figures/ or ls results/
-python scripts/generate_slide_image.py "Presentation slide titled 'Model Performance Results'. Create a slide presenting the attached accuracy chart. Key findings to highlight: 1) 95% accuracy achieved, 2) Outperforms baseline by 12%, 3) Consistent across test sets. CITATIONS: Include at bottom: (Our results, 2025). FORMATTING GOAL: Match attached slide style exactly." -o slides/04_results.png --attach slides/03_background.png --attach figures/accuracy_chart.png
+# Results slides: insert figures/accuracy_chart.png as an original asset in
+# PowerPoint or Beamer, then add verified findings and citations as text.
+# The PowerPoint design guide below shows the explicit aspect-preserving geometry for this purpose.
 
-# RESULTS SLIDE - Multiple figures comparison
-python scripts/generate_slide_image.py "Presentation slide titled 'Before vs After Comparison'. Build a side-by-side comparison slide using the two attached figures. Left: baseline results, Right: our improved results. Add brief labels explaining the improvement. FORMATTING GOAL: Match attached slide style exactly." -o slides/05_comparison.png --attach slides/04_results.png --attach figures/baseline.png --attach figures/improved.png
-
-# METHODOLOGY SLIDE - Attach existing diagram
-python scripts/generate_slide_image.py "Presentation slide titled 'System Architecture'. Present the attached architecture diagram with brief explanatory bullet points: 1) Input processing, 2) Model inference, 3) Output generation. FORMATTING GOAL: Match attached slide style exactly." -o slides/06_architecture.png --attach slides/05_comparison.png --attach diagrams/system_architecture.png
+# Conceptual methodology draft; provide the diagram file before running
+python scripts/generate_slide_image.py "Presentation slide titled 'System Architecture'. Present the attached architecture diagram with brief explanatory bullet points: 1) Input processing, 2) Model inference, 3) Output generation. FORMATTING GOAL: Match attached slide style exactly." -o slides/04_architecture.png --attach slides/03_background.png --attach diagrams/system_architecture.png
 ```
 
-**IMPORTANT: Before creating results slides, always:**
-1. List files in working directory: `ls -la figures/` or `ls -la results/`
-2. Check user-provided directories for relevant figures
-3. Attach ALL relevant figures that should appear on the slide
-4. Describe how Nano Banana Pro should incorporate the attached figures
+**Before creating results slides:** find the original figure and source analysis, check labels,
+units, sample sizes and uncertainty, then embed the figure without generative redrawing.
+Numeric claims and placeholder references in these examples are illustrative, not evidence.
 
 **Prompt Template:**
 
@@ -175,12 +165,12 @@ python scripts/slides_to_pdf.py slides/*.png -o presentation.pdf
 
 ### PPT Workflow: PowerPoint with Generated Visuals
 
-When creating PowerPoint presentations, use Nano Banana Pro to generate images and figures for each slide, then add text separately using the PPTX skill.
+When creating PowerPoint presentations, use Nano Banana 2 to generate images and figures for each slide, then add text separately with PptxGenJS.
 
 **How it works:**
 1. **Plan the deck**: Create content plan for each slide
-2. **Generate visuals**: Use Nano Banana Pro with `--visual-only` flag to create images for slides
-3. **Build PPTX**: Use the PPTX skill (PptxGenJS or template-based) to create slides with generated visuals and separate text
+2. **Generate visuals**: Use Nano Banana 2 with `--visual-only` flag to create images for slides
+3. **Build PPTX**: Use PptxGenJS (or python-pptx for an existing template) to create slides with generated visuals and separate text
 
 **Step 1: Generate Visuals for Each Slide**
 
@@ -195,14 +185,14 @@ python scripts/generate_slide_image.py "Neural network architecture diagram show
 python scripts/generate_slide_image.py "Before and after comparison showing improvement: left side shows cluttered data, right side shows organized insights. Arrow connecting them. Professional business style." -o figures/results_visual.png --visual-only
 ```
 
-**Step 2: Build PowerPoint with PPTX Skill**
+**Step 2: Build PowerPoint with PptxGenJS**
 
-Use the PPTX skill's PptxGenJS workflow to create slides that include:
+Use PptxGenJS to create slides that include:
 - Generated images from step 1
 - Title and body text added separately
 - Professional layout and formatting
 
-See `skills/pptx/SKILL.md` for complete PPTX creation documentation.
+See `assets/powerpoint_design_guide.md` for the PptxGenJS and template workflows and the rendering check.
 
 ---
 
@@ -217,7 +207,7 @@ In addition to slide generation, use the **scientific-schematics** skill for tec
 
 **How to generate schematics:**
 ```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python scripts/generate_schematic.py "your diagram description" -o figures/output.png --doc-type presentation
 ```
 
 For detailed guidance on creating schematics, refer to the scientific-schematics skill documentation.
@@ -259,11 +249,8 @@ often sink a talk are catalogued in
 - Use same figures (but redesigned for slides)
 - Maintain consistent terminology
 
-**PPTX Skill**:
-- Use for PowerPoint creation and editing
-- Leverage scripts for template workflows
-- Use thumbnail generation for validation
-- Reference the PPTX skill's `SKILL.md` for programmatic creation
+**MarkItDown**:
+- Extract the text of an existing template or prior deck before reusing it (`markitdown template.pptx`)
 
 **Data Visualization**:
 - Create presentation-appropriate figures
@@ -303,7 +290,7 @@ Comprehensive guides for specific aspects:
 
 ## Quick Start Guide
 
-### For a 15-Minute Conference Talk (PDF Workflow - Recommended)
+### For a 15-Minute Conference Talk
 
 1. **Research & Plan** (45 minutes):
    - **Use research-lookup** to find 8-12 relevant papers for citations
@@ -312,13 +299,15 @@ Comprehensive guides for specific aspects:
    - **Create detailed plan for each slide** (title, key points, visual elements)
    - Target 15-18 slides
 
-2. **Generate Slides with Nano Banana Pro** (1-2 hours):
+2. **Generate Conceptual Slides with Nano Banana 2** (1-2 hours):
    
-   **Important: Use consistent formatting, attach previous slides, and include citations!**
+   Use verified citations and supplied presenter details. The commands below are
+   illustrative; use the native PowerPoint or Beamer workflow to add original
+   quantitative figures and exact results text.
    
    ```bash
-   # Title slide (establishes style - default author: K-Dense)
-   python scripts/generate_slide_image.py "Title slide: 'Your Research Title'. Conference name, K-Dense. FORMATTING GOAL: [your color scheme], minimal professional design, no decorative elements, clean and corporate." -o slides/01_title.png
+   # Title slide (establishes style - substitute the supplied presenter)
+   python scripts/generate_slide_image.py "Title slide: 'Your Research Title'. Conference name, supplied presenter name. FORMATTING GOAL: [your color scheme], minimal professional design, no decorative elements, clean and corporate." -o slides/01_title.png
    
    # Introduction slide with citations (attach previous for consistency)
    python scripts/generate_slide_image.py "Slide titled 'Why This Matters'. Three key points with simple icons. CITATIONS: Include at bottom: (Smith et al., 2023; Jones et al., 2024). FORMATTING GOAL: Match attached slide style exactly." -o slides/02_intro.png --attach slides/01_title.png
@@ -357,10 +346,10 @@ If you need editable slides (e.g., for company templates):
    ```bash
    python scripts/generate_slide_image.py "diagram description" -o figures/fig1.png --visual-only
    ```
-3. **Build PPTX** using the PPTX skill with generated images
-4. **Add text** separately using PPTX workflow
+3. **Build PPTX** with PptxGenJS using the generated images
+4. **Add text** separately as native, editable text boxes
 
-See `skills/pptx/SKILL.md` for complete PowerPoint workflow.
+See `assets/powerpoint_design_guide.md` for the complete PowerPoint workflow.
 
 ## Summary: Key Principles
 

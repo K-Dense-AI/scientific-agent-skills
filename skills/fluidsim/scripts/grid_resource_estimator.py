@@ -10,6 +10,7 @@ from typing import Any
 try:
     from ._common import (
         GIB,
+        MAX_RECORDS,
         ToolError,
         bounded_int,
         checked_input,
@@ -26,6 +27,7 @@ try:
 except ImportError:  # Direct script execution.
     from _common import (
         GIB,
+        MAX_RECORDS,
         ToolError,
         bounded_int,
         checked_input,
@@ -44,10 +46,13 @@ except ImportError:  # Direct script execution.
 TOOL = "fluidsim-grid-resource-estimator"
 
 
-def _records(t_end: float, period: float, maximum: int) -> int:
+def _records(t_end: float, period: float) -> int:
     if period <= 0:
         return 0
-    return min(maximum, int(math.floor(t_end / period + 1e-12)) + 2)
+    ratio = t_end / period
+    if not math.isfinite(ratio) or ratio > MAX_RECORDS - 2:
+        raise ToolError("predicted output records exceed the planning limit; reduce duration or save frequency")
+    return int(math.floor(ratio + 1e-12)) + 2
 
 
 def estimate(
@@ -65,7 +70,8 @@ def estimate(
     axes = ("x", "y", "z")[:dimension]
     shape = [int(oper[f"n{axis}"]) for axis in axes]
     grid_points = math.prod(shape)
-    spectral_shape = [*shape[:-1], shape[-1] // 2 + 1]
+    # Sequential FluidFFT stores physical (y, x) / (z, y, x) and reduces x.
+    spectral_shape = [*reversed(shape[1:]), shape[0] // 2 + 1]
     spectral_points = math.prod(spectral_shape)
 
     real_fields, complex_fields = STATE_FIELD_COUNTS[solver]
@@ -80,14 +86,13 @@ def estimate(
     periods = output.get("periods_save", {})
     time = parameters["time_stepping"]
     t_end = float(time["t_end"])
-    file_limit = int(config["resources"]["max_output_files"])
     state_records = (
-        _records(t_end, float(periods.get("phys_fields", 0.0)), file_limit)
+        _records(t_end, float(periods.get("phys_fields", 0.0)))
         if output.get("HAS_TO_SAVE")
         else 0
     )
     spectra_records = (
-        _records(t_end, float(periods.get("spectra", 0.0)), file_limit)
+        _records(t_end, float(periods.get("spectra", 0.0)))
         if output.get("HAS_TO_SAVE")
         else 0
     )
@@ -95,13 +100,12 @@ def estimate(
         _records(
             t_end,
             float(periods.get("spect_energy_budg", 0.0)),
-            file_limit,
         )
         if output.get("HAS_TO_SAVE")
         else 0
     )
     scalar_records = (
-        _records(t_end, float(periods.get("spatial_means", 0.0)), file_limit)
+        _records(t_end, float(periods.get("spatial_means", 0.0)))
         if output.get("HAS_TO_SAVE")
         else 0
     )
@@ -141,6 +145,11 @@ def estimate(
     memory_ok = peak_bytes <= ram_bytes
     storage_ok = storage_bytes <= disk_bytes
     files_ok = estimated_files <= int(resources["max_output_files"])
+    unmodeled = sorted(
+        name for name, period in periods.items()
+        if period > 0 and name not in {"phys_fields", "spectra", "spect_energy_budg", "spatial_means"}
+    ) if output.get("HAS_TO_SAVE") else []
+    time_bounded = bool(time["USE_T_END"])
     return {
         "assumptions": {
             "compression_ratio": compression_ratio,
@@ -150,6 +159,7 @@ def estimate(
             "safety_factor": safety_factor,
             "spectra_and_budget_layout_is_approximate": True,
             "workspace_factor": workspace_factor,
+            "unmodeled_enabled_outputs": unmodeled,
         },
         "declared_bounds": {
             "cpu_cores": resources["cpu_cores"],
@@ -184,12 +194,16 @@ def estimate(
             "storage_within_bound": storage_ok,
         },
         "notes": [
-            "This is a conservative planning envelope, not a measured FluidSim allocation.",
+            "This is an approximate planning model, not a hard memory or storage bound.",
             "FFT decomposition, backend buffers, Python overhead, diagnostics, and MPI imbalance are backend-specific.",
             "Runtime is not inferred from grid size; benchmark a tiny representative pilot on the target machine.",
             "A resource fit does not establish numerical convergence or physical validity.",
         ],
-        "ok": memory_ok and storage_ok and files_ok,
+        "ok": memory_ok and storage_ok and files_ok and time_bounded and not unmodeled,
+        "coverage": {
+            "output_model_complete": not unmodeled,
+            "time_horizon_bounded": time_bounded,
+        },
         "runtime_estimated": False,
         "solver": solver,
         "tool": TOOL,
@@ -199,7 +213,7 @@ def estimate(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Estimate a conservative FluidSim memory/storage envelope from strict "
+            "Estimate an approximate FluidSim memory/storage envelope from strict "
             "local JSON. No arrays are allocated and no package is imported."
         )
     )

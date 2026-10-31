@@ -1,11 +1,12 @@
 ---
 name: transformers
-description: Hugging Face Transformers for loading Hub models, running pipeline inference, text generation, and Trainer fine-tuning on NLP, vision, audio, and multimodal tasks. Use when working with AutoModel, pipelines, tokenizers, or TrainingArguments—not for general ML outside the Transformers library.
+description: Hugging Face Transformers for loading Hub models, running pipeline inference, text generation, and Trainer fine-tuning on NLP, vision, audio, and multimodal tasks. Applies when working with AutoModel, pipelines, tokenizers, generation configs, or TrainingArguments within Transformers.
 allowed-tools: Read Write Edit Bash
 license: Apache-2.0 license
-compatibility: Requires Python 3.10+, PyTorch 2.4+, and transformers 5.x. Gated or private Hub models need an HF token (`hf auth login` or `HF_TOKEN`).
+compatibility: Requires Python 3.10+, PyTorch 2.5+, and transformers 5.18.0; optional librosa 1.0 requires Python 3.12+. Network access for Hub downloads. Gated or private Hub models need an HF token (`hf auth login` or `HF_TOKEN`).
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
   skill-author: "K-Dense Inc."
 ---
 
@@ -17,25 +18,18 @@ The Hugging Face Transformers library provides access to thousands of pre-traine
 
 ## Installation
 
-Tested against **transformers 5.12.0** (current PyPI release; June 2026). Requires **Python 3.10+**; the `torch` extra currently requires **PyTorch 2.4+**.
+Targets **Transformers 5.18.0**, verified against its released source on 2026-10-01. Native CPU checks use Python 3.11, Torch 2.14.1, Datasets 5.0.1, Accelerate 1.15.0, PEFT 0.21.2, and Hub 1.33.0. The Torch extra requires Torch >=2.5. Install in a dedicated environment:
 
 ```bash
-uv pip install "transformers[torch]==5.12.0" huggingface_hub==1.19.0 datasets==5.0.0 evaluate==0.4.6 accelerate==1.14.0
+uv venv --python 3.11 .venv-transformers
+uv pip install --python .venv-transformers/bin/python "transformers[torch]==5.18.0" "torch==2.14.1" "huggingface-hub==1.33.0" "datasets==5.0.1" "accelerate==1.15.0" "peft==0.21.2"
 ```
 
-For vision tasks, add:
+Use `.venv-transformers/Scripts/python.exe` on Windows. Select an appropriate Torch build for the target hardware before installation. Hub 2.1.1 is newer, but Datasets 5.0.1 requires Hub <2; upgrading every package independently makes this training stack unsatisfiable. The separate `esm` SDK currently requires Transformers <5 and belongs in another environment.
 
-```bash
-uv pip install timm==1.0.27 pillow==12.2.0
-```
+Optional dependencies (install only for the selected workflow): Pillow 12.3.0 for images; torchvision matched to Torch and timm 1.0.30 for models that require them; librosa 1.0.0 and soundfile 0.14.0 for audio preprocessing (librosa requires Python >=3.12); FFmpeg for encoded audio file inputs; pytesseract plus Tesseract for OCR document pipelines; bitsandbytes 0.50.2 for supported quantization backends. See [model loading](references/models.md) before choosing precision or quantization.
 
-For audio tasks, add:
-
-```bash
-uv pip install librosa==0.11.0 soundfile==0.14.0
-```
-
-These pins are for reproducible examples. For exploratory work, loosen them only after checking the Transformers and Hub release notes for API changes.
+Verification used tiny random models, synthetic input, and local save/reload only. Hub pretrained examples throughout this skill are **illustrative**: public checkpoint metadata and configurations were reviewed, but no weights or datasets were downloaded and no hosted inference or uploads were run. Optional export/distributed/hardware paths are source-checked, not end-to-end tested. See [review evidence](references/review.md).
 
 Check your version:
 
@@ -48,7 +42,7 @@ print(transformers.__version__)
 
 Many models on the Hugging Face Hub are gated or private. Authenticate before loading them.
 
-**Recommended:** CLI login (stores token in `~/.cache/huggingface/token`):
+**Recommended:** CLI login (uses `$HF_TOKEN_PATH`, defaulting to `$HF_HOME/token`, normally `~/.cache/huggingface/token`):
 
 ```bash
 hf auth login
@@ -75,9 +69,9 @@ Use the narrowest token scope that works: `read` for private or gated model down
 
 ## Transformers v5
 
-Transformers v5 is **PyTorch-only** (TensorFlow and JAX backends were removed). For upgrades from v4, see the [v5 migration guide](https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md). New projects should pair **transformers 5.x** with **huggingface_hub 1.x**.
+Transformers v5 is **PyTorch-only** (TensorFlow and JAX backends were removed). For upgrades from v4, see the [v5 migration guide](https://github.com/huggingface/transformers/blob/v5.18.0/MIGRATION_GUIDE_V5.md). Transformers 5.18.0 accepts Hub >=1.31,<3; preserve the tighter constraint of Datasets when training.
 
-**Gated or custom architectures:** accept the model license on the Hub, then load with `trust_remote_code=True` only when the model card requires custom code you have reviewed.
+**Gated or custom architectures:** accept the model license on the Hub, then load with `trust_remote_code=True` only when required custom code has been reviewed; pin its full immutable commit with `revision` (and `code_revision` for a separate code repository). Gating and custom code are independent: a gated built-in architecture does not require remote code.
 
 **Cache location:** set `HF_HOME` for all Hugging Face caches, or `HF_HUB_CACHE` just for Hub files. Use `HF_HUB_OFFLINE=1` only after required model snapshots are already cached.
 
@@ -93,19 +87,19 @@ generator = pipeline("text-generation", model="Qwen/Qwen2.5-1.5B")
 result = generator("The future of AI is", max_new_tokens=50)
 
 # Text classification
-classifier = pipeline("text-classification")
+classifier = pipeline("text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
 result = classifier("This movie was excellent!")
 
-# Question answering
-qa = pipeline("question-answering")
-result = qa(question="What is AI?", context="AI is artificial intelligence...")
+# Generative question answering: verify responses against the supplied context.
+qa = pipeline("text-generation", model="Qwen/Qwen2.5-0.5B-Instruct")
+result = qa([{ "role": "user", "content": "Context: AI means artificial intelligence. What does AI mean?" }], max_new_tokens=32, do_sample=False)
 ```
 
 ## Core Capabilities
 
 ### 1. Pipelines for Quick Inference
 
-Use for simple, optimized inference across many tasks. Supports text generation, classification, NER, question answering, summarization, translation, image classification, object detection, audio classification, and more.
+Use for simple, optimized inference across many tasks. Supports text generation, classification, NER, image classification, object detection, audio classification, and more. In v5, `question-answering`, `summarization`, `translation*`, `text2text-generation`, `image-to-text`, and `visual-question-answering` pipelines are removed. Use direct task models when exact extractive/seq2seq semantics are needed; generative text/VLM pipelines are different tasks, not equivalent replacements.
 
 **When to use**: Quick prototyping, simple inference tasks, no custom preprocessing needed.
 
@@ -162,7 +156,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("model-id")
 model = AutoModelForCausalLM.from_pretrained("model-id", device_map="auto")
 
-inputs = tokenizer("text", return_tensors="pt")
+inputs = tokenizer("text", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=100)
 result = tokenizer.decode(outputs[0])
 ```
@@ -176,16 +170,22 @@ training_args = TrainingArguments(
     output_dir="./results",
     num_train_epochs=3,
     per_device_train_batch_size=8,
+    report_to="none",
 )
 
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
+    processing_class=tokenizer,
 )
 
 trainer.train()
 ```
+
+## Research validation
+
+Record package versions, checkpoint and dataset revisions, label order, preprocessing, split units, seeds, and generation settings. Split by patient, subject, document family, or time when observations are dependent; fit preprocessing and tune hyperparameters on training/validation data only. Report truncation and excluded records. A softmax score is not calibrated certainty, and decoding choices do not establish factual accuracy. Compare against held-out baselines and inspect failures before scientific use. Test adapters such as SHAP against the actual output shape/class order; their compatibility is not established by Transformers alone.
 
 ## Reference Documentation
 

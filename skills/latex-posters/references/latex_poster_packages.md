@@ -1,5 +1,23 @@
 # LaTeX Poster Packages: Comprehensive Comparison
 
+## Verified versions and installation
+
+Reviewed 2026-09-30 against [CTAN beamerposter 1.13](https://ctan.org/pkg/beamerposter),
+[CTAN tikzposter 2.0](https://ctan.org/pkg/tikzposter), their distributed source and
+[tikzposter manual](https://mirrors.ctan.org/graphics/pgf/contrib/tikzposter/tikzposter.pdf).
+All three bundled asset templates were compiled with pdfLaTeX (TeX Live 2025).
+The snippets below are illustrative fragments, not independently runnable documents;
+provide their packages, figures, styles, and containing environments.
+
+baposter is not supplied by the tested TeX Live installation. Its original author
+site `http://www.brian-amberg.de/uni/poster/` returned 404 and HTTPS refused connections
+at review. No current upstream release was verified. The template was tested with
+the authored class v2.0 (2011/11/26) preserved in this
+[pinned archival source mirror](https://github.com/mloesch/baposter/blob/eabd151901a0f005faf0ff06e1f3ab88773a287f/baposter.cls).
+This is a bounded compatibility target, not a new official release. Supply a trusted
+`baposter.cls` beside the project, retain its GPL notice, and record the revision.
+Do not assume `tlmgr install baposter` exists or silently substitute a different class.
+
 ## Overview
 
 Three major LaTeX packages dominate research poster creation: beamerposter, tikzposter, and baposter. Each has distinct strengths, syntax, and use cases. This guide provides detailed comparisons and practical examples.
@@ -16,7 +34,7 @@ Three major LaTeX packages dominate research poster creation: beamerposter, tikz
 | **Layout System** | Frame-based | Block-based | Box-based with grid |
 | **Multi-column** | Manual | Automatic | Automatic |
 | **Graphics Integration** | Standard includegraphics | TikZ + includegraphics | Standard + advanced |
-| **Community Support** | Large (Beamer community) | Growing | Smaller |
+| **Primary documentation** | Beamer + beamerposter docs | tikzposter manual | Legacy class source |
 | **Best For** | Traditional academic, institutional branding | Creative designs, custom graphics | Structured multi-column layouts |
 | **File Size** | Small | Medium-Large (TikZ overhead) | Medium |
 | **Compilation Speed** | Fast | Slower (TikZ processing) | Fast-Medium |
@@ -158,6 +176,7 @@ beamerposter extends the popular Beamer presentation class for poster-sized docu
   \usebeamerfont{block body}
   \begin{beamercolorbox}[colsep*=.75ex,vmode,rounded=true]{block body}
 }
+\setbeamertemplate{block end}{\end{beamercolorbox}\vskip\smallskipamount}
 ```
 
 ### Three-Column Layout
@@ -281,16 +300,16 @@ tikzposter is built on the powerful TikZ graphics package, offering modern desig
 ### Color Styles
 
 ```latex
-% Professional blue
+% Built-in Denmark style
 \usecolorstyle{Denmark}
 
-% Warm colors
+% Built-in Australia style
 \usecolorstyle{Australia}
 
-% Cool tones
+% Built-in Sweden style
 \usecolorstyle{Sweden}
 
-% Earth tones
+% Built-in Britain style
 \usecolorstyle{Britain}
 
 % Default color scheme
@@ -336,10 +355,10 @@ tikzposter is built on the powerful TikZ graphics package, offering modern desig
 \block{Title}{Content}
 
 % Specify width
-\block[width=0.8\linewidth]{Title}{Content}
+\block[titlewidthscale=0.8,bodywidthscale=0.8]{Title}{Content}
 
-% Position manually
-\block[x=10, y=50, width=30]{Title}{Content}
+% Offset title and body together; values are TeX dimensions
+\block[titleoffsetx=10mm,bodyoffsetx=10mm]{Title}{Content}
 
 % Inner blocks (nested, different styling)
 \block{Outer Title}{
@@ -374,6 +393,7 @@ tikzposter is built on the powerful TikZ graphics package, offering modern desig
   \end{tabular}
 }
 
+% Preamble: \usetikzlibrary{positioning}
 % Custom TikZ graphics
 \block{Methodology}{
   \begin{tikzpicture}
@@ -397,7 +417,7 @@ baposter (Box Area Poster) uses a box-based layout system with automatic positio
 - **Multi-column excellence**: Best-in-class column-based layouts
 - **Header/footer boxes**: Easy institutional branding
 - **Consistent spacing**: Automatic vertical and horizontal alignment
-- **Print-ready**: Excellent CMYK support
+- **Print preparation**: Colors can be defined with xcolor; the printer still determines profile and PDF/X requirements
 
 ### Disadvantages
 
@@ -490,6 +510,13 @@ baposter (Box Area Poster) uses a box-based layout system with automatic positio
 
 ### Box Positioning
 
+Declare every referenced box first. `above=bottom` alone anchors a box by its
+content height. `above=anotherbox` sets the lower edge but does not automatically
+move the upper edge; provide `row`, `below`, or `aligned` as needed and inspect for
+overlap. The asset template defines its footer before the row positioned above it.
+Blank lines inside the `poster` option list can break xkeyval parsing; use `%` lines.
+
+
 ```latex
 % Position by column and row
 \headerbox{Title}{name=box1, column=0, row=0}{Content}
@@ -541,7 +568,7 @@ baposter (Box Area Poster) uses a box-based layout system with automatic positio
   boxColorOne=white,
   boxColorTwo=blue!10,
   boxshade=plain,                % plain, shadetb, shadelr
-  textborder=roundedleft,        % none, rectangle, rounded, roundedleft, roundedright
+  textborder=roundedleft,        % none, rectangle, rounded, roundedleft, roundedsmall
   
   % Eye catcher
   eyecatcher=true
@@ -551,7 +578,7 @@ baposter (Box Area Poster) uses a box-based layout system with automatic positio
 ### Color Schemes
 
 ```latex
-% Professional blue
+% Built-in Denmark style
 \begin{poster}{
   headerColorOne=blue!80,
   headerColorTwo=blue!70,
@@ -648,38 +675,23 @@ baposter (Box Area Poster) uses a box-based layout system with automatic positio
 
 ## Compilation Tips
 
-### Faster Compilation
+### Compilation and fonts
 
 ```bash
-# Use draft mode for initial edits
-\documentclass[draft]{tikzposter}
-
-# Compile with faster engines when possible
-pdflatex -interaction=nonstopmode poster.tex
-
-# For tikzposter, use externalization to cache TikZ graphics
-\usetikzlibrary{external}
-\tikzexternalize
-```
-
-### Memory Issues
-
-```latex
-% Increase TeX memory for large posters
-% Add to poster preamble:
-\pdfminorversion=7
-\pdfobjcompresslevel=2
-```
-
-### Font Embedding
-
-```bash
-# Ensure fonts are embedded (required for printing)
-pdflatex -dEmbedAllFonts=true poster.tex
-
-# Check font embedding
+pdflatex -interaction=nonstopmode -halt-on-error poster.tex
 pdffonts poster.pdf
 ```
+
+Check `emb` for every listed font. If one is missing, rebuild the responsible LaTeX
+or imported figure with an embeddable font. `-dEmbedAllFonts=true` belongs to
+Ghostscript, not pdfLaTeX. See
+[Ghostscript's conversion documentation](https://ghostscript.readthedocs.io/en/latest/VectorDevices.html)
+before making a separate derived PDF; conversion can alter links and other content.
+
+For expensive TikZ graphics, precompile individual figures to PDF. Do not enable
+externalization blindly in a class that uses one large TikZ picture for the entire
+poster. `\pdfminorversion` and `\pdfobjcompresslevel` control PDF format/compression,
+not TeX memory. They are pdfTeX-specific, not portable memory fixes.
 
 ## Hybrid Approaches
 
@@ -723,15 +735,11 @@ You can combine strengths of different packages:
 \usepackage{subcaption}      % Subfigures
 ```
 
-## Performance Comparison
+## Performance
 
-| Package | Compile Time (A0) | PDF Size | Memory Usage |
-|---------|-------------------|----------|--------------|
-| beamerposter | ~5-10 seconds | 2-5 MB | Low |
-| tikzposter | ~15-30 seconds | 5-15 MB | Medium-High |
-| baposter | ~8-15 seconds | 3-8 MB | Medium |
-
-*Note: Times for poster with 5 figures, typical conference content*
+Compile time and PDF size depend mostly on figure complexity, embedded fonts,
+compression, and the machine. No comparative timing benchmark was run for this
+refresh; measure the actual project if performance matters.
 
 ## Conclusion
 

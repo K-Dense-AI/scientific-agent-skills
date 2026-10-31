@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/prompt-templates
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Prompt templates are Markdown snippets that expand into full prompts. Type `/name` in the editor, where `name` is the filename without `.md` (`review.md` → `/review`).
 
 ## Locations

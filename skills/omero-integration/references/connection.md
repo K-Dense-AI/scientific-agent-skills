@@ -1,6 +1,6 @@
 # Connection, Sessions, and Transport Security
 
-This reference is current for the skill snapshot dated 2026-07-23. It uses
+This reference is current for the skill snapshot dated 2026-09-30. It uses
 `omero-py==5.22.1` and the OMERO.server 5.6.18 documentation.
 
 ## Compatibility Before Credentials
@@ -18,6 +18,10 @@ For the current stable pairing:
 - Ice 3.6 is recommended; Ice 3.7 is unsupported.
 - The OMERO-linked Glencoe wheel matrix provides IcePy 3.6.5 wheels through
   Python 3.12 for documented platforms.
+
+OMERO.py 5.23.0 is the newer client release; local API checks for this refresh
+used it with IcePy 3.6.5. The historical server-tested pairing above remains
+5.22.1; a local import or CLI help check does not establish server compatibility.
 
 For a different server release, read that release's history entry and use its
 tested OMERO.py version. A newest-client/old-server pairing may appear to work
@@ -143,8 +147,13 @@ try:
         raise RuntimeError("Could not join the OMERO session")
     print(conn.getEventContext().groupId)
 finally:
-    conn.close()
+    conn.close(hard=False)  # Release this client without killing a shared session.
 ```
+
+`close()` defaults to `hard=True`, which kills the session regardless of
+reference count. Use `close(hard=False)` for a joined session and reserve hard
+closure for a session this client created. The gateway context manager uses
+hard closure, so it is unsuitable for a borrowed session.
 
 Joining a session does not make it safe to log the key. If a low-level
 `omero.client` is supplied through `BlitzGateway(client_obj=client)`, the
@@ -198,6 +207,12 @@ conn.SERVICE_OPTS.setOmeroGroup("-1")
 ```
 
 Do not set `-1` by default, and do not combine it with an unbounded query.
+Gateway methods such as `getObject()` apply `SERVICE_OPTS`; direct service
+methods do not add it automatically. Pass it as the final Ice context argument,
+for example `conn.getRoiService().findByImage(image_id, None, conn.SERVICE_OPTS)`.
+An `opts={"group": ...}` argument to `getObjects()` is not a general group
+filter. Use `SERVICE_OPTS` for the selected group.
+
 Record the original group if temporarily changing context and restore it
 before subsequent writes.
 
@@ -270,7 +285,7 @@ Generic pattern:
 ```python
 store = conn.createRawFileStore()
 try:
-    store.setFileId(original_file_id)
+    store.setFileId(original_file_id, conn.SERVICE_OPTS)
     # Perform one explicitly bounded read.
 finally:
     store.close()

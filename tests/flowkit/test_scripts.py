@@ -84,6 +84,10 @@ def test_compensation_transform_hierarchy_and_denominators(tmp_path, inputs):
     assert rows.loc["Positive", "absolute_percent"] == pytest.approx(50)
     assert rows.loc["Positive", "relative_percent"] == pytest.approx(75)
     assert json.loads(rows.loc["Positive", "gate_path"]) == ["root", "Cells"]
+    assert json.loads(rows.loc["Positive", "population_path"]) == ["root", "Cells", "Positive"]
+    assert rows.loc["Positive", "sample_event_count"] == 6
+    assert rows.loc["Positive", "parent_event_count"] == 4
+    assert bool(rows.loc["Positive", "relative_percent_defined"])
     assert manifest["samples"][0]["event_count"] == 6
     assert manifest["samples"][0]["sha256"] == hashlib.sha256(inputs[0].read_bytes()).hexdigest()
     assert manifest["definition"]["sha256"] == hashlib.sha256(inputs[1].read_bytes()).hexdigest()
@@ -151,6 +155,74 @@ def test_imported_flowjo_polygon_has_known_50_events(tmp_path):
     assert rows.loc["poly1", "count"] == 50
     assert rows.loc["poly1", "absolute_percent"] == pytest.approx(50)
     assert rows.loc["rect1", "count"] == 0
+    assert rows.loc["rect1", "parent_event_count"] == 100
+    assert rows.loc["rect1", "relative_percent"] == 0
+    assert bool(rows.loc["rect1", "relative_percent_defined"])
+
+
+def quadrant_strategy(parent_min=50, second_split=False):
+    result = fk.GatingStrategy()
+    result.add_gate(fk.gates.RectangleGate("Cells", [
+        fk.Dimension("FSC-A", range_min=parent_min, range_max=300)
+    ]), ("root",))
+    divider = fk.QuadrantDivider("split_x", "FSC-A", "uncompensated", [175])
+    for owner in (["Split", "OtherSplit"] if second_split else ["Split"]):
+        result.add_gate(fk.gates.QuadrantGate(owner, [divider], [
+            fk.gates.Quadrant("Low", ["split_x"], [(None, 175)]),
+            fk.gates.Quadrant("High", ["split_x"], [(175, None)]),
+        ]), ("root", "Cells"))
+    result.add_gate(fk.gates.RectangleGate("Leaf", [
+        fk.Dimension("FSC-A", range_min=200)
+    ]), ("root", "Cells", "Split", "High"))
+    return result
+
+
+@pytest.mark.parametrize("parent_min", [50, 1000])
+def test_quadrant_and_descendant_denominators_in_cli_report(tmp_path, inputs, parent_min):
+    sample, xml = inputs
+    with xml.open("wb") as handle:
+        fk.export_gatingml(quadrant_strategy(parent_min), handle)
+    # Released FlowKit emits a RuntimeWarning for quadrant 0/0; the exported
+    # report still needs to distinguish this from a defined zero percentage.
+    with np.errstate(invalid="ignore"):
+        _, report = run_analysis(tmp_path, (sample, xml))
+    rows = report.set_index("gate_name")
+    assert json.loads(rows.loc["High", "gate_path"]) == ["root", "Cells"]
+    assert json.loads(rows.loc["High", "population_path"]) == ["root", "Cells", "Split", "High"]
+    if parent_min == 50:
+        assert rows.loc["High", "parent_event_count"] == 4
+        assert rows.loc["High", "count"] == 2
+        assert rows.loc["High", "relative_percent"] == 50
+        assert rows.loc["Leaf", "parent_event_count"] == 2
+        assert rows.loc["Leaf", "relative_percent"] == 100
+    else:
+        assert rows.loc["Cells", "relative_percent"] == 0
+        assert bool(rows.loc["Cells", "relative_percent_defined"])
+        for name in ("High", "Low", "Leaf"):
+            assert rows.loc[name, "count"] == 0
+            assert rows.loc[name, "parent_event_count"] == 0
+            assert not bool(rows.loc[name, "relative_percent_defined"])
+            assert pd.isna(rows.loc[name, "relative_percent"])
+
+
+def test_same_quadrant_name_keeps_owner_in_population_identity(inputs):
+    sample = fk.Sample(inputs[0])
+    session = fk.Session(quadrant_strategy(second_split=True), [sample])
+    session.analyze_samples(use_mp=False)
+    report = analyze_gates.add_denominators(
+        session.get_analysis_report(), {sample.id: sample.event_count}
+    )
+    high = report.loc[report.gate_name == "High"]
+    assert set(high.population_path) == {
+        ("root", "Cells", "Split", "High"),
+        ("root", "Cells", "OtherSplit", "High"),
+    }
+    assert high.parent_event_count.tolist() == [4, 4]
+    assert report.set_index("gate_name").loc["Leaf", "parent_event_count"] == 2
+    # Document the current upstream limitation instead of asking users to
+    # trust a disambiguating path that this API cannot honor in 1.3.2.
+    with pytest.raises(ValueError, match="multiple quadrant parents"):
+        session.get_gate_membership(sample.id, "High", ("root", "Cells", "Split"))
 
 
 def test_missing_workspace_member_is_not_silently_dropped(tmp_path):

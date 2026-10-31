@@ -1,6 +1,7 @@
 # Plotting Guide
 
-Comprehensive guide for creating publication-quality visualizations from Neuropixels data.
+Targets SI 0.105.0 (reviewed 2026-10-01). Examples assume one continuous segment,
+calibrated amplitudes and computed extensions. Real-data figures are illustrative.
 
 ## Setup
 
@@ -26,8 +27,7 @@ from spikeinterface.sortingcomponents.peak_detection import detect_peaks
 from spikeinterface.sortingcomponents.peak_localization import localize_peaks
 
 noise_levels = si.get_noise_levels(recording, return_in_uV=False)
-peaks = detect_peaks(recording, method='locally_exclusive', noise_levels=noise_levels,
-                     detect_threshold=5, radius_um=50.0)
+peaks = detect_peaks(recording, method='locally_exclusive', method_kwargs={'noise_levels': noise_levels, 'detect_threshold': 5, 'radius_um': 50.0})
 peak_locations = localize_peaks(recording, peaks, method='center_of_mass')
 
 si.plot_drift_raster_map(
@@ -75,7 +75,7 @@ sw.plot_unit_waveforms(analyzer, unit_ids=[unit_id])
 plt.savefig(f'unit_{unit_id}_waveforms.png')
 
 # With density map
-sw.plot_unit_waveform_density_map(analyzer, unit_ids=[unit_id])
+sw.plot_unit_waveforms_density_map(analyzer, unit_ids=[unit_id])
 plt.savefig(f'unit_{unit_id}_density.png')
 ```
 
@@ -92,7 +92,7 @@ plt.savefig('template_comparison.png')
 
 ```python
 # Show waveforms spatially on probe
-sw.plot_unit_waveforms_on_probe(
+sw.plot_unit_waveforms(
     analyzer,
     unit_ids=[unit_id],
     plot_channels=True,
@@ -116,7 +116,7 @@ plt.savefig('quality_overview.png', dpi=300, bbox_inches='tight')
 fig, axes = plt.subplots(2, 3, figsize=(12, 8))
 
 metric_names = ['snr', 'isi_violations_ratio', 'presence_ratio',
-                'amplitude_cutoff', 'firing_rate', 'amplitude_cv']
+                'amplitude_cutoff', 'firing_rate', 'amplitude_cv_median']
 
 for ax, metric in zip(axes.flat, metric_names):
     if metric in metrics.columns:
@@ -183,10 +183,11 @@ plt.savefig(f'unit_{unit_id}_acg.png')
 ### Cross-correlograms
 
 ```python
+analyzer.compute("template_similarity")
 unit_pairs = [(0, 1), (0, 2), (1, 2)]
 sw.plot_crosscorrelograms(
     analyzer,
-    unit_pairs=unit_pairs,
+    unit_ids=sorted(set(uid for pair in unit_pairs for uid in pair)),
     window_ms=50,
     bin_ms=1,
 )
@@ -226,12 +227,13 @@ times = spike_train / fs
 
 # Compute firing rate histogram
 bin_width = 1.0  # seconds
-bins = np.arange(0, recording.get_total_duration(), bin_width)
+duration = recording.get_total_duration()
+bins = np.append(np.arange(0, duration, bin_width), duration)
 hist, _ = np.histogram(times, bins=bins)
-firing_rate = hist / bin_width
+firing_rate = hist / np.diff(bins)
 
 plt.figure(figsize=(12, 3))
-plt.bar(bins[:-1], firing_rate, width=bin_width, edgecolor='none')
+plt.bar(bins[:-1], firing_rate, width=np.diff(bins), align="edge", edgecolor='none')
 plt.xlabel('Time (s)')
 plt.ylabel('Firing rate (Hz)')
 plt.title(f'Unit {unit_id} firing rate')
@@ -338,26 +340,29 @@ plt.savefig(f'unit_{unit_id}_summary.png', dpi=300, bbox_inches='tight')
 ### Manual Multi-Panel Summary
 
 ```python
+fs = sorting.get_sampling_frequency()
 fig = plt.figure(figsize=(16, 12))
 
 # Waveforms
 ax1 = fig.add_subplot(2, 3, 1)
-wfs = analyzer.get_extension('waveforms').get_waveforms(unit_id)
+wfs = analyzer.get_extension('waveforms').get_waveforms_one_unit(unit_id)
 for i in range(min(50, wfs.shape[0])):
     ax1.plot(wfs[i, :, 0], 'k', alpha=0.1, linewidth=0.5)
 template = wfs.mean(axis=0)[:, 0]
 ax1.plot(template, 'b', linewidth=2)
 ax1.set_title('Waveforms')
 
-# Template
+# Template: choose the unit's main channel, not an arbitrary probe channel.
 ax2 = fig.add_subplot(2, 3, 2)
 templates_ext = analyzer.get_extension('templates')
 template = templates_ext.get_unit_template(unit_id, operator='average')
 template_std = templates_ext.get_unit_template(unit_id, operator='std')
-x = range(template.shape[0])
-ax2.plot(x, template[:, 0], 'b', linewidth=2)
-ax2.fill_between(x, template[:, 0] - template_std[:, 0],
-                 template[:, 0] + template_std[:, 0], alpha=0.3)
+main_channel = int(np.argmax(np.ptp(template, axis=0)))
+x = np.arange(template.shape[0]) / fs * 1000
+ax2.plot(x, template[:, main_channel], 'b', linewidth=2)
+ax2.fill_between(x, template[:, main_channel] - template_std[:, main_channel],
+                 template[:, main_channel] + template_std[:, main_channel], alpha=0.3)
+ax2.set_xlabel('Time in waveform window (ms)')
 ax2.set_title('Template')
 
 # Autocorrelogram

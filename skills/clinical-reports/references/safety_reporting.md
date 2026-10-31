@@ -29,7 +29,7 @@ E2B(R3) defines data elements and electronic transmission for individual case sa
 - replace E2A, E2D(R1), or regional rules;
 - validate clinical coding or narrative accuracy.
 
-The ICH index listed E2B(R3) Q&As at Step 5 dated 18 July 2025 when checked. Use the current implementation guide, Q&As, code lists, regional implementation guide, and receiving-system rules.
+Use the current implementation guide, Q&As, code lists, regional implementation guide, and receiving-system rules. The ICH catalogue did not expose a readable current file list during this review; the FDA implementation page independently confirms the E2B(R3) message specification and regional additions. No local script implements or validates E2B messages.
 
 ### E2D(R1) — post-approval individual cases
 
@@ -51,15 +51,19 @@ Where applicable, E2C(R2) addresses periodic benefit-risk evaluation reporting. 
 
 For applicable US IND studies, 21 CFR 312.32 controls sponsor IND safety reporting. FDA issued final sponsor and investigator safety-reporting guidances in December 2025. The sponsor guidance includes aggregate-data assessment considerations; the investigator guidance clarifies investigator-to-sponsor and IRB responsibilities.
 
-FDA’s IND safety-reporting page, current 23 June 2026 when checked, states:
+FDA’s IND safety-reporting page, checked 30 September 2026, states:
 
 - sponsors report qualifying potential serious risks under 21 CFR 312.32;
-- unexpected fatal or life-threatening suspected adverse reactions have a 7-calendar-day outer limit after the relevant sponsor determination/receipt described by the regulation;
-- other qualifying reports generally use the applicable 15-calendar-day requirement;
+- unexpected fatal or life-threatening suspected adverse reactions must be reported to FDA as soon as possible and within 7 calendar days after the sponsor’s initial receipt of the information;
+- other qualifying potential serious risks must be reported to FDA and participating investigators as soon as possible and within 15 calendar days after the sponsor determines the information qualifies;
 - as of 1 April 2026, commercial IND reports under 21 CFR 312.32(c)(1)(i) use FDA AEMS with E2B(R3), with stated exemptions for noncommercial INDs;
 - other categories described on the page use the applicable eCTD route.
 
 This summary is not a reporting clock or filing instruction. The responsible sponsor, investigator, IRB/IEC, and regulatory professionals must consult the current regulation, guidance, protocol, and procedures for each event.
+
+## US postmarketing electronic transition
+
+FDA’s AEMS electronic-submissions page permits E2B(R2) postmarketing ICSRs through **30 September 2026** and requires E2B(R3) for all ICSRs submitted through ESG NextGen beginning **1 October 2026**. This transition is distinct from the commercial IND requirement above. FDA states that Safety Reporting Portal users need take no action for this transition. These are US receiving-system requirements, not worldwide ICH effective dates. The responsible regulatory professional must verify the applicable route; this skill never transmits.
 
 ## Aggregate formatter input
 
@@ -91,7 +95,7 @@ It rejects row-level identifiers, verbatim narratives, case IDs, and onset dates
 
 ## MedDRA caveats
 
-MedDRA 29.0 (March 2026; transition date 4 May 2026) was current when this skill was refreshed. A report must use the study/sponsor-authorized dictionary version, not automatically the newest version.
+MedDRA 29.1 (September 2026) is the released version documented by the official English Introductory Guide at this review. A report must use the study/sponsor-authorized dictionary version, not automatically the newest version.
 
 State the exact version and language. Terms can change currency, names, or hierarchy across releases; codes can persist through renames. Use licensed official files and MedDRA Points to Consider. A syntax checker cannot validate coding.
 

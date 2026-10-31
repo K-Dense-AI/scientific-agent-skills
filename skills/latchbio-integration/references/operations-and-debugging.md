@@ -1,6 +1,6 @@
 # Operations, Registration, Debugging, and Execution
 
-This reference targets the current stable CLI and SDK (`latch==2.76.8`).
+This reference targets the current stable CLI and SDK (`latch==2.77.1`).
 
 ## Authenticate and Select a Workspace
 
@@ -67,8 +67,10 @@ Registration combines the project `version` with automatic content/version
 information unless disabled. Do not disable automatic versioning merely to
 force an overwrite.
 
-A duplicate workflow registration exits with status `2`. CI should distinguish
-that from status `1`, which indicates registration failure.
+An ordinary duplicate workflow registration exits with status `2`. A duplicate
+**staging** version exits with status `1`, which also covers build failures;
+inspect the diagnostic instead of applying the ordinary-registration exit-code
+rule to staging.
 
 ### Release behavior
 
@@ -80,6 +82,26 @@ Before `--mark-as-release`:
 - Confirm result links and metadata.
 - Verify the source commit is clean and reproducible.
 
+## Private Workflow Images
+
+SDK 2.77.1 supports an explicit workspace for image upload and listing:
+
+```bash
+latch image ls --workspace-id 12345
+latch image upload my-workflow:1.0 --workspace-id 12345 --yes
+```
+
+Upload expects the image to exist in the local Docker daemon. To fetch an image
+intentionally, add `--pull` and use its full trusted registry reference. Since
+2.77.0, a missing local image is no longer pulled implicitly.
+
+An upload exits `0` when the push and Latch record both succeed, `1` when the
+push fails, and `3` when the image was pushed but recording it in Latch failed.
+The record is idempotent, so retry the same reference/name/version after status
+`3`; an immutable registry tag can require a new version on retry. Preserve the
+reported digest to identify the exact uploaded image. An empty
+`latch image ls` result is a successful exit `0`; status messages use stderr.
+
 ## Staging and Development Shell
 
 Build an image without publishing a workflow version:
@@ -87,6 +109,11 @@ Build an image without publishing a workflow version:
 ```bash
 latch register --staging .
 ```
+
+In 2.77.1, the staging branch ignores `--workspace-id` and uses the active
+workspace. Select the target using `latch workspace --id 12345` before staging.
+It also does not generate entrypoints from `--nf-script` or `--snakefile`;
+prepare the version-compatible entrypoint first.
 
 Open a remote interactive shell in that image:
 
@@ -154,7 +181,7 @@ execution = launch(
     },
 )
 
-completed = asyncio.run(execution.wait())
+completed = asyncio.run(asyncio.wait_for(execution.wait(), timeout=3600))
 if completed is None:
     raise RuntimeError("execution polling ended without a result")
 if completed.status != "SUCCEEDED":
@@ -165,6 +192,13 @@ if completed.status != "SUCCEEDED":
 print(completed.output)
 print([path.path for path in completed.ingress_data])
 ```
+
+The timeout limits asynchronous polling; synchronous SDK network requests may
+exceed it. A local polling timeout does **not** cancel paid compute: retain the
+execution ID, check status in the Console, and explicitly abort only if intended.
+
+Only use this API with trusted registered workflow definitions: typed metadata
+is deserialized by the SDK, including when `best_effort=True`.
 
 `wf_name` is the registered workflow name (check `.latch/workflow_name` or the
 Console), not the human-readable metadata display name.
@@ -194,7 +228,7 @@ execution = launch_from_launch_plan(
     lp_name="Small public example",
 )
 
-completed = asyncio.run(execution.wait())
+completed = asyncio.run(asyncio.wait_for(execution.wait(), timeout=3600))
 if completed is None or completed.status != "SUCCEEDED":
     raise RuntimeError("launch-plan execution did not succeed")
 ```
@@ -205,14 +239,15 @@ if completed is None or completed.status != "SUCCEEDED":
 
 - `id`
 - `status`
-- `poll()`
+- `poll()` (a generator; calling it alone does not fetch status)
 - async `wait()`
 - `abort()`
 
 Abort only the intended active execution:
 
 ```python
-if execution.status not in {"SUCCEEDED", "FAILED", "ABORTED"}:
+next(execution.poll())  # Refresh status once; continuous polling needs a delay.
+if execution.status not in {"SUCCEEDED", "FAILED", "ABORTED", "SKIPPED", "ABORTING"}:
     execution.abort()
 ```
 
@@ -243,7 +278,7 @@ Console execution monitoring provides:
 - Provenance and result files
 - Resource monitoring
 
-The 2.76.8 CLI still provides the following deprecated command:
+The 2.77.1 CLI still provides the following deprecated command:
 
 ```bash
 latch get-executions
@@ -317,4 +352,4 @@ objects. Do not attempt to repair authentication by modifying token files.
 - Execution monitoring: https://wiki.latch.bio/workflows/sdk/console/execution-monitoring
 - Resource monitoring: https://wiki.latch.bio/workflows/sdk/console/resource-monitoring
 - Versioning: https://wiki.latch.bio/workflows/sdk/console/versioning
-- CLI source in the 2.76.8 release commit: https://github.com/latchbio/latch/blob/0faa9dcd8186444ac008f50adf95d43f0fa30e06/src/latch_cli/main.py
+- CLI source in the 2.77.1 release commit: https://github.com/latchbio/latch/blob/b3768e65c6d496868f6e530f11977d857ad85dc7/src/latch_cli/main.py

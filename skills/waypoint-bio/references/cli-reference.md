@@ -1,6 +1,9 @@
 # `waypoint` CLI reference
 
-Targets `waypoint-bio` 1.0.2 (PyPI) / 1.0.4 (GitHub main, commit `f45eee6`, 2026-07-16).
+Reviewed 2026-10-01 against `waypoint-bio` 1.0.2 (PyPI wheel) and GitHub main
+1.0.4 (`f45eee6d07a480bfc90f84ab8082bbc969dec15d`). Flags below are shared;
+export/logging differences and known failures are recorded in `upstream-review.md`.
+Hub-backed training examples are illustrative, without authenticated scientific execution.
 
 ```
 waypoint {pretrain,benchmark,finetune,embed,prepare-dataset} ...
@@ -47,7 +50,7 @@ One fixed-size vector per sample from a pretrained checkpoint. No fine-tuning, n
 | `--output` | *required* | `.parquet`, or `.csv` if the path ends in `.csv`. |
 | `--pooling` | `last_token` | `last_token`, `mean`, `first_token`, `cls_token`. |
 | `--batch_size` | `32` | |
-| `--max_length` | `512` | Truncates after ordering, so the least informative taxa are lost first. |
+| `--max_length` | `512` | Keeps at most max_length - 2 ordered entries; no guarantee discarded taxa are uninformative. |
 | `--device` | auto | `cuda`, `mps`, or `cpu`; auto-detects in that order. |
 
 Output columns are `dim_0 … dim_{H-1}`, indexed by sample ID. Hidden size `H` is 256 (6m),
@@ -84,7 +87,7 @@ split_column: null        # column holding train/validation/test; null = random 
 val_fraction: 0.1
 test_fraction: 0.1
 
-max_length: 512           # must match the checkpoint's pretraining context
+max_length: 512           # 2 <= max_length <= checkpoint n_positions
 pooling_strategy: last_token
 filter_unk_taxa: true     # drop out-of-vocabulary taxa rather than feed <unk>
 
@@ -109,22 +112,31 @@ lora_bias: none
 lora_fan_in_fan_out: true               # required for GPT-2 Conv1D layouts
 ```
 
-`num_epochs: 1` in the shipped configs is tuned for the large Compass tasks. On a few-thousand-row
-dataset one epoch is a handful of optimizer steps and the model barely moves — raise `num_epochs`
-and let `patience` stop it. Likewise `eval_steps: 400` may never fire; lower it so early stopping
+The shipped configs use `num_epochs: 1`, whereas the paper describes up to 300 fine-tuning
+epochs with early stopping. The default CLI config does not reproduce that training budget.
+On small datasets, choose enough epochs and a suitable evaluation interval for validation
+and early stopping to occur. Likewise `eval_steps: 400` may never fire; lower it so early stopping
 and best-checkpoint selection can actually work.
 
-LoRA adapters are merged back into the base transformer before saving, so `best_model/` loads with
-a plain `AutoModel.from_pretrained` and works with `waypoint embed` and `waypoint benchmark`.
+GitHub 1.0.4 merges LoRA adapters before export. PyPI 1.0.2 saves an adapter-only model when
+`use_lora: true`; plain `AutoModel.from_pretrained` cannot load that export. Keep LoRA disabled
+for the released-package workflow, or explicitly load/merge via PEFT with the original base model.
+Both versions also require a tokenizer that actually implements vocabulary serialization.
+
+The fine-tuning config `seed` affects initial RNG setup and random splits, but its value is
+not passed to `TrainingArguments` either. Explicitly wire trainer seeds for controlled repeats.
 
 ### Outputs
+
+These describe successful exports; see the tokenizer/LoRA limitations above.
 
 | Path | Contents |
 | --- | --- |
 | `best_model/` | Fine-tuned base transformer in standard HF format, plus tokenizer and `token_std_means.parquet`. |
 | `best_model/finetuned_model_state.pt` | Full torch state dict: transformer + head + covariate embedding. |
 | `validation_metrics.json`, `test_metrics.json` | Per-split scores, benchmark-equivalent. |
-| `training_log.csv`, `training_log.html` | Every row of `trainer.state.log_history`; the HTML is an interactive plotly line plot. |
+| `training_log.csv`, `training_log.html` | GitHub 1.0.4 only, when log rows exist; HTML uses Plotly from a CDN. |
+| `validation_predictions.csv`, `test_predictions.csv` | GitHub 1.0.4 only; prediction order, without original sample IDs. |
 | `finetune_results.json` | Run config, label maps, covariate map, val/test scores. |
 
 ---
@@ -143,10 +155,16 @@ a plain `AutoModel.from_pretrained` and works with `waypoint embed` and `waypoin
 `configs/benchmark.yaml` is the fine-tuning config applied identically to every task:
 `learning_rate: 3e-5`, `num_epochs: 1`, `batch_size: 64`, `warmup_steps: 1000`,
 `weight_decay: 0.001`, `patience: 5`, `pooling_strategy: last_token`, `eval_steps: 400`,
-`filter_unk_taxa: true`, `seed: 42`. Change it and your score is no longer comparable to the paper.
+`filter_unk_taxa: true`, `seed: 42`. The paper describes up to 300 fine-tuning epochs with early
+stopping, so the shipped one-epoch config already differs from the paper. Record the actual
+training budget and completed evaluation steps instead of claiming automatic comparability.
 
-The paper reports means over three independent runs. A single run is noisy; vary `--seed` and
-report the spread.
+The paper reports repeated runs. The CLI `--seed` seeds Torch/NumPy before tasks, but
+`TrainingArguments` does not receive that value and resets training randomness to its default
+42; YAML `seed` is unused here. Changing `--seed` alone does not establish independent training
+seeds. Use an explicitly reviewed local change passing the seed to the trainer for a seed study.
+Record the dataset/model revisions, package/dependency versions and hardware;
+unchanged YAML alone is not a claim to reproduce the paper.
 
 ---
 
@@ -160,7 +178,11 @@ report the spread.
 | `--max_samples` | none | Limit training samples for a quick test. |
 | `--data` | none | Local waypoint-format corpus instead of downloading Atlas. |
 
-Steps: download the Atlas `pretrain` split → build a taxonomic tokenizer from the corpus →
+**Known blocker:** both reviewed upstream versions call the local tokenizer
+`save_pretrained()` before training; it raises `NotImplementedError` because `save_vocabulary`
+is missing. A repaired tokenizer and save/reload test are prerequisites.
+
+Intended steps: download the Atlas `pretrain` split → build a taxonomic tokenizer from the corpus →
 compute per-token abundance mean/std for z-score ordering → train GPT-2 with next-token prediction
 and early stopping → save `best_model/`.
 
@@ -186,7 +208,8 @@ seed: 42
 
 ### Architectures
 
-All share `model_type: gpt2`, `n_positions: 512`, and a fixed per-head dimension of 64.
+All share `model_type: gpt2` and `n_positions: 512`. Per-head dimension is 64 except
+`gpt2-6m-mgm.yaml`, where 256 / 8 = 32.
 
 | Config | Layers | Hidden | Heads | ~Params |
 | --- | --- | --- | --- | --- |
@@ -206,5 +229,6 @@ reproducible; `gpt2-6m-mgm` isolates the effect of head count against the MGM ba
 Parameter counts exclude token and positional embeddings, so the Hub's reported sizes are larger
 (the 6m checkpoint reports ~10.1M, the 45m ~51.8M).
 
-Pretraining Atlas end to end is a multi-GPU-day job. Validate the pipeline with
-`--max_samples 5000` before committing to a full run.
+Pretraining Atlas end to end is a multi-GPU-day job. After resolving serialization, validate the pipeline with a tiny local corpus and architecture
+before a full run. `--max_samples` caps rows after `load_dataset`, so it does not bound the Atlas
+download size.

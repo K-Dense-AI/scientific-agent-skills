@@ -14,7 +14,7 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata
+from _common import add_io_args, configure_scanpy, info, load_anndata, save_anndata, compute_pca, build_neighbors, die
 
 
 def main():
@@ -37,20 +37,20 @@ def main():
     adata = load_anndata(args.input)
     info(f"Loaded {adata.n_obs} cells x {adata.n_vars} genes")
 
-    n_comps = min(args.n_comps, adata.n_vars - 1, adata.n_obs - 1)
-    sc.tl.pca(adata, n_comps=n_comps, svd_solver="arpack")
-    if not args.no_plots:
-        sc.pl.pca_variance_ratio(adata, n_pcs=n_comps, log=True,
-                                 show=False, save="_variance.png")
-
-    sc.pp.neighbors(adata, n_neighbors=args.n_neighbors, n_pcs=args.n_pcs,
-                    use_rep=args.use_rep)
+    if args.use_rep is None or args.use_rep == "X_pca":
+        n_comps = compute_pca(sc, adata, args.n_comps)
+        if not args.no_plots:
+            sc.pl.pca_variance_ratio(adata, n_pcs=n_comps, log=True,
+                                     show=False, save="_variance.png")
+    build_neighbors(sc, adata, n_neighbors=args.n_neighbors, n_pcs=args.n_pcs,
+                    use_rep=args.use_rep or "X_pca")
     info("Computing UMAP...")
     sc.tl.umap(adata)
 
     if args.tsne:
         info("Computing t-SNE...")
-        sc.tl.tsne(adata, use_rep=args.use_rep or "X_pca")
+        sc.tl.tsne(adata, use_rep=args.use_rep or "X_pca",
+                   perplexity=min(30, max(1, (adata.n_obs - 1) / 3)), random_state=0)
 
     if not args.no_plots and args.color:
         color = [c for c in args.color if c in adata.obs.columns or c in adata.var_names]

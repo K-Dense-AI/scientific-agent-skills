@@ -18,11 +18,13 @@ MAX_ROWS = 1_000
 MAX_CELL_CHARS = 8_000
 MAX_TEXT_CHARS = 20_000
 MAX_LIST_ITEMS = 500
+MAX_JSON_DEPTH = 64
 
 IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._:-]{0,95}$")
 URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 HTTPS_URL_RE = re.compile(r"^https://[^\s]+$", re.IGNORECASE)
 PARTIAL_DATE_RE = re.compile(r"^\d{4}(?:-\d{2}(?:-\d{2})?)?$")
+ISO_DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 class ValidationError(ValueError):
@@ -36,6 +38,10 @@ def _duplicate_safe_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValidationError(f"JSON object contains duplicate key: {key}")
         result[key] = value
     return result
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValidationError(f"JSON contains a nonstandard numeric constant: {value}")
 
 
 def _reject_url_like_path(raw_path: str | Path, context: str) -> None:
@@ -104,11 +110,28 @@ def read_json(raw_path: str | Path) -> Any:
     if "\x00" in text:
         raise ValidationError(f"JSON contains a NUL byte: {path}")
     try:
-        return json.loads(text, object_pairs_hook=_duplicate_safe_object)
+        payload = json.loads(
+            text,
+            object_pairs_hook=_duplicate_safe_object,
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as exc:
         raise ValidationError(
             f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
         ) from exc
+    except RecursionError as exc:
+        raise ValidationError("JSON nesting exceeds the parser limit") from exc
+    # The decoder's recursion threshold varies between Python releases.
+    # Enforce our own bound without a second recursive walk.
+    pending = [(payload, 1)]
+    while pending:
+        value, depth = pending.pop()
+        if isinstance(value, (dict, list)):
+            if depth > MAX_JSON_DEPTH:
+                raise ValidationError(f"JSON nesting exceeds {MAX_JSON_DEPTH} levels")
+            children = value.values() if isinstance(value, dict) else value
+            pending.extend((child, depth + 1) for child in children)
+    return payload
 
 
 def read_markdown(raw_path: str | Path) -> str:
@@ -328,6 +351,8 @@ def split_identifiers(
 
 def require_iso_date(value: Any, context: str) -> str:
     text = require_text(value, context, maximum=10)
+    if not ISO_DATE_RE.fullmatch(text):
+        raise ValidationError(f"{context} must be an ISO date (YYYY-MM-DD)")
     try:
         date.fromisoformat(text)
     except ValueError as exc:

@@ -3,7 +3,7 @@
 # LLM backend for skill synthesis. Detection/clustering always runs locally;
 # only redacted cluster summaries are sent to the LLM.
 #
-# Local is the default — your screen content never leaves the machine.
+# Local is the default; summaries stay local when the endpoint is loopback.
 # Cloud backends (claude, foundry) are available for users who explicitly
 # opt in; see the backend sections below.
 backend: local    # local | claude | foundry
@@ -13,17 +13,18 @@ local:
   # LM Studio exposes an OpenAI-compatible server. Start it from the
   # "Developer" tab; the default port is 1234.
   endpoint: http://localhost:1234/v1
-  # Gemma-4-31B-it is the recommended default: strong reasoning at a size
-  # most modern workstation GPUs can run. Swap for any LM Studio model ID.
-  model: Gemma-4-31B-it
+  # Load your installed model with --identifier autoskill-local, or use its
+  # exact /v1/models ID. Set LM_API_TOKEN if server auth is enabled.
+  model: autoskill-local
 
 claude:
   model: claude-opus-4-7
   # api_key read from ANTHROPIC_API_KEY env var
 
 foundry:
-  endpoint: https://foundry.example.com/anthropic
+  endpoint: https://your-resource.services.ai.azure.com/anthropic
   model: claude-opus-4-7
+  # model must be your deployment name; API-key authentication only.
   # api_key read from FOUNDRY_API_KEY env var
 
 # Screenpipe HTTP endpoint. For TLS, point this at your local Caddy proxy
@@ -36,9 +37,10 @@ screenpipe:
   # token: your-token-here
 
 # Embedding model for matching against existing scientific skills.
-# Local only; no API calls.
+# Inference is local; initial installation can download from Hugging Face.
 embeddings:
   model: sentence-transformers/all-MiniLM-L6-v2
+  local_files_only: false  # true requires a pre-existing local model/cache
 
 # Clustering thresholds.
 cluster:
@@ -46,8 +48,5 @@ cluster:
   idle_gap_minutes: 10          # new session after this much inactivity
   min_cluster_size: 2           # need this many similar sessions before proposing
 
-# Content redaction regexes applied before any cluster summary leaves
-# the local detection layer. Defense-in-depth on top of screenpipe's
-# own app/window filtering.
-redaction:
-  enabled: true
+# Local redaction is always applied to event text, app names, and titles.
+# It is defense-in-depth, not complete anonymization.

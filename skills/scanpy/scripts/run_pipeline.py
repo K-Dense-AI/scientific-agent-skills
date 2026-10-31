@@ -23,7 +23,7 @@ import argparse
 import json
 import os
 
-from _common import configure_scanpy, info, load_anndata, save_anndata
+from _common import configure_scanpy, info, load_anndata, save_anndata, prepare_counts, normalize_hvg, compute_pca, build_neighbors, die, ensure_categories, integrate_harmony
 
 
 def build_parser():
@@ -41,9 +41,10 @@ def build_parser():
     p.add_argument("--mt-threshold", type=float, default=5)
     p.add_argument("--scrublet", action="store_true")
     # normalization / HVG
+    p.add_argument("--counts-layer", default=None, help="Explicit raw-count layer instead of X")
     p.add_argument("--target-sum", type=float, default=1e4)
     p.add_argument("--n-top-genes", type=int, default=2000)
-    p.add_argument("--hvg-flavor", default="seurat", choices=["seurat", "cell_ranger", "seurat_v3"])
+    p.add_argument("--hvg-flavor", default="seurat", choices=["seurat", "cell_ranger", "seurat_v3", "seurat_v3_paper"])
     p.add_argument("--scale", action="store_true")
     p.add_argument("--regress-out", nargs="+", default=None)
     # dim reduction / clustering
@@ -54,7 +55,7 @@ def build_parser():
     p.add_argument("--batch-key", default=None)
     p.add_argument("--batch-method", default="harmony", choices=["harmony", "combat"])
     # markers
-    p.add_argument("--marker-method", default="wilcoxon")
+    p.add_argument("--marker-method", default="wilcoxon", choices=["wilcoxon", "t-test", "t-test_overestim_var"])
     p.add_argument("--skip-markers", action="store_true")
     return p
 
@@ -63,8 +64,20 @@ def apply_config(args):
     if args.config:
         with open(args.config) as fh:
             cfg = json.load(fh)
+        if not isinstance(cfg, dict):
+            die("config must be a JSON object")
         for k, v in cfg.items():
-            setattr(args, k.replace("-", "_"), v)
+            key = k.replace("-", "_")
+            if key not in vars(args) or key in {"input", "output", "config"}:
+                die(f"unknown or unsupported config option: {k}")
+            action = next(a for a in build_parser()._actions if a.dest == key)
+            if action.choices and v not in action.choices:
+                die(f"invalid config choice for {k}: {v}")
+            old = getattr(args, key)
+            if old is not None and not isinstance(v, type(old)):
+                if not (type(old) is float and type(v) is int):
+                    die(f"invalid config value type for {k}")
+            setattr(args, key, v)
     return args
 
 
@@ -74,6 +87,9 @@ def main():
 
     info("[1/8] Loading data")
     adata = load_anndata(args.input)
+    prepare_counts(adata, args.counts_layer)
+    if args.batch_key:
+        ensure_categories(adata, args.batch_key)
     adata.var_names_make_unique()
     info(f"      {adata.n_obs} cells x {adata.n_vars} genes")
 
@@ -91,27 +107,19 @@ def main():
         adata = adata[adata.obs["n_genes_by_counts"] < args.max_genes, :].copy()
     if qc_vars and "pct_counts_mt" in adata.obs.columns:
         adata = adata[adata.obs["pct_counts_mt"] < args.mt_threshold, :].copy()
+    if min(adata.shape) == 0:
+        die("QC removed all cells or genes; inspect thresholds")
     if args.scrublet:
         try:
-            sc.pp.scrublet(adata)
+            sc.pp.scrublet(adata, batch_key=args.batch_key, random_state=0)
             adata = adata[~adata.obs["predicted_doublet"], :].copy()
         except (ImportError, ValueError) as e:
-            info(f"      Scrublet skipped ({e}); install scikit-image to enable")
+            die(f"Requested Scrublet failed: {e}; check counts, capture/library groups and scikit-image")
     info(f"      {n0} -> {adata.n_obs} cells, {adata.n_vars} genes")
 
     info("[3/8] Normalize + log1p + HVG")
-    adata.layers["counts"] = adata.X.copy()
-    if args.hvg_flavor == "seurat_v3":
-        sc.pp.highly_variable_genes(adata, n_top_genes=args.n_top_genes,
-                                    flavor="seurat_v3", batch_key=args.batch_key)
-        sc.pp.normalize_total(adata, target_sum=args.target_sum)
-        sc.pp.log1p(adata)
-    else:
-        sc.pp.normalize_total(adata, target_sum=args.target_sum)
-        sc.pp.log1p(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=args.n_top_genes,
-                                    flavor=args.hvg_flavor, batch_key=args.batch_key)
-    adata.raw = adata
+    normalize_hvg(sc, adata, target_sum=args.target_sum, n_top_genes=args.n_top_genes,
+                  flavor=args.hvg_flavor, batch_key=args.batch_key)
     info(f"      {int(adata.var['highly_variable'].sum())} HVGs")
 
     info("[4/8] Scale / regress (optional)")
@@ -122,22 +130,22 @@ def main():
         sc.pp.scale(work, max_value=10)
 
     info("[5/8] PCA" + (f" + {args.batch_method} batch correction" if args.batch_key else ""))
-    sc.tl.pca(work, svd_solver="arpack")
-    sc.pl.pca_variance_ratio(work, log=True, show=False, save="_variance.png")
+    compute_pca(sc, work, args.n_pcs)
+    sc.pl.pca_variance_ratio(work, n_pcs=work.obsm["X_pca"].shape[1], log=True, show=False, save="_variance.png")
     use_rep = "X_pca"
     if args.batch_key:
         if args.batch_method == "harmony":
             try:
-                sc.external.pp.harmony_integrate(work, args.batch_key)
+                integrate_harmony(work, args.batch_key)
                 use_rep = "X_pca_harmony"
             except ImportError:
-                info("      harmonypy not installed; skipping (uv pip install harmonypy)")
+                die("Requested Harmony requires harmonypy; install it before running integration")
         else:
             sc.pp.combat(work, key=args.batch_key)
-            sc.tl.pca(work, svd_solver="arpack")
+            compute_pca(sc, work, args.n_pcs)
 
     info("[6/8] Neighbors + UMAP")
-    sc.pp.neighbors(work, n_neighbors=args.n_neighbors, n_pcs=args.n_pcs, use_rep=use_rep)
+    build_neighbors(sc, work, n_neighbors=args.n_neighbors, n_pcs=args.n_pcs, use_rep=use_rep)
     sc.tl.umap(work)
 
     info("[7/8] Leiden clustering")
@@ -149,17 +157,28 @@ def main():
     info(f"      {n_clusters} clusters at resolution {args.resolution}")
 
     # Carry embeddings/clusters back onto the full-gene object so markers use all genes.
-    adata.obs["leiden"] = work.obs["leiden"].values
+    adata.obs["leiden"] = work.obs["leiden"].copy()
     adata.obsm["X_pca"] = work.obsm["X_pca"]
     adata.obsm["X_umap"] = work.obsm["X_umap"]
     if use_rep in work.obsm:
         adata.obsm[use_rep] = work.obsm[use_rep]
+    import numpy as np
+    adata.uns["pca"] = work.uns["pca"].copy()
+    adata.uns["pca"]["params"]["mask_var"] = "highly_variable"
+    loadings = np.zeros((adata.n_vars, work.obsm["X_pca"].shape[1]), dtype=work.varm["PCs"].dtype)
+    loadings[adata.var["highly_variable"].to_numpy()] = work.varm["PCs"]
+    adata.varm["PCs"] = loadings
+    adata.uns["umap"] = work.uns["umap"].copy()
+    adata.uns["leiden"] = work.uns["leiden"].copy()
     adata.uns["neighbors"] = work.uns["neighbors"]
     adata.obsp = work.obsp
 
+    if not args.skip_markers and (n_clusters < 2 or work.obs["leiden"].value_counts().min() < 2):
+        die("marker ranking requires at least two groups with at least two cells each; tune clustering or use --skip-markers")
     if not args.skip_markers:
         info("[8/8] Marker genes")
-        sc.tl.rank_genes_groups(adata, "leiden", method=args.marker_method, use_raw=True)
+        sc.tl.rank_genes_groups(adata, "leiden", method=args.marker_method, use_raw=True,
+                                 reference="rest", corr_method="benjamini-hochberg", tie_correct=True)
         sc.pl.rank_genes_groups_dotplot(adata, n_genes=5, show=False, save="_markers_dotplot.png")
         os.makedirs(args.marker_dir, exist_ok=True)
         import pandas as pd

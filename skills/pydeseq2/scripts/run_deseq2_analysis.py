@@ -13,13 +13,17 @@ Usage:
 Requirements:
     - pydeseq2
     - pandas
-    - matplotlib (optional, for plots)
+    - matplotlib (installed by PyDESeq2; used for plots)
 """
 
 import argparse
+import csv
+import json
+from importlib.metadata import version
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 try:
@@ -31,70 +35,97 @@ except ImportError:
     sys.exit(1)
 
 
-def load_and_validate_data(counts_path, metadata_path, transpose_counts=True):
-    """Load count matrix and metadata, perform basic validation."""
-    print(f"Loading count data from {counts_path}...")
-    counts_df = pd.read_csv(counts_path, index_col=0)
+def read_indexed_csv(path):
+    """Reject ambiguous source headers before pandas can rename duplicates."""
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        reader = csv.reader(handle)
+        header = next(reader, [])
+        for line_number, row in enumerate(reader, start=2):
+            if len(row) != len(header):
+                raise ValueError(f"CSV row {line_number} has the wrong number of fields")
+    if len(header) < 2 or any(not item.strip() for item in header[1:]):
+        raise ValueError("CSV requires an identifier column and named data columns")
+    if len(set(header)) != len(header):
+        raise ValueError("CSV contains duplicate headers")
+    frame = pd.read_csv(path, dtype={0: str})
+    frame = frame.set_index(frame.columns[0])
+    for axis in (frame.index, frame.columns):
+        if axis.has_duplicates or axis.isna().any() or any(not str(x).strip() for x in axis):
+            raise ValueError("Sample, gene, and metadata identifiers must be nonempty and unique")
+    return frame
 
-    if transpose_counts:
-        print("Transposing count matrix to samples × genes format...")
-        counts_df = counts_df.T
 
-    print(f"Loading metadata from {metadata_path}...")
-    metadata = pd.read_csv(metadata_path, index_col=0)
-
-    print(f"\nData loaded:")
-    print(f"  Counts shape: {counts_df.shape} (samples × genes)")
-    print(f"  Metadata shape: {metadata.shape} (samples × variables)")
-
-    # Validate. `Index.equals` also covers a length mismatch, which element-wise
-    # comparison cannot: `index_a == index_b` raises when the two differ in
-    # length, so the intersection fallback below would never be reached.
-    if not counts_df.index.equals(metadata.index):
-        print("\nWarning: Sample indices don't match perfectly. Taking intersection...")
-        common_samples = counts_df.index.intersection(metadata.index)
-        counts_df = counts_df.loc[common_samples]
-        metadata = metadata.loc[common_samples]
-        print(f"  Using {len(common_samples)} common samples")
-
-    # Check for negative or non-integer values
-    if (counts_df < 0).any().any():
+def validate_counts(counts_df):
+    """Validate the count domain; integer-valued data do not prove raw-count provenance."""
+    if counts_df.empty:
+        raise ValueError("Count matrix must contain samples and genes")
+    try:
+        values = counts_df.to_numpy(dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Counts must be numeric") from exc
+    if not np.isfinite(values).all():
+        raise ValueError("Counts must be finite without missing values")
+    if (values < 0).any():
         raise ValueError("Count matrix contains negative values")
+    if (values != np.floor(values)).any() or (values > 2**53 - 1).any():
+        raise ValueError("Counts must be exact nonnegative integers no larger than 2**53 - 1")
+    if (values.sum(axis=1) == 0).any():
+        raise ValueError("Every sample must have positive total counts")
 
-    return counts_df, metadata
+
+def load_and_validate_data(counts_path, metadata_path, transpose_counts=True):
+    """Load explicitly oriented CSVs, require the same sample set, then align."""
+    counts_df = read_indexed_csv(counts_path)
+    if transpose_counts:
+        counts_df = counts_df.T
+    metadata = read_indexed_csv(metadata_path)
+    if set(counts_df.index) != set(metadata.index):
+        raise ValueError("Sample sets differ; resolve omissions explicitly before analysis")
+    metadata = metadata.loc[counts_df.index].copy()
+    validate_counts(counts_df)
+    print(f"[OK] Loaded {counts_df.shape[0]} samples x {counts_df.shape[1]} genes")
+    return counts_df.astype(np.int64), metadata
 
 
 def filter_data(counts_df, metadata, min_counts=10, condition_col=None):
-    """Filter low-count genes and samples with missing data."""
-    print(f"\nFiltering data...")
-
-    initial_genes = counts_df.shape[1]
-    initial_samples = counts_df.shape[0]
-
-    # Filter genes
-    genes_to_keep = counts_df.columns[counts_df.sum(axis=0) >= min_counts]
-    counts_df = counts_df[genes_to_keep]
-    genes_removed = initial_genes - counts_df.shape[1]
-    print(f"  Removed {genes_removed} genes with < {min_counts} total counts")
-
-    # Filter samples with missing condition data
-    if condition_col and condition_col in metadata.columns:
-        samples_to_keep = ~metadata[condition_col].isna()
-        counts_df = counts_df.loc[samples_to_keep]
-        metadata = metadata.loc[samples_to_keep]
-        samples_removed = initial_samples - counts_df.shape[0]
-        if samples_removed > 0:
-            print(f"  Removed {samples_removed} samples with missing '{condition_col}' data")
-
-    print(f"  Final data shape: {counts_df.shape[0]} samples × {counts_df.shape[1]} genes")
-
+    """Apply a declared total-count gene prefilter without silently excluding samples."""
+    if isinstance(min_counts, bool) or not isinstance(min_counts, (int, np.integer)) or min_counts < 0:
+        raise ValueError("min_counts must be a nonnegative integer")
+    if not counts_df.index.equals(metadata.index):
+        raise ValueError("Counts and metadata sample order must match")
+    if condition_col:
+        if condition_col not in metadata:
+            raise ValueError(f"Missing contrast column: {condition_col}")
+        if metadata[condition_col].isna().any():
+            raise ValueError("Missing contrast annotations; resolve sample exclusions explicitly")
+    validate_counts(counts_df)
+    counts_df = counts_df.loc[:, counts_df.sum(axis=0) >= min_counts].copy()
+    validate_counts(counts_df)
+    print(f"[OK] Retained {counts_df.shape[1]} genes at total counts >= {min_counts}")
     return counts_df, metadata
+
+
+def prepare_contrast_metadata(metadata, contrast):
+    """Set the CLI categorical reference before fitting, preserving all observed levels."""
+    variable, tested, reference = contrast
+    if variable not in metadata or metadata[variable].isna().any():
+        raise ValueError("Contrast variable must exist and have no missing annotations")
+    values = metadata[variable].astype(str)
+    levels = list(pd.unique(values))
+    if tested == reference or tested not in levels or reference not in levels:
+        raise ValueError("Contrast requires two distinct observed levels")
+    metadata = metadata.copy()
+    metadata[variable] = pd.Categorical(values, categories=[reference] + [x for x in levels if x != reference])
+    return metadata
 
 
 def run_deseq2(counts_df, metadata, design, n_cpus=1):
     """Run DESeq2 normalization and fitting."""
     print(f"\nInitializing DeseqDataSet with design: {design}")
 
+    validate_counts(counts_df)
+    if n_cpus < 1:
+        raise ValueError("n_cpus must be positive")
     inference = DefaultInference(n_cpus=n_cpus)
     dds = DeseqDataSet(
         counts=counts_df,
@@ -104,6 +135,14 @@ def run_deseq2(counts_df, metadata, design, n_cpus=1):
         inference=inference,
         quiet=False
     )
+
+    matrix = dds.obsm["design_matrix"]
+    if not matrix.index.equals(counts_df.index) or not np.isfinite(matrix.to_numpy()).all():
+        raise ValueError("Design matrix must retain every sample and contain finite values")
+    if np.linalg.matrix_rank(matrix.to_numpy()) != matrix.shape[1]:
+        raise ValueError("Design is not full rank; inspect confounding and redundant terms")
+    if matrix.shape[0] <= matrix.shape[1]:
+        raise ValueError("Design requires residual degrees of freedom and biological replication")
 
     print("\nRunning DESeq2 pipeline...")
     print("  Step 1/7: Computing size factors...")
@@ -121,21 +160,26 @@ def run_deseq2(counts_df, metadata, design, n_cpus=1):
     return dds, inference
 
 
-def infer_shrink_coeff(dds, contrast):
-    """Infer the formulaic coefficient name for a categorical contrast."""
-    coeff = f"{contrast[0]}[T.{contrast[1]}]"
-    design_columns = list(dds.obsm["design_matrix"].columns)
-    if coeff in design_columns:
-        return coeff
-    raise ValueError(
-        "Could not infer LFC shrinkage coefficient "
-        f"{coeff!r}. Available design columns: {design_columns}. "
-        "Pass --shrink-coeff explicitly or use --no-shrink."
-    )
+def infer_shrink_coeff(dds, contrast, coeff=None):
+    """Require the tested contrast to equal one positive design coefficient."""
+    columns = list(dds.obsm["design_matrix"].columns)
+    vector = np.asarray(dds.contrast(column=contrast[0], group_to_compare=contrast[1], baseline=contrast[2]))
+    matches = [name for i, name in enumerate(columns)
+               if np.allclose(vector, np.eye(len(columns))[i], rtol=0, atol=1e-12)]
+    if len(matches) != 1 or (coeff is not None and coeff != matches[0]):
+        raise ValueError(
+            "LFC shrinkage needs a single positive coefficient matching the exact contrast. "
+            f"Contrast vector: {vector.tolist()}; columns: {columns}. "
+            "Relevel and refit, or use --no-shrink; --shrink-coeff cannot override a mismatch."
+        )
+    return matches[0]
 
 
 def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True, inference=None, shrink_coeff=None):
     """Perform Wald tests and compute p-values."""
+    if not np.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError("alpha must be finite and between 0 and 1")
+    coeff = infer_shrink_coeff(dds, contrast, shrink_coeff) if shrink_lfc else None
     print(f"\nPerforming statistical tests...")
     print(f"  Contrast: {contrast}")
     print(f"  Significance threshold: {alpha}")
@@ -156,20 +200,21 @@ def run_statistical_tests(dds, contrast, alpha=0.05, shrink_lfc=True, inference=
     print("  Adjusting p-values (Benjamini-Hochberg)...")
 
     ds.summary()
+    ds.unshrunk_results_df = ds.results_df.copy(deep=True)
+    ds.shrink_coeff = coeff
 
     print("\n[OK] Statistical testing complete")
 
     # Optional LFC shrinkage
     if shrink_lfc:
         print("\nApplying LFC shrinkage for visualization...")
-        coeff = shrink_coeff or infer_shrink_coeff(dds, contrast)
         ds.lfc_shrink(coeff=coeff)
         print("[OK] LFC shrinkage complete")
 
     return ds
 
 
-def save_results(ds, dds, output_dir, shrink_lfc=True):
+def save_results(ds, dds, output_dir):
     """Save results and intermediate objects."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -179,10 +224,13 @@ def save_results(ds, dds, output_dir, shrink_lfc=True):
     # Save statistical results
     results_path = output_dir / "deseq2_results.csv"
     ds.results_df.to_csv(results_path)
+    unshrunk = getattr(ds, "unshrunk_results_df", ds.results_df)
+    unshrunk.to_csv(output_dir / "deseq2_results_unshrunken.csv")
     print(f"  Saved: {results_path}")
 
     # Save significant genes
-    significant = ds.results_df[ds.results_df.padj < 0.05]
+    alpha = ds.alpha
+    significant = ds.results_df[ds.results_df.padj < alpha]
     sig_path = output_dir / "significant_genes.csv"
     significant.to_csv(sig_path)
     print(f"  Saved: {sig_path} ({len(significant)} significant genes)")
@@ -198,12 +246,24 @@ def save_results(ds, dds, output_dir, shrink_lfc=True):
     dds.to_picklable_anndata().write_h5ad(dds_path)
     print(f"  Saved: {dds_path}")
 
+    manifest = {
+        "alpha": alpha,
+        "design": getattr(dds, "design", None),
+        "size_factors_fit_type_requested": getattr(dds, "size_factors_fit_type", None),
+        "retained_genes": len(ds.results_df),
+        "contrast": list(ds.contrast),
+        "shrink_coefficient": getattr(ds, "shrink_coeff", None),
+        "pvalues_and_stat": "unshrunken Wald test",
+        "versions": {name: version(name) for name in ("pydeseq2", "anndata", "numpy", "pandas")},
+    }
+    (output_dir / "analysis_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
     # Print summary
     print(f"\n{'='*60}")
     print("ANALYSIS SUMMARY")
     print(f"{'='*60}")
-    print(f"Total genes tested: {len(ds.results_df)}")
-    print(f"Significant genes (padj < 0.05): {len(significant)}")
+    print(f"Genes retained: {len(ds.results_df)}; finite p-values: {ds.results_df.pvalue.notna().sum()}")
+    print(f"Significant genes (padj < {alpha}): {len(significant)}")
     print(f"Upregulated: {len(significant[significant.log2FoldChange > 0])}")
     print(f"Downregulated: {len(significant[significant.log2FoldChange < 0])}")
     print(f"{'='*60}")
@@ -226,14 +286,17 @@ def create_plots(ds, output_dir):
 
     output_dir = Path(output_dir)
     results = ds.results_df.copy()
+    alpha = ds.alpha
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("\nGenerating plots...")
 
     # Volcano plot
-    results["-log10(padj)"] = -np.log10(results.padj.fillna(1))
+    # Missing adjusted p-values remain missing; zero p-values are capped only for display.
+    results["-log10(padj)"] = -np.log10(results.padj.clip(lower=np.finfo(float).tiny))
 
     plt.figure(figsize=(10, 6))
-    significant = results.padj < 0.05
+    significant = results.padj < alpha
     plt.scatter(
         results.loc[~significant, "log2FoldChange"],
         results.loc[~significant, "-log10(padj)"],
@@ -242,9 +305,9 @@ def create_plots(ds, output_dir):
     plt.scatter(
         results.loc[significant, "log2FoldChange"],
         results.loc[significant, "-log10(padj)"],
-        alpha=0.6, s=10, c='red', label='Significant (padj < 0.05)'
+        alpha=0.6, s=10, c='red', label=f'Significant (padj < {alpha})'
     )
-    plt.axhline(-np.log10(0.05), color='blue', linestyle='--', linewidth=1, alpha=0.5)
+    plt.axhline(-np.log10(alpha), color='blue', linestyle='--', linewidth=1, alpha=0.5)
     plt.axvline(1, color='gray', linestyle='--', linewidth=1, alpha=0.5)
     plt.axvline(-1, color='gray', linestyle='--', linewidth=1, alpha=0.5)
     plt.xlabel("Log2 Fold Change", fontsize=12)
@@ -257,17 +320,24 @@ def create_plots(ds, output_dir):
     plt.close()
     print(f"  Saved: {volcano_path}")
 
-    # MA plot
+    # MA plot: distinguish absent adjusted tests from tested nonsignificant genes.
     plt.figure(figsize=(10, 6))
+    tested_nonsignificant = (~significant) & results.padj.notna()
     plt.scatter(
-        np.log10(results.loc[~significant, "baseMean"] + 1),
-        results.loc[~significant, "log2FoldChange"],
+        np.log10(results.loc[tested_nonsignificant, "baseMean"] + 1),
+        results.loc[tested_nonsignificant, "log2FoldChange"],
         alpha=0.3, s=10, c='gray', label='Not significant'
     )
     plt.scatter(
         np.log10(results.loc[significant, "baseMean"] + 1),
         results.loc[significant, "log2FoldChange"],
-        alpha=0.6, s=10, c='red', label='Significant (padj < 0.05)'
+        alpha=0.6, s=10, c='red', label=f'Significant (padj < {alpha})'
+    )
+    missing = results.padj.isna()
+    plt.scatter(
+        np.log10(results.loc[missing, "baseMean"] + 1),
+        results.loc[missing, "log2FoldChange"],
+        alpha=0.4, s=12, c='silver', marker='x', label='No adjusted p-value'
     )
     plt.axhline(0, color='blue', linestyle='--', linewidth=1, alpha=0.5)
     plt.xlabel("Log10(Base Mean + 1)", fontsize=12)
@@ -344,6 +414,12 @@ Examples:
     parser.add_argument("--plots", action="store_true", help="Generate volcano and MA plots")
 
     args = parser.parse_args()
+    if not np.isfinite(args.alpha) or not 0 < args.alpha < 1:
+        parser.error("--alpha must be finite and between 0 and 1")
+    if args.n_cpus < 1 or args.min_counts < 0:
+        parser.error("--n-cpus must be positive and --min-counts nonnegative")
+    if args.no_shrink and args.shrink_coeff:
+        parser.error("--shrink-coeff cannot be combined with --no-shrink")
 
     # Load data
     counts_df, metadata = load_and_validate_data(
@@ -361,6 +437,8 @@ Examples:
         condition_col=condition_col,
     )
 
+    metadata = prepare_contrast_metadata(metadata, args.contrast)
+
     # Run DESeq2
     dds, inference = run_deseq2(counts_df, metadata, args.design, n_cpus=args.n_cpus)
 
@@ -375,7 +453,7 @@ Examples:
     )
 
     # Save results
-    save_results(ds, dds, args.output, shrink_lfc=not args.no_shrink)
+    save_results(ds, dds, args.output)
 
     # Create plots if requested
     if args.plots:

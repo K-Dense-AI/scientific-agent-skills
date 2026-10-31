@@ -7,10 +7,9 @@ probability density of the RELSA scores observed in a model and taking the
 scores. Two minima split the scale into three zones: normal, attention, danger.
 
 The published sepsis analysis (n = 7 mice, 239 scores) yields minima at
-RELSA = 0.337 and 0.643. The KDE here reproduces R's ``stats::density``
-defaults — Gaussian kernel, Silverman's ``bw.nrd0`` bandwidth, a 512-point grid
-extended three bandwidths past the data — so thresholds match the R workflow
-the paper used.
+RELSA = 0.337 and 0.643. This KDE uses the same Gaussian kernel, ``bw.nrd0``
+bandwidth and grid extent as R; direct SciPy evaluation differs from R's
+FFT approximation, so numerical parity is not promised.
 
 Thresholds are **model-specific and bandwidth-sensitive**, and they are not the
 severity categories of EU Directive 2010/63/EU. Report them as candidate zones
@@ -108,14 +107,14 @@ class ThresholdResult:
 
     def as_dict(self) -> dict:
         return {
-            "thresholds": [round(float(t), 4) for t in self.thresholds],
+            "thresholds": [float(t) for t in self.thresholds],
             "modes": [round(float(m), 4) for m in self.modes],
             "bandwidth": round(float(self.bandwidth), 6),
             "n": self.n,
             "zones": {
                 name: {
-                    "low": round(float(low), 4),
-                    "high": None if not np.isfinite(high) else round(float(high), 4),
+                    "low": float(low),
+                    "high": None if not np.isfinite(high) else float(high),
                     "n": self.zone_counts.get(name),
                 }
                 for name, (low, high) in zip(self.zone_names(), self.zone_edges())
@@ -133,15 +132,29 @@ def density_curve(
     from scipy.stats import gaussian_kde
 
     data = np.asarray(list(values), dtype=float)
+    if data.ndim != 1 or np.isinf(data).any():
+        raise ValueError("scores must be a vector of finite values or NaN")
     data = data[np.isfinite(data)]
     if data.size < 2:
         raise ValueError("need at least 2 finite RELSA scores")
 
-    bw = float(bandwidth) if bandwidth else bw_nrd0(data)
+    if np.any(data < 0):
+        raise ValueError("RELSA scores must be nonnegative")
+    bw = float(bandwidth) if bandwidth is not None else bw_nrd0(data)
+    if not np.isfinite(bw) or bw <= 0:
+        raise ValueError("bandwidth must be finite and positive")
+    if int(grid_size) != grid_size or grid_size < 3:
+        raise ValueError("grid_size must be an integer of at least three")
+    if not np.isfinite(cut) or cut <= 0:
+        raise ValueError("cut must be finite and positive")
     # gaussian_kde scales its factor by the sample sd, so divide it back out.
     sd = float(np.std(data, ddof=1))
-    kde = gaussian_kde(data, bw_method=bw / sd if sd > 0 else bw)
     grid = np.linspace(data.min() - cut * bw, data.max() + cut * bw, grid_size)
+    if sd == 0:
+        # A repeated constant has one Gaussian mode; SciPy covariance is singular.
+        density = np.exp(-0.5 * ((grid - data[0]) / bw) ** 2) / (bw * np.sqrt(2 * np.pi))
+        return grid, density, bw
+    kde = gaussian_kde(data, bw_method=bw / sd)
     return grid, kde(grid), bw
 
 
@@ -201,7 +214,13 @@ def find_thresholds(
     carries an empty threshold list — a real answer, meaning this cohort's
     scores form one cluster and give no data-driven place to cut.
     """
+    if n_thresholds is not None and (int(n_thresholds) != n_thresholds or n_thresholds < 0):
+        raise ValueError("n_thresholds must be a nonnegative integer")
+    if not np.isfinite(min_zone_fraction) or not 0 <= min_zone_fraction <= 1:
+        raise ValueError("min_zone_fraction must be between zero and one")
     data = np.asarray(list(values), dtype=float)
+    if data.ndim != 1 or np.isinf(data).any():
+        raise ValueError("scores must be a vector of finite values or NaN")
     data = data[np.isfinite(data)]
     grid, dens, bw = density_curve(data, bandwidth, grid_size, cut)
 

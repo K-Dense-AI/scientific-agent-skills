@@ -1,21 +1,24 @@
 ---
 name: pyzotero
-description: Interact with Zotero reference management libraries using the pyzotero Python client. Retrieve, create, update, and delete items, collections, tags, and attachments via the Zotero Web API v3. Use this skill when working with Zotero libraries programmatically, managing bibliographic references, exporting citations, searching library contents, uploading PDF attachments, or building research automation workflows that integrate with Zotero.
+description: >-
+  Manages Zotero reference libraries using the pyzotero Python client: retrieves, creates, updates, and deletes items, collections, tags, and attachments via the Zotero Web API v3 or local API. Applies when working with Zotero libraries programmatically, managing bibliographic references, exporting citations, searching library contents, uploading PDF attachments, or building research automation workflows that integrate with Zotero.
 allowed-tools: Read Write Edit Bash
 license: MIT License
-compatibility: Requires Python 3.10+ and pyzotero 1.13+. Web API access needs a Zotero API key. Optional CLI and MCP extras require Zotero 7 with local API access enabled.
+compatibility: Requires Python 3.10+ and pyzotero 1.15.2. Remote access needs network access; private reads and writes need a Zotero API key. Local reads require Zotero 7+ with local API enabled; local writes require Zotero 10+ and separate local authorization.
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-09-30"
+  upstream-version: "1.15.2"
   skill-author: K-Dense Inc.
   openclaw:
     primaryEnv: ZOTERO_API_KEY
     envVars:
     - name: ZOTERO_API_KEY
-      required: true
-      description: Zotero API key.
+      required: false
+      description: Zotero Web API key for private reads and remote writes; not needed for public or local reads.
     - name: ZOTERO_LIBRARY_ID
-      required: true
-      description: Zotero library id.
+      required: false
+      description: Remote Zotero user or group ID; local personal-library reads can use user ID 0.
     - name: ZOTERO_LIBRARY_TYPE
       required: false
       description: 'Zotero library type: ''user'' or ''group'' (default ''user'').'
@@ -25,11 +28,11 @@ metadata:
 
 Pyzotero is a Python wrapper for the [Zotero API v3](https://www.zotero.org/support/dev/web_api/v3/start). Use it to programmatically manage Zotero libraries: read items and collections, create and update references, upload attachments, manage tags, and export citations.
 
-**Current upstream:** pyzotero 1.13.0 (PyPI, May 2026). Docs: [pyzotero.readthedocs.io](https://pyzotero.readthedocs.io/en/latest/).
+**Reviewed target:** [pyzotero 1.15.2](https://pypi.org/project/pyzotero/1.15.2/) on 2026-09-30. Checked official [SDK documentation](https://pyzotero.readthedocs.io/en/latest/), release source, and [Web API contracts](https://www.zotero.org/support/dev/web_api/v3/basics). Examples requiring a private library or running Zotero are illustrative; read-only public probes and isolated SDK contract checks do not establish authenticated write success.
 
 ## Authentication Setup
 
-**Required credentials** — get from https://www.zotero.org/settings/keys:
+**For remote private reads and writes**, get credentials from https://www.zotero.org/settings/keys:
 - **User ID**: shown as "Your userID for use in API calls"
 - **API Key**: create at https://www.zotero.org/settings/keys/new
 - **Library ID**: for group libraries, the integer after `/groups/` in the group URL
@@ -46,9 +49,9 @@ See [references/authentication.md](references/authentication.md) for full setup 
 ## Installation
 
 ```bash
-uv add pyzotero              # Web API client
-uv add "pyzotero[cli]"       # + local CLI (Zotero 7)
-uv add "pyzotero[mcp]"       # + MCP server for LLM clients (Zotero 7)
+uv add "pyzotero==1.15.2"    # Reviewed Web API client
+uv add "pyzotero[cli]==1.15.2"  # + local CLI
+uv add "pyzotero[mcp]==1.15.2"  # + MCP server
 ```
 
 ## Quick Start
@@ -66,7 +69,7 @@ zot = Zotero(
 # Retrieve top-level items (returns 100 by default)
 items = zot.top(limit=10)
 for item in items:
-    print(item['data']['title'], item['data']['itemType'])
+    print(item['data'].get('title', ''), item['data']['itemType'])
 
 # Search by keyword
 results = zot.items(q='machine learning', limit=20)
@@ -80,7 +83,7 @@ all_items = zot.everything(zot.items())
 - A `Zotero` instance is bound to a single library (user or group). All methods operate on that library.
 - Item data lives in `item['data']`. Access fields like `item['data']['title']`, `item['data']['creators']`.
 - Pyzotero returns 100 items by default (API default is 25). Use `zot.everything(zot.items())` to get all items.
-- Return types are method-specific: `update_item()` reports Boolean success, while `create_items()` returns per-item creation status. Inspect its `failed`, `success`, and `unchanged` mappings and retain the input-index-to-key mapping. A truthy response dictionary does not establish that every item was created; report partial failures and retry only the failed inputs after reconciliation. See the [write-method contracts](https://pyzotero.readthedocs.io/en/latest/#creating-and-updating-items).
+- Return types are method-specific: `update_item()` reports Boolean success, while `create_items()` returns per-item creation status. Inspect its `failed`, `successful` (full saved objects), `success` (legacy keys), and `unchanged` mappings and retain the input-index-to-key mapping. A truthy response dictionary does not establish that every item was created; report partial failures and retry only the failed inputs after reconciliation. See the [write-method contracts](https://pyzotero.readthedocs.io/en/latest/#creating-and-updating-items).
 
 ## Reference Files
 
@@ -97,8 +100,8 @@ all_items = zot.everything(zot.items())
 | [references/pagination.md](references/pagination.md) | follow(), everything(), generators |
 | [references/full-text.md](references/full-text.md) | Full-text content indexing and access |
 | [references/saved-searches.md](references/saved-searches.md) | Saved search management |
-| [references/cli.md](references/cli.md) | Command-line interface (local Zotero 7) |
-| [references/mcp.md](references/mcp.md) | MCP server for LLM clients (local Zotero 7) |
+| [references/cli.md](references/cli.md) | Command-line interface (local Zotero) |
+| [references/mcp.md](references/mcp.md) | MCP server for LLM clients (local Zotero) |
 | [references/error-handling.md](references/error-handling.md) | Errors and exception handling |
 
 ## Common Patterns
@@ -114,27 +117,28 @@ zot.update_item(item)
 ```python
 template = zot.item_template('journalArticle')
 template['title'] = 'My Paper'
-template['creators'][0] = {'creatorType': 'author', 'firstName': 'Jane', 'lastName': 'Doe'}
-zot.create_items([template])
+template['creators'] = [{'creatorType': 'author', 'firstName': 'Jane', 'lastName': 'Doe'}]
+result = zot.create_items([template])
+if result.get('failed'):
+    raise RuntimeError(f"Item creation failed: {result['failed']}")
 ```
 
 ### Export as BibTeX
 ```python
-zot.add_parameters(format='bibtex')
-bibtex = zot.top(limit=50)
+bibtex = zot.top(format='bibtex', limit=50)
 # bibtex is a bibtexparser BibDatabase object
 print(bibtex.entries)
 ```
 
-### Local mode (read-only, no API key needed)
+### Local reads (no API key needed)
 ```python
-zot = Zotero(library_id='123456', library_type='user', local=True)
+zot = Zotero(library_id='0', library_type='user', local=True)
 items = zot.items()
 ```
 
-### Local Zotero 7 (CLI or MCP, no API key)
+### Local Zotero (CLI or MCP)
 
-For searching a locally running Zotero desktop app (including full-text PDF search), use the CLI or MCP server instead of the Web API. Both require Zotero 7 with local API access enabled. See [references/cli.md](references/cli.md) and [references/mcp.md](references/mcp.md).
+The CLI and MCP server search a running Zotero desktop app, including indexed PDF text, with Zotero 7+ and local API access enabled. Zotero 10+ also supports writes with a separate local API key. The MCP server exposes writes only with `--enable-writes`; permanent deletion additionally requires `--enable-deletes`. Python local writes cannot use `item_template()`; see the authentication reference. See [references/cli.md](references/cli.md) and [references/mcp.md](references/mcp.md).
 
 ## Citing Scientific Agent Skills
 

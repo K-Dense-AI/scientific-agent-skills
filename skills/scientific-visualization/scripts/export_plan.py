@@ -65,7 +65,8 @@ def build_plan(
         "publisher": publisher,
         "label": profile["label"],
         "scope": profile["scope"],
-        "profile_accessed": document["accessed"],
+        "profile_accessed": profile.get("accessed", document["accessed"]),
+        "source_status": profile.get("source_status", "reviewed"),
         "profile_phase": profile_phase,
         "requested_phase": phase,
         "phase_matches_snapshot": phase_matches,
@@ -77,6 +78,9 @@ def build_plan(
             "available": widths,
         },
         "max_height_mm": profile.get("max_height_mm"),
+        "recommended_max_height_mm": profile.get("recommended_max_height_mm"),
+        "max_height_includes_legend": profile.get("max_height_includes_legend", False),
+        "tiff_requirements": profile.get("tiff_requirements"),
         "formats": format_map.get(figure_type) if format_map else None,
         "raster_dpi": dpi_map.get(figure_type) if dpi_map else None,
         "color_modes": profile.get("color_modes"),
@@ -160,6 +164,24 @@ def validate_against_plan(
     inspected = inspect_file(input_path)
     metadata = inspected["metadata"]
     findings: list[dict[str, Any]] = []
+    if not plan.get("phase_matches_snapshot", True):
+        findings.append(_finding(
+            "submission_phase", "review", actual=plan.get("requested_phase"),
+            expected=plan.get("profile_phase"),
+            detail="Requested phase differs; these snapshot rules may not apply.",
+        ))
+    if plan.get("source_status", "reviewed") != "reviewed":
+        findings.append(_finding(
+            "source_currency", "review", actual=plan.get("source_status"),
+            expected="current target-journal instructions",
+            detail="Historical or legacy profile requires current journal verification.",
+        ))
+    if metadata.get("cropbox_differs_from_mediabox"):
+        findings.append(_finding(
+            "pdf_page_box", "review", actual="CropBox differs from MediaBox",
+            expected="confirm intended displayed/production page box",
+            detail="Width screening below uses the rotated MediaBox, not the cropped view.",
+        ))
 
     formats = plan.get("formats")
     actual_format = str(metadata.get("format", "")).lower()
@@ -230,7 +252,9 @@ def validate_against_plan(
         ):
             dpi_status = "fail"
         else:
-            dpi_status = "pass"
+            dpi_status = (
+                "review" if set(dpi_rule) == {"target"} else "pass"
+            )
         findings.append(
             _finding(
                 "effective_raster_dpi",
@@ -240,7 +264,8 @@ def validate_against_plan(
                 detail=(
                     "Calculated at the selected final width when supplied; "
                     "otherwise uses embedded DPI metadata. Upsampling is not "
-                    "evidence of added detail."
+                    "evidence of added detail. A target without a defined tolerance "
+                    "is a recommendation requiring review, not a pass threshold."
                 ),
             )
         )
@@ -294,6 +319,9 @@ def validate_against_plan(
         )
 
     max_height = plan.get("max_height_mm")
+    recommended_height = plan.get("recommended_max_height_mm")
+    if max_height is None and recommended_height is not None:
+        max_height = recommended_height
     if max_height is not None:
         findings.append(
             _finding(
@@ -302,31 +330,38 @@ def validate_against_plan(
                     "unknown"
                     if effective_height is None
                     else (
-                        "pass"
+                        ("review" if plan.get("max_height_includes_legend") else "pass")
                         if effective_height <= float(max_height)
-                        else "fail"
+                        else ("review" if recommended_height is not None else "fail")
                     )
                 ),
                 actual=effective_height,
                 expected={"max": max_height},
-                detail="Height includes the exported page/canvas, not a caption.",
+                detail=(
+                    "Measured exported page/canvas height; legends outside the file "
+                    "are not included. Recommended maxima are advisory; limits "
+                    "including an external legend require manual review."
+                ),
             )
         )
 
     pixel_range = plan.get("width_range_px_at_300_dpi")
     if pixel_range and metadata.get("width_px") is not None:
-        actual_width_px = int(metadata["width_px"])
+        # The published pixel range is a size equivalence at 300 dpi, not a
+        # cap on pixels in a valid 600 dpi image at the same physical size.
+        actual_width_px = effective_width / 25.4 * 300 if effective_width else None
         findings.append(
             _finding(
                 "pixel_width_snapshot",
                 (
-                    "pass"
-                    if int(pixel_range[0]) <= actual_width_px <= int(pixel_range[1])
-                    else "fail"
+                    "unknown" if actual_width_px is None else (
+                        "pass" if pixel_range[0] - 0.5 <= actual_width_px <= pixel_range[1] + 0.5
+                        else "fail"
+                    )
                 ),
                 actual=actual_width_px,
                 expected={"min": pixel_range[0], "max": pixel_range[1]},
-                detail="This publisher expresses its width range at 300 dpi.",
+                detail="Equivalent width at 300 dpi, computed from final physical size; half-pixel rounding tolerance.",
             )
         )
 
@@ -377,7 +412,18 @@ def validate_against_plan(
             )
         )
 
-    if metadata.get("has_alpha") is True:
+    tiff_rules = plan.get("tiff_requirements") or {}
+    if actual_format == "tiff":
+        for field, expected in tiff_rules.items():
+            actual = metadata.get(field)
+            findings.append(_finding(
+                f"tiff_{field}",
+                "unknown" if actual is None else ("pass" if actual == expected else "fail"),
+                actual=actual, expected=expected,
+                detail="Explicit TIFF property recorded by the selected publisher profile.",
+            ))
+
+    if metadata.get("has_alpha") is True and "has_alpha" not in tiff_rules:
         findings.append(
             _finding(
                 "transparency",
@@ -454,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
                             "label": profile["label"],
                             "scope": profile["scope"],
                             "phase": profile["phase"],
+                            "accessed": profile.get("accessed", document["accessed"]),
+                            "source_status": profile.get("source_status", "reviewed"),
                             "sources": profile["sources"],
                         }
                         for name, profile in sorted(document["profiles"].items())

@@ -1,12 +1,12 @@
 # Safety, Scope, and Routing
 
-Last reviewed: **2026-07-23**
+Last reviewed: **2026-10-01**
 
 ## Purpose
 
 This skill is a transcription, formatting, provenance, and process-validation aid. It accepts clinical decisions only after an authorized licensed professional has made and verified them in a current local source.
 
-The skill is not a clinical decision-support system, medical device, prescribing tool, medication checker, triage service, or patient education service.
+The intended use excludes clinical decision support, prescribing, medication checking, triage, and patient education. This description is not a regulatory classification of any deployment; qualified institutional reviewers must determine applicable requirements.
 
 ## Prohibited functions
 

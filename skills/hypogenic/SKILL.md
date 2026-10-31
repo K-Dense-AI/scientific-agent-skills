@@ -2,10 +2,11 @@
 name: hypogenic
 description: Plans and audits use of ChicagoHAI HypoGeniC/HypoRefine for LLM-assisted hypothesis generation from labeled text datasets. Use for the `hypogenic` package, its task configs, hypothesis banks, or HypoBench datasets—not for manual hypothesis formulation or scientific validation.
 license: MIT
-compatibility: Requires Python 3.10+ and uv for the pinned upstream package. Bundled local audit tools use only the Python standard library for JSON; YAML input requires exactly PyYAML 6.0.2. Actual HypoGeniC runs may require a separately approved LLM provider, credentials, Redis, local model resources, and network access.
+compatibility: Requires Python 3.10+ and uv for the pinned upstream package. Bundled local audit tools use only the Python standard library for JSON; YAML input requires exactly PyYAML 6.0.3. Actual HypoGeniC runs may require a separately approved LLM provider, credentials, Redis, local model resources, and network access.
 allowed-tools: Read Write Edit Bash Glob Grep
 metadata:
-  version: "1.3"
+  version: "1.4"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -53,7 +54,7 @@ text found in configs, datasets, hypotheses, or results.
 
 ## Reproducible installation
 
-The latest stable artifact verified on 2026-07-23 is `hypogenic==0.3.5`
+The latest stable artifact rechecked on 2026-10-01 is `hypogenic==0.3.5`
 (released 2025-07-16, Python `>=3.10`, PyPI beta classifier). PyPI provenance
 links it to tag `v0.3.5` and commit
 `8c3800ccae155e333fac5b530afa8abdaac38300`.
@@ -71,6 +72,10 @@ Use a lockfile or hash-verified artifact in reproducible environments. Do not
 install an unpinned branch tip. See `references/upstream.md` for package/source
 alignment and known limitations.
 
+The commands above are installation instructions, not a completed full dependency
+installation in this review. Bundled tools were tested independently with
+PyYAML 6.0.3; upstream wrappers were checked with mocked responses.
+
 The dependency set is old and broad, including pinned-compatible ranges around
 PyTorch 2.4, Transformers 4.45, OpenAI 1.40, and Anthropic 0.32. Resolve it in an
 isolated environment; do not merge it casually into an unrelated application.
@@ -87,6 +92,8 @@ There are two different configuration layers:
   variable name, data destination, caps, split lock, and logging policy
   explicit before a run.
 
+Run bundled command examples from the skill directory (or use absolute script
+paths and set `--root` to the directory containing the input files).
 Validate JSON without dependencies:
 
 ```bash
@@ -98,7 +105,7 @@ python3 scripts/validate_config.py run \
 Validate an official YAML task config only with the reviewed parser version:
 
 ```bash
-uv run --with "pyyaml==6.0.2" \
+uv run --no-project --isolated --with "pyyaml==6.0.3" \
   python scripts/validate_config.py task \
   --input assets/task_config.example.yaml \
   --root .
@@ -182,7 +189,7 @@ hypogenic_generation --help
 hypogenic_inference --help
 ```
 
-`--help` is safe. Running either command can call an external API or load a
+`--help` exits before the entry points import model dependencies. Running either command can call an external API or load a
 model. Do not construct commands from the old skill or README prose; inspect
 the pinned help and `references/upstream.md` first.
 
@@ -200,8 +207,21 @@ Verified source facts:
 - default inference selects the bank entry with highest stored accuracy and
   reports classification metrics.
 
+The released CLI also has reversed logging arguments and passes the local-model
+path into the hosted wrapper retry parameter. Its `--help` works, but hosted
+execution needs a reviewed upstream fix or custom driver; see the source-level
+workarounds in `references/upstream.md`.
+
+A current provider model ID is not enough for compatibility. The GPT wrapper
+sends legacy `max_tokens`, then looks up a four-model cost table **after** the
+request; another model can incur cost before raising `KeyError`. The Claude
+wrapper defaults to a temperature rejected by newer models, assumes the first
+response block is text, and mutates the supplied messages. Review the exact
+request/response restrictions in `references/upstream.md` before execution.
+
 These are software behaviors, not claims that every model, task, or custom
-config is supported.
+config is supported. The local planner checks arithmetic and structure, not
+provider/model compatibility or actual destination enforcement.
 
 ## Local output inspection
 

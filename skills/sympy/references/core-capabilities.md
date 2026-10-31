@@ -1,5 +1,8 @@
 # SymPy Core Capabilities
 
+Examples in this reference are ordered session fragments: run earlier imports and
+setup first. Tested with SymPy 1.14.0; exceptions are explicitly marked illustrative.
+
 This document covers SymPy's fundamental operations: symbolic computation basics, algebra, calculus, simplification, and equation solving.
 
 ## Creating Symbols and Basic Operations
@@ -16,8 +19,9 @@ x, y, z = symbols('x y z')
 
 **With assumptions:**
 ```python
-x = symbols('x', real=True, positive=True)
+xp = symbols('xp', positive=True)
 n = symbols('n', integer=True)
+# Keep x generic; symbols with the same name and different assumptions differ.
 ```
 
 Common assumptions: `real`, `positive`, `negative`, `integer`, `rational`, `prime`, `even`, `odd`, `complex`
@@ -57,6 +61,10 @@ expr.evalf(20)    # 2.8284271247461900976 (20 digits)
 pi.evalf(100)     # 100 digits of pi
 ```
 
+`evalf(n)` requests precision; it cannot recreate digits missing from an input
+float. For high-precision decimal input use `Float("0.1", 50)` or exact
+`Rational("0.1")`. `nsimplify` guesses exact forms; a guess is not a proof.
+
 ## Simplification
 
 SymPy provides multiple simplification functions, each with different strategies:
@@ -64,7 +72,7 @@ SymPy provides multiple simplification functions, each with different strategies
 ### General Simplification
 
 ```python
-from sympy import simplify, expand, factor, collect, cancel, trigsimp
+from sympy import simplify, expand, factor, collect, cancel, trigsimp, sin, cos
 
 # General simplification (tries multiple methods)
 simplify(sin(x)**2 + cos(x)**2)  # Returns 1
@@ -81,6 +89,10 @@ collect(x*y + x - 3 + 2*x**2 - z*x**2 + x**3, x)
 # Cancel common factors in rational expressions
 cancel((x**2 + 2*x + 1)/(x**2 + x))  # (x + 1)/x
 ```
+
+Cancelling factors preserves equality away from excluded denominator zeros; keep
+those restrictions from the original problem. `simplify` is heuristic. A symbolic
+`.equals()` or assumption predicate can return `None`, meaning undecided.
 
 ### Trigonometric Simplification
 
@@ -99,15 +111,18 @@ expand_trig(sin(x + y))  # sin(x)*cos(y) + sin(y)*cos(x)
 
 ```python
 from sympy import powsimp, powdenest, log, expand_log, logcombine
+a, b = symbols("a b")
+p, q = symbols("p q", positive=True)
 
 # Simplify powers
 powsimp(x**a * x**b)  # x**(a + b)
 
 # Expand logarithms
-expand_log(log(x*y))  # log(x) + log(y)
+expand_log(log(p*q))  # log(p) + log(q); positive arguments justify the identity
 
 # Combine logarithms
-logcombine(log(x) + log(y))  # log(x*y)
+logcombine(log(p) + log(q))  # log(p*q)
+# Generic complex x, y do not justify these logarithm identities.
 ```
 
 ## Calculus
@@ -136,7 +151,7 @@ d.doit()  # Evaluates to 2*x
 
 **Indefinite integrals:**
 ```python
-from sympy import integrate
+from sympy import integrate, exp, sin
 
 integrate(x**2, x)           # x**3/3
 integrate(exp(x)*sin(x), x)  # exp(x)*sin(x)/2 - exp(x)*cos(x)/2
@@ -156,8 +171,12 @@ integrate(sin(x), (x, 0, pi))  # 2
 
 **Multiple integrals:**
 ```python
-integrate(x*y, (x, 0, 1), (y, 0, x))  # 1/12
+integrate(x*y, (y, 0, x), (x, 0, 1))  # 1/8; inner integral comes first
 ```
+
+An unevaluated `Integral` means SymPy did not produce a closed form. Parameter
+conditions, convergence and singularities must still be checked. Nested limits
+are applied left to right, from inner to outer.
 
 **Numerical integration (when symbolic fails):**
 ```python
@@ -207,7 +226,7 @@ f = Function('f')
 
 # Approximate derivative using finite differences
 differentiate_finite(f(x), x)
-f(x).as_finite_difference()
+f(x).diff(x).as_finite_difference()
 ```
 
 ## Equation Solving
@@ -231,7 +250,10 @@ solveset(x**2 - 1, x, domain=S.Reals)  # {-1, 1}
 solveset(x**2 + 1, x, domain=S.Reals)  # EmptySet (no real solutions)
 ```
 
-**Return types:** Finite sets, intervals, or image sets
+**Return types:** Sets such as `FiniteSet`, `ImageSet`, `Union`, `EmptySet`, or
+`ConditionSet`. `ConditionSet` is unresolved, not empty. The `domain` argument
+controls `solveset`, independently of assumptions on the solved symbol. Do not
+convert an infinite/unresolved set to a list or describe it as no solutions.
 
 ### Systems of Equations
 
@@ -258,7 +280,9 @@ from sympy import nonlinsolve
 nonlinsolve([x**2 + y - 2, x + y**2 - 3], x, y)
 ```
 
-**Note:** Currently nonlinsolve doesn't return solutions in form of LambertW.
+`nonlinsolve` can leave conditional or parametrized results and does not cover
+all transcendental systems (including some LambertW cases). `nsolve` finds a
+local numerical root; check the residual and domain and retain the initial guess.
 
 ### Polynomial Roots
 
@@ -268,6 +292,8 @@ from sympy import roots, solve
 # Get roots with multiplicities
 roots(x**3 - 6*x**2 + 9*x, x)  # {0: 1, 3: 2}
 # Means x=0 (multiplicity 1), x=3 (multiplicity 2)
+# For higher-degree polynomials, roots() may be incomplete. Check the sum
+# of multiplicities against degree, or use Poly(...).all_roots() for CRootOf.
 ```
 
 ### General Solver - solve
@@ -276,7 +302,9 @@ More flexible alternative for transcendental equations:
 ```python
 from sympy import solve, exp, log
 
-solve(exp(x) - 3, x)     # [log(3)]
+xr = symbols("xr", real=True)
+solve(exp(xr) - 3, xr)   # [log(3)]; real domain
+# For generic complex x use solveset: exp(x)=3 has infinitely many roots.
 solve(x**2 - 4, x)       # [-2, 2]
 solve([x + y - 1, x - y + 1], [x, y])  # {x: 0, y: 1}
 ```
@@ -340,7 +368,7 @@ y_vals = f(x_vals)
 
 ### Pattern 4: Pretty Printing
 ```python
-from sympy import init_printing, pprint
+from sympy import init_printing, pprint, Integral
 init_printing()  # Enable pretty printing in terminal/notebook
 
 expr = Integral(sqrt(1/x), x)

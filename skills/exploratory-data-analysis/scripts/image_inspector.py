@@ -99,7 +99,10 @@ def _inspect_pillow(path: Path) -> dict[str, Any]:
                 }
     except CliError:
         raise
-    except (OSError, ValueError, SyntaxError, Image.DecompressionBombWarning) as exc:
+    except (
+        OSError, ValueError, SyntaxError,
+        Image.DecompressionBombWarning, Image.DecompressionBombError,
+    ) as exc:
         raise CliError("the image metadata could not be inspected safely") from exc
     finally:
         Image.MAX_IMAGE_PIXELS = previous_limit
@@ -110,14 +113,19 @@ def _inspect_tiff(path: Path) -> dict[str, Any]:
         import tifffile
     except ImportError as exc:
         raise CliError(
-            'optional dependency missing; install with: uv pip install "tifffile==2026.7.14"'
+            'optional dependency missing; install with: uv pip install "tifffile==2026.9.20"'
         ) from exc
     try:
-        with tifffile.TiffFile(path) as tiff:
+        # Generic series avoid metadata-driven OME/vendor companion discovery.
+        # _multifile is a pinned upstream internal safeguard, not a public API.
+        with tifffile.TiffFile(path, _multifile=False) as tiff:
             pages = list(itertools.islice(tiff.pages, MAX_TIFF_PAGES + 1))
             if len(pages) > MAX_TIFF_PAGES:
                 raise CliError("TIFF page count exceeds the safety limit")
-            series_items = list(tiff.series[: MAX_TIFF_SERIES + 1])
+            subifd_count = sum(len(page.subifds or ()) for page in pages)
+            if len(pages) + subifd_count > MAX_TIFF_PAGES:
+                raise CliError("TIFF page/SubIFD count exceeds the safety limit")
+            series_items = list(tiff.series(kind="generic")[: MAX_TIFF_SERIES + 1])
             if len(series_items) > MAX_TIFF_SERIES:
                 raise CliError("TIFF series count exceeds the safety limit")
             series_reports: list[dict[str, Any]] = []
@@ -143,6 +151,8 @@ def _inspect_tiff(path: Path) -> dict[str, Any]:
                 "profile_type": "tiff_structural_metadata_only",
                 "page_count": len(pages),
                 "series_count": len(series_items),
+                "series_interpretation": "generic_page_groups_not_OME_axes",
+                "subifd_count": subifd_count,
                 "series": series_reports,
                 "is_ome_tiff": bool(tiff.is_ome),
                 "is_bigtiff": bool(tiff.is_bigtiff),
@@ -150,6 +160,7 @@ def _inspect_tiff(path: Path) -> dict[str, Any]:
                 "tag_values_emitted": False,
                 "pixels_decoded": False,
                 "compression_codecs_invoked_for_pixels": False,
+                "companion_files_opened": False,
                 "integrity_fully_validated": False,
             }
     except CliError:

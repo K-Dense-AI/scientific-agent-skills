@@ -86,11 +86,11 @@ Compare population, intervention/exposure, comparator, outcome, time horizon, se
 
 ### Imprecision
 
-Use decision-relevant thresholds and the range of effects compatible with the interval. Do not apply unsupported universal event-count rules.
+Use the [current GRADE Book imprecision chapter](https://book.gradepro.org/guideline/imprecision): record the target of certainty, prespecified thresholds, and absolute-effect intervals where appropriate. Its human judgments can include `extremely_serious` concerns (three levels); the checker accepts that label for imprecision without deriving the final certainty. Do not import universal event counts, invent clinical cut points, or count a shared concern twice across domains.
 
-### Publication Bias
+### Dissemination Bias (Publication Bias)
 
-Consider missing studies/results, selective reporting, small-study effects, sponsorship patterns, registrations, protocols, and reporting availability.
+The [current GRADE Book](https://book.gradepro.org/guideline/dissemination-bias) uses dissemination bias to cover selective availability of evidence, including unpublished and obscurely published results. Consider missing studies/results, small-study effects, time/language effects, sponsorship, registrations, and protocols. Separate selective results within a study from missing evidence across the body of evidence and document overlap with risk of bias. The JSON key remains `publication_bias` for compatibility; record the broader assessment in its rationale.
 
 ### Upgrading Considerations
 

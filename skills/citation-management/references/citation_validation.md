@@ -30,7 +30,7 @@ Validation should be performed:
 ```
 Valid:   10.1038/s41586-021-03819-2
 Valid:   10.1126/science.aam9317
-Invalid: 10.1038/invalid
+Syntactically plausible but requires lookup: 10.1038/invalid
 Invalid: doi:10.1038/... (should omit "doi:" prefix in BibTeX)
 ```
 
@@ -60,17 +60,21 @@ python scripts/validate_citations.py references.bib --check-dois
 
 **Process**:
 1. Extract all DOIs from BibTeX file
-2. Query doi.org resolver for each
-3. Query CrossRef API for metadata
-4. Compare metadata with BibTeX entry
-5. Report discrepancies
+2. Query Crossref `/works/{doi}`; on 404, query DataCite `/dois/{doi}`
+3. If both lack a record, GET `doi.org/{doi}` without following the redirect
+4. A registration record or resolver redirect confirms registration; resolver 404 is an error
+5. Report timeouts, 429/5xx, and malformed responses as `doi_unverified` warnings
+
+The script does not compare bibliographic fields or test the publisher landing
+page. Review title/authors/year manually; a registered DOI can still identify
+the wrong work. Retraction status also requires a separate publisher check.
 
 #### Common Issues
 
 **Broken DOIs**:
 - Typos in DOI
 - Publisher changed DOI (rare)
-- Article retracted
+- A retracted article normally retains its DOI; check its publication status separately
 - Solution: Find correct DOI from publisher site
 
 **Mismatched metadata**:
@@ -241,7 +245,7 @@ year = {1665}    % Hooke's Micrographia (very old)
 ```bibtex
 year = {24}      % Two digits (ambiguous)
 year = {202}     % Typo
-year = {2025}    % Future (unless accepted/in press)
+year = {3025}    % Implausible future year
 year = {0}       % Obviously wrong
 ```
 
@@ -457,12 +461,10 @@ title = {Title with {Protected} Text}
 python scripts/validate_citations.py references.bib
 ```
 
-**Checks**:
-- Valid BibTeX structure
-- Balanced braces
-- Proper commas
-- Valid entry types
-- Unique citation keys
+The bundled parser checks entries it can parse and duplicate keys; it is not
+a complete BibTeX syntax validator. Malformed entries may be skipped, and
+`@string` macros are not expanded. Compare input/output counts and compile the
+bibliography with the actual BibTeX/Biber toolchain before submission.
 
 ## Validation Workflow
 
@@ -474,8 +476,8 @@ Run comprehensive validation:
 python scripts/validate_citations.py references.bib
 ```
 
-**Checks all**:
-- DOI resolution
+**Checks**:
+- DOI registration only when `--check-dois` is requested
 - Required fields
 - Author formatting
 - Data consistency
@@ -583,14 +585,9 @@ Validate after fixes:
 python scripts/validate_citations.py fixed_references.bib --verbose
 ```
 
-Should show:
-```
-✓ All DOIs valid
-✓ All required fields present
-✓ No duplicates found
-✓ Syntax valid
-✓ 150/150 entries valid
-```
+Inspect `errors`, `warnings`, and `duplicates` in the JSON report. Zero high-severity
+errors does not mean every DOI was verified: review any `doi_unverified` warnings
+and compile the bibliography separately.
 
 ## Validation Checklist
 
@@ -603,7 +600,7 @@ Use this checklist before final submission:
 
 ### Completeness
 - [ ] All entries have required fields
-- [ ] Modern papers (2000+) have DOIs
+- [ ] DOIs are included when assigned; absence is verified, not inferred from year
 - [ ] Authors properly formatted
 - [ ] Journals/conferences properly named
 
@@ -693,7 +690,7 @@ For entries that can't be fixed:
   year = {1950},
   volume = {12},
   pages = {34--56},
-  note = {DOI not available for publications before 2000}
+  note = {No DOI found in the checked publisher record}
 }
 ```
 

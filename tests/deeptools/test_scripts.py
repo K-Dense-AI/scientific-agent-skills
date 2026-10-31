@@ -13,6 +13,8 @@ in a temporary directory rather than mocking `open`.
 from __future__ import annotations
 
 import os
+import gzip
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -254,18 +256,33 @@ class FileValidationTests(unittest.TestCase):
                         self.assertTrue(ok, message)
                         self.assertIn(str(index), message)
 
-    def test_tiny_bigwig_is_flagged_as_suspicious(self) -> None:
+    @unittest.skipUnless(importlib.util.find_spec("pyBigWig"), "requires pyBigWig")
+    def test_random_bytes_are_not_bigwig_regardless_of_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             small = Path(directory) / "small.bw"
             small.write_bytes(b"x" * 10)
             ok, message = validate_files.check_bigwig_file(str(small))
             self.assertFalse(ok)
-            self.assertIn("suspiciously small", message)
+            self.assertIn("Invalid bigWig", message)
 
             big = Path(directory) / "big.bw"
             big.write_bytes(b"x" * 1024)
             ok, _ = validate_files.check_bigwig_file(str(big))
-            self.assertTrue(ok)
+            self.assertFalse(ok)
+
+    def test_bed_checks_rows_beyond_ten_and_negative_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bed = Path(directory) / "late.bed.gz"
+            with gzip.open(bed, "wt") as handle:
+                handle.write("track name=test\n" + "chr1\t1\t2\n" * 11 + "chr1\t-1\t2\n")
+            ok, message = validate_files.check_bed_file(bed)
+            self.assertFalse(ok)
+            self.assertIn("line 13", message)
+            self.assertIn("nonnegative", message)
+
+    def test_directory_is_not_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertFalse(validate_files.check_file_exists(directory)[0])
 
     def test_well_formed_bed_passes_and_counts_regions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -305,12 +322,15 @@ class FileValidationTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertIn("empty", message)
 
+    @unittest.skipUnless(importlib.util.find_spec("pysam"), "requires pysam")
     def test_validate_files_aggregates_across_types(self) -> None:
+        import pysam
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bam = root / "s.bam"
-            bam.write_bytes(b"BAM\1")
-            (root / "s.bam.bai").write_bytes(b"BAI\1")
+            with pysam.AlignmentFile(str(bam), "wb", header={"HD": {"SO": "coordinate"}, "SQ": [{"SN": "chr1", "LN": 1000}]}):
+                pass
+            pysam.index(str(bam))
             bed = root / "p.bed"
             bed.write_text("chr1\t1\t2\n", encoding="utf-8")
 

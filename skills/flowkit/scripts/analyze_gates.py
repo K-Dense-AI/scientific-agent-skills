@@ -16,6 +16,51 @@ def file_record(path: Path) -> dict:
     return {"path": str(path.resolve()), "sha256": digest}
 
 
+def add_denominators(report, event_counts: dict[str, int]):
+    """Attach population identities and denominators, including quadrant children."""
+    import pandas as pd
+
+    report = report.copy()
+    population_paths = []
+    counts = {}
+    for row in report.itertuples(index=False):
+        # FlowKit reports a quadrant at its owning QuadrantGate's path, with
+        # that gate stored separately in quadrant_parent. Its children use
+        # the full strategy path, so include the owner when building the LUT.
+        path = tuple(row.gate_path)
+        if pd.notna(row.quadrant_parent):
+            path += (row.quadrant_parent,)
+        path += (row.gate_name,)
+        key = (row.sample_id, path)
+        if key in counts:
+            raise ValueError(f"Duplicate population in analysis report: {key!r}")
+        counts[key] = int(row.count)
+        population_paths.append(path)
+
+    parent_counts = []
+    for row in report.itertuples(index=False):
+        path = tuple(row.gate_path)
+        if path == ("root",):
+            parent_count = event_counts[row.sample_id]
+        else:
+            key = (row.sample_id, path)
+            if key not in counts:
+                raise ValueError(f"Missing parent population in analysis report: {key!r}")
+            parent_count = counts[key]
+        if not 0 <= row.count <= parent_count <= event_counts[row.sample_id]:
+            raise ValueError(f"Inconsistent gate/parent/sample counts for {row.gate_name!r}")
+        parent_counts.append(parent_count)
+
+    report["population_path"] = population_paths
+    report["sample_event_count"] = report["sample_id"].map(event_counts)
+    report["parent_event_count"] = parent_counts
+    report["relative_percent_defined"] = report["parent_event_count"] > 0
+    # FlowKit 1.3.2 returns zero for ordinary gates below an empty parent and
+    # NaN for quadrants. Neither is a defined percentage; CSV writes blank.
+    report.loc[~report["relative_percent_defined"], "relative_percent"] = float("nan")
+    return report
+
+
 def analyze(
     *,
     fcs_paths: list[Path],
@@ -93,9 +138,10 @@ def analyze(
 
     if report.empty or set(report["sample_id"]) != seen_ids:
         raise ValueError("Analysis did not produce gate results for every input sample")
-    # A JSON array preserves a gate path even when gate names contain slashes.
-    report = report.copy()
-    report["gate_path"] = report["gate_path"].map(lambda path: json.dumps(list(path)))
+    report = add_denominators(report, {sample.id: sample.event_count for sample in samples})
+    # Preserve path components without inventing an additional separator.
+    for column in ("gate_path", "population_path"):
+        report[column] = report[column].map(lambda path: json.dumps(list(path)))
     manifest = {
         "mode": mode,
         "group": group,
@@ -110,7 +156,9 @@ def analyze(
         "percentages": {
             "absolute_percent": "100 * gate count / total sample events",
             "relative_percent": "100 * gate count / parent population count",
+            "empty_parent": "relative_percent is blank; relative_percent_defined is false",
         },
+        "population_identity": "sample_id plus population_path (JSON array including gate name and quadrant owner)",
         "event_processing": "FlowKit FCS preprocessing; compensation and transforms from gate definitions",
         "use_mp": False,
     }

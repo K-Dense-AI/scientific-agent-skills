@@ -1,250 +1,151 @@
 ---
 name: histolab
-description: Lightweight WSI tile extraction and preprocessing. Use for basic slide processing, tissue detection, tile extraction, and stain normalization for H&E images. Best for simple pipelines, dataset preparation, and quick tile-based analysis. For advanced spatial proteomics, multiplexed imaging, or deep learning pipelines use pathml.
+description: Extracts and preprocesses whole-slide histology image tiles with Histolab. Use for WSI inspection, tissue masks, random/grid/score-based tile extraction, H&E stain normalization, and tile dataset preparation. For multiplexed imaging or deep learning inference pipelines, use pathml.
 license: Apache-2.0 license
-compatibility: Requires Python 3.8–3.11 (histolab 0.7.0), OpenSlide system libraries, and Linux or macOS. Sample data via histolab.data requires pooch.
+compatibility: Requires Python 3.8–3.11 and histolab 0.7.0 on Linux or macOS, plus native OpenSlide. Python 3.10 avoids scikit-image 0.19 source builds on macOS ARM. Optional pooch downloads samples; matplotlib plots results; large-image plus a tile source enables MPP extraction.
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: K-Dense Inc.
+  last-reviewed: "2026-10-01"
+  upstream-version: "0.7.0"
 ---
 
 # Histolab
 
-## Overview
+## When to use
 
-Histolab is a Python library for processing whole slide images (WSI) in digital pathology. It automates tissue detection, extracts informative tiles from gigapixel images, and prepares datasets for deep learning pipelines. The library handles multiple WSI formats, implements sophisticated tissue segmentation, and provides flexible tile extraction strategies.
+Use Histolab to inspect WSI metadata, identify tissue, extract image tiles, and
+standardize H&E staining. Its masks and scores are image-processing heuristics;
+they do not diagnose cancer, count individual cells, or establish image quality.
 
 ## Installation
 
-Install OpenSlide system libraries first ([OpenSlide download](https://openslide.org/download/)), then install histolab:
+Histolab 0.7.0 remains the latest published release as of the review date. Its
+[release constraints](https://github.com/histolab/histolab/blob/v0.7.0/pyproject.toml)
+require Python <3.12, NumPy <=1.24.4, scikit-image <0.19.4, SciPy <1.10.1,
+Pillow <11, and openslide-python 1.3.1. Keep this stack isolated from modern
+scientific environments. Windows is not supported by this Histolab release.
+
+Install [native OpenSlide](https://openslide.org/download/) for your system,
+then create a dedicated environment (Python 3.10 was tested):
 
 ```bash
-uv pip install histolab
+uv venv --python 3.10 .venv-histolab
+uv pip install --python .venv-histolab/bin/python 'histolab==0.7.0' pooch matplotlib
+.venv-histolab/bin/python -c 'import openslide; print(openslide.__library_version__)'
 ```
 
-For built-in TCGA sample slides via `histolab.data`, also install pooch:
+On macOS with Homebrew, `brew install openslide` installs the native library.
+If the older Python binding cannot find it, launch Python with the library path
+set immediately before Python starts:
 
 ```bash
-uv pip install pooch
+env DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix openslide)/lib" .venv-histolab/bin/python -c 'import openslide; print(openslide.__library_version__)'
 ```
 
-Histolab 0.7.0 (latest stable) supports Python 3.8–3.11 on Linux and macOS. Windows is not supported as of 0.7.0.
+`pooch` is optional for remote examples. Start with a local slide or the tiny
+bundled `cmu_small_region` sample; other sample functions may download hundreds
+of megabytes. Exact `mpp` extraction also needs `large-image` and a matching
+source plugin; see [slide management](references/slide_management.md).
 
-## Quick Start
+## Workflow
 
-Illustrative workflow for a user-provided WSI; extraction was not run in this review:
+1. Inspect `slide.dimensions`, `slide.levels` (a list), and
+   `slide.level_dimensions(level)` (a method). Check both MPP axes in metadata.
+2. Select physical field of view and pixel resolution; level numbers are not
+   interchangeable across scanners. Preserve level-0 coordinate bounds.
+3. Choose `TissueMask` for all tissue sections or `BiggestTissueBoxMask` for the
+   largest section's bounding box. Inspect the mask at its actual resolution.
+4. Configure a tiler and preview with the **same mask** passed to extraction.
+   Preview methods return a Pillow image; save or display that return value.
+5. Extract into a distinct per-slide/per-strategy directory. Count saved files,
+   inspect representative tiles, and retain parameters, source IDs and QC flags.
+6. Split datasets by patient before training/validation/test tile assignment.
+   Fit stain normalization targets on training data only and validate on held-out
+   scanners. A seed reproduces sampling; it does not prevent patient leakage.
+
+## Quick start
+
+Illustrative for a user-provided slide; the same API path is tested with small
+local fixtures. `n_tiles` is an upper bound, not a promise of 100 valid tiles.
 
 ```python
+from pathlib import Path
 from histolab.slide import Slide
+from histolab.masks import TissueMask
 from histolab.tiler import RandomTiler
 
-# Load slide
-slide = Slide("slide.svs", processed_path="output/")
+output = Path("output/random_tiles")
+output.mkdir(parents=True, exist_ok=True)
+slide = Slide("slide.svs", processed_path=output)
+mask = TissueMask()
+slide.locate_mask(mask).save(output / "mask_preview.png")
 
-# Configure tiler
 tiler = RandomTiler(
-    tile_size=(512, 512),
-    n_tiles=100,
-    level=0,
-    seed=42
+    tile_size=(512, 512), n_tiles=100, level=0, seed=42,
+    check_tissue=True, tissue_percent=80.0, prefix="random_",
 )
-
-# Preview tile locations
-tiler.locate_tiles(slide)
-
-# Extract tiles
-tiler.extract(slide)
+tiler.locate_tiles(slide, extraction_mask=mask).save(output / "tile_preview.png")
+tiler.extract(slide, extraction_mask=mask)
+print("[OK] Saved tiles:", len(list(output.glob("random_tile_*.png"))))
 ```
 
-## Core Capabilities
+`extraction_mask` belongs to `extract()` and `locate_tiles()`, not to the tiler
+constructor. `locate_tiles()` has no `n_tiles` argument. Previewing runs tile
+selection again, so it may be expensive; use a separate small tiler for initial
+exploration, then preview the final configuration before committing a large run.
 
-Six capability areas, each with worked code, are documented in
-[references/core_capabilities.md](references/core_capabilities.md):
+## Choose a strategy
 
-1. **Slide management** — opening slides, properties, levels, thumbnails, and scaled images.
-2. **Tissue detection and masks** — `TissueMask` and `BiggestTissueBoxMask`, and custom masks.
-3. **Tile extraction** — random, grid, and score-based tilers with size, level, and
-   tissue-fraction control.
-4. **Filters and preprocessing** — image and morphological filters, and composing them.
-5. **Stain normalization** — Reinhard and Macenko normalization against a target image.
-6. **Visualization** — locating tiles on the slide and inspecting masks and extractions.
+| Tiler | Selection | Important limitation |
+| --- | --- | --- |
+| `RandomTiler` | Seeded sampling, at most `n_tiles`, up to `max_iter` attempts | May overlap, repeat, or miss rare structures |
+| `GridTiler` | Grid within the extraction mask | Boundary tiles and tissue checks can leave gaps |
+| `ScoreTiler` | Scores all eligible grid candidates; saves top `n_tiles` | Lower output count does not avoid scoring all candidates |
 
-Five end-to-end workflows are in
-[references/typical_workflows.md](references/typical_workflows.md). Per-topic detail lives
-in [references/slide_management.md](references/slide_management.md),
-[references/tissue_masks.md](references/tissue_masks.md),
-[references/tile_extraction.md](references/tile_extraction.md),
-[references/filters_preprocessing.md](references/filters_preprocessing.md), and
-[references/visualization.md](references/visualization.md).
+For grids, stride in each axis is tile size minus `pixel_overlap`; positive
+values must be smaller than both tile dimensions. Negative overlap leaves gaps.
+`ScoreTiler(n_tiles=0)` saves all eligible ranked tiles.
 
-## Best Practices
+Nuclei and cellularity scores estimate stain-derived area fractions. They are
+not calibrated tumor probabilities or blur/focus scores. Score reports contain
+exactly `filename,score,scaled_score`; record coordinate bounds and physical
+resolution separately. Equal raw scores can make `scaled_score` undefined in
+0.7.0, so inspect raw scores and finiteness before plotting or comparing them.
 
-### Slide Loading and Inspection
-1. Always inspect slide properties before processing
-2. Save thumbnails with `slide.thumbnail.save()` for quick visual review
-3. Check pyramid levels and dimensions
-4. Verify tissue is present using thumbnails
+## Troubleshooting and scientific checks
 
-### Tissue Detection
-1. Preview masks with `locate_mask()` before extraction
-2. Use `TissueMask` for multiple sections, `BiggestTissueBoxMask` for single sections
-3. Customize filters for specific stains (H&E vs IHC)
-4. Handle pen annotations with custom masks
-5. Test masks on diverse slides
+- **No/few tiles:** inspect mask and output counts, dimensions, level, and
+  `max_iter`. Lowering `tissue_percent` relaxes QC; validate the added tiles.
+- **Missing sections:** the default biggest-region box excludes other sections.
+  Pass `TissueMask()` explicitly to both preview and extraction.
+- **Slow extraction:** benchmark valid coarser levels (larger level numbers).
+  Higher tissue thresholds can increase random rejections; ScoreTiler still
+  examines the full candidate grid. Avoid assuming lower output count is faster.
+- **Mask/thumbnail mismatch:** 0.7.0 selects the larger of the thumbnail and
+  1/32-scale image for slide masks. Resize categorical masks with nearest-neighbor
+  interpolation when overlaying them; never reinterpret mask pixels as level 0.
+- **Normalization artifacts:** inspect target/source tissue coverage and finite
+  output. Near-constant or blank tiles can make stain estimates degenerate.
+  HED channel scaling alone is not a validated RGB stain normalization method.
+- **Across-scale alignment:** the same random seed at different levels does
+  not align coordinates. Reuse explicit level-0 boxes/centers instead.
 
-### Tile Extraction
-1. **Always preview with `locate_tiles()` before extracting**
-2. Choose appropriate tiler:
-   - RandomTiler: Sampling and exploration
-   - GridTiler: Complete coverage
-   - ScoreTiler: Quality-driven selection
-3. Set appropriate `tissue_percent` threshold (70-90% typical)
-4. Use seeds for reproducibility in RandomTiler
-5. Extract at appropriate pyramid level for analysis resolution
-6. Enable logging for large datasets
+## References and verification scope
 
-### Performance
-1. Extract at lower levels (1, 2) for faster processing
-2. Use `BiggestTissueBoxMask` over `TissueMask` when appropriate
-3. Adjust `tissue_percent` to reduce invalid tile attempts
-4. Limit `n_tiles` for initial exploration
-5. Use `pixel_overlap=0` for non-overlapping grids
+- [Core API map](references/core_capabilities.md)
+- [Slides, pyramid levels, MPP and sample data](references/slide_management.md)
+- [Tissue masks, custom ROIs and annotation exclusion](references/tissue_masks.md)
+- [Tilers, scorers, reports and spatial alignment](references/tile_extraction.md)
+- [Filters and stain normalization](references/filters_preprocessing.md)
+- [Visualization and report plots](references/visualization.md)
+- [Complete workflows](references/typical_workflows.md)
 
-### Quality Control
-1. Validate tile quality (check for blur, artifacts, focus)
-2. Review score distributions for ScoreTiler
-3. Inspect top and bottom scoring tiles
-4. Monitor tissue coverage statistics
-5. Filter extracted tiles by additional quality metrics if needed
-
-## Common Use Cases
-
-### Training Deep Learning Models
-- Extract balanced datasets using RandomTiler across multiple slides
-- Use ScoreTiler with NucleiScorer to focus on cell-rich regions
-- Match physical resolution in microns per pixel, not merely pyramid level:
-  scanners can assign different physical scales to level 0/1. Inspect slide MPP
-  metadata and use the tiler's [documented `mpp` parameter](https://histolab.readthedocs.io/en/latest/api/tiler.html)
-  when appropriate; it takes precedence over `level`. Record target MPP, tile
-  pixel dimensions, and resampling so physical field of view is reproducible.
-- Generate CSV reports for tracking tile metadata
-
-### Whole Slide Analysis
-- Use GridTiler for complete tissue coverage
-- Extract at multiple pyramid levels for hierarchical analysis
-- Maintain spatial relationships with grid positions
-- Use `pixel_overlap` for sliding window approaches
-
-### Tissue Characterization
-- Sample diverse regions with RandomTiler
-- Quantify tissue coverage with masks
-- Extract stain-specific information with HED decomposition
-- Compare tissue patterns across slides
-
-### Quality Assessment
-- Identify optimal focus regions with ScoreTiler
-- Detect artifacts using custom masks and filters
-- Assess staining quality across slide collection
-- Flag problematic slides for manual review
-
-### Dataset Curation
-- Use ScoreTiler to prioritize informative tiles
-- Filter tiles by tissue percentage
-- Generate reports with tile scores and metadata
-- Create stratified datasets across slides and tissue types
-
-## Troubleshooting
-
-### No tiles extracted
-- Lower `tissue_percent` threshold
-- Verify slide contains tissue (check thumbnail)
-- Ensure extraction_mask captures tissue regions
-- Check tile_size is appropriate for slide resolution
-
-### Many background tiles
-- Enable `check_tissue=True`
-- Increase `tissue_percent` threshold
-- Use appropriate mask (TissueMask vs BiggestTissueBoxMask)
-- Customize mask filters to better detect tissue
-
-### Extraction very slow
-- Extract at lower pyramid level (level=1 or 2)
-- Reduce `n_tiles` for RandomTiler/ScoreTiler
-- Use RandomTiler instead of GridTiler for sampling
-- Use BiggestTissueBoxMask instead of TissueMask
-
-### Tiles have artifacts
-- Implement custom annotation-exclusion masks
-- Adjust filter parameters for artifact removal
-- Increase small object removal threshold
-- Apply post-extraction quality filtering
-
-### Inconsistent results across slides
-- Use same seed for RandomTiler
-- Normalize staining with `MacenkoStainNormalizer` or `ReinhardStainNormalizer`
-- Adjust `tissue_percent` per staining quality
-- Implement slide-specific mask customization
-
-## Resources
-
-This skill includes detailed reference documentation in the `references/` directory:
-
-### references/slide_management.md
-Comprehensive guide to loading, inspecting, and working with whole slide images:
-- Slide initialization and configuration
-- Built-in sample datasets
-- Slide properties and metadata
-- Thumbnail generation and visualization
-- Working with pyramid levels
-- Multi-slide processing workflows
-- Best practices and common patterns
-
-### references/tissue_masks.md
-Complete documentation on tissue detection and masking:
-- TissueMask, BiggestTissueBoxMask, BinaryMask classes
-- How tissue detection filters work
-- Customizing masks with filter chains
-- Visualizing masks
-- Creating custom rectangular and annotation-exclusion masks
-- Integration with tile extraction
-- Best practices and troubleshooting
-
-### references/tile_extraction.md
-Detailed explanation of tile extraction strategies:
-- RandomTiler, GridTiler, ScoreTiler comparison
-- Available scorers (NucleiScorer, CellularityScorer, custom)
-- Common and strategy-specific parameters
-- Tile preview with locate_tiles()
-- Extraction workflows and CSV reporting
-- Advanced patterns (multi-level, hierarchical)
-- Performance optimization
-- Troubleshooting common issues
-
-### references/filters_preprocessing.md
-Complete filter reference and preprocessing guide:
-- Image filters (color conversion, thresholding, contrast)
-- Morphological filters (dilation, erosion, opening, closing)
-- Filter composition and chaining
-- Built-in stain normalization (Macenko, Reinhard) and filter-based alternatives
-- Common preprocessing pipelines
-- Applying filters to tiles
-- Custom mask filters
-- Quality control filters
-- Best practices and troubleshooting
-
-### references/visualization.md
-Comprehensive visualization guide:
-- Slide thumbnail display and saving
-- Mask visualization techniques
-- Tile location preview
-- Displaying extracted tiles and creating mosaics
-- Quality assessment visualizations
-- Multi-slide comparison
-- Filter effect visualization
-- Exporting high-resolution figures and PDFs
-- Interactive visualization in Jupyter notebooks
-
-**Usage pattern:** Reference files contain in-depth information to support workflows described in this main skill document. Load specific reference files as needed for detailed implementation guidance, troubleshooting, or advanced features.
+The review checked the published 0.7.0 source because the current Read the Docs
+pages still display 0.6.0 and omit the 0.7.0 mask-resolution change.
+Local tests exercise the documented recipes on synthetic images and the bundled
+small SVS with native OpenSlide. Large WSI cohorts, remote sample downloads and
+optional exact-MPP backends remain illustrative, not end-to-end validated.
 
 ## Citing Scientific Agent Skills
 

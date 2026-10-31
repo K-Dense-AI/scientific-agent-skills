@@ -1,6 +1,8 @@
 # Protein Expression and Thermal Shift Assay
 
 **URL:** https://cloud.ginkgo.bio/protocols/cfps-strep-purification-thermal-shift
+**Service terms:** https://cloud.ginkgo.bio/terms/cfps-strep-purification-thermal-shift
+**Reviewed:** 2026-09-30; prices and turnaround below are catalog estimates.
 **Status:** Ginkgo Certified
 **Price:** $159/sample
 **Turnaround:** up to 12 days
@@ -10,7 +12,7 @@
 
 Combines cell-free protein expression, Strep-tag magnetic bead purification, and a Protein Thermal Shift Assay using SYPRO Orange into a single end-to-end workflow. Starting from a DNA template plate, the protocol expresses protein in a CFPS reaction, purifies the tagged product via Strep-Tactin magnetic beads, and characterizes thermal unfolding of the purified protein by extrinsic fluorimetry.
 
-SYPRO Orange is a hydrophobic-binding dye whose fluorescence increases sharply as a protein unfolds and exposes buried hydrophobic regions during a controlled temperature ramp. Tracking fluorescence vs. temperature reports **Tonset** (where unfolding begins) plus up to three melting transitions (**TM1, TM2, TM3**) corresponding to distinct domains. These are standard developability parameters used to compare candidates, flag stability liabilities, and rank molecules for downstream development. Best suited for screening and ranking variants by thermal stability directly from DNA, where consistent Tm values across many samples matter more than absolute biophysical precision.
+SYPRO Orange fluorescence tracks exposure of hydrophobic regions during a temperature ramp. The service reports **Tonset** and up to three apparent transitions (**TM1, TM2, TM3**) where callable. Compare variants under matched conditions and review thermograms and QC flags; multiple peaks alone do not establish which structural domains unfolded. This assay supports stability ranking, not binding-affinity measurement.
 
 ## Input
 

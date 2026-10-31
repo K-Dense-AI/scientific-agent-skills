@@ -1,10 +1,11 @@
 ---
 name: get-available-resources
-description: Detect host inventory and effective CPU, memory, disk, scheduler, container, and accelerator limits when a user asks for resource-aware planning or before a clearly resource-sensitive local workload. Produces a redacted JSON snapshot and conservative planning helpers without stress tests or assuming visible host hardware is usable.
+description: Detects host inventory and effective CPU, memory, disk, scheduler, container, and accelerator limits when a user asks for resource-aware planning or before a clearly resource-sensitive local workload. Produces a redacted JSON snapshot and conservative planning helpers without stress tests or assuming visible host hardware is usable.
 license: MIT
-compatibility: Python 3.11+ on Linux, macOS, or Windows; standard library by default, optional psutil 7.2.2; accelerator and scheduler CLIs are optional read-only probes.
+compatibility: Python 3.11+ on Linux, macOS, or Windows; standard library by default, optional psutil 7.2.2; accelerator management CLIs are optional read-only probes.
 metadata:
-  version: "1.4"
+  version: "1.5"
+  last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
 
@@ -55,8 +56,10 @@ python scripts/detect_resources.py --output resource-snapshot.json
 ```
 
 Explicit output is restricted to one `.json` filename in the current
-directory, uses private permissions, rejects symlinks and path traversal, and
-refuses overwrite unless `--force` is supplied.
+directory, uses mode 0600 on POSIX, rejects symlinks and path traversal, and
+refuses overwrite unless `--force` is supplied. Forced output also rejects
+hard links and non-regular files. Windows privacy additionally depends on the
+directory ACL.
 
 ### Optional psutil enhancement
 
@@ -65,7 +68,7 @@ cross-platform physical-core, affinity, available-memory, swap, and disk
 coverage:
 
 ```bash
-uv pip install "psutil==7.2.2"
+uv run --no-project --with "psutil==7.2.2" python scripts/detect_resources.py
 ```
 
 The import is lazy. Failure to import psutil becomes a warning, not a fatal
@@ -131,8 +134,10 @@ Management-query visibility does not establish:
 5. operator/data-type support.
 
 Therefore `runtime_usable_devices` remains null and each device says
-`runtime_compatibility: not_tested`. Visibility/allocation counts are upper
-bounds, not guarantees.
+`runtime_compatibility: not_tested`. Visibility/allocation counts constrain
+the observed management records, not the number of framework devices. MIG and AMD partition enumeration can differ.
+AMD `reported_total_bytes` is a device-reported memory pool; its relationship
+to host RAM is not established, so it is never added to the RAM budget.
 
 ### Disk
 
@@ -141,7 +146,7 @@ non-writing permission check are distinct. Filesystem or project quotas can
 still be stricter. The absolute working path is always redacted.
 
 The disk snapshot covers the working filesystem only, matching
-[psutil's path-specific semantics](https://psutil.readthedocs.io/stable/#psutil.disk_usage).
+[psutil's path-specific semantics](https://psutil.readthedocs.io/stable/index.html#psutil.disk_usage).
 If scratch, caches, and final outputs use different filesystems, inspect each
 from its target directory and label the reports by role. Budget temporary and
 final copies that coexist; free space on the input filesystem does not establish
@@ -179,6 +184,11 @@ Optional controls:
 - `--accelerator none|any|cuda|rocm|metal`: requests a candidate backend
   decision without claiming usability.
 - `--output plan.json`: explicit private local output; stdout is default.
+
+A known memory budget that cannot fit one worker returns zero workers and
+`recommendation.status: insufficient_memory`; do not launch that plan. Unknown
+CPU or available memory produces `review_required`. Positive counts are
+provisional estimates, not reservations.
 
 For CPU or mixed work, use `suggested_workers` and
 `threads_per_worker` together. Process workers multiplied by BLAS/OpenMP native
@@ -237,7 +247,9 @@ because they can contain identifiers or paths.
 ## Platform notes
 
 - **Linux:** reads only bounded `/proc` and cgroup v2 files. Ancestor CPU and
-  memory limits are considered.
+  memory limits visible through the cgroup2 mount are considered. Hidden
+  ancestors and cgroup v1 limits are not measured; unreadable v2 membership is
+  reported as unknown rather than substituted with the mount root.
 - **macOS:** uses fixed `sysctl` keys and a bounded
   `system_profiler SPDisplaysDataType -json` query. Apple silicon memory is
   unified.
@@ -262,7 +274,7 @@ because they can contain identifiers or paths.
 - `references/snapshot_schema.md` — schema 1.1 contract.
 - `references/sources.md` — dated official-source ledger.
 
-Official documentation was refreshed on **2026-07-23**; consult
+Official documentation and source were refreshed on **2026-10-01**; consult
 [`references/sources.md`](references/sources.md) before changing semantics or
 dependency pins.
 

@@ -263,5 +263,51 @@ class CatalogueSourceTests(unittest.TestCase):
                 self.assertNotIn("Traceback", str(raised.exception))
 
 
+
+class CurrentCatalogTests(unittest.TestCase):
+    def test_cross_topic_duplicates_do_not_inflate_resource_count(self):
+        md = CATALOGUE + "\n## Topic: Biology\n" + CATALOGUE
+        entries = fetch_catalog.unique_entries(fetch_catalog.parse_markdown(md))
+        # The blog has no URL: do not silently merge unknown identities.
+        self.assertEqual(len(entries), 5)
+        self.assertEqual(sum(e.url.endswith('/folding') for e in entries), 1)
+
+    def test_model_and_dataset_at_the_same_url_are_not_merged(self):
+        entries = [fetch_catalog.Entry('same', section, url='https://example.org/x')
+                   for section in ('models', 'datasets')]
+        self.assertEqual(len(fetch_catalog.unique_entries(entries)), 2)
+
+    def test_search_filters_before_deduplication(self):
+        import argparse
+        import contextlib
+        import io
+        md = CATALOGUE + CATALOGUE.replace('biology, benchmark', 'biology, new-tag')
+        args = argparse.Namespace(query='folding', filter='datasets', tag='new-tag', format='json')
+        with mock.patch.object(fetch_catalog, 'fetch', return_value=md):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                fetch_catalog.cmd_search(args)
+        import json
+        result = json.loads(output.getvalue())
+        self.assertEqual(len(result), 1)
+        self.assertIn('new-tag', result[0]['tags'])
+
+    def test_all_raw_preserves_provenance_banner(self):
+        import argparse
+        import contextlib
+        import io
+        with mock.patch.object(fetch_catalog, 'fetch', return_value=CATALOGUE):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                fetch_catalog.cmd_all(argparse.Namespace(raw=True))
+        self.assertIn('untrusted third-party data', output.getvalue())
+        self.assertTrue(output.getvalue().endswith(CATALOGUE + '\n'))
+
+    def test_socket_timeout_is_a_clean_failure(self):
+        with mock.patch('urllib.request.urlopen', side_effect=TimeoutError):
+            with self.assertRaisesRegex(SystemExit, 'Timeout fetching'):
+                fetch_catalog.fetch('https://example.invalid')
+
+
 if __name__ == "__main__":
     unittest.main()

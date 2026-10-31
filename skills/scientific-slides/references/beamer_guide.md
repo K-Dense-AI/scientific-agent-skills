@@ -4,6 +4,15 @@
 
 Beamer is a LaTeX document class for creating presentations with professional, consistent formatting. It's particularly well-suited for scientific presentations containing equations, code, algorithms, and citations. This guide covers Beamer basics, themes, customization, and advanced features for effective scientific talks.
 
+Current upstream: [Beamer 3.78](https://ctan.org/pkg/beamer), reviewed 2026-09-30.
+The snippets below are illustrative fragments: combine their required packages in the
+preamble, provide figures and `references.bib`, and compile in your TeX distribution.
+The bundled templates were smoke-compiled with local Beamer 3.72 / TeX Live 2025; that is not a complete layout or
+bibliography validation. Dense placeholder layouts in the
+seminar and defense templates emit overfull-box warnings and need content-specific
+rendering and adjustment. Beamer currently does not support tagged PDF; provide a
+semantic alternative when accessibility requires it.
+
 ## Why Use Beamer?
 
 ### Advantages
@@ -349,12 +358,16 @@ Beamer includes many built-in themes controlling overall layout:
 \begin{frame}{Comparison}
   \begin{columns}
     \begin{column}{0.5\textwidth}
-      \includegraphics[width=\textwidth]{fig1.pdf}
-      \caption{Condition A}
+      \begin{figure}
+        \includegraphics[width=\textwidth]{fig1.pdf}
+        \caption{Condition A}
+      \end{figure}
     \end{column}
     \begin{column}{0.5\textwidth}
-      \includegraphics[width=\textwidth]{fig2.pdf}
-      \caption{Condition B}
+      \begin{figure}
+        \includegraphics[width=\textwidth]{fig2.pdf}
+        \caption{Condition B}
+      \end{figure}
     \end{column}
   \end{columns}
 \end{frame}
@@ -720,7 +733,8 @@ def fibonacci(n):
   Questions?
 \end{frame}
 
-% Backup slides (not counted in numbering)
+% Appendix alone does not exclude frames from total numbering.
+% In the preamble use \usepackage{appendixnumberbeamer} if that behavior is wanted.
 \appendix
 
 \begin{frame}{Extra Data}
@@ -851,20 +865,20 @@ def fibonacci(n):
 
 ```bash
 # Standard compilation
-pdflatex presentation.tex
+pdflatex -no-shell-escape presentation.tex
 
 # With bibliography
-pdflatex presentation.tex
+pdflatex -no-shell-escape presentation.tex
 biber presentation
-pdflatex presentation.tex
-pdflatex presentation.tex
+pdflatex -no-shell-escape presentation.tex
+pdflatex -no-shell-escape presentation.tex
 ```
 
 ### Modern Compilation (Recommended)
 
 ```bash
 # Using latexmk (automated)
-latexmk -pdf presentation.tex
+latexmk -pdf -no-shell-escape presentation.tex
 
 # With continuous preview
 latexmk -pdf -pvc presentation.tex

@@ -1,6 +1,8 @@
 # Core Geospatial Libraries
 
-This reference covers the fundamental Python libraries for geospatial data processing.
+Local API reference. File-dependent fragments are illustrative; see [review.md](review.md)
+for tested versions. Raster masks, band meaning and grid alignment are prerequisites.
+Metric geometry operations require a suitable projected CRS with metre units.
 
 ## GDAL (Geospatial Data Abstraction Library)
 
@@ -8,6 +10,7 @@ GDAL is the foundation for geospatial I/O in Python.
 
 ```python
 from osgeo import gdal
+gdal.UseExceptions()
 
 # Open a raster file
 ds = gdal.Open('raster.tif')
@@ -29,11 +32,12 @@ Rasterio provides a cleaner interface to GDAL.
 
 ```python
 import rasterio
+from rasterio.mask import mask
 import numpy as np
 
 # Basic reading
 with rasterio.open('raster.tif') as src:
-    data = src.read()           # All bands
+    data = src.read(masked=True) # All bands: (bands, rows, columns)
     band1 = src.read(1)         # Single band
     profile = src.profile       # Metadata
 
@@ -45,17 +49,17 @@ with rasterio.open('large.tif') as src:
 # Writing
 with rasterio.open('output.tif', 'w',
                    driver='GTiff',
-                   height=data.shape[0],
-                   width=data.shape[1],
-                   count=1,
+                   height=data.shape[1],
+                   width=data.shape[2],
+                   count=data.shape[0],
                    dtype=data.dtype,
-                   crs=src.crs,
-                   transform=src.transform) as dst:
-    dst.write(data, 1)
+                   crs=profile['crs'],
+                   transform=profile['transform']) as dst:
+    dst.write(data, masked=True)
 
 # Masking
 with rasterio.open('raster.tif') as src:
-    masked_data, mask = rasterio.mask.mask(src, shapes=[polygon], crop=True)
+    masked_data, cropped_transform = mask(src, shapes=[polygon], crop=True, filled=False)
 ```
 
 ## Fiona
@@ -125,20 +129,13 @@ PyProj handles coordinate transformations.
 ```python
 from pyproj import Transformer, CRS
 
-# Coordinate transformation
-transformer = Transformer.from_crs('EPSG:4326', 'EPSG:32633')
-x, y = transformer.transform(lat, lon)
-x_inv, y_inv = transformer.transform(x, y, direction='INVERSE')
-
-# Batch transformation
-lon_array = [-122.4, -122.3]
-lat_array = [37.7, 37.8]
-x_array, y_array = transformer.transform(lon_array, lat_array)
-
-# Always z/height if available
-transformer_always_z = Transformer.from_crs(
-    'EPSG:4326', 'EPSG:32633', always_z=True
-)
+# Consistent longitude/latitude order; these points are in UTM zone 10N.
+transformer = Transformer.from_crs('EPSG:4326', 'EPSG:32610', always_xy=True)
+x, y = transformer.transform(-122.4, 37.7, errcheck=True)
+lon, lat = transformer.transform(x, y, direction='INVERSE', errcheck=True)
+x_array, y_array = transformer.transform([-122.4, -122.3], [37.7, 37.8])
+# Height is a third transform argument, not an always_z option. A horizontal-only
+# transform can leave Z unchanged; vertical conversion needs a suitable compound CRS/grid.
 
 # Get CRS info
 crs = CRS.from_epsg(4326)
@@ -169,8 +166,11 @@ gdf.to_file('output.gpkg', layer='data', use_arrow=True)
 
 # CRS operations
 gdf.crs  # Get CRS
-gdf = gdf.to_crs('EPSG:32633')  # Reproject
-gdf = gdf.set_crs('EPSG:4326')  # Set CRS
+if gdf.crs is None:
+    raise ValueError('Confirm the source CRS from authoritative metadata before transforming')
+gdf = gdf.to_crs('EPSG:32633')  # Example target: use only within zone 33N
+# set_crs labels existing coordinates without transforming them. Use it only when
+# the missing source CRS is independently known, before calling to_crs.
 
 # Geometric operations
 gdf['area'] = gdf.geometry.area
@@ -208,6 +208,7 @@ from pathlib import Path
 
 input_dir = Path('input')
 output_dir = Path('output')
+output_dir.mkdir(parents=True, exist_ok=True)
 
 for shp in input_dir.glob('*.shp'):
     gdf = gpd.read_file(shp)
@@ -224,13 +225,15 @@ from shapely.geometry import shape
 
 with rasterio.open('raster.tif') as src:
     image = src.read(1)
+    valid = src.read_masks(1) > 0
+    crs = src.crs
     results = (
         {'properties': {'value': v}, 'geometry': s}
-        for s, v in rasterio.features.shapes(image, transform=src.transform)
+        for s, v in rasterio.features.shapes(image, mask=valid, transform=src.transform)
     )
 
 geoms = list(results)
-gdf = gpd.GeoDataFrame.from_features(geoms, crs=src.crs)
+gdf = gpd.GeoDataFrame.from_features(geoms, crs=crs)
 ```
 
 ### Vector to Raster Conversion
@@ -256,18 +259,19 @@ raster = rasterize(
 ```python
 import rasterio.merge
 import rasterio as rio
+from contextlib import ExitStack
 
 files = ['tile1.tif', 'tile2.tif', 'tile3.tif']
-datasets = [rio.open(f) for f in files]
-
-merged, transform = rasterio.merge.merge(datasets)
-
-# Save
-profile = datasets[0].profile
-profile.update(transform=transform, height=merged.shape[1], width=merged.shape[2])
-
-with rio.open('merged.tif', 'w', **profile) as dst:
-    dst.write(merged)
+with ExitStack() as stack:
+    datasets = [stack.enter_context(rio.open(f)) for f in files]
+    # Verify matching CRS, band count/type and compatible grids before merging.
+    merged, transform = rasterio.merge.merge(datasets)
+    profile = datasets[0].profile.copy()
+    profile.update(transform=transform, height=merged.shape[1], width=merged.shape[2])
+    with rio.open('merged.tif', 'w', **profile) as dst:
+        dst.write(merged)
 ```
 
 For more detailed examples, see [code-examples.md](code-examples.md).
+
+Sources: [Rasterio masks](https://rasterio.readthedocs.io/en/stable/topics/masks.html), [PyProj Transformer](https://pyproj4.github.io/pyproj/stable/api/transformer.html), [GeoPandas API](https://geopandas.org/en/stable/docs/reference.html).

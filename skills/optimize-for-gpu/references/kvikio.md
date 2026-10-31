@@ -1,6 +1,9 @@
 # KvikIO Reference — High-Performance GPU File IO
 
-KvikIO is a Python and C++ library for high-performance file IO. It provides bindings to NVIDIA cuFile, enabling GPUDirect Storage (GDS) — reading and writing data directly between storage and GPU memory, bypassing CPU memory entirely. When GDS isn't available, KvikIO falls back gracefully to POSIX IO while still handling both host and device data seamlessly.
+> Review: 2026-10-01. Code below is illustrative unless explicitly described as CPU-tested.
+> GPU execution, performance, GDS, and multi-GPU behavior require validation on target hardware.
+
+KvikIO is a Python and C++ library for high-performance file IO. It provides bindings to NVIDIA cuFile, enabling GPUDirect Storage (GDS) — eligible local reads and writes between supported storage and GPU memory. When GDS isn't available, KvikIO falls back gracefully to POSIX IO while still handling both host and device data seamlessly.
 
 KvikIO is part of the RAPIDS ecosystem and interoperates with CuPy, cuDF, Numba, and other GPU libraries.
 
@@ -24,10 +27,10 @@ KvikIO is part of the RAPIDS ecosystem and interoperates with CuPy, cuDF, Numba,
 
 ```bash
 # CUDA 12.x
-uv add "kvikio-cu12==26.6.*"
+uv add "kvikio-cu12==26.8.*"
 
 # CUDA 13.x
-uv add "kvikio-cu13==26.6.*"
+uv add "kvikio-cu13==26.8.*"
 
 # For Zarr support (optional)
 uv add "zarr==3.*"
@@ -49,13 +52,13 @@ print(kvikio.cufile_driver.get("is_gds_available"))  # True if GDS is set up
 Use KvikIO when:
 - **Loading large binary data directly to GPU** — avoids the CPU-memory copy that standard `open()` or NumPy's `fromfile()` would require
 - **Writing GPU arrays to disk** — saves directly from device memory without copying to host first
-- **Reading from remote storage (S3, HTTP, WebHDFS) into GPU memory** — skips the host-memory staging step
+- **Reading from remote storage (S3, HTTP, WebHDFS) into GPU memory** — convenient device destinations; libcurl uses host bounce buffers
 - **Working with Zarr arrays on GPU** — the GDSStore backend reads chunks directly into CuPy arrays
-- **IO is the bottleneck** — GDS can achieve close to raw NVMe bandwidth (6-7 GB/s per drive) vs standard IO that tops out at CPU-memory bandwidth
+- **IO is the bottleneck** — compare the actual storage, filesystem, access pattern and GDS eligibility
 - **Overlapping IO and compute** — non-blocking reads/writes let you pipeline data loading with GPU computation
 
 KvikIO is a poor fit when:
-- Data is small (< 1 MB) — kernel launch and GDS overhead dominate
+- Small transfers whose setup costs dominate measured latency
 - You're reading structured formats (CSV, Parquet, JSON) — use cuDF instead, which has its own optimized readers
 - You only need host memory — standard Python IO is simpler
 
@@ -155,7 +158,7 @@ with kvikio.CuFile("data.bin", "r") as f:
 
 ### GDS Alignment
 
-GDS works best with page-aligned IO. The GPU page size is 4 KiB (4096 bytes):
+GDS works best with page-aligned IO. The relevant GDS I/O alignment is 4 KiB (4096 bytes); this is not a universal GPU memory-page size:
 - **File offset**: should be a multiple of 4096
 - **Transfer size**: should be a multiple of 4096
 
@@ -206,7 +209,7 @@ with kvikio.RemoteFile.open_s3_presigned_url(presigned_url) as f:
     f.read(buf)
 ```
 
-AWS credentials come from environment variables (`AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) or can be passed as keyword arguments.
+AWS credentials come from `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optionally `AWS_SESSION_TOKEN`, or documented keyword arguments. Resolve temporary credentials explicitly; do not assume the complete boto3 profile/role provider chain. S3/public/presigned endpoints and HTTP range behavior must match the actual service.
 
 ### Auto-Detect Endpoint Type
 
@@ -226,10 +229,13 @@ with kvikio.RemoteFile.open("https://example.com/file.bin") as f:
 ```python
 import kvikio
 
-with kvikio.RemoteFile.open_webhdfs("http://namenode:9870/path/to/file") as f:
+with kvikio.RemoteFile.open_webhdfs("http://namenode:9870/webhdfs/v1/path/to/file") as f:
     buf = cp.empty(f.nbytes(), dtype=cp.uint8)
     f.read(buf)
 ```
+
+Use the deployment's actual scheme, host, explicit port, and `/webhdfs/v1/` path.
+This example does not configure Kerberos or establish access to a protected cluster.
 
 ### Host Memory with RemoteFile
 
@@ -266,7 +272,7 @@ z = zarr.create_array(
     shape=(1000, 1000),
     chunks=(100, 100),
     dtype="float32",
-    overwrite=True,
+    overwrite=False,
 )
 
 # Reading returns CuPy arrays
@@ -278,7 +284,7 @@ Zarr + KvikIO is useful for:
 - Bioinformatics (genomic arrays)
 - Any workload using chunked arrays that need GPU processing
 
-Requires: `uv add "zarr==3.*"` in addition to KvikIO 26.06.
+Requires a compatible Zarr 3 release in addition to KvikIO 26.08. Check codec GPU support; a GPU store alone does not make every codec device-resident.
 
 ---
 
@@ -339,12 +345,12 @@ kvikio.defaults.set({"auto_direct_io_read": True})
 
 ### Compatibility Mode
 
-When GDS isn't available (missing `libcufile.so`, running in WSL, Docker without `/run/udev`), `AUTO` mode falls back to POSIX IO automatically. This means KvikIO code works everywhere — it just runs faster when GDS is available.
+When GDS isn't available (missing `libcufile.so`, running in WSL, Docker without `/run/udev`), `AUTO` mode falls back to POSIX IO automatically. This fallback still requires a supported KvikIO/CUDA platform; it does not add macOS support or guarantee a speedup.
 
 ```python
 import kvikio.cufile_driver
 
-# Check if GDS is actually being used
+# Check GDS capability; individual operations can still take compatibility/bounce-buffer paths
 print(kvikio.cufile_driver.get("is_gds_available"))
 ```
 
@@ -385,29 +391,55 @@ kvikio.defaults.set({"num_threads": 16})
 Overlap IO with compute by using `pread`/`pwrite`:
 
 ```python
+from pathlib import Path
 import cupy as cp
 import kvikio
 
-# Pipeline: read chunk N while processing chunk N-1
-chunk_size = 10_000_000
-buf_a = cp.empty(chunk_size, dtype=cp.float32)
-buf_b = cp.empty(chunk_size, dtype=cp.float32)
+def process_float32_chunks(path, chunk_items, consume):
+    """Consume every chunk, including the tail, without reusing a live GPU buffer."""
+    if chunk_items <= 0:
+        raise ValueError("chunk_items must be positive")
+    nbytes = Path(path).stat().st_size
+    if nbytes % 4:
+        raise ValueError("Input must contain complete float32 values")
+    total = nbytes // 4
+    if total == 0:
+        return
+    buf_a = cp.empty(chunk_items, dtype=cp.float32)
+    buf_b = cp.empty_like(buf_a)
+    stream = cp.cuda.get_current_stream()
+    with kvikio.CuFile(path, "r") as f:
+        count = min(chunk_items, total)
+        future = f.pread(buf_a[:count], file_offset=0)
+        offset = 0
+        while count:
+            if future.get() != count * 4:
+                raise EOFError("Short read")
+            next_count = min(chunk_items, total - offset - count)
+            next_future = None
+            if next_count:
+                next_future = f.pread(buf_b[:next_count],
+                                      file_offset=(offset + count) * 4)
+            try:
+                try:
+                    consume(buf_a[:count])  # Enqueue only on the current CuPy stream.
+                finally:
+                    stream.synchronize()  # Finish using this buffer before recycling it.
+            except BaseException:
+                if next_future is not None:
+                    next_future.get()  # Drain pending I/O before either buffer is freed.
+                raise
+            offset += count
+            count, future = next_count, next_future
+            buf_a, buf_b = buf_b, buf_a
 
-with kvikio.CuFile("large_data.bin", "r") as f:
-    # Start first read
-    future = f.pread(buf_a)
-    future.get()
-
-    for offset in range(chunk_size * 4, file_size, chunk_size * 4):
-        # Start next read while processing current
-        next_future = f.pread(buf_b, file_offset=offset)
-
-        # Process buf_a on GPU (overlaps with IO)
-        result = cp.fft.fft(buf_a)
-
-        next_future.get()
-        buf_a, buf_b = buf_b, buf_a  # Swap buffers
+# consume must finish using its input on this stream and must not retain that view.
+# process_float32_chunks("large_data.bin", 1_000_000, consume)
 ```
+
+The chunk/tail and buffer-lifetime logic is CPU-tested with fake asynchronous I/O and streams;
+actual overlap and throughput are not GPU-verified. A callback using other streams must join
+those streams before returning.
 
 ### 3. Align IO to Page Boundaries
 
@@ -459,8 +491,7 @@ print(f"{pages_cached}/{total_pages} pages in cache")
 # Drop the page cache for a single file (no elevated privileges needed; added in 26.04)
 kvikio.drop_file_page_cache("data.bin")
 
-# Drop the system-wide page cache (requires elevated permissions)
-kvikio.drop_system_page_cache()
+# Avoid system-wide cache eviction on a shared host. Use a dedicated benchmark environment.
 ```
 
 `kvikio.clear_page_cache()` is deprecated since 26.04 — use `drop_system_page_cache()` (or the per-file `drop_file_page_cache()`) instead.
@@ -533,6 +564,12 @@ with kvikio.CuFile("data.bin", "r") as f:
 
 ### Save and Load GPU Model Checkpoints
 
+This is a raw contiguous-array container, not a self-describing or atomic checkpoint
+format. Save an ordered manifest with each array's name, shape, dtype/byte order,
+and byte offset; load using that exact order, and validate total file length and
+checksums. Synchronize producers before writing. For recovery-safe checkpoints,
+publish only after the payload and manifest are both complete.
+
 ```python
 import cupy as cp
 import kvikio
@@ -542,7 +579,10 @@ def save_checkpoint(arrays: dict[str, cp.ndarray], path: str):
     with kvikio.CuFile(path, "w") as f:
         offset = 0
         for arr in arrays.values():
-            f.write(arr, file_offset=offset)
+            if not arr.flags.c_contiguous:
+                raise ValueError("Checkpoint arrays must be C-contiguous")
+            if f.write(arr, file_offset=offset) != arr.nbytes:
+                raise IOError("Incomplete checkpoint write")
             offset += arr.nbytes
 
 def load_checkpoint(shapes_dtypes: dict, path: str) -> dict[str, cp.ndarray]:
@@ -552,7 +592,8 @@ def load_checkpoint(shapes_dtypes: dict, path: str) -> dict[str, cp.ndarray]:
         offset = 0
         for name, (shape, dtype) in shapes_dtypes.items():
             arr = cp.empty(shape, dtype=dtype)
-            f.read(arr, file_offset=offset)
+            if f.read(arr, file_offset=offset) != arr.nbytes:
+                raise IOError("Incomplete checkpoint read")
             offset += arr.nbytes
             arrays[name] = arr
     return arrays
@@ -566,14 +607,19 @@ import kvikio
 
 with kvikio.RemoteFile.open_s3("my-bucket", "large-dataset.bin") as f:
     total_bytes = f.nbytes()
+    if total_bytes % 4:
+        raise ValueError("Object is not an integral number of float32 values")
     chunk_size = 100 * 1024 * 1024  # 100 MB chunks
     buf = cp.empty(chunk_size // 4, dtype=cp.float32)
 
     for offset in range(0, total_bytes, chunk_size):
         size = min(chunk_size, total_bytes - offset)
-        f.read(buf[:size // 4], size=size, file_offset=offset)
+        bytes_read = f.read(buf[:size // 4], size=size, file_offset=offset)
+        if bytes_read != size:
+            raise EOFError("Short remote read")
         # Process chunk on GPU
         result = cp.mean(buf[:size // 4])
+        cp.cuda.get_current_stream().synchronize()  # Finish before the next read reuses buf.
 ```
 
 ### Replace Python open() for GPU Workloads

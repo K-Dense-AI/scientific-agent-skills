@@ -2,6 +2,8 @@
 
 Source: https://pi.dev/docs/latest/extensions
 
+Reviewed against Pi 0.99.2 and the package versions listed in `../SKILL.md` on 2026-09-30.
+
 Extensions are TypeScript modules that extend Pi. They register tools, commands, shortcuts, CLI flags, providers, renderers, UI, event handlers, and persistent session entries. They run with the full permissions of the Pi process — only install extensions you trust.
 
 ## Locations
@@ -67,8 +69,10 @@ Session replacement (`/new`, `/resume`): `session_before_switch` (cancellable) �
 
 - `project_trust` — must return `{ trusted: "yes" | "no" | "undecided", remember?: boolean }`. First yes/no decision wins and suppresses the built-in prompt. `ctx` is a limited trust context (cwd, mode, hasUI, select/confirm/input/notify).
 - `resources_discover` — return `{ skillPaths, promptPaths, themePaths }`.
-- `before_agent_start` — return `{ message }` to inject a persistent custom message and/or `{ systemPrompt }` to replace it for this turn (chained across handlers). `event.systemPromptOptions` exposes the structured inputs Pi used: `customPrompt`, `selectedTools`, `toolSnippets`, `promptGuidelines`, `appendSystemPrompt`, `cwd`, `contextFiles`, `skills`.
-- `context` — `event.messages` is a deep copy; return `{ messages }` to modify what the LLM sees.
+- `before_agent_start` — return `{ message }` to inject a persistent custom message. Prefer structured prompt-section/tool updates so Pi persists transcript deltas; `{ systemPrompt }` or `forceSystemPrompt` forces the leading provider prompt for this run. `event.systemPromptOptions` exposes the structured inputs Pi used: `customPrompt`, `selectedTools`, `toolSnippets`, `promptGuidelines`, `appendSystemPrompt`, `cwd`, `contextFiles`, `skills`.
+- `context` — transforms the conversation without prompt/tool system messages; Pi restores that state afterward. Use `context_with_system` only to own the complete request-local transcript and preserve a system message at index zero.
+- `provider_stream_event` — observes each parsed provider event before normalization; awaited, notification-only, not persisted.
+- `turn_end` / `agent_before_settle` — may propose `custom`, `custom_message`, `context_edit`, or `compaction` entries and request one continuation with `continue: true`; guard against unconditional loops.
 - `before_provider_headers` — mutate `event.headers` in place; a string adds/overrides, `null` deletes. Fires once per request; retries reuse the headers.
 - `before_provider_request` — inspect or replace `event.payload`; handlers run in load order and `undefined` keeps it unchanged. Payload-level system-instruction rewrites are not reflected by `ctx.getSystemPrompt()`.
 - `after_provider_response` — `event.status` and normalized `event.headers` before the stream body is consumed.
@@ -119,7 +123,7 @@ Model and provider: `setModel(model)` (returns `false` without an API key), `get
 
 `refreshModels` receives the canonical credential/stored-catalog/network/signal context: `context.stored` is the persisted provider snapshot, and persistence goes through generation-checked `context.publish({ persist: entry })` (`persist: null` deletes the snapshot). Live servers such as llama.cpp can return models without persisting. `context.signal` is always a concrete signal and provider callbacks must pass it to blocking I/O; public `ModelRuntime.refresh()` / `ModelRegistry.refresh()` accept an optional signal and are unbounded when it is omitted, so extensions choose their own deadlines. Cancellation stops the caller waiting even if a provider ignores the signal. OAuth `refreshToken(credentials, signal)` now takes the signal as a second argument.
 
-Other: `exec(command, args, { signal, timeout })` → `{ stdout, stderr, code, killed }`, `on(event, handler)`, `events` (inter-extension bus).
+Other: `exec(command, args, { signal, timeout })` → `{ stdout, stderr, code, killed }`, `on(event, handler)` (returns unsubscribe), `events` (inter-extension bus), `registerMcpServer`/`unregisterMcpServer`/`getMcpServers` for native MCP. Tools can call `ctx.executeTool(name, args, { signal, onUpdate })`; nested calls pass normal validation/hooks and emit `parentToolCallId`. Pi records bounded nested-call metadata and aggregates nested usage; callers must not double-count it.
 
 ## Custom Tools
 
@@ -145,7 +149,7 @@ pi.registerTool({
 - Use `StringEnum` from `@earendil-works/pi-ai` for string enums; `Type.Union`/`Type.Literal` breaks Google's API.
 - `promptGuidelines` bullets are appended flat with no tool-name prefix — always name the tool ("Use my_tool when…"), never "this tool".
 - `prepareArguments` runs before schema validation; use it to fold legacy argument shapes from resumed sessions instead of loosening `parameters`.
-- Signal errors by **throwing** — returning a value never sets `isError`.
+- Throw to fail a tool, or return `isError: true` when a structured failure result should remain available to script callers. With `outputSchema`, return matching `structuredContent`; ordinary model callers still receive `content`.
 - `terminate: true` hints that the follow-up LLM call should be skipped, and only applies when every finalized result in the batch terminates.
 - Return `usage` for nested LLM calls; Pi persists it and includes it in footer, `/session`, and RPC totals.
 - Strip a leading `@` from path arguments (some models add it), and wrap read-modify-write windows in `withFileMutationQueue(absolutePath, fn)` so the tool shares the per-file queue with built-in `edit`/`write` — tools run in parallel by default. Resolve to an absolute path first; the helper canonicalizes existing files through `realpath()`.
@@ -157,7 +161,9 @@ Remote execution: built-in tool factories accept pluggable `operations` (`ReadOp
 
 ### Dynamic Tool Loading
 
-Register every tool, keep only loader tools active, then call `pi.setActiveTools([...current, ...matched])` during loader execution. The change must be purely additive. Pi records the added names on the loader's tool result and exposes the definitions before the next model request — natively via `defer_loading`/`tool_reference` on Anthropic Sonnet/Opus/Fable 4.5+ and via `tool_search_call`/`tool_search_output` on OpenAI `gpt-5.4`+, otherwise by sending the normal active tool list. Verified custom endpoints can opt in with `compat.supportsToolReferences` (anthropic-messages) or `compat.supportsToolSearch` (openai-responses / openai-codex-responses). Non-additive changes fall back to the full list. Lazily loaded tools should rely on `description` and omit `promptSnippet`/`promptGuidelines`, which rebuild the system prompt and can invalidate the cached prefix.
+Register tools first; `pi.setActiveTools(names)` can activate known tools and ignores unknown names. Pi persists initial prompt/tool declarations and later changes as system messages; a provider unable to represent the transition receives a checkpoint and may lose its cache prefix. Do not assume additive changes are always cache-free.
+
+`exposure` controls reachability: `direct` (default, declared/callable while active), `model-only` (declared while active, never callable from another tool), `codemode` (callable while registered), `deferred` (callable but discovered instead of listed), or `hidden` (unreachable). There is no public tool unregister API in Pi 0.99.2; re-register hidden to withdraw a tool. `namespace` groups tools and `annotations` carry unverified MCP-style hints. `prepareLoadout(loadout)` can change declarations/descriptions while preserving callable tools. Prefer `model-only` for user interaction and orchestrator tools. See `mcp.md` for native MCP exposure (the default server `codemode` exposure deliberately uses deferred discovery).
 
 ## State Management
 
@@ -173,7 +179,7 @@ Custom-component details, overlays, built-in components, and copy-paste patterns
 
 ## Error Handling and Mode Behavior
 
-Extension errors are logged and the agent continues; `tool_call` errors block the tool (fail-safe); tool `execute` errors must be thrown and are reported to the LLM with `isError: true`.
+Extension errors are logged and the agent continues; `tool_call` errors block the tool (fail-safe); tool `execute` failures may throw or return `isError: true`. `user_bash` exceptions and invalid defined results fail closed; only `undefined` continues to later handlers/local execution.
 
 | Mode | `ctx.mode` | `ctx.hasUI` | Notes |
 |---|---|---|---|

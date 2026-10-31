@@ -46,16 +46,16 @@ Example:
 GET /efetch.fcgi?db=gene&id={gene_ids}&rettype=gene_table&retmode=text
 ```
 
-### eLink — Cross-database links (gene to pathways, PubMed, OMIM)
+### eLink — Cross-database links (gene to PubMed, OMIM, sequences)
 ```
 GET /elink.fcgi?dbfrom=gene&db={target_db}&id={gene_id}&retmode=json
 ```
 
-Target databases: `biosystems` (pathways), `pubmed`, `omim`, `nuccore`, `protein`
+Target databases include `pubmed`, `omim`, `nuccore`, and `protein`; discover supported links with EInfo. BioSystems is retired; use current KEGG/Reactome resources for pathways.
 
-Example — gene to pathways:
+Example — gene to PubMed:
 ```
-/elink.fcgi?dbfrom=gene&db=biosystems&id=672&retmode=json
+/elink.fcgi?dbfrom=gene&db=pubmed&id=672&retmode=json
 ```
 
 ## Rate Limits

@@ -1,6 +1,6 @@
 # Matplotlib Common Issues and Solutions
 
-Troubleshooting guide for frequently encountered matplotlib problems.
+Targets Matplotlib 3.11.2. Snippets illustrate individual fixes and assume imports, a figure, and suitable data unless shown. Apply alternatives separately; do not combine layout engines or run notebook magics as Python scripts.
 
 ## Display and Backend Issues
 
@@ -14,8 +14,8 @@ Troubleshooting guide for frequently encountered matplotlib problems.
 import matplotlib
 print(matplotlib.get_backend())
 
-# 2. Try different backends
-matplotlib.use('TkAgg')  # or 'Qt5Agg', 'MacOSX'
+# 2. Select an installed GUI backend before importing pyplot
+matplotlib.use('TkAgg')  # or 'QtAgg', 'MacOSX'; requires the corresponding GUI toolkit
 import matplotlib.pyplot as plt
 
 # 3. In Jupyter notebooks, use magic command
@@ -39,8 +39,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# Or turn off interactive mode
-plt.ioff()
+# plt.ioff() alone does not make a GUI backend safe in a worker thread.
 ```
 
 ### Issue: Figures Not Updating Interactively
@@ -67,7 +66,7 @@ plt.pause(0.001)  # Brief pause to update display
 **Solutions:**
 ```python
 # Solution 1: Constrained layout (RECOMMENDED)
-fig, ax = plt.subplots(constrained_layout=True)
+fig, ax = plt.subplots(layout='constrained')
 
 # Solution 2: Tight layout
 fig, ax = plt.subplots()
@@ -76,7 +75,7 @@ plt.tight_layout()
 # Solution 3: Adjust margins manually
 plt.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.15)
 
-# Solution 4: Save with bbox_inches='tight'
+# Solution 4: Crop the export (changes final dimensions; does not fix overlaps)
 plt.savefig('figure.png', bbox_inches='tight')
 
 # Solution 5: Rotate long tick labels
@@ -91,7 +90,7 @@ plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
 **Solution:**
 ```python
 # Solution 1: Use constrained layout
-fig, ax = plt.subplots(constrained_layout=True)
+fig, ax = plt.subplots(layout='constrained')
 im = ax.imshow(data)
 plt.colorbar(im, ax=ax)
 
@@ -115,7 +114,7 @@ fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.95)
 **Solution:**
 ```python
 # Solution 1: Use constrained_layout
-fig, axes = plt.subplots(2, 2, constrained_layout=True)
+fig, axes = plt.subplots(2, 2, layout='constrained')
 
 # Solution 2: Adjust spacing with subplots_adjust
 fig, axes = plt.subplots(2, 2)
@@ -161,8 +160,8 @@ ax.plot(x, y, rasterized=True)
 # Solution 3: Use vector format for simple plots
 plt.savefig('figure.pdf')  # or .svg
 
-# Solution 4: Compress PNG
-plt.savefig('figure.png', dpi=300, optimize=True)
+# Solution 4: Pass PNG compression options through Pillow
+fig.savefig('figure.png', dpi=300, pil_kwargs={'optimize': True})
 ```
 
 ### Issue: Slow Plotting with Large Datasets
@@ -173,15 +172,17 @@ plt.savefig('figure.png', dpi=300, optimize=True)
 ```python
 # Solution 1: Downsample data
 from scipy.signal import decimate
-y_downsampled = decimate(y, 10)  # Keep every 10th point
+y_downsampled = decimate(y, 10)  # Anti-alias filtering, then decimation
+ax.plot(x[::10], y_downsampled)  # Assumes evenly sampled x; inspect edge effects
 
 # Solution 2: Use rasterization
 ax.plot(x, y, rasterized=True)
 
-# Solution 3: Use line simplification
-ax.plot(x, y)
-for line in ax.get_lines():
-    line.set_rasterized(True)
+# Solution 3: Simplify paths in display coordinates; check that peaks survive
+with plt.rc_context({'path.simplify': True, 'path.simplify_threshold': 0.1}):
+    fig, ax = plt.subplots()
+    ax.plot(x, y)
+    fig.savefig('simplified.png')
 
 # Solution 4: For scatter plots, consider hexbin or 2d histogram
 ax.hexbin(x, y, gridsize=50, cmap='viridis')
@@ -197,18 +198,14 @@ ax.hexbin(x, y, gridsize=50, cmap='viridis')
 ```python
 # Solution 1: Use available fonts
 from matplotlib.font_manager import findfont, FontProperties
-print(findfont(FontProperties(family='sans-serif')))
+print(findfont(FontProperties(family=['sans-serif'])))
 
 # Solution 2: Check Matplotlib's cache directory, then restart Python
 import matplotlib
 print(matplotlib.get_cachedir())
 
-# Solution 3: Suppress warnings
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-
-# Solution 4: Specify fallback fonts
-plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'sans-serif']
+# Solution 3: Specify installed fallback fonts; missing-glyph warnings matter
+plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
 ```
 
 ### Issue: LaTeX Rendering Errors
@@ -247,7 +244,7 @@ plt.subplots_adjust(left=0.15, right=0.85, top=0.85, bottom=0.15)
 ax.text(x, y, 'text', clip_on=True)
 
 # Solution 4: Use constrained_layout
-fig, ax = plt.subplots(constrained_layout=True)
+fig, ax = plt.subplots(layout='constrained')
 ```
 
 ## Color and Colormap Issues
@@ -264,7 +261,12 @@ plt.colorbar(im, ax=ax)
 
 # Or use the same norm for multiple plots
 import matplotlib.colors as mcolors
-norm = mcolors.Normalize(vmin=data.min(), vmax=data.max())
+# Both panels must have the same physical quantity/units. Exclude missing values.
+combined = np.concatenate([np.asarray(data1).ravel(), np.asarray(data2).ravel()])
+finite = combined[np.isfinite(combined)]
+if finite.size == 0:
+    raise ValueError('No finite values for a shared color scale')
+norm = mcolors.Normalize(vmin=finite.min(), vmax=finite.max())
 im1 = ax1.imshow(data1, norm=norm, cmap='viridis')
 im2 = ax2.imshow(data2, norm=norm, cmap='viridis')
 ```
@@ -284,7 +286,7 @@ ax.plot(x, y, color='#0000FF')  # Correct hex
 print(plt.colormaps())  # List available colormaps
 
 # Solution 3: For scatter plots, ensure c shape matches
-ax.scatter(x, y, c=colors)  # colors should have same length as x, y
+ax.scatter(x, y, c=colors)  # Numeric colors: one value per point; uniform RGB goes in color=(r, g, b)
 
 # Solution 4: Check if alpha is set correctly
 ax.plot(x, y, alpha=1.0)  # 0=transparent, 1=opaque
@@ -296,7 +298,7 @@ ax.plot(x, y, alpha=1.0)  # 0=transparent, 1=opaque
 
 **Solution:**
 ```python
-# Add _r suffix to reverse any colormap
+# Built-in reversed names have _r; for a custom map use cmap.reversed()
 ax.imshow(data, cmap='viridis_r')
 ```
 
@@ -323,21 +325,19 @@ ax.axis([xmin, xmax, ymin, ymax])
 
 ### Issue: Log Scale with Zero or Negative Values
 
-**Problem:** ValueError when using log scale with data ≤ 0
+**Problem:** Nonpositive observations disappear or are clipped on a log scale
 
 **Solutions:**
 ```python
-# Solution 1: Filter out non-positive values
-mask = (data > 0)
-ax.plot(x[mask], data[mask])
-ax.set_yscale('log')
+# Solution 1: Explicitly mask invalid/nonpositive points, preserving line gaps
+masked = np.ma.masked_where(~np.isfinite(data) | (data <= 0), data)
+print(f'Excluded {np.ma.count_masked(masked)} points from the log plot')
+ax.plot(x, masked)
+ax.set_yscale('log', nonpositive='mask')
 
 # Solution 2: Use symlog for data with positive and negative values
-ax.set_yscale('symlog')
-
-# Solution 3: Add small offset
-ax.plot(x, data + 1e-10)
-ax.set_yscale('log')
+ax.set_yscale('symlog', linthresh=1)  # Choose/document threshold in data units
+# Do not add an arbitrary epsilon: it changes values and can hide zeros/censoring.
 ```
 
 ### Issue: Dates Not Displaying Correctly
@@ -378,7 +378,7 @@ ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 ax.legend(framealpha=0.7)
 
 # Solution 4: Put legend below plot
-ax.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncol=3)
+ax.legend(bbox_to_anchor=(0.5, -0.15), loc='upper center', ncols=3)
 ```
 
 ### Issue: Too Many Items in Legend
@@ -393,7 +393,7 @@ for i, (x, y) in enumerate(data):
     ax.plot(x, y, label=label)
 
 # Solution 2: Use multiple columns
-ax.legend(ncol=3)
+ax.legend(ncols=3)
 
 # Solution 3: Create custom legend with fewer entries
 from matplotlib.lines import Line2D
@@ -467,14 +467,16 @@ ax.imshow(np.flipud(img))
 
 **Solutions:**
 ```python
-# Solution 1: Use interpolation
+# For quantitative pixel/cell data preserve the sampling grid
+ax.imshow(img, interpolation='nearest')
+# Optional display smoothing (not new measurement information)
 ax.imshow(img, interpolation='bilinear')
 # Options: 'nearest', 'bilinear', 'bicubic', 'spline16', 'spline36', etc.
 
 # Solution 2: Increase DPI when saving
 plt.savefig('figure.png', dpi=300)
 
-# Solution 3: Use vector format if appropriate
+# PDF/SVG retain imshow pixels as raster images; they do not recover detail
 plt.savefig('figure.pdf')
 ```
 
@@ -527,7 +529,7 @@ data.plot(ax=ax)
 
 2. **Use constrained_layout** - Prevents overlap issues
    ```python
-   fig, ax = plt.subplots(constrained_layout=True)
+   fig, ax = plt.subplots(layout='constrained')
    ```
 
 3. **Close figures explicitly** - Prevents memory leaks
@@ -550,7 +552,7 @@ data.plot(ax=ax)
    assert len(x) == len(y)
    ```
 
-7. **Use appropriate DPI** - 300 for print, 150 for web
+7. **Choose output size and DPI together** - follow the destination requirements
    ```python
    plt.savefig('figure.png', dpi=300)
    ```
@@ -560,3 +562,20 @@ data.plot(ax=ax)
    import matplotlib
    matplotlib.use('TkAgg')
    ```
+
+## Current API checks
+
+- `fig.get_size_inches()` reads size; there is no public `fig.figsize` attribute.
+- `grid.alpha` is the rcParam, not `axes.grid.alpha`.
+- 3.11 removes `boxplot(labels=...)` and `matplotlib.cm.get_cmap`; use
+  `tick_labels=...` and `matplotlib.colormaps[name]`. Use `orientation` rather than
+  deprecated `vert` for box/violin plots.
+- In 3.11, `plt.subplots(num=existing_number)` requires `clear=True` to reuse the
+  figure by clearing it. To add to an existing Figure, use `fig.subplots(...)`.
+- Keep legend handles and labels both positional or both keyword arguments.
+- Prefer `cmap.with_extremes(bad='gray')` to pending-deprecated `set_bad`.
+
+Sources: [API changes](https://matplotlib.org/stable/api/prev_api_changes/api_changes_3.11.0.html),
+[savefig](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.savefig.html),
+[performance](https://matplotlib.org/stable/users/explain/artists/performance.html),
+[constrained layout](https://matplotlib.org/stable/users/explain/axes/constrainedlayout_guide.html).

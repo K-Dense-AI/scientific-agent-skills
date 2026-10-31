@@ -1,32 +1,13 @@
 #!/usr/bin/env python3
-"""
-TimesFM Covariates (XReg) Example
+"""Synthetic retail covariate generator and TimesFM 2.5 XReg recipe.
 
-Demonstrates the TimesFM covariate API using synthetic retail sales data.
-TimesFM 1.0 does NOT support forecast_with_covariates(); that requires
-TimesFM 2.5 + `uv pip install timesfm[xreg]`.
-
-This script:
-  1. Generates synthetic 3-store weekly retail data (24-week context, 12-week horizon)
-  2. Produces a 2x2 visualization showing WHAT each covariate contributes
-     and WHY knowing them improves forecasts -- all panels share the same
-     week x-axis (0 = first context week, 35 = last horizon week)
-  3. Exports a compact CSV (108 rows) and metadata JSON
-
-NOTE ON REAL DATA:
-  If you want to use a real retail dataset (e.g., Kaggle Rossmann Store Sales),
-  download it to a TEMP location -- do NOT commit large CSVs to this repo.
-
-      import tempfile, urllib.request
-      tmp = tempfile.mkdtemp(prefix="timesfm_retail_")
-      # urllib.request.urlretrieve("https://...store_sales.csv", f"{tmp}/store_sales.csv")
-      # df = pd.read_csv(f"{tmp}/store_sales.csv")
-
-  This skills directory intentionally keeps only tiny reference datasets.
+Plots show components used to generate the data, not estimated causal effects
+or improved forecast accuracy. Default run generates data only, with no weights.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -34,6 +15,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+plt.rcParams["text.parse_math"] = False
 import numpy as np
 import pandas as pd
 
@@ -51,7 +33,7 @@ def generate_sales_data() -> dict:
 
     Returns a dict with:
       stores:     {store_id: {sales, config}}
-      covariates: {price, promotion, holiday, day_of_week, store_type, region}
+      covariates: {price, promotion, holiday, week_of_year, store_type, region}
       components: {store_id: {base, price_effect, promo_effect, holiday_effect}}
 
     Components let us show 'what would sales look like without covariates?' --
@@ -76,7 +58,7 @@ def generate_sales_data() -> dict:
     prices_by_store: dict[str, np.ndarray] = {}
     promos_by_store: dict[str, np.ndarray] = {}
     holidays_by_store: dict[str, np.ndarray] = {}
-    dow_by_store: dict[str, np.ndarray] = {}
+    week_by_store: dict[str, np.ndarray] = {}
 
     for store_id, config in stores.items():
         bp = base_prices[store_id]
@@ -99,7 +81,7 @@ def generate_sales_data() -> dict:
         promotion = rng.choice([0.0, 1.0], TOTAL_LEN, p=[0.8, 0.2]).astype(np.float32)
         promo_effect = (150 * promotion).astype(np.float32)
 
-        day_of_week = np.tile(np.arange(7), TOTAL_LEN // 7 + 1)[:TOTAL_LEN].astype(
+        week_of_year = (weeks % 52).astype(
             np.int32
         )
 
@@ -116,13 +98,13 @@ def generate_sales_data() -> dict:
         prices_by_store[store_id] = price
         promos_by_store[store_id] = promotion
         holidays_by_store[store_id] = holidays
-        dow_by_store[store_id] = day_of_week
+        week_by_store[store_id] = week_of_year
 
     data["covariates"] = {
         "price": prices_by_store,
         "promotion": promos_by_store,
         "holiday": holidays_by_store,
-        "day_of_week": dow_by_store,
+        "week_of_year": week_by_store,
         "store_type": {sid: stores[sid]["type"] for sid in stores},
         "region": {sid: stores[sid]["region"] for sid in stores},
     }
@@ -140,7 +122,7 @@ def create_visualization(data: dict) -> None:
 
     Each panel has a conclusion annotation box explaining what the data shows.
     """
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     store_colors = {"store_A": "#1a56db", "store_B": "#057a55", "store_C": "#c03221"}
     weeks = np.arange(TOTAL_LEN)
@@ -153,7 +135,7 @@ def create_visualization(data: dict) -> None:
         gridspec_kw={"hspace": 0.42, "wspace": 0.32},
     )
     fig.suptitle(
-        "TimesFM Covariates (XReg) -- Retail Sales with Exogenous Variables\n"
+        "Synthetic Retail Covariates -- Generator Components (No Forecast Executed)\n"
         "Shared x-axis: Week 0-23 = context (observed) | Week 24-35 = forecast horizon",
         fontsize=13,
         fontweight="bold",
@@ -213,7 +195,7 @@ def create_visualization(data: dict) -> None:
     )
     ax.annotate(
         f"Store A earns {ratio:.1f}x Store C\n(premium vs discount pricing)\n"
-        f"-> store_type is a useful static covariate",
+        f"Generator assigns different store baselines",
         xy=(0.97, 0.05),
         xycoords="axes fraction",
         ha="right",
@@ -326,7 +308,7 @@ def create_visualization(data: dict) -> None:
     ax.grid(True, alpha=0.22)
     ax.annotate(
         "Prices are planned -- known for forecast horizon\n"
-        "Price elasticity: -$1 increase -> -20 units sold\n"
+        "Generator coefficient: +$1 -> -20 units\n"
         "Store A ($12) consistently more expensive than C ($7.50)",
         xy=(0.97, 0.05),
         xycoords="axes fraction",
@@ -382,7 +364,7 @@ def create_visualization(data: dict) -> None:
     ax.annotate(
         f"Holidays (+200) and promotions (+150) dominate\n"
         f"Price effect (+/-{np.abs(pe).max():.0f} units) is minor by comparison\n"
-        f"-> Time-varying covariates explain most sales spikes",
+        f"These effects were assigned by the generator",
         xy=(0.97, 0.55),
         xycoords="axes fraction",
         ha="right",
@@ -395,59 +377,54 @@ def create_visualization(data: dict) -> None:
         for col in [0, 1]:
             axes[row, col].set_xticks(tick_pos)
 
-    plt.tight_layout()
     output_path = OUTPUT_DIR / "covariates_data.png"
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"\n Saved visualization: {output_path}")
 
 
+def build_covariates(data: dict) -> dict:
+    """Keep store order identical across target and full-length feature arrays."""
+    ids = list(data["stores"])
+    return {
+        "inputs": [data["stores"][sid]["sales"][:CONTEXT_LEN].copy() for sid in ids],
+        "dynamic_numerical_covariates": {
+            name: [data["covariates"][name][sid].copy() for sid in ids]
+            for name in ("price", "promotion", "holiday")
+        },
+        "static_categorical_covariates": {
+            "store_type": [data["covariates"]["store_type"][sid] for sid in ids]
+        },
+    }
+
+
 def demonstrate_api() -> None:
-    print("\n" + "=" * 70)
-    print("  TIMESFM COVARIATES API (TimesFM 2.5)")
-    print("=" * 70)
     print("""
-# Installation
-uv pip install timesfm[xreg]
-
-import timesfm
-hparams   = timesfm.TimesFmHparams(backend="cpu", per_core_batch_size=32, horizon_len=12)
-ckpt      = timesfm.TimesFmCheckpoint(huggingface_repo_id="google/timesfm-2.5-200m-pytorch")
-model     = timesfm.TimesFm(hparams=hparams, checkpoint=ckpt)
-
-point_fc, quant_fc = model.forecast_with_covariates(
-    inputs=[sales_a, sales_b, sales_c],
-    dynamic_numerical_covariates={"price": [price_a, price_b, price_c]},
-    dynamic_categorical_covariates={"holiday": [hol_a, hol_b, hol_c]},
-    static_categorical_covariates={"store_type": ["premium","standard","discount"]},
-    xreg_mode="xreg + timesfm",
-    normalize_xreg_target_per_input=True,
-)
-# point_fc:  (num_series, horizon_len)
-# quant_fc:  (num_series, horizon_len, 10)
+# CPU XReg requires timesfm[torch]==3.0.2, jax and scikit-learn.
+# Run preflight, then load the 2.5 model via forecast_csv.load_model with
+# return_backcast=True, nonnegative=False, horizon=HORIZON_LEN.
+# `data` comes from generate_sales_data(); future schedules are assumed known.
+# point_list, quantile_list = model.forecast_with_covariates(
+#     **build_covariates(data), xreg_mode="xreg + timesfm", ridge=1.0,
+#     force_on_cpu=True,
+# )
+# point_list[i].shape == (12,); quantile_list[i].shape == (12,10)
+# This generator does not execute the pretrained call or evaluate accuracy.
 """)
 
 
 def explain_xreg_modes() -> None:
-    print("\n" + "=" * 70)
-    print("  XREG MODES")
-    print("=" * 70)
-    print("""
-"xreg + timesfm" (DEFAULT)
-  1. TimesFM makes baseline forecast
-  2. Fit regression on residuals (actual - baseline) ~ covariates
-  3. Final = TimesFM baseline + XReg adjustment
-  Best when: covariates explain residual variation (e.g. promotions)
-
-"timesfm + xreg"
-  1. Fit regression: target ~ covariates
-  2. TimesFM forecasts the residuals
-  3. Final = XReg prediction + TimesFM residual forecast
-  Best when: covariates explain the main signal (e.g. temperature)
-""")
+    print('"xreg + timesfm": regression on targets, then TimesFM on residuals (default).')
+    print('"timesfm + xreg": TimesFM first, then regression on backcast residuals.')
+    print('Both need return_backcast=True; second mode needs context >32 points.')
 
 
 def main() -> None:
+    global OUTPUT_DIR
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    args = parser.parse_args()
+    OUTPUT_DIR = args.output_dir
     print("=" * 70)
     print("  TIMESFM COVARIATES (XREG) EXAMPLE")
     print("=" * 70)
@@ -467,7 +444,7 @@ def main() -> None:
     create_visualization(data)
 
     print("\n Saving output data...")
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     records = []
     for store_id, store_data in data["stores"].items():
@@ -487,7 +464,7 @@ def main() -> None:
                     ),
                     "promotion": int(data["covariates"]["promotion"][store_id][i]),
                     "holiday": int(data["covariates"]["holiday"][store_id][i]),
-                    "day_of_week": int(data["covariates"]["day_of_week"][store_id][i]),
+                    "week_of_year": int(data["covariates"]["week_of_year"][store_id][i]),
                     "store_type": data["covariates"]["store_type"][store_id],
                     "region": data["covariates"]["region"][store_id],
                 }
@@ -522,7 +499,7 @@ def main() -> None:
         },
         "covariates": {
             "dynamic_numerical": ["price"],
-            "dynamic_categorical": ["promotion", "holiday", "day_of_week"],
+            "dynamic_categorical": ["promotion", "holiday", "week_of_year"],
             "static_categorical": ["store_type", "region"],
         },
         "effect_magnitudes": {
@@ -531,8 +508,8 @@ def main() -> None:
             "price": "-20 units per $1 above base price",
         },
         "xreg_modes": {
-            "xreg + timesfm": "Regression on TimesFM residuals (default)",
-            "timesfm + xreg": "TimesFM on regression residuals",
+            "xreg + timesfm": "TimesFM on regression residuals (default)",
+            "timesfm + xreg": "Regression on TimesFM backcast residuals",
         },
         "bug_fixes_history": [
             "v1: Variable-shadowing -- all stores had identical covariates",
@@ -551,7 +528,7 @@ def main() -> None:
     print("=" * 70)
     print("""
 Key points:
-  1. Requires timesfm[xreg] + TimesFM 2.5+ for actual inference
+  1. Requires package3.0.2 + TimesFM2.5 + JAX/scikit-learn for actual inference
   2. Dynamic covariates need values for BOTH context AND horizon (future must be known!)
   3. Static covariates: one value per series (store_type, region)
   4. All 4 visualization panels share the same week x-axis (0-35)
