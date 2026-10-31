@@ -662,7 +662,7 @@ Package versions below identify the baselines documented by the skills. Follow e
 - Workflow mining: Autoskill (local screenpipe-based repeated workflow detection and skill drafting)
 - Agent platform development: [Pi Agent](skills/pi-agent/SKILL.md) (Pi 0.99.2 terminal harness, SDK, RPC/JSONL, native MCP, extensions, providers/models, packages, TUI components, and session tooling)
 
-#### 🎓 **Research Methodology & Planning** (13 skills)
+#### 🎓 **Research Methodology & Planning** (14 skills)
 - Ideation: evidence-aware Scientific Brainstorming and non-scoring Hypothesis Generation that keeps hypotheses labeled as candidates
 - Text-dataset hypothesis software: HypoGeniC/HypoRefine produces candidate textual patterns and task-prediction statistics, not validated scientific hypotheses
 - Autonomous optimization: Arbor (Hypothesis Tree Refinement — iteratively improve a code/model/agent-harness/data artifact against a dev evaluator while a held-out test gate guards against overfitting)
@@ -672,6 +672,7 @@ Package versions below identify the baselines documented by the skills. Follow e
 - Cognitive profiling: DHDNA Profiler (extract thinking patterns and cognitive signatures from any text)
 - Funding: Research Grants
 - Discovery: Research Lookup, Paper Lookup (10 academic databases)
+- Reading decisions: Research Weave maps claim-level support, evidence dependence, and aligned contradictions to prioritize papers for a scoped research question
 - Market analysis: evidence-traceable Market Research Reports with assumption-led sizing and forecast sensitivity
 
 #### ⚖️ **Regulatory & Standards** (2 skills)

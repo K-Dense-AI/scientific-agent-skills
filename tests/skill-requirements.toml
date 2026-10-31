@@ -73,6 +73,9 @@ packages = ["matplotlib", "seaborn", "plotly", "pypdf", "pillow", "numpy"]
 
 # --- literature and research workflow -------------------------------------
 
+[skills.research-weave]
+packages = []
+
 [skills.citation-management]
 # The BibTeX parsing, rendering, and validation layers are standard library
 # (scripts/_common.py). `requests` covers Crossref, PubMed, OpenAlex, and the
