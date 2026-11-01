@@ -296,6 +296,18 @@ class SummarizeRoutesTests(TemporaryDirectoryTestCase):
         self.assertEqual(rows[0]["unparsable_smiles"], PENTAVALENT_CARBON)
         self.assertEqual(rows[0]["steps"], 0)
 
+    def test_a_missing_or_empty_smiles_is_a_visible_failure(self) -> None:
+        for route in ([{"type": "mol", "smiles": "", "is_chemical": True, "in_stock": True}],
+                      [{"type": "mol", "is_chemical": True, "in_stock": True}]):
+            rows = self.summarize(route, name=f"trees{len(route[0])}.json")
+            self.assertEqual(rows[0]["unparsable_smiles"], summarize_routes.EMPTY_SMILES)
+        path = self.root / "empty.json"
+        path.write_text(json.dumps([{"type": "mol", "smiles": "", "in_stock": True}]), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = summarize_routes.main([str(path), str(self.root / "routes.csv"), "--strict"])
+        self.assertEqual(code, 1)
+        self.assertIn("[FAIL]", out.getvalue())
+
     def test_an_in_stock_leaf_with_a_bad_smiles_is_reported(self) -> None:
         bad_leaf = mol_node(PARACETAMOL, children=[
             reaction_node(">>", [mol_node(ACETIC_ANHYDRIDE, True),

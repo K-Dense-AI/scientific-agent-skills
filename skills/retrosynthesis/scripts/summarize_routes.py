@@ -29,6 +29,9 @@ from pathlib import Path
 
 from rdkit import Chem, RDLogger
 
+#: Placeholder for a molecule node whose `smiles` is missing or empty.
+EMPTY_SMILES = "<empty>"
+
 ROUTE_FIELDS = [
     "target", "route", "solved", "steps", "longest_linear_steps", "n_leaves", "leaves_in_stock",
     "leaves_not_in_stock", "state_score", "scores", "unparsable_smiles", "element_mismatch_steps",
@@ -43,7 +46,7 @@ def load_routes(path: Path):
         data = json.load(handle)
     if isinstance(data, list):
         routes = data
-        target = routes[0]["smiles"] if routes else ""
+        target = routes[0].get("smiles", "") if routes else ""
         return [(target, routes)]
     if isinstance(data, dict) and "data" in data:
         targets = []
@@ -99,8 +102,12 @@ def check_route(route):
     # Every molecule node, so a childless root or an in-stock leaf cannot carry
     # an unparsable SMILES past the reaction loop below.
     for node in molecules(route):
-        if _mol(node["smiles"]) is None:
-            unparsable.add(node["smiles"])
+        smiles = node.get("smiles", "")
+        if _mol(smiles) is None:
+            # A missing or empty SMILES is a failure too, and it has to reach the
+            # report as visible text: an empty string would join to "" and make
+            # the column look clean.
+            unparsable.add(smiles if smiles else EMPTY_SMILES)
     for product, reaction, depth in walk(route):
         steps += 1
         longest = max(longest, depth + 1)
@@ -109,8 +116,8 @@ def check_route(route):
             policies[meta["policy_name"]] += 1
         if meta.get("classification"):
             classes[meta["classification"]] += 1
-        product_mol = _mol(product["smiles"])
-        reactant_mols = [_mol(child["smiles"]) for child in reaction.get("children", [])]
+        product_mol = _mol(product.get("smiles", ""))
+        reactant_mols = [_mol(child.get("smiles", "")) for child in reaction.get("children", [])]
         if product_mol is None or any(mol is None for mol in reactant_mols):
             continue
         supplied = Counter()
@@ -118,18 +125,18 @@ def check_route(route):
             supplied.update(_heavy_elements(mol))
         missing = {el: n for el, n in _heavy_elements(product_mol).items() if supplied[el] < n}
         if missing:
-            mismatch.append(f"{steps}:{product['smiles']}")
+            mismatch.append(f"{steps}:{product.get('smiles', '')}")
         if _defined_centers(product_mol) > sum(_defined_centers(mol) for mol in reactant_mols):
-            stereo_set.append(f"{steps}:{product['smiles']}")
+            stereo_set.append(f"{steps}:{product.get('smiles', '')}")
     leaf_nodes = list(leaves(route))
-    not_in_stock = [leaf["smiles"] for leaf in leaf_nodes if not leaf.get("in_stock")]
+    not_in_stock = [leaf.get("smiles", "") for leaf in leaf_nodes if not leaf.get("in_stock")]
     scores = route.get("scores", {})
     return {
         "solved": not not_in_stock,
         "steps": steps,
         "longest_linear_steps": longest,
         "n_leaves": len(leaf_nodes),
-        "leaves_in_stock": ".".join(leaf["smiles"] for leaf in leaf_nodes if leaf.get("in_stock")),
+        "leaves_in_stock": ".".join(leaf.get("smiles", "") for leaf in leaf_nodes if leaf.get("in_stock")),
         "leaves_not_in_stock": ".".join(not_in_stock),
         "state_score": scores.get("state score", ""),
         "scores": json.dumps(scores, sort_keys=True) if scores else "",

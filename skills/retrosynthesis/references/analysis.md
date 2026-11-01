@@ -5,14 +5,17 @@ and filter policies, and the ZINC stock, on CPU.
 
 ## Statistics
 
-`finder.extract_statistics()` after `build_routes()`, and every column of a
-batch `output.json.gz`, carry these fields. The ones that decide whether a
+`finder.extract_statistics()` after `tree_search()` and `build_routes()`, and
+every column of a batch `output.json.gz`, carry these fields. Both earlier
+calls are required: without `build_routes` it returns an empty dict, and
+without a completed `tree_search` it raises `KeyError: 'time'` reading
+`search_stats`. The ones that decide whether a
 result is usable:
 
 | Field | What it actually says |
 | --- | --- |
-| `is_solved` | Whether the **top-ranked** route's leaves are all in the selected stock, and nothing about the other routes. Under multi-objective ranking it is not a Boolean at all but a pipe-joined string over the Pareto front, see below. |
-| `number_of_steps` | The top-ranked MCTS state's `max_transforms`, which is the route's **depth**. For a convergent route that is fewer than the number of reactions, so do not read it as a step count: count `tree.reactions()`, or the `steps` column from `summarize_routes.py`. |
+| `is_solved` | Whether the **top-ranked** route's leaves are all in the selected stock, and nothing about the other routes. Multi-objective ranking reports the whole Pareto front through `_top_ranked_join`, so the value stays a Boolean when the front has one member and becomes a pipe-joined string when it has several, see below. |
+| `number_of_steps` | Algorithm-dependent. Under MCTS it is the top-ranked state's `max_transforms`, which is the route's **depth**: a convergent three-reaction route at depth 2 reports 2. Under the AND/OR algorithms it is `len(list(route.reactions()))`, an actual reaction count. Count `tree.reactions()` yourself, or read the `steps` and `longest_linear_steps` columns from `summarize_routes.py`, if the two must be comparable. |
 | `number_of_solved_routes` / `number_of_routes` | Under MCTS, childless nodes of the **search tree**, not the extracted set: 23 solved of 46 for paracetamol, 0 of 150 for ibuprofen at 100 iterations, while `len(finder.routes)` for that ibuprofen run was 8. Under the AND/OR algorithms (Retro\*, DFPN, breadth-first) the same fields count what `search_tree.routes()` returns, so the two are not comparable. `post_processing.min_routes` and `max_routes` govern extraction either way. |
 | `top_score` | The top-ranked route's score under the active scorer, `state score` by default. Not a probability of success, and `None` under multi-objective ranking, where the per-route scores in `trees` are the ones to read. |
 | `first_solution_iteration`, `first_solution_time` | 0 when nothing was solved. A value close to the iteration limit means the budget was the binding constraint. |
@@ -20,7 +23,7 @@ result is usable:
 | `precursors_availability` | Semicolon-separated per precursor, naming each stock that holds it, which is how you tell an in-house hit from a catalogue hit. |
 | `number_of_nodes`, `max_transforms`, `max_children` | Shape of the search tree, useful to see whether the search explored or thrashed. |
 | `profiling` | `expansion_calls`, `reactants_generations`, `iterations`. Measured: 284 expansion calls and 2433 reactant generations for a 100-iteration paracetamol search against a small stock, 33 and 479 against ZINC, because a solved node stops being expanded. |
-| `policy_used_counts` | Reaction actions in the search tree per policy, read off every node-child edge, not the number of model calls. Still the check that a second policy is contributing. |
+| `policy_used_counts` | Also algorithm-dependent, and never a count of model calls. Under MCTS it counts the `action` on every node-child edge of the search tree. Under the AND/OR algorithms it counts reactions across all returned routes, so a step shared by two routes is counted twice. Read it as "is the second policy contributing", not as a quantity. |
 | `stock_info`, `trees` | Per-leaf availability and the route dictionaries. Batch output only. |
 
 **Multi-objective searches change the shape of these fields.** With
@@ -28,9 +31,10 @@ result is usable:
 `top_score` was `None` and the per-route fields came back as pipe-joined
 strings across the Pareto front: `is_solved` as
 `True|True|...|False|False` (31 entries) and `number_of_steps` as
-`4|4|5|5|6|...`. Anything parsing these fields has to handle both shapes, and
-the per-route scores in `trees` are the reliable source under multi-objective
-ranking.
+`4|4|5|5|6|...`. A front with a single member keeps the scalar, so the same
+configuration can return either a Boolean or a string for `is_solved`.
+Anything parsing these fields has to handle both shapes, and the per-route
+scores in `trees` are the reliable source under multi-objective ranking.
 
 A batch file is a pandas "table" JSON:
 
