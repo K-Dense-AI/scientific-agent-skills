@@ -13,6 +13,12 @@ separate 2026-10-30 release acceptance flow exercised BRCA1 identity/profile,
 section continuation, live literature and ABC1 ambiguity. Older execution
 observations below retain their original date; they were not all rerun here.
 
+On 2026-11-01, the current public server card was reviewed for adapter 1.7.0 and
+all eleven tools. The active classification tool is `classify_germline_variant`
+and the VUS prompt is `assess_vus`. This was a schema/documentation review;
+no scientific requests were executed. The older dated checks above and below
+retain their original versions and scope.
+
 ## Connection
 
 - Endpoint: `https://api.helena.bio/folklore/v1/mcp`
@@ -58,37 +64,39 @@ there is no verified universal request quota to hardcode.
 
 | Tool | Successful structured content |
 |---|---|
-| `search_variant_evidence` | `s.result.status`; identity at `s.result.identity`; interpretation at `s.result.interpretation`; outer `record_url`, `usage_boundary`, `adapter_error` |
+| `classify_germline_variant` | `s.result.status`; identity at `s.result.identity`; interpretation at `s.result.interpretation`; outer `record_url`, `adapter_error` |
 | `search_variant_literature` | Direct `s.status`, `s.variant_result`, and nullable `s.literature`; no extra `s.result` wrapper |
-| `get_publication_details` | `s.publication` and `s.usage_boundary`; no scientific `status` field |
+| `get_publication_details` | `s.publication`; no scientific `status` field |
 | `search_literature_corpus` | `s.results`, `returned_count`, pagination and retrieval metadata; no scientific `status` field |
-| Both gene-disease tools | Direct `s.status` (`ok` or `not_found`), `associations`, `pagination`, `source`, `warnings`, `usage_boundary` |
+| Both gene-disease tools | Direct `s.status` (`ok` or `not_found`), `associations`, `pagination`, `source`, `warnings` |
 | `resolve_gene` | `s.result.status`, `identity_snapshot_id`, `candidates`, `candidate_total`, `complete` |
 | `get_gene_profile` | `s.result.gene_id`, `snapshot_id`, `identity`, `sources`, `sections`; no required scientific `status` field |
 | `get_gene_section` | `s.result.status`, `coverage`, `data`, `pagination`, with the same gene/snapshot/section |
 | `search_gene_literature` | `s.result.records`, `captured_at`, `capture_sha256`, `returned`, `has_more`, `next_cursor`; no required scientific `status` field |
 
-The evidence envelope has `contract_version: "1"` and its scientific result has
-`search_contract_version: "1.0"`. Literature/details/corpus use
-`contract_version: "1.0"`; gene-disease uses camel-case `contractVersion: "1.0"`.
-Do not impose the evidence envelope on the other tools. Adapter failures for
-literature/details/corpus can use the evidence-style envelope with `result: null`;
-gene-disease failures contain `adapter_error` and `usage_boundary` directly.
+The classification envelope has `contract_version: "2"`; its scientific result
+retains `search_contract_version: "1.0"`. Successful variant-literature,
+publication-details and corpus responses use `contract_version: "2"` with the
+direct shapes above. Gene-disease responses use camel-case `contractVersion: "2"`.
+Their adapter failures contain `contractVersion` and `adapter_error` directly;
+literature/details/corpus adapter failures can use the classification-style
+envelope with `result: null`. Do not impose one tool's envelope on another.
+
+Each public gene tool has `contract_version: "2"`, `result`, nullable
+`record_url` and nullable `adapter_error`. Handle a non-null adapter error before
+scientific fields; `result` can be null on failure. Preserve
+`available_snapshot_id` if returned, but resolve again instead of silently
+substituting it. Current top-level schemas do not contain `usage_boundary`.
+Preserve scientific limitations and provenance within the returned results.
 Unrecognized status values or missing required fields are a contract problem,
-not an empty result. Each new gene tool has `contract_version: "1"` with
-`result`, nullable `record_url`, `usage_boundary` and nullable `adapter_error`.
-Handle a non-null adapter error before scientific fields; `result` can be null
-on failure. Preserve `available_snapshot_id` if returned, but resolve again
-instead of silently substituting it. The usage boundary explicitly requires
-professional gene-reference review and excludes patient evaluation, diagnosis,
-treatment decisions and changes to variant pathogenicity classification.
+not an empty result.
 
 Preserve complete structured content. The evidence and literature text fallbacks
 for the original variant tools are summaries and need not contain all provenance
 or candidate data. The four new gene tools instead return the same complete
 envelope as JSON text for text-only clients.
 
-## Public gene profiles in adapter 1.6.0
+## Public gene profiles
 
 `resolve_gene` accepts only `query`: one printable public symbol, previous symbol,
 alias, HGNC, Ensembl or NCBI Gene identifier, 1–128 characters. Preserve `exact`,
@@ -129,7 +137,7 @@ or curated gene-disease evidence; keep it separate from the immutable profile's
 literature section. Gene validity, dosage, constraint and GWAS do not by
 themselves establish variant pathogenicity or a patient diagnosis.
 
-## `search_variant_evidence`
+## `classify_germline_variant`
 
 Required input:
 
@@ -205,13 +213,12 @@ state rather than inventing a cursor. Keep result `match_types`, scores and
 signals, not pathogenicity probabilities. Corpus match types are not restricted
 to the three variant-literature types above.
 
-Report `semantic_index_used` and any `semantic_degraded_reason`. The live service
-also advertised and returned `graph_used`, `graph_version`, and
-`graph_degraded_reason` on the review date, although the pinned public adapter's
-corpus model did not declare them. Retain such fields as returned metadata; do
-not assume their presence or infer graph/semantic success from HTTP 200 alone.
+Report `semantic_index_used` and any `semantic_degraded_reason`. The current corpus schema also advertises `graph_used`, `graph_version` and
+`graph_degraded_reason`. The 2026-09-30 live review observed these fields before
+they appeared in its pinned adapter model. Preserve returned retrieval metadata;
+do not infer graph or semantic success from HTTP 200 alone.
 
-## Gene-disease assertions in adapter 1.5.0
+## Gene-disease assertions
 
 Request examples (not captured scientific results):
 
@@ -233,7 +240,7 @@ preserve the warning and compare `offset + len(associations)` with `total` befor
 calling retrieval complete. An out-of-range page can be empty with `status: ok`
 when `total > 0`; `not_found` means `total == 0`.
 
-Successful structured output directly carries query, associations, pagination, source, warnings and usage_boundary. Read JSON-RPC and adapter errors before interpreting output. The source is ClinGen Gene-Disease Validity; preserve assertion-specific inheritance, assessment, source links and dates. Missing source values stay unavailable. No result does not establish no association, and association validity is not variant pathogenicity.
+Successful structured output directly carries query, associations, pagination, source and warnings. Read JSON-RPC and adapter errors before interpreting output. The source is ClinGen Gene-Disease Validity; preserve assertion-specific inheritance, assessment, source links and dates. Missing source values stay unavailable. No result does not establish no association, and association validity is not variant pathogenicity.
 
 Record `source.version`, `source.snapshotSha256`, and `source.downloadUrl`.
 These describe the deployed local snapshot and do not guarantee the newest
@@ -260,11 +267,9 @@ The unavailable/degraded branches and the gene-disease pagination ceiling were
 source-reviewed, not forced in the live service. These checks establish observed
 protocol behavior, not clinical accuracy, source completeness, or host UI support.
 
-## Interpretation boundary
+## Interpretation scope
 
-- Folklore Clinical Variant Interpretation MCP accepts no patient, phenotype,
-  family, segregation, or private case data.
-- Results support qualified professional review.
-- Results are not a diagnosis or treatment recommendation.
-- Literature associations do not alter an ACMG/AMP classification.
-- An empty bounded result does not establish universal absence.
+Classify one supported public variant and preserve its returned scientific
+limitations. Review results with source provenance and qualified professional
+judgment. Literature and gene associations remain separate from variant
+classification. An empty bounded result does not establish universal absence.

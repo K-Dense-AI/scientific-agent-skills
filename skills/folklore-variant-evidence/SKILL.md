@@ -1,11 +1,11 @@
 ---
 name: folklore-variant-evidence
-description: "Resolves public human gene symbols, aliases and identifiers into source-qualified gene profiles and separate live literature through Folklore MCP; retrieves ClinGen gene-disease assertions; and reviews public evidence for one supported GRCh38 germline nuclear SNV or simple indel. Used when an agent needs explicit identity/outcome handling, snapshot-bound gene sections, variant-linked literature, or source provenance. Requires explicit selection for ambiguous identities and professional review; accepts no patient, family, segregation or private case data."
+description: "Provides ACMG/AMP germline variant classification, gene profiles, disease associations and literature through Folklore MCP. Used for one public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp, public gene identity/profile review, ClinGen assertions, and source-linked literature. Preserves explicit resolution states, ambiguous-identity selection, snapshot continuity and provenance."
 license: MIT
 compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials) and a host supporting its advertised protocol, or curl for direct JSON-RPC POST requests.
 metadata:
-  version: "1.3"
-  last-reviewed: "2026-10-31"
+  version: "1.4"
+  last-reviewed: "2026-11-01"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -13,14 +13,14 @@ metadata:
 
 # Folklore Variant Evidence
 
-Use Folklore Clinical Variant Interpretation MCP to retrieve structured public
-variant evidence, automated variant-level ACMG/AMP decision support, provenance,
-and source-linked literature for professional review. Keep the workflow limited
-to public identifiers and preserve every explicit outcome state. Adapter 1.6.0 adds
-gene identity resolution, source-qualified profiles and separate live gene
-literature to the existing ClinGen Gene-Disease Validity lookups. Source coverage
-is bounded, not every known association. This MIT collection skill is distinct
-from the Apache-2.0 adapter and the publisher's independently versioned Skill 1.4.0.
+Folklore MCP 1.7.0 provides ACMG/AMP germline variant classification, gene
+profiles, disease associations and literature through eleven tools. Classify one
+public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp with
+`classify_germline_variant`. Resolve public genes into source-qualified profiles,
+retrieve ClinGen assertions, and explore source-linked literature. Preserve
+explicit outcome states, identity selections, source provenance and snapshots.
+This MIT collection skill has its own version, separate from the Apache-2.0
+adapter and the publisher's skill.
 
 Folklore Clinical Variant Interpretation MCP is published by Helena
 Bioinformatics. Its hosted endpoint is:
@@ -34,7 +34,8 @@ available at <https://github.com/helena-bioinformatics/folklore-mcp>.
 
 ## Minimal connection example
 
-A host without native MCP support can make the same public JSON-RPC call:
+Illustrative request for a host without native MCP support; this updated
+example was schema-reviewed, not executed as a scientific call:
 
 ```bash
 curl --silent --show-error --fail-with-body --max-time 60 \
@@ -43,8 +44,8 @@ curl --silent --show-error --fail-with-body --max-time 60 \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/call' \
-  -H 'Mcp-Name: search_variant_evidence' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"search_variant_evidence","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
+  -H 'Mcp-Name: classify_germline_variant' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"classify_germline_variant","arguments":{"assembly":"GRCh38","query":"rs80357914"}}}'
 ```
 
 The routing headers must match the JSON-RPC method and tool name. A successful
@@ -99,7 +100,7 @@ Variant Interpretation MCP.
 Connect to the hosted endpoint and call `tools/list`. Verify the available tools
 instead of relying on model memory. The documented public catalog contains:
 
-- `search_variant_evidence`
+- `classify_germline_variant`
 - `search_variant_literature`
 - `get_publication_details`
 - `search_literature_corpus`
@@ -123,7 +124,7 @@ calls or interpreting response states.
 
 1. Call `resolve_gene` with one printable public gene symbol, previous symbol,
    alias, HGNC, Ensembl or NCBI Gene identifier (1–128 characters). Gene-plus-HGVS
-   expressions belong in `search_variant_evidence`. Send no patient narrative.
+   expressions belong in `classify_germline_variant`. Send no patient narrative.
 2. Read transport/JSON-RPC errors and `adapter_error` first. Preserve resolver
    statuses `exact`, `alias`, `ambiguous`, `not_found` and `withdrawn`. Show every
    returned candidate for ambiguity and require explicit selection. Never choose
@@ -194,11 +195,11 @@ response means no matching assertion in the available source, not no association
 No patient, phenotype, family, segregation, private case data or sequencing files
 may be sent. Qualified professional review remains required.
 
-## Run the variant-evidence workflow
+## Run the variant-classification workflow
 
-### 1. Resolve and retrieve evidence
+### 1. Resolve and classify the variant
 
-Call `search_variant_evidence` with:
+Call `classify_germline_variant` with:
 
 ```text
 assembly: GRCh38
@@ -206,13 +207,13 @@ query: <one public variant identifier or notation>
 ```
 
 Do not add phenotype, disease, patient, family, or treatment context to this
-call. Preserve the returned contract fields, source links, limitations, and
-usage boundary.
+call. Preserve the returned contract fields, source links and scientific
+limitations.
 
 ### 2. Branch on the returned status
 
 Read transport/JSON-RPC errors and `adapter_error` first. For
-`search_variant_evidence`, let `envelope = result.structuredContent`; only if
+`classify_germline_variant`, let `envelope = result.structuredContent`; only if
 `envelope.result` is non-null, branch on `envelope.result.status`. An
 `invalid_arguments` adapter error is distinct from scientific `invalid_request`.
 Preserve `isError` and any typed failure, including `resolution_unavailable`.
@@ -304,19 +305,17 @@ Include:
 5. Match type for literature results.
 6. Access date and any availability limitation.
 7. For gene results, distinguish immutable reference snapshots from live
-   literature captures and state that gene evidence is not variant classification
-   or patient diagnosis. For variant results, include this boundary statement:
+   literature captures. Report variant classifications as returned, with their
+   scope, sources and scientific limitations. Gene evidence alone does not
+   classify a variant; patient diagnosis requires a separate clinical workflow.
 
-> This is public, variant-level decision support for qualified professional
-> review. It does not evaluate patient, phenotype, family, segregation, or
-> private case data and is not a diagnosis or treatment recommendation.
+## Illustrative ambiguity smoke test
 
-## Falsifiable smoke test
-
-Use the public rsID `rs80357914` to test ambiguity handling:
+The following template describes an ambiguity test; it was not rerun for the
+2026-11-01 documentation update:
 
 ```text
-Call search_variant_evidence with assembly GRCh38 and query rs80357914. If the
+Call classify_germline_variant with assembly GRCh38 and query rs80357914. If the
 result is ambiguous, list the returned candidates and stop for explicit
 selection. Do not select a candidate or call downstream literature tools.
 ```
@@ -338,6 +337,12 @@ the release's 2026-10-30 public acceptance flow exercised BRCA1 resolution,
 profile/section continuation, live gene literature and preserved ABC1 ambiguity.
 This does not repeat the older seven-tool execution checks or validate clinical
 accuracy. No synthetic patient data or inferred scientific result is required.
+
+On 2026-11-01, the public server card advertised adapter 1.7.0 and eleven tools.
+This schema review updated the current tool name to `classify_germline_variant`,
+the VUS prompt name to `assess_vus`, and response contract versions to `2`.
+No scientific calls were executed for this update. The older dated execution
+observations above remain historical evidence.
 
 ## Official references
 
