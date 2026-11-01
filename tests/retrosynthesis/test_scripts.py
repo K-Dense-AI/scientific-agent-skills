@@ -19,13 +19,17 @@ is the cheap arithmetic that catches it: every heavy element in a product must
 be present in at least that count across the step's reactants. Stereocentre
 counting is reported rather than failed, because a step that genuinely sets a
 centre (an asymmetric reduction) and a template that invented one look the same
-in the tree.
+in the tree. It compares counts rather than mapped atoms, so a step that
+destroys one centre while creating another is a known false negative, and a
+test pins that limit so nobody reads the column as a guarantee.
 """
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import gzip
+import io
 import json
 import sys
 import tempfile
@@ -37,6 +41,7 @@ import pytest
 import skill_contract
 
 SKILL_ROOT = Path(__file__).resolve().parents[2] / "skills" / "retrosynthesis"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SCRIPTS = SKILL_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -164,6 +169,29 @@ class PrepareTargetsTests(TemporaryDirectoryTestCase):
         _, rows = self.prepare("CC(=O)O[Sn](CCCC)(CCCC)CCCC tin\n")
         self.assertIn("uncommon_elements=Sn", rows[0]["flags"])
 
+    def test_an_isotope_and_a_radical_are_flagged(self) -> None:
+        _, rows = self.prepare("[13CH3]C(=O)Nc1ccc(O)cc1 labelled\n[CH2]c1ccccc1 benzyl-radical\n")
+        self.assertIn("isotopes", rows[0]["flags"])
+        self.assertIn("radicals", rows[1]["flags"])
+
+    def test_an_undefined_double_bond_is_flagged(self) -> None:
+        _, rows = self.prepare("CC=CC(=O)O crotonic\nC/C=C/C(=O)O trans\n")
+        self.assertIn("undefined_double_bond_stereo=1", rows[0]["flags"])
+        self.assertNotIn("undefined_double_bond_stereo", rows[1]["flags"])
+
+    def test_no_neutralize_keeps_the_charges_the_input_declared(self) -> None:
+        accepted, rows = self.prepare("CC(=O)[O-] acetate\n", neutralize=False)
+        self.assertEqual(accepted, ["CC(=O)[O-]"])
+        self.assertIn("net_charge=-1", rows[0]["flags"])
+        self.assertNotIn("neutralized", rows[0]["flags"])
+
+    def test_two_enantiomers_are_kept_as_distinct_targets(self) -> None:
+        accepted, rows = self.prepare(
+            "CC(C)Cc1ccc(cc1)[C@H](C)C(=O)O s\nCC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O r\n")
+        self.assertEqual(len(accepted), 2)
+        self.assertEqual([row["status"] for row in rows], ["ok", "ok"])
+        self.assertNotEqual(rows[0]["inchikey"], rows[1]["inchikey"])
+
     def test_the_cli_reports_failure_when_nothing_survives(self) -> None:
         source = write(self.root / "in.smi", f"{PENTAVALENT_CARBON} bad\n")
         code = prepare_targets.main([str(source), str(self.root / "out.smi")])
@@ -179,7 +207,8 @@ class SummarizeRoutesTests(TemporaryDirectoryTestCase):
                 json.dump(payload, handle)
         else:
             path.write_text(json.dumps(payload), encoding="utf-8")
-        return summarize_routes.summarize(path)
+        rows, _ = summarize_routes.summarize(path)
+        return rows
 
     def test_a_single_target_trees_file_is_read_as_one_target(self) -> None:
         rows = self.summarize([paracetamol_route(scores={"state score": 0.994})])
@@ -261,6 +290,73 @@ class SummarizeRoutesTests(TemporaryDirectoryTestCase):
         with self.assertRaises(ValueError) as caught:
             summarize_routes.load_routes(path)
         self.assertIn("other.json", str(caught.exception))
+
+    def test_a_childless_root_is_still_checked_for_a_bad_smiles(self) -> None:
+        rows = self.summarize([mol_node(PENTAVALENT_CARBON, in_stock=True)])
+        self.assertEqual(rows[0]["unparsable_smiles"], PENTAVALENT_CARBON)
+        self.assertEqual(rows[0]["steps"], 0)
+
+    def test_an_in_stock_leaf_with_a_bad_smiles_is_reported(self) -> None:
+        bad_leaf = mol_node(PARACETAMOL, children=[
+            reaction_node(">>", [mol_node(ACETIC_ANHYDRIDE, True),
+                                 mol_node(AMINOPHENOL, True, children=[
+                                     reaction_node(">>", [mol_node(PENTAVALENT_CARBON, True)])])]),
+        ])
+        rows = self.summarize([bad_leaf])
+        self.assertEqual(rows[0]["unparsable_smiles"], PENTAVALENT_CARBON)
+
+    def test_a_deficit_in_one_element_is_flagged_even_when_the_element_is_present(self) -> None:
+        # The product needs six carbons; the single reactant supplies two.
+        rows = self.summarize([mol_node("CCCCCC", children=[
+            reaction_node(">>", [mol_node("CC", True)]),
+        ])])
+        self.assertIn("CCCCCC", rows[0]["element_mismatch_steps"])
+
+    def test_the_stereo_check_is_a_net_count_and_says_so(self) -> None:
+        # One centre destroyed and one created: the counts match, so this step
+        # is not flagged. The column is a net count, not an atom-level audit.
+        swapped = mol_node("CC[C@H](O)C", children=[
+            reaction_node(">>", [mol_node("CCC(C)=O", True), mol_node("C[C@H](N)c1ccccc1", True)]),
+        ])
+        rows = self.summarize([swapped])
+        self.assertEqual(rows[0]["stereo_set_steps"], "")
+
+    def test_a_target_with_no_route_still_counts_in_the_cli_summary(self) -> None:
+        path = self.root / "output.json"
+        path.write_text(json.dumps({"schema": {}, "data": [
+            {"target": PARACETAMOL, "trees": [paracetamol_route()]},
+            {"target": IBUPROFEN, "trees": []},
+        ]}), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = summarize_routes.main([str(path), str(self.root / "routes.csv")])
+        self.assertEqual(code, 0)
+        printed = out.getvalue()
+        self.assertIn("solved route: 1/2", printed)
+        self.assertIn("no route at all: 1", printed)
+
+    def test_strict_mode_fails_on_a_lost_element_and_the_default_does_not(self) -> None:
+        path = self.root / "trees.json"
+        path.write_text(json.dumps([mol_node("Clc1ccc(C(C)=O)cc1", children=[
+            reaction_node(">>", [mol_node("CC(=O)c1ccccc1", True)]),
+        ])]), encoding="utf-8")
+        output = str(self.root / "routes.csv")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(summarize_routes.main([str(path), output]), 0)
+        self.assertIn("[FAIL]", out.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(summarize_routes.main([str(path), output, "--strict"]), 1)
+
+    def test_an_exported_aizynthcli_route_is_read_as_written(self) -> None:
+        """A route exported by aizynthcli 4.4.1, not a hand-built dictionary."""
+        rows = summarize_routes.summarize(FIXTURES / "paracetamol_trees.json")[0]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["target"], PARACETAMOL)
+        self.assertTrue(all(row["solved"] for row in rows))
+        self.assertEqual([row["steps"] for row in rows], [1, 1, 1])
+        self.assertEqual(json.loads(rows[0]["policies"]), {"uspto": 1})
+        self.assertAlmostEqual(float(rows[0]["state_score"]), 0.9976287063, places=9)
+        self.assertEqual(rows[0]["element_mismatch_steps"], "")
+        self.assertEqual(rows[0]["unparsable_smiles"], "")
 
     def test_the_cli_writes_a_row_per_route_with_the_declared_header(self) -> None:
         source = self.root / "trees.json"

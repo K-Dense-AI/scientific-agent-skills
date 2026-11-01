@@ -10,8 +10,9 @@ release models trained on data with noncommercial terms.
 **Template-based** (the AiZynthFinder USPTO policy, ASKCOS template relevance,
 MHNreact, LocalRetro in its own way). A neural network ranks reaction templates
 extracted from a reaction corpus, and the template is applied with RDChiral or
-RDKit. Every proposal is a chemically valid molecule and carries a precedent,
-the template, that a chemist can inspect. Coverage is bounded by the template
+RDKit. Every proposal is an RDKit-sanitizable molecule and carries a
+precedent, the template, that a chemist can inspect; neither sanitization nor
+precedent says the step will work. Coverage is bounded by the template
 library, so chemistry absent from the corpus is unreachable, and rare templates
 are poorly ranked.
 

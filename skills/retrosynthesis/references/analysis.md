@@ -11,17 +11,26 @@ result is usable:
 
 | Field | What it actually says |
 | --- | --- |
-| `is_solved` | Every leaf of the **top-ranked** route is in the selected stock, and nothing about the other routes. It is the top-ranked node's state, so under multi-objective ranking it can be false while `number_of_solved_routes` is positive. |
-| `number_of_steps` | Reactions in the top-scored route. |
-| `number_of_solved_routes` / `number_of_routes` | Leaf nodes of the **search tree**, not the extracted set: 23 solved of 46 for paracetamol, 0 of 150 for ibuprofen at 100 iterations, while `len(finder.routes)` for that ibuprofen run was 8. `post_processing.min_routes` and `max_routes` govern extraction. |
+| `is_solved` | Whether the **top-ranked** route's leaves are all in the selected stock, and nothing about the other routes. Under multi-objective ranking it is not a Boolean at all but a pipe-joined string over the Pareto front, see below. |
+| `number_of_steps` | The top-ranked MCTS state's `max_transforms`, which is the route's **depth**. For a convergent route that is fewer than the number of reactions, so do not read it as a step count: count `tree.reactions()`, or the `steps` column from `summarize_routes.py`. |
+| `number_of_solved_routes` / `number_of_routes` | Under MCTS, childless nodes of the **search tree**, not the extracted set: 23 solved of 46 for paracetamol, 0 of 150 for ibuprofen at 100 iterations, while `len(finder.routes)` for that ibuprofen run was 8. Under the AND/OR algorithms (Retro\*, DFPN, breadth-first) the same fields count what `search_tree.routes()` returns, so the two are not comparable. `post_processing.min_routes` and `max_routes` govern extraction either way. |
 | `top_score` | The top-ranked route's score under the active scorer, `state score` by default. Not a probability of success, and `None` under multi-objective ranking, where the per-route scores in `trees` are the ones to read. |
 | `first_solution_iteration`, `first_solution_time` | 0 when nothing was solved. A value close to the iteration limit means the budget was the binding constraint. |
 | `precursors_in_stock`, `precursors_not_in_stock` | Comma-separated SMILES. The second is the shopping list, or the reason the target is unsolved. |
 | `precursors_availability` | Semicolon-separated per precursor, naming each stock that holds it, which is how you tell an in-house hit from a catalogue hit. |
 | `number_of_nodes`, `max_transforms`, `max_children` | Shape of the search tree, useful to see whether the search explored or thrashed. |
 | `profiling` | `expansion_calls`, `reactants_generations`, `iterations`. Measured: 284 expansion calls and 2433 reactant generations for a 100-iteration paracetamol search against a small stock, 33 and 479 against ZINC, because a solved node stops being expanded. |
-| `policy_used_counts` | Expansion calls per policy, the check that a second policy is really contributing. |
+| `policy_used_counts` | Reaction actions in the search tree per policy, read off every node-child edge, not the number of model calls. Still the check that a second policy is contributing. |
 | `stock_info`, `trees` | Per-leaf availability and the route dictionaries. Batch output only. |
+
+**Multi-objective searches change the shape of these fields.** With
+`search_rewards: ["state score", "number of reactions"]` on osimertinib,
+`top_score` was `None` and the per-route fields came back as pipe-joined
+strings across the Pareto front: `is_solved` as
+`True|True|...|False|False` (31 entries) and `number_of_steps` as
+`4|4|5|5|6|...`. Anything parsing these fields has to handle both shapes, and
+the per-route scores in `trees` are the reliable source under multi-objective
+ranking.
 
 A batch file is a pandas "table" JSON:
 
@@ -50,8 +59,13 @@ finder.routes.all_scores[0]
 
 `routes.scores` holds one dict per route keyed by the active scorer, so a
 multi-objective search and a single-objective one read the same way. `state
-score` combines the fraction of precursors in stock with route length, and it
-is what guides MCTS; the other scorers only rank afterwards. Additional
+score` is `0.95 * fraction_of_precursors_in_stock + 0.05 * squashed_depth`
+(`StateScorer` in `context/scoring/scorers.py`, the depth term squashed around
+`max_transforms` 4), so it is dominated by purchasability and only mildly
+prefers short routes. It guides MCTS by default, but it is not privileged:
+`search.algorithm_config.search_rewards` decides which scorers guide the
+search, and any configured scorer can be named there. Otherwise scorers only
+rank; the other scorers only rank afterwards. Additional
 scorers in the package include average template occurrence, sum of prices,
 route cost (Badowski et al., *Chem. Sci.* 2019, 10, 4640), stock availability,
 broken bonds, reaction-class membership, delta synthetic complexity, and route
@@ -61,7 +75,8 @@ precedented the steps are.
 
 ```yaml
 post_processing:
-  route_scorer: number of reactions   # or a list under route_scorers
+  route_scorers:
+    - number of reactions
 ```
 
 ## Route dictionaries
@@ -73,12 +88,21 @@ A route is a nested dict alternating molecule and reaction nodes, which is what
 from aizynthfinder.reactiontree import ReactionTree
 tree = ReactionTree.from_dict(route_dict)
 tree.is_branched()                      # convergent route or linear
-[r.smiles for r in tree.reactions()]    # mapped retro SMILES, product>>reactants
+[r.smiles for r in tree.reactions()]    # see the note below: template-level, not whole molecules
 [(m.smiles, tree.in_stock(m)) for m in tree.leafs()]
 tree.depth(tree.root)                   # 0 at the target
 tree.hash_key()                         # stable identity for de-duplication
 tree.metadata                           # {'created_at_iteration': 1, 'is_solved': True}
 ```
+
+A reaction node's own `smiles` is the applied template in
+`product>>reactants` form with atom maps, so it shows the reacting fragments
+rather than the whole molecules. For paracetamol's acetylation it reads
+`[C:1]([CH3:2])(=[O:3])[N:4][cH3:5]>>CC(=O)O[C:1]([CH3:2])=[O:3].[N:4][cH3:5]`.
+The fully mapped reaction between complete structures is
+`metadata["mapped_reaction_smiles"]`, and the child molecule nodes hold the
+reactant SMILES. Use those two, not the reaction node's `smiles`, when
+exporting reactions elsewhere.
 
 Molecule nodes carry `in_stock`; reaction nodes carry metadata the policy
 produced. Measured keys on a USPTO expansion: `template_hash`,
@@ -90,7 +114,9 @@ Three of those are the ones to read:
 
 - `policy_probability` is the model's confidence in the **template**, not in
   the reaction working. 0.74 for the top osimertinib amide coupling.
-- `library_occurence` is how often the template appears in the training corpus.
+- `library_occurence` is the template library's own occurrence count, a column
+  of `uspto_templates.csv.gz` alongside `template_code`, `retro_template`,
+  `template_hash` and `classification`.
   1706 for the paracetamol acetylation with acetic anhydride, 13100 for a
   methyl-ether route. A single-digit occurrence is a rare template.
 - `classification` comes from the template library's reaction-class
@@ -127,9 +153,9 @@ Measured on 6 osimertinib routes: the matrix took 0.1 s, pairwise distances ran
 from 0.004 to 0.239, and `n_clusters=0` chose 3 clusters with labels
 `[2, 2, 1, 1, 0, 0]`. Distances that small mean the top routes were minor
 variants, which is the normal case and the reason to cluster before reading.
-Fewer than 3 routes returns an empty array rather than raising. Setting
-`post_processing.route_distance_model` switches to the LSTM tree-edit-distance
-model, which needs a checkpoint you supply.
+Fewer than 3 routes returns an empty array rather than raising. `post_processing.route_distance_model` looks like a switch to the
+LSTM tree-edit-distance model, but nothing in 4.4.1 reads it, so clustering
+always uses the structural similarity above.
 
 ## Single-step expansion without a search
 
@@ -161,12 +187,15 @@ templates that did not apply:
 | acetyl chloride + 4-aminophenol | 0.072 | 0.9999 | 5220 |
 | 4-acetamidophenyl acetate | 0.070 | 0.559 | 964 |
 
-The ranking by policy probability and the ranking by feasibility disagree: the
-second and third proposals are plausible templates applied to the wrong
-oxidation state or protecting pattern, and the filter model is what separates
-them. In the expander the filter only annotates; inside a tree search a
-reaction below `filter_cutoff` (default 0.05) is dropped, which is why the
-third proposal would not survive a search.
+The two rankings disagree. Policy probability puts the nitro compound second,
+while the filter scores that step 0.163 and the acetyl chloride route, fourth by
+policy probability, 0.9999. All five are chemistry a chemist can name, the
+O-demethylation of 4-methoxyacetanilide at 0.054 included, so a low feasibility
+score is the model's opinion about how usual a step is, not a verdict. What the
+numbers do decide is survival inside a search: the filter rejects a reaction
+when `prob < filter_cutoff` (default 0.05), so 0.054 passes by a small margin
+and the 0.163 nitro route passes comfortably. In the expander the filter only
+annotates and removes nothing.
 
 `do_expansion` returns a list of tuples, where each tuple groups reactions that
 give the same reactants, so `len(groups)` is a count of distinct precursor sets

@@ -53,7 +53,7 @@ choice in a pipeline.
 | `default_prior` | 0.5 | Used only when `use_prior` is False. |
 | `use_prior` | True | Use the policy probability as the node prior. |
 | `prune_cycles_in_search` | True | Blocks re-creating a molecule already seen on the path. |
-| `search_rewards` | `[state score]` | More than one entry turns on multi-objective MCTS. |
+| `search_rewards` | `[state score]` | The scorers that guide the search, not just the ranking. More than one entry turns on multi-objective MCTS: Pareto-ranked on its own, weighted-sum when `search_rewards_weights` is given. |
 | `search_rewards_weights` | `[]` | Weights for the combined scorer. |
 | `immediate_instantiation` | `[]` | Expansion policies whose children are instantiated at expansion time; intended for expensive remote models. |
 | `mcts_grouping` | unset | `partial` or `full`; groups expansions that lead to the same state. |
@@ -67,7 +67,7 @@ choice in a pipeline.
 | `cutoff_number` | 50 | Hard cap on templates returned per expansion. The main cost knob. |
 | `use_rdchiral` | True | Apply templates with RDChiral, which preserves stereochemistry better than plain RDKit template application. |
 | `use_remote_models` | False | Try a TensorFlow Serving endpoint first; needs the `tf` extra and `TF_SERVING_HOST`, `TF_SERVING_REST_PORT`, `TF_SERVING_GRPC_PORT`. |
-| `rescale_prior` | False | Softmax the kept priors. |
+| `rescale_prior` | False | Divide the kept priors by their sum (`probs /= probs.sum()`). The upstream docstring says softmax; the code normalizes. A multi-expansion strategy with a weight below 1 forces it on. |
 | `mask` | `""` | Path to an `.npz` boolean vector masking templates, for example to disable chemistry your lab will not run. |
 
 ## filter (quick-filter)
@@ -75,7 +75,7 @@ choice in a pipeline.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `filter_cutoff` | 0.05 | Reactions the feasibility model scores below this are rejected. |
-| `exclude_from_policy` | `[]` | Filter names to skip. |
+| `exclude_from_policy` | `[]` | **Expansion**-policy names whose reactions skip this filter: `apply` compares the reaction's `policy_name` against this list. |
 | `use_remote_models` | False | As above. |
 
 The filter policy only removes reactions during search. In
@@ -89,8 +89,8 @@ The filter policy only removes reactions during search. In
 | `min_routes` | 5 | Lower bound on extracted routes. |
 | `max_routes` | 25 | Upper bound, unless `all_routes`. |
 | `all_routes` | False | Extract every solved route; falls back to the min/max window when nothing is solved. |
-| `route_scorer` / `route_scorers` | `state score` | Scorer used to rank extracted routes. Defaults to `search.algorithm_config.search_rewards` when unset. |
-| `route_distance_model` | unset | Checkpoint for the LSTM route-distance model used by clustering. |
+| `route_scorers` | `[]` | List of scorers used to rank extracted routes; falls back to `search.algorithm_config.search_rewards`, then to `state score`. The upstream table spells this `route_scorer`, singular, which raises `TypeError: _PostprocessingConfiguration.__init__() got an unexpected keyword argument 'route_scorer'`. |
+| `route_distance_model` | unset | Accepted by the config object, but nothing in 4.4.1 reads it: `RouteCollection.distance_matrix` always uses `1 - simple_route_similarity`. Setting it changes nothing. |
 
 ## stock
 
@@ -137,10 +137,10 @@ as class paths:
 
 | `algorithm` value | Character |
 | --- | --- |
-| `mcts` | Monte Carlo tree search, prior-guided, anytime. Measured: the best-supported path, and the only one with multi-objective rewards. |
-| `aizynthfinder.search.retrostar.search_tree.SearchTree` | Retro\* AND/OR search with an optional learned molecule cost. Measured: found a solved osimertinib route at iteration 4 against MCTS's iteration 1, and a two-step solved ibuprofen route at iteration 6 where MCTS needed 127 iterations. |
-| `aizynthfinder.search.dfpn.search_tree.SearchTree` | Depth-first proof-number search. Measured: 100 iterations in 8.8 s on osimertinib but no solved route, and it is slow to extract routes from large trees. Each iteration expands at most two nodes, so iteration counts are not comparable with MCTS. |
-| `aizynthfinder.search.breadth_first.search_tree.SearchTree` | Breadth-first AND/OR expansion. Exhaustive at shallow depth, and the iteration cost grows quickly with `max_transforms`. |
+| `mcts` | Monte Carlo tree search, prior-guided, anytime. The default, the best covered by the documentation, and the only one with multi-objective rewards. |
+| `aizynthfinder.search.retrostar.search_tree.SearchTree` | Retro\* AND/OR search with an optional learned molecule cost. In single runs here it solved osimertinib at iteration 4 and ibuprofen at iteration 6 with a two-step route, where MCTS needed 127 iterations for ibuprofen. Its iterations are not MCTS iterations, so compare wall time and solved routes, not counts. |
+| `aizynthfinder.search.dfpn.search_tree.SearchTree` | Depth-first proof-number search. One iteration expands at most two nodes, so 100 iterations is a far smaller budget than 100 MCTS iterations: here it took 8.8 s on osimertinib and returned no solved route. Raise the limit substantially before judging it. |
+| `aizynthfinder.search.breadth_first.search_tree.SearchTree` | Breadth-first AND/OR expansion, one whole frontier level per iteration. Exhaustive at shallow depth and expensive fast: on osimertinib, iteration 1 took 0.9 s and three iterations took 28.9 s for 4958 nodes, and with `max_transforms: 6` a single iteration ran past a `time_limit: 120` for more than 6 minutes, because the limit is only checked between iterations. |
 
 Retro\* with a learned cost needs the value-model pickle from the PaRoutes
 repository:
@@ -180,8 +180,11 @@ expansion:
 
 Then `aizynthcli --policy multi_expansion_strategy`. Selecting two policy keys
 on the command line (`--policy uspto ringbreaker`) also works and is what the
-measured ringbreaker run used. Expect roughly double the expansion cost:
-measured 58.8 s for 300 MCTS iterations with both policies against 46.5 s for
-500 iterations with the USPTO policy alone, same target and machine. The
+measured ringbreaker run used. Each expansion now queries two models, so budget
+for it: one ibuprofen run took 58.8 s for 300 MCTS iterations with both policies
+where 500 iterations with the USPTO policy alone took 46.5 s on the same
+machine. Those are single runs at different iteration counts, and an iteration
+is not a fixed amount of work, so read it as a reason to re-budget rather than
+as a per-expansion cost. The
 ringbreaker model is trained for ring-forming disconnections, so it earns its
 cost on targets whose rings have to be built rather than substituted.

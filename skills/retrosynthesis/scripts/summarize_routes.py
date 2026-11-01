@@ -7,10 +7,12 @@ Accepts either output of `aizynthcli`:
 
 Writes one CSV row per route with the route's step count, longest linear
 sequence, leaves, leaves missing from stock, AiZynthFinder scores, and
-per-step checks: every SMILES parses, no product element is missing from
-its reactants, and stereocenters defined in a product but in none of its
-reactants are flagged for review. Needs RDKit only; AiZynthFinder itself is
-not imported.
+per-step checks: every molecule SMILES parses, no product element is missing
+from its reactants, and steps whose product has more defined tetrahedral
+centres than its reactants are flagged for review. That last check is a net
+count, so a step that destroys one centre while creating another is a false
+negative; it finds the common case, not every case. Needs RDKit only;
+AiZynthFinder itself is not imported.
 
 Example:
     python summarize_routes.py output.json.gz routes.csv
@@ -73,6 +75,14 @@ def walk(node, depth=0):
             yield from walk(child, depth + 1)
 
 
+def molecules(node):
+    """Yield every molecule node in a route, including a childless root."""
+    yield node
+    for reaction in node.get("children", []):
+        for child in reaction.get("children", []):
+            yield from molecules(child)
+
+
 def leaves(node):
     children = [c for reaction in node.get("children", []) for c in reaction.get("children", [])]
     if not children:
@@ -86,6 +96,11 @@ def check_route(route):
     unparsable, mismatch, stereo_set = set(), [], []
     policies, classes = Counter(), Counter()
     steps, longest = 0, 0
+    # Every molecule node, so a childless root or an in-stock leaf cannot carry
+    # an unparsable SMILES past the reaction loop below.
+    for node in molecules(route):
+        if _mol(node["smiles"]) is None:
+            unparsable.add(node["smiles"])
     for product, reaction, depth in walk(route):
         steps += 1
         longest = max(longest, depth + 1)
@@ -95,16 +110,8 @@ def check_route(route):
         if meta.get("classification"):
             classes[meta["classification"]] += 1
         product_mol = _mol(product["smiles"])
-        reactant_mols = []
-        for child in reaction.get("children", []):
-            mol = _mol(child["smiles"])
-            if mol is None:
-                unparsable.add(child["smiles"])
-            reactant_mols.append(mol)
-        if product_mol is None:
-            unparsable.add(product["smiles"])
-            continue
-        if any(mol is None for mol in reactant_mols):
+        reactant_mols = [_mol(child["smiles"]) for child in reaction.get("children", [])]
+        if product_mol is None or any(mol is None for mol in reactant_mols):
             continue
         supplied = Counter()
         for mol in reactant_mols:
@@ -135,36 +142,47 @@ def check_route(route):
 
 
 def summarize(path: Path):
-    rows = []
+    """Return (rows, targets): one row per route, and every target in the file."""
+    rows, targets = [], []
     for target, routes in load_routes(path):
+        targets.append(target)
         for index, route in enumerate(routes):
             rows.append({"target": target, "route": index, **check_route(route)})
-    return rows
+    return rows, targets
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("input", type=Path, help="trees.json, output.json, or output.json.gz from aizynthcli")
     parser.add_argument("output", type=Path, help="CSV file with one row per route")
+    parser.add_argument("--strict", action="store_true",
+                        help="exit nonzero when any route has an unparsable SMILES or a lost element")
     args = parser.parse_args(argv)
     if not args.input.is_file():
         parser.error(f"input file not found: {args.input}")
 
     RDLogger.DisableLog("rdApp.*")
-    rows = summarize(args.input)
+    rows, targets = summarize(args.input)
     with args.output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=ROUTE_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
 
-    targets = {row["target"] for row in rows}
+    # Targets come from the file, not from the rows: a target the search left
+    # without any route has no row and must still count in the denominator.
+    unique_targets = dict.fromkeys(targets)
     solved = {row["target"] for row in rows if row["solved"]}
+    routeless = [target for target in unique_targets if target not in {row["target"] for row in rows}]
     flagged = sum(1 for row in rows if row["element_mismatch_steps"] or row["unparsable_smiles"])
-    print(f"[OK] {len(rows)} routes for {len(targets)} targets written to {args.output}")
-    print(f"-> targets with at least one solved route: {len(solved)}/{len(targets)}")
-    print(f"-> routes with stereocenters set in a step: {sum(1 for row in rows if row['stereo_set_steps'])}")
+    print(f"[OK] {len(rows)} routes for {len(unique_targets)} targets written to {args.output}")
+    print(f"-> targets with at least one solved route: {len(solved)}/{len(unique_targets)}")
+    if routeless:
+        print(f"-> targets with no route at all: {len(routeless)}")
+    print(f"-> routes with a step that sets a stereocenter: {sum(1 for row in rows if row['stereo_set_steps'])}")
     if flagged:
-        print(f"[FAIL] {flagged} routes have unparsable SMILES or element mismatches; inspect before use")
+        print(f"[FAIL] {flagged} routes have unparsable SMILES or a lost element; inspect before use")
+        if args.strict:
+            return 1
     return 0
 
 

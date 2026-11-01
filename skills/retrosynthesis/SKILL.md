@@ -36,6 +36,7 @@ reaches a bench.
 ```bash
 uv venv --python 3.12 && source .venv/bin/activate
 uv pip install "aizynthfinder[all]==4.4.1" "pyarrow==25.0.1"
+mkdir -p aizynth-data   # the downloader does not create its destination
 python -m aizynthfinder.tools.download_public_data ./aizynth-data
 ```
 
@@ -48,13 +49,21 @@ chain reaches `rxnutils -> swifter -> dask.dataframe -> pyarrow`. Install the
 import failed with `ModuleNotFoundError: No module named 'six.moves'`.
 
 The download is about 0.8 GB (2 min 32 s here) and writes `config.yml` with
-absolute paths to five artifacts: the USPTO expansion policy ONNX model and its
-template file, the RingBreaker policy and templates, the quick-filter model,
-and `zinc_stock.hdf5` (17,422,831 InChIKeys). All of it is CPU; the published
-`onnxruntime` wheel exposes only `CPUExecutionProvider`, and AiZynthFinder sets
-`intra_op_num_threads` to the physical core count per session. A GPU helps only
-if you serve a template-free model separately, see
-[references/alternatives.md](references/alternatives.md).
+absolute paths to the six artifacts it fetches: the USPTO expansion policy ONNX
+model and its template file, the RingBreaker policy and its templates, the
+quick-filter model, and `zinc_stock.hdf5` (17,422,831 InChIKeys). Paths in a
+config file are resolved against the **process** working directory, not the
+config file's directory, which is why the generated file uses absolute paths;
+a relative one fails with `NO_SUCHFILE` from onnxruntime when you run from
+elsewhere. All of it runs on CPU. The `onnxruntime` wheel
+pulled in here reported only `AzureExecutionProvider` and
+`CPUExecutionProvider`, so there is no GPU path for these policies without
+installing a GPU build, and `LocalOnnxModel` sets `intra_op_num_threads` to
+`psutil.cpu_count() // psutil.cpu_count(logical=False)`, which is the
+threads-per-core ratio (2 here, 1 on a host without SMT) rather than the core
+count. Extra cores therefore help through `--nproc` and separate processes, not
+through a single session. A GPU helps only if you serve a template-free model
+separately, see [references/alternatives.md](references/alternatives.md).
 
 ## Workflow
 
@@ -79,7 +88,10 @@ if you serve a template-free model separately, see
 5. **Check the routes mechanically.** `scripts/summarize_routes.py` flattens
    `aizynthcli` output into one row per route and flags steps whose product
    contains a heavy element absent from its reactants, unparsable SMILES, and
-   steps that create a stereocentre no reactant had.
+   steps whose product has more defined stereocentres than its reactants. The
+   stereo check is a net count, so a step that destroys one centre and creates
+   another slips through; `--strict` turns the element and parse failures into a
+   nonzero exit for a pipeline.
 6. **Cluster before reading.** Top-k routes are often the same disconnection;
    `routes.cluster(n_clusters=0)` groups them so a chemist reviews distinct
    options.
@@ -136,9 +148,12 @@ batch** rather than per molecule.
 | Osimertinib | DFPN, 100 iterations | not solved, 8.8 s |
 | 5 chiral drugs, 300 iterations | `aizynthcli` batch | 3 of 5 solved, 119.8 s total; atorvastatin and oseltamivir unsolved |
 
-Two readings worth keeping: an unsolved target at the default iteration limit
-often just needs more iterations, and the search algorithm changes which
-targets are reachable in a fixed budget more than the iteration count does.
+Each line is a single run, and an iteration is not a fixed amount of work, so
+read the table as examples rather than as a benchmark. What they do show is
+that an unsolved target at the default limit is not necessarily unreachable:
+ibuprofen was solved by raising the iteration limit, and solved sooner by a
+different algorithm. Before concluding anything about a target, vary the budget
+and the algorithm on that target.
 
 ## Stocks are the answer, so build them deliberately
 
@@ -162,9 +177,10 @@ stock:
 ```
 
 `smiles2stock --files blocks.smi --output stock.hdf5` does the same conversion
-and is the better choice for large lists. Select several stocks at once
-(`--stocks inhouse zinc`); `precursors_availability` then names the source per
-precursor. A small stock does not make the search fail, it makes it return
+and is the better choice for large lists; it reports how many unique compounds
+it wrote, and the result is an HDF5 frame under the `table` key. Select several
+stocks at once (`--stocks inhouse zinc`); `precursors_availability` then names
+the source per precursor. A small stock does not make the search fail, it makes it return
 unsolved routes: the in-house stock above left osimertinib unsolved with 4
 off-stock leaves.
 
