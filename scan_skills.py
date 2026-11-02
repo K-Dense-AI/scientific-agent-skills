@@ -76,7 +76,9 @@ def content_hash(skill_dir: Path) -> str:
     """Fingerprint everything in a skill package.
 
     Covers file paths as well as bytes, so a rename or deletion changes the hash
-    even when the surviving content is identical. `__pycache__` is excluded
+    even when the surviving content is identical. Paths are hashed in POSIX form
+    so the fingerprint is the same on Windows as on the CI runner that wrote the
+    cached report. `__pycache__` is excluded
     because it is a build artifact that varies without the skill changing.
     """
     digest = hashlib.sha256()
@@ -85,7 +87,7 @@ def content_hash(skill_dir: Path) -> str:
         if f.is_file() and "__pycache__" not in f.parts
     )
     for f in files:
-        digest.update(str(f.relative_to(skill_dir)).encode())
+        digest.update(f.relative_to(skill_dir).as_posix().encode())
         digest.update(b"\0")
         digest.update(f.read_bytes())
         digest.update(b"\0")
