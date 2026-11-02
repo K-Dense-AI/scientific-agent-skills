@@ -212,7 +212,7 @@ Use the repository directory listing to discover preview schema paths; do not as
 - **BIDS Website**: https://bids.neuroimaging.io/
 - **PyBIDS Documentation**: https://bids-standard.github.io/pybids/
 - **BIDS Validator**: https://github.com/bids-standard/bids-validator
-- **BIDS Starter Kit**: https://bids-standard.github.io/bids-starter-kit/
+- **BIDS Starter Kit**: https://bids-website.readthedocs.io/en/latest/getting_started/index.html
 - **BIDS Examples**: https://github.com/bids-standard/bids-examples — canonical reference datasets for every BIDS modality; use as templates and test data
 - **HeuDiConv Docs**: https://heudiconv.readthedocs.io/
 - **Original BIDS paper**: Gorgolewski et al. (2016) Scientific Data, doi:10.1038/sdata.2016.44
