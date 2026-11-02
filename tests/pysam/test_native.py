@@ -28,6 +28,22 @@ def args(module, *values):
     return module.build_parser().parse_args([str(value) for value in values])
 
 
+@pytest.mark.parametrize("quality", ["nan", "inf", "-inf"])
+def test_variant_summary_reports_nonfinite_quality_without_invalid_json(tmp_path, quality):
+    path = tmp_path / "nonfinite.vcf"
+    path.write_text(
+        '##fileformat=VCFv4.3\n##contig=<ID=chr1,length=200>\n'
+        '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'
+        f'chr1\t1\t.\tA\tG\t{quality}\tPASS\t.\n'
+        'chr1\t2\t.\tA\tG\t50\tPASS\t.\n'
+    )
+    report = variant_summary.summarize_variants(args(variant_summary, path))
+    assert report["record_counts"]["total"] == 2
+    assert report["record_counts"]["nonfinite_quality"] == 1
+    assert report["quality"] == {"records_with_quality": 1, "mean_quality": 50.0}
+    json.dumps(report, allow_nan=False)
+
+
 def segment(header, name="match", *, start=10, cigar="10M", sequence="A" * 10,
             flag=0, mapq=60, tid=0, quality=40):
     read = pysam.AlignedSegment(header)
