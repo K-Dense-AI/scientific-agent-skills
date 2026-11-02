@@ -394,7 +394,7 @@ def lack_of_fit(xs: Sequence[float], ys: Sequence[float], fit: LinearFit) -> dic
     """
     groups: dict[float, list[float]] = {}
     for x, y in zip(xs, ys):
-        groups.setdefault(round(float(x), 12), []).append(float(y))
+        groups.setdefault(float(x), []).append(float(y))
     k = len(groups)
     n = len(xs)
     replicated = sum(1 for vals in groups.values() if len(vals) > 1)
@@ -411,7 +411,7 @@ def lack_of_fit(xs: Sequence[float], ys: Sequence[float], fit: LinearFit) -> dic
     # within a concentration level for this replicate-based partition.
     level_weights: dict[float, float] = {}
     for x, weight in zip(xs, fit.weights):
-        level = round(float(x), 12)
+        level = float(x)
         if level in level_weights and weight != level_weights[level]:
             return {"applicable": False, "reason": "weights differ within a level"}
         level_weights[level] = weight
