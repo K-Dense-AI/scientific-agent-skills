@@ -37,7 +37,7 @@ from _common import (
 )
 
 try:
-    from scipy.optimize import least_squares, minimize
+    from scipy.optimize import least_squares
     from scipy.stats import norm
     from scipy.stats import t as t_dist
 except ImportError as exc:  # pragma: no cover
@@ -127,22 +127,45 @@ def fit_logistic(exposure: np.ndarray, response: np.ndarray) -> dict:
     if zero.max() <= one.min() or one.max() <= zero.min():
         raise InputError("complete or quasi-complete separation: unpenalized logistic slope is not finite")
 
-    def neg_loglik(theta: np.ndarray) -> float:
-        eta = theta[0] + theta[1] * exposure
+    # Newton-Raphson (IRLS) on standardized exposure: AUC-scale exposures leave
+    # a quasi-Newton gradient test unmet at the optimum, and its inverse-Hessian
+    # estimate is not the Fisher information the Wald interval needs.
+    center, spread = float(exposure.mean()), float(exposure.std())
+    design = np.column_stack([np.ones_like(exposure), (exposure - center) / spread])
+
+    def neg_loglik(beta: np.ndarray) -> float:
+        eta = design @ beta
         # log(1+exp(eta)) computed stably
         return float(np.sum(np.logaddexp(0.0, eta) - response * eta))
 
-    result = minimize(neg_loglik, np.array([0.0, 0.0]), method="BFGS")
-    intercept, slope = result.x
-    try:
-        cov = result.hess_inv
-        se = np.sqrt(np.maximum(np.diag(np.asarray(cov)), 0.0))
-    except (ValueError, TypeError):  # pragma: no cover
-        se = np.array([float("nan"), float("nan")])
+    def information(beta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        prob = 1.0 / (1.0 + np.exp(-(design @ beta)))
+        return design.T @ (design * (prob * (1.0 - prob))[:, None]), design.T @ (response - prob)
+
+    beta = np.zeros(2)
+    objective = neg_loglik(beta)
+    converged = False
+    for _ in range(100):
+        fisher, score = information(beta)
+        step = np.linalg.solve(fisher, score)
+        trial = beta + step
+        while neg_loglik(trial) > objective + 1e-12 and np.max(np.abs(step)) > 1e-12:
+            step /= 2.0
+            trial = beta + step
+        beta, objective = trial, neg_loglik(trial)
+        if np.max(np.abs(step)) < 1e-10:
+            converged = True
+            break
+
+    fisher, _ = information(beta)
+    jacobian = np.array([[1.0, -center / spread], [0.0, 1.0 / spread]])
+    cov = jacobian @ np.linalg.inv(fisher) @ jacobian.T
+    se = np.sqrt(np.maximum(np.diag(cov), 0.0))
+    intercept, slope = jacobian @ beta
 
     ec50 = -intercept / slope if slope else float("nan")
     return {
-        "converged": bool(result.success),
+        "converged": converged,
         "intercept": float(intercept),
         "slope": float(slope),
         "se_slope": float(se[1]),
@@ -152,7 +175,7 @@ def fit_logistic(exposure: np.ndarray, response: np.ndarray) -> dict:
         "exposure_at_50pct_probability": float(ec50),
         "n": len(exposure),
         "n_responders": int(response.sum()),
-        "neg_loglik": float(result.fun),
+        "neg_loglik": objective,
     }
 
 
