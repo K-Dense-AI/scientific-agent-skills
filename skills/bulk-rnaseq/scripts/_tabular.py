@@ -19,3 +19,19 @@ def validate_header(path, delimiter=",", comment=None):
     normalized = [label.strip() for label in header]
     if len(normalized) != len(set(normalized)):
         raise ValueError("Duplicate column labels in input header; refusing automatic renaming")
+
+
+def read_table(path, **kwargs):
+    """Keep pandas' CSV semantics without implicit indices or lost data."""
+    import warnings
+
+    import pandas as pd
+
+    # index_col=False prevents automatic index inference. Pandas warns when
+    # that would discard data, so never return the resulting truncated table.
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", pd.errors.ParserWarning)
+            return pd.read_csv(path, index_col=False, **kwargs)
+    except pd.errors.ParserWarning as exc:
+        raise ValueError(f"Table fields do not match the header: {exc}") from exc

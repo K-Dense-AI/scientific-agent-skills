@@ -499,6 +499,21 @@ class SalmonImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Duplicate column'):
             build_counts_matrix.build_from_salmon(self.root, self.mapping)
 
+    def test_surplus_mapping_field_is_rejected_before_import(self):
+        rows = self.mapping.read_text().splitlines()
+        self.mapping.write_text(rows[0] + '\n' +
+                                '\n'.join(row + '\tEXTRA' for row in rows[1:]) + '\n')
+        with self.assertRaisesRegex(ValueError, 'fields do not match'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
+    def test_surplus_salmon_field_is_rejected_before_import(self):
+        path = self.root / 's1' / 'quant.sf'
+        rows = path.read_text().splitlines()
+        path.write_text(rows[0] + '\n' +
+                        '\n'.join(row + '\t999' for row in rows[1:]) + '\n')
+        with self.assertRaisesRegex(ValueError, 'fields do not match'):
+            build_counts_matrix.build_from_salmon(self.root, self.mapping)
+
     def test_ambiguous_mapping_is_rejected(self):
         with self.mapping.open('a') as handle: handle.write('t1\tOTHER\n')
         with self.assertRaisesRegex(ValueError, 'Duplicate transcript'):
@@ -573,3 +588,97 @@ def test_provenance_hash_matches_exact_bytes_across_read_chunks(tmp_path):
     payload = b'a' * (1024 * 1024 + 7) + 'gene\u03b1\r\n'.encode('utf-8')
     path.write_bytes(payload)
     assert build_counts_matrix._file_record(path)['sha256'] == hashlib.sha256(payload).hexdigest()
+
+
+@pytest.mark.parametrize("genes", [("G1", "G2"), ('"#G1"', "G2"), ("0", "1")])
+def test_featurecounts_extra_fields_cannot_shift_gene_ids_and_counts(tmp_path, genes):
+    path = tmp_path / 'counts.tsv'
+    path.write_text('Geneid\tChr\tStart\tEnd\tStrand\tLength\ts1.bam\n'
+                    f'{genes[0]}\tchr1\t1\t100\t+\t100\t10\t20\n'
+                    f'{genes[1]}\tchr2\t1\t200\t+\t200\t30\t40\n')
+    with pytest.raises(ValueError, match='fields do not match'):
+        build_counts_matrix.build_from_featurecounts(path)
+
+
+def test_samplesheet_extra_field_is_reported_instead_of_inferred_as_index(tmp_path):
+    path = tmp_path / 'samples.csv'
+    path.write_text('sample,fastq_1\nctrl1,reads.fastq.gz,\n')
+    report = validate_samplesheet.Report()
+    assert validate_samplesheet.validate_samplesheet(path, False, report) is None
+    assert any('fields do not match' in error for error in report.errors)
+
+
+def test_metadata_extra_fields_are_rejected_before_sample_matching(tmp_path):
+    path = tmp_path / 'metadata.csv'
+    path.write_text('sample,condition\ns1,control,extra\ns2,treated,extra\n')
+    report = validate_samplesheet.Report()
+    validate_samplesheet.validate_metadata(path, None, 'condition', 3, report)
+    assert any('fields do not match' in error for error in report.errors)
+
+
+
+def test_samplesheet_preserves_quoted_records_and_missing_optional_cells(tmp_path):
+    path = tmp_path / 'samples.csv'
+    path.write_text('sample,fastq_1,fastq_2\n'
+                    '"sample,one","reads,one.fastq.gz",\n'
+                    'sample_two,reads_two.fastq.gz\n'
+                    '"sample\nthree",reads_three.fastq.gz,\n')
+    report = validate_samplesheet.Report()
+    sheet = validate_samplesheet.validate_samplesheet(path, False, report)
+    assert report.errors == []
+    assert sheet['sample'].tolist() == ['sample,one', 'sample_two', 'sample\nthree']
+    assert sheet['fastq_2'].tolist() == ['', '', '']
+
+
+def test_featurecounts_comments_blank_lines_and_quoted_tabs_remain_valid(tmp_path):
+    path = tmp_path / 'counts.tsv'
+    path.write_text('# Program: featureCounts\tcommand\toptions\n\n'
+                    'Geneid\tChr\tStart\tEnd\tStrand\tLength\ts1.bam\n'
+                    '"G\t1"\tchr1\t1\t100\t+\t100\t10\n\n'
+                    '# comment\twith\textra\tfields\tignored\tby\tpandas\treader\n'
+                    '# comment\t"unclosed quote in a comment\n'
+                    'G2\tchr2\t1\t200\t+\t200\t30\n')
+    counts = build_counts_matrix.build_from_featurecounts(path)
+    assert counts.index.tolist() == ['G\t1', 'G2']
+    assert counts['s1'].tolist() == [10, 30]
+
+
+def test_featurecounts_inline_comment_tabs_do_not_count_as_data(tmp_path):
+    path = tmp_path / 'counts.tsv'
+    path.write_text('Geneid\tChr\tStart\tEnd\tStrand\tLength\ts1.bam\n'
+                    'G1\tchr1\t1\t100\t+\t100\t10# note\textra\tfields\n')
+    counts = build_counts_matrix.build_from_featurecounts(path)
+    assert counts.index.tolist() == ['G1']
+    assert counts['s1'].tolist() == [10]
+
+
+@pytest.mark.parametrize('header', ['sample', ''])
+@pytest.mark.parametrize('ids', [('001', '002', '003', '004'), ('0', '1', '2', '3')])
+def test_metadata_first_column_keeps_string_ids_and_optional_cells(tmp_path, header, ids):
+    path = tmp_path / 'metadata.csv'
+    path.write_text(f'{header},condition,batch\n' +
+                    ''.join(f'{sample},{"control" if i < 2 else "treated"}\n'
+                            for i, sample in enumerate(ids)))
+    report = validate_samplesheet.Report()
+    sheet = pd.DataFrame({'sample': list(ids)})
+    validate_samplesheet.validate_metadata(path, sheet, 'condition', 2, report)
+    assert report.errors == []
+    assert report.warnings == []
+
+
+def test_metadata_header_only_remains_a_validation_error(tmp_path):
+    path = tmp_path / 'metadata.csv'
+    path.write_text('sample,condition\n')
+    report = validate_samplesheet.Report()
+    validate_samplesheet.validate_metadata(path, None, 'condition', 2, report)
+    assert any('empty for all' in error for error in report.errors)
+
+
+def test_featurecounts_empty_surplus_cell_cannot_shift_data(tmp_path):
+    path = tmp_path / 'counts.tsv'
+    path.write_text('Geneid\tChr\tStart\tEnd\tStrand\tLength\ts1.bam\n'
+                    '0\tchr1\t1\t100\t+\t100\t10\t\n'
+                    '1\tchr2\t1\t200\t+\t200\t30\t\n')
+    counts = build_counts_matrix.build_from_featurecounts(path)
+    assert counts.index.tolist() == ['0', '1']
+    assert counts['s1'].tolist() == [10, 30]
