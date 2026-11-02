@@ -201,7 +201,10 @@ python scripts/profiler_to_waypoint.py --input ... --metadata labels.csv --outpu
 ```
 
 — where `labels.csv` is indexed by sample ID, or join afterwards in pandas. Sample IDs must match
-exactly. These are left joins: unmatched samples remain with missing labels. The bundled helper
+exactly. When sample IDs are first-column values in a generic samples-as-rows table,
+metadata table, or converter CSV/TSV read by the coverage helper, they are preserved
+as literal text, including leading zeros and labels such as `NA`. This does not change
+existing header normalization or numeric abundance missingness. These are left joins: unmatched samples remain with missing labels. The bundled helper
 warns about unmatched IDs and rejects duplicate IDs; upstream may omit missing targets in
 `finetune`. Check sample counts and missingness explicitly before splitting. Parquet metadata
 must preserve a sample-ID index. The bundled converter rejects non-finite/negative abundances
