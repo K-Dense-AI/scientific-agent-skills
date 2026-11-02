@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "context": {
+    "question": "Should intrinsic revision motivate a frozen-model exact-answer reasoning project?",
+    "decision": "Choose evaluation controls before a method commitment",
+    "target_setting": "Tool-free frozen LLM; target model/version/tasks unspecified",
+    "mode": "scout",
+    "as_of": "2026-10-31",
+    "bounds": "Three named historical papers; selected sections only; no current-field completeness, forward-citation audit or formal novelty search",
+    "stop_reason": "Fixed three-paper example budget"
+  },
+  "papers": [
+    {
+      "id": "P1",
+      "title": "Self-Refine: Iterative Refinement with Self-Feedback",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2023/file/91edff07232fb1b55a505a9e9f6c0ff3-Paper-Conference.pdf",
+      "version": "NeurIPS 2023 conference PDF",
+      "access": "excerpt",
+      "evidence_family": "SELFREFINE-2023"
+    },
+    {
+      "id": "P2",
+      "title": "Large Language Models Cannot Self-Correct Reasoning Yet",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/file/8b4add8b0aa8749d80a34ca5d941c355-Paper-Conference.pdf",
+      "version": "ICLR 2024 conference PDF",
+      "access": "excerpt",
+      "evidence_family": "HUANG-2024"
+    },
+    {
+      "id": "P3",
+      "title": "CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2024/file/fef126561bbf9d4467dbb8d27334b8fe-Paper-Conference.pdf",
+      "version": "ICLR 2024 conference PDF",
+      "access": "excerpt",
+      "evidence_family": "CRITIC-2024"
+    }
+  ],
+  "claims": [
+    {
+      "id": "C1",
+      "paper_id": "P1",
+      "statement": "Math results show small point-estimate changes, despite larger gains on other task metrics.",
+      "kind": "empirical",
+      "scope": "Table 1 model/task setups; not an equal-all-in-budget guarantee.",
+      "evidence": {
+        "locator": "Table 1, PDF p.5; §3.2–3.3; Appendix K.1, Table 14",
+        "observation": "Math solve rates: 64.1→64.1, 74.8→75.0, 92.9→93.1. Authors also distinguish oracle feedback.",
+        "authors_interpretation": "Difficulty recognizing errors limits math refinement.",
+        "analyst_inference": "A general iterative-improvement headline is insufficient motivation for intrinsic exact-answer reasoning."
+      },
+      "assessment": {
+        "strength": "supported",
+        "reason": "Inspected primary PDF sections; strength applies only to reported scoped result",
+        "limitation": "Point estimates are not evidence of zero effect; paired precision and equal-budget comparison not established here."
+      },
+      "uses": [
+        {
+          "role": "boundary",
+          "decision": "Choose task-appropriate motivation and baseline",
+          "transfer_assumption": "New target models/tasks require direct testing"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "paper_id": "P2",
+      "statement": "A more informative initial prompt changes the constrained-generation comparison.",
+      "kind": "empirical",
+      "scope": "CommonGen-Hard concept coverage; gpt-3.5-turbo-0613 replication; not a mathematical reasoning equivalence.",
+      "evidence": {
+        "locator": "§5; Table 8, PDF pp.7–8",
+        "observation": "Authors’ stronger initial prompt: 81.8; subsequent correction: 75.1 concept coverage.",
+        "authors_interpretation": "Initial instruction quality can confound attributed correction gains.",
+        "analyst_inference": "Test informative initial prompts before attributing gains to a revision mechanism."
+      },
+      "assessment": {
+        "strength": "supported",
+        "reason": "Inspected primary PDF sections; strength applies only to reported scoped result",
+        "limitation": "This is a specific prompt intervention, not a theorem that intrinsic revision never works; all-in budgets differ."
+      },
+      "uses": [
+        {
+          "role": "evaluation",
+          "decision": "Add stronger initial-prompt and cost controls",
+          "transfer_assumption": "Need analogous prompt adequacy in the target task"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "paper_id": "P3",
+      "statement": "Tool feedback helps in reported math-program settings, while no-tool effects vary.",
+      "kind": "empirical",
+      "scope": "Table 2; frozen gpt-3.5-turbo, official arithmetic test splits; up to four corrections; task-specific inference protocol.",
+      "evidence": {
+        "locator": "§4.2; Table 2, PDF pp.7–8",
+        "observation": "For gpt-3.5-turbo GSM8k: PoT 72.5, CRITIC 78.2, no-tool 77.0; SVAMP: 82.0, 83.3, 82.0.",
+        "authors_interpretation": "External feedback is valuable; intrinsic critique is less reliable.",
+        "analyst_inference": "Separate tool access from intrinsic revision and retain nonzero no-tool findings."
+      },
+      "assessment": {
+        "strength": "supported",
+        "reason": "Inspected primary PDF sections; strength applies only to reported scoped result",
+        "limitation": "Point estimates, model/task/protocol dependence; no claim of matched all-in tokens or universal tool necessity."
+      },
+      "uses": [
+        {
+          "role": "counterevidence",
+          "decision": "Avoid a blanket no-tool impossibility claim",
+          "transfer_assumption": "Program-generation/execution setup differs from pure textual reasoning"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "paper_id": "P3",
+      "statement": "Some comparison rows are imported results rather than a new independent replication.",
+      "kind": "empirical",
+      "scope": "Additional comparison provenance only.",
+      "evidence": {
+        "locator": "Appendix D.6, Table 10 caption, PDF p.28",
+        "observation": "Caption explicitly attributes PAL and Self-Refine rows to Madaan et al.",
+        "authors_interpretation": "These rows are a comparison to prior results.",
+        "analyst_inference": "Do not count this table as an extra independent Self-Refine study."
+      },
+      "assessment": {
+        "strength": "supported",
+        "reason": "Inspected primary PDF sections; strength applies only to reported scoped result",
+        "limitation": "Evidence family is conservatively grouped by original study; this does not establish independence among its internal experiments."
+      },
+      "uses": [
+        {
+          "role": "evaluation",
+          "decision": "Deduplicate supporting evidence",
+          "transfer_assumption": "Track originating result rather than publication count"
+        }
+      ],
+      "evidence_family": "SELFREFINE-2023"
+    }
+  ],
+  "propositions": [
+    {
+      "id": "Q1",
+      "statement": "The inspected historical evidence makes intrinsic-revision gains conditional on task, prompts and evaluation; it does not justify guaranteed gains or universal impossibility.",
+      "scope": "Only inspected 2023–2024 protocols; target 2026 model unspecified",
+      "supporting_claim_ids": [
+        "C1",
+        "C2",
+        "C3"
+      ],
+      "counter_claim_ids": [],
+      "candidate_claim_ids": [],
+      "synthesis": "conditional",
+      "independent_evidence_count": null,
+      "independence_assessment": "Three papers and three conservative source families, but overlapping models/benchmarks and no independence audit. C4 reuses the P1 family and adds no independent confirmation.",
+      "coverage": "Different tasks, feedback access and prompting protocols; not matched replications of one estimand.",
+      "justification": "Converges on conditionality, not a common quantitative effect or a universal causal explanation."
+    }
+  ],
+  "edges": [
+    {
+      "id": "E1",
+      "source": "C2",
+      "target": "C1",
+      "relation": "supports",
+      "status": "hypothesis",
+      "evidence_claims": [
+        "C1",
+        "C2"
+      ],
+      "rationale": "Both caution against transferring broad gains to the target; different tasks prevent a direct replication claim.",
+      "independence": "unknown"
+    },
+    {
+      "id": "E2",
+      "source": "C3",
+      "target": "C1",
+      "relation": "supports",
+      "status": "hypothesis",
+      "evidence_claims": [
+        "C1",
+        "C3"
+      ],
+      "rationale": "Analyst synthesis: intrinsic gains are setup-dependent; not an assertion of equal protocols or independent replication.",
+      "independence": "unknown"
+    }
+  ],
+  "tensions": [
+    {
+      "id": "T1",
+      "claim_ids": [
+        "C1",
+        "C3"
+      ],
+      "classification": "scope_mismatch",
+      "comparison": "Different models, tasks, initial programs, feedback sources and stopping protocols; all-in budget and paired precision not aligned.",
+      "explanation": "Positive no-tool rows and small Self-Refine math changes do not form an established like-for-like contradiction.",
+      "resolution_search": "No broad later-resolution search performed; this is a three-paper historical bounded example.",
+      "frontier_candidate": false
+    }
+  ],
+  "reading_queue": [
+    {
+      "paper_id": "P2",
+      "action": "deep_read",
+      "focus": "§3–5, especially Table 8 and prompt controls",
+      "reason": "Evaluation confounds can change whether a revision project is justified."
+    },
+    {
+      "paper_id": "P1",
+      "action": "targeted_read",
+      "focus": "§2, Table 1, Appendix K.1",
+      "reason": "Recover the loop and distinguish task-level evidence from the broad headline."
+    },
+    {
+      "paper_id": "P3",
+      "action": "targeted_read",
+      "focus": "§4.2, Table 2, Appendix D.6",
+      "reason": "Separate external feedback effects, nonzero intrinsic results and reused rows."
+    }
+  ],
+  "searches": [
+    {
+      "channel": "historical-bounded",
+      "query": "Self-Refine iterative refinement self feedback NeurIPS 2023",
+      "source": "Web search → primary conference PDFs",
+      "date": "2026-10-31",
+      "outcome": "Identity and selected primary sections inspected; not a systematic candidate sweep",
+      "kept_ids": [
+        "P1"
+      ]
+    },
+    {
+      "channel": "historical-bounded",
+      "query": "Large Language Models Cannot Self-Correct Reasoning Yet ICLR 2024",
+      "source": "Web search → primary conference PDFs",
+      "date": "2026-10-31",
+      "outcome": "Identity and selected primary sections inspected; not a systematic candidate sweep",
+      "kept_ids": [
+        "P2"
+      ]
+    },
+    {
+      "channel": "historical-bounded",
+      "query": "CRITIC tool interactive critiquing ICLR 2024",
+      "source": "Web search → primary conference PDFs",
+      "date": "2026-10-31",
+      "outcome": "Identity and selected primary sections inspected; not a systematic candidate sweep",
+      "kept_ids": [
+        "P3"
+      ]
+    }
+  ]
+}
