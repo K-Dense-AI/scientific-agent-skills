@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT license
 compatibility: Requires Python 3.10+ with httpx, PyYAML, and sentence-transformers; Screenpipe and a local LM Studio server or an opt-in cloud LLM. Initial model installation needs network access.
 metadata:
-  version: "1.6"
+  version: "1.7"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
@@ -247,7 +247,7 @@ The 2026-09-30 review used synthetic events, mock HTTP transports, and a local f
 
 ## Composition with other skills in this repo
 
-The autoskill's embedding index discovers sibling `SKILL.md` files from the configured skills directory at run time. Workflows that look like scientific writing will match `scientific-writing` / `literature-review` / `citation-management`; figure work will match `scientific-schematics` / `generate-image` / `infographics`; slide prep matches `scientific-slides` / `pptx`; etc. When a cluster scores high against two or three sibling skills the emitted composition recipe names them explicitly, so the user's future agent invocations use the optimized paths already documented in this repo.
+The autoskill's embedding index discovers sibling `SKILL.md` files from the configured skills directory at run time. Workflows that look like scientific writing will match `scientific-writing` / `literature-review` / `citation-management`; figure work will match `scientific-schematics` / `generate-image` / `infographics`; slide prep matches `scientific-slides`; etc. When a cluster scores high against two or three sibling skills the emitted composition recipe names them explicitly, so the user's future agent invocations use the optimized paths already documented in this repo.
 
 ## Citing Scientific Agent Skills
 
