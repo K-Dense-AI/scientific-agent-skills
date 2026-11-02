@@ -200,6 +200,73 @@ class CliTests(unittest.TestCase):
 
 
 class PlanValidationTests(unittest.TestCase):
+    @staticmethod
+    def enum_cases(profile: str) -> tuple[tuple[str, str, str], ...]:
+        return (
+            ("environment", "adapter", "$.environment.adapter is not allowlisted"),
+            ("training", "device", "$.training.device must be cpu or cuda"),
+            ("vectorization", "backend", (
+                "$.vectorization.backend is invalid for PufferLib 3.0.0"
+                if profile == "pypi-3.0.0"
+                else "$.vectorization.backend must be native or torch"
+            )),
+            ("vectorization", "start_method", (
+                "$.vectorization.start_method must be spawn or forkserver"
+                if profile == "pypi-3.0.0"
+                else "$.vectorization.start_method must be spawn for 4.0"
+            )),
+            ("logging", "backend", "$.logging.backend must be none, wandb, or neptune"),
+            ("checkpoint", "format", "$.checkpoint.format is invalid"),
+        )
+
+    def test_invalid_enum_values_return_schema_errors(self) -> None:
+        for profile in validate_plan.PROFILES:
+            for section, field, expected in self.enum_cases(profile):
+                for value in (["cpu"], {"value": "cpu"}, 1, True, None, "unknown"):
+                    with self.subTest(profile=profile, field=f"{section}.{field}", value=value):
+                        plan = validate_plan.default_plan(profile)
+                        plan[section][field] = value
+                        if section == "environment":
+                            plan["environment"]["name"] = "reviewed-env"
+                        self.assertEqual(validate_plan.validate_plan(plan), [expected])
+
+    def test_invalid_enum_values_emit_complete_cli_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for profile in validate_plan.PROFILES:
+                for section, field, expected in self.enum_cases(profile):
+                    for value in (["cpu"], {"value": "cpu"}, 1, True, None, "unknown"):
+                        with self.subTest(profile=profile, field=f"{section}.{field}", value=value):
+                            plan = validate_plan.default_plan(profile)
+                            plan[section][field] = value
+                            if section == "environment":
+                                plan["environment"]["name"] = "reviewed-env"
+                            (root / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+                            result = run_script(
+                                "validate_plan.py", "--root", str(root),
+                                "--config", "plan.json", "--compact",
+                            )
+                            self.assertEqual(result.returncode, 1)
+                            self.assertEqual(result.stderr, "")
+                            self.assertEqual(json.loads(result.stdout), {
+                                "errors": [expected],
+                                "network_used": False,
+                                "plan": plan,
+                                "status": "invalid",
+                            })
+
+    def test_invalid_enums_preserve_error_aggregation_and_order(self) -> None:
+        for profile in validate_plan.PROFILES:
+            with self.subTest(profile=profile):
+                plan = validate_plan.default_plan(profile)
+                for section, field, _ in self.enum_cases(profile):
+                    plan[section][field] = []
+                plan["environment"]["name"] = "reviewed-env"
+                plan["checkpoint"]["trusted_only"] = False
+                expected = [case[2] for case in self.enum_cases(profile)]
+                expected.append("$.checkpoint.trusted_only must be true")
+                self.assertEqual(validate_plan.validate_plan(plan), expected)
+
     def test_historical_native_profile_rejects_removed_adapters(self) -> None:
         plan = validate_plan.default_plan("source-4.0")
         plan["environment"].update(name="reviewed-env", adapter="gymnasium")

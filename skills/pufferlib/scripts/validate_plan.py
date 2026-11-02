@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import re
+from collections.abc import Collection
 from typing import Any
 
 try:
@@ -142,6 +143,11 @@ def _boolean(value: Any, *, path: str, errors: list[str]) -> bool | None:
     return value
 
 
+def _is_string_choice(value: Any, choices: Collection[str]) -> bool:
+    """Check an enum without hashing arbitrary decoded JSON values."""
+    return isinstance(value, str) and value in choices
+
+
 def _validate_package(
     package: dict[str, Any], profile: str, errors: list[str]
 ) -> None:
@@ -189,12 +195,12 @@ def _validate_environment(environment: dict[str, Any], errors: list[str]) -> Non
         validate_slug(environment.get("name"), name="environment.name")
     except UserInputError as exc:
         errors.append(str(exc))
-    if environment.get("adapter") not in {
+    if not _is_string_choice(environment.get("adapter"), {
         "synthetic",
         "gymnasium",
         "pettingzoo",
         "native-ocean",
-    }:
+    }):
         errors.append("$.environment.adapter is not allowlisted")
     if environment.get("name") == "synthetic" and environment.get("adapter") != "synthetic":
         errors.append("the synthetic environment must use the synthetic adapter")
@@ -213,7 +219,7 @@ def _validate_training(training: dict[str, Any], errors: list[str]) -> None:
             path="$.training",
         )
     )
-    if training.get("device") not in {"cpu", "cuda"}:
+    if not _is_string_choice(training.get("device"), {"cpu", "cuda"}):
         errors.append("$.training.device must be cpu or cuda")
     _integer(
         training.get("seed"),
@@ -271,11 +277,11 @@ def _validate_vectorization(
             )
         )
         backend = vectorization.get("backend")
-        if backend not in {
+        if not _is_string_choice(backend, {
             "serial",
             "multiprocessing",
             "native",
-        }:
+        }):
             errors.append("$.vectorization.backend is invalid for PufferLib 3.0.0")
         num_envs = _integer(
             vectorization.get("num_envs"),
@@ -303,7 +309,7 @@ def _validate_vectorization(
             path="$.vectorization.zero_copy",
             errors=errors,
         )
-        if vectorization.get("start_method") not in {"spawn", "forkserver"}:
+        if not _is_string_choice(vectorization.get("start_method"), {"spawn", "forkserver"}):
             errors.append("$.vectorization.start_method must be spawn or forkserver")
         if num_envs and workers and num_envs % workers:
             errors.append("$.vectorization.num_envs must be divisible by num_workers")
@@ -340,7 +346,7 @@ def _validate_vectorization(
                 path="$.vectorization",
             )
         )
-        if vectorization.get("backend") not in {"native", "torch"}:
+        if not _is_string_choice(vectorization.get("backend"), {"native", "torch"}):
             errors.append("$.vectorization.backend must be native or torch")
         agents = _integer(
             vectorization.get("total_agents"),
@@ -427,7 +433,7 @@ def _validate_logging(
         require_keys(logging, allowed=allowed, required=allowed, path="$.logging")
     )
     backend = logging.get("backend")
-    if backend not in LOGGER_CREDENTIAL_ENV:
+    if not _is_string_choice(backend, LOGGER_CREDENTIAL_ENV):
         errors.append("$.logging.backend must be none, wandb, or neptune")
         return
     if backend == "neptune":
@@ -470,7 +476,7 @@ def _validate_checkpoint(checkpoint: dict[str, Any], errors: list[str]) -> None:
             path="$.checkpoint",
         )
     )
-    if checkpoint.get("format") not in {"state_dict", "native-bin", "opaque"}:
+    if not _is_string_choice(checkpoint.get("format"), {"state_dict", "native-bin", "opaque"}):
         errors.append("$.checkpoint.format is invalid")
     if checkpoint.get("trusted_only") is not True:
         errors.append("$.checkpoint.trusted_only must be true")
@@ -522,7 +528,9 @@ def validate_plan(plan: Any) -> list[str]:
 
     _validate_package(package, profile, errors)
     _validate_environment(environment, errors)
-    if profile == "source-4.0" and environment.get("adapter") in {"gymnasium", "pettingzoo"}:
+    if profile == "source-4.0" and _is_string_choice(
+        environment.get("adapter"), {"gymnasium", "pettingzoo"}
+    ):
         errors.append("source-4.0 has no Gymnasium/PettingZoo emulation adapter")
     _validate_training(training, errors)
     _validate_vectorization(vectorization, profile, training, errors)
