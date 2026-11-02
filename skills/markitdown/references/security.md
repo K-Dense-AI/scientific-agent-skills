@@ -114,7 +114,7 @@ MarkItDown does not turn an archive into a safe bundle merely because it process
 Use a pinned MarkItDown release:
 
 ```bash
-uv pip install "markitdown[all]==0.1.8"
+uv pip install "markitdown[all]==0.1.8" "azure-ai-contentunderstanding==1.2.0b3"
 ```
 
 Relevant release history:
