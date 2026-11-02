@@ -179,7 +179,11 @@ def inspect_alignment(
     if path.name.lower().endswith(".cram") and reference is None:
         raise ValueError("CRAM inspection requires --reference")
 
-    kwargs: dict[str, Any] = {"threads": threads}
+    kwargs: dict[str, Any] = {
+        "threads": threads,
+        # Header inspection can report an empty SAM/BAM reference dictionary.
+        "check_sq": alignment_mode(path) == "rc",
+    }
     if reference is not None:
         kwargs["reference_filename"] = str(reference)
     if index is not None:
@@ -216,6 +220,7 @@ def inspect_alignment(
             "has_index": has_index,
             "sort_order": header.get("HD", {}).get("SO"),
             "reference_count": len(alignments.references),
+            "content_scanned": False,
             "contigs": contigs,
             "contigs_truncated": contigs_truncated,
             "read_group_count": len(read_groups),

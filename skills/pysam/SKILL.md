@@ -5,7 +5,7 @@ license: MIT
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.9+ and pysam 0.24.1. Bundled scripts use local files. CRAM decoding may require the matching reference FASTA or an explicitly configured REF_PATH/REF_CACHE.
 metadata:
-  version: "2.3"
+  version: "2.4"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -81,6 +81,10 @@ All scripts refuse to overwrite existing outputs. The filter also refuses stale
 output indexes and offers `--index --csi` for large BAM contigs. FASTA inspection
 requires an existing `.fai`; create it explicitly with `pysam.faidx()` first.
 Run each with `--help` for coordinate, index, and privacy notes.
+Sequential SAM/BAM QC and filtering also accept unplaced unmapped records without
+an `@SQ` reference dictionary, including headerless SAM. They reject decoded mapped
+records without a dictionary. The metadata-only inspector reports an empty dictionary
+without scanning records; this is not a claim that the file is valid or unmapped-only.
 
 Examples use illustrative filenames and assay-specific thresholds. The local
 synthetic suite exercises these API patterns on pysam 0.24.1; remote storage and
