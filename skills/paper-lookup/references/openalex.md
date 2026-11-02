@@ -16,7 +16,7 @@ https://api.openalex.org
 
 ## Rate Limits
 
-- **100 requests/second** max
+- Requests per second: 10 without a key, 30 with a free key or prepaid usage, 50 on an annual plan; semantic search is 1/second
 - Usage-based pricing: $0.10/day without a key, $1/day with a free account key
 - Single entity lookups by ID/DOI are free (unlimited)
 - List + filter queries: ~$0.0001 each (~10,000/day free)
@@ -113,7 +113,7 @@ Authors and institutions accept similar filter/sort/pagination parameters.
 GET /works?filter=publication_year:2024&cursor=*&per_page=100
 ```
 
-Response includes `meta.next_cursor`. Pass it as `cursor={value}` in the next request. Stop when `next_cursor` is null and the results are exhausted. The supported page maximum is 100; 200 is deprecated legacy behavior.
+Response includes `meta.next_cursor`. Pass it as `cursor={value}` in the next request. Following `next_cursor` needs a free API key: without one, `cursor=*` returns the first page but the next request returns HTTP 401. Stop when `next_cursor` is null and the results are exhausted. The supported page maximum is 100; 200 is deprecated legacy behavior.
 
 ## Response Format
 
