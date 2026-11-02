@@ -42,7 +42,7 @@ These skills enable your AI agent to seamlessly work with specialized scientific
 - 🧠 Healthcare AI & Biosignal Research - EHR and model research, physiological signal analysis, and retrospective validation—not patient-specific diagnosis, treatment, alarms, or deployment decisions
 - 🐭 Preclinical Research & Animal Welfare - Multivariate severity scoring and humane-endpoint forecasting for laboratory animal studies, for 3Rs/refinement analysis and EU Directive 2010/63/EU reporting—an aid to severity assessment, never a decision rule
 - 🖼️ Microscopy, Medical Imaging & Digital Pathology - Quantitative fluorescence microscopy, privacy-aware DICOM processing, research-only whole-slide image analysis, computational pathology, and radiology data workflows
-- 🧠 Neuroscience & Electrophysiology - BIDS datasets, NWB conversion and clock alignment, extracellular recordings, and physiological signals
+- 🧠 Neuroscience & Electrophysiology - BIDS datasets, EEG and MEG analysis, NWB conversion and clock alignment, extracellular recordings, and physiological signals
 - 🤖 Machine Learning & AI - Deep learning, reinforcement learning, time series analysis, model interpretability, Bayesian methods
 - 🔮 Materials Science & Chemistry - Crystal structure analysis, CALPHAD phase equilibria, metabolic modeling, computational chemistry
 - 🌌 Physics & Astronomy - Astronomical data analysis, coordinate transformations, cosmological calculations, symbolic mathematics, physics computations
@@ -548,8 +548,9 @@ Package versions below identify the baselines documented by the skills. Follow e
 - Quantitative microscopy: [CellProfiler](skills/cellprofiler/SKILL.md) (reusable nuclei-measurement pipeline, channel manifests, segmentation overlays, and measurement checks)
 - Virtual spatial transcriptomics: noncommercial DeepSpot-M for transcriptome-wide spatial gene expression from 224x224 H&E tiles
 
-#### 🧠 **Neuroscience & Electrophysiology** (4 skills)
+#### 🧠 **Neuroscience & Electrophysiology** (5 skills)
 - Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets; pairs with DataLad for retrieval — OpenNeuro at github.com/OpenNeuroDatasets and DANDI at github.com/dandisets publish their holdings as DataLad datasets — and for BIDS-App runs under recorded provenance, with BEP028 the extension proposal for provenance records in derivatives)
+- EEG and MEG analysis: MNE-Python 1.13 (any EEG/MEG format, filtering, ICA artifact removal, ERPs with standardized measurement error, band power and alpha frequency, time-frequency, cluster statistics, decoding, and source estimates; tested preprocessing, ERP, and spectral command-line tools validated against a ground-truth simulator)
 - Neural recordings: Neuropixels-Analysis (extracellular spikes, silicon probes, spike sorting)
 - Data conversion: [NWB Conversion](skills/nwb-conversion/SKILL.md) (two-photon TIFF and behavioral positions, clock alignment, round-trip preservation, and NWB validation)
 - Physiological signals: NeuroKit2 0.2.13 for reproducible research workflows—not diagnosis, monitoring decisions, or medical-device validation
