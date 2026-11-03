@@ -1,6 +1,6 @@
 # Scientific Skills
 
-This checkout contains **177 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
+This checkout contains **179 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
 current `description`; open its linked `SKILL.md` for setup, tested versions, workflows,
 and limitations. Browse the [illustrated skill guides](skill-guides/README.md) for
 scientist-facing explanations, or see [workflow examples](examples.md) for ways to combine them.
@@ -133,6 +133,8 @@ scientist-facing explanations, or see [workflow examples](examples.md) for ways 
 - **[BIDS](../skills/bids/SKILL.md)** - Organizes, queries, validates, and converts Brain Imaging Data Structure (BIDS) datasets. Supports organizing neuroscience and biomedical data (MRI, EEG, MEG, iEEG, PET, microscopy, NIRS, motion capture, EMG, MR spectroscopy, behavioral), querying BIDS layouts, validating compliance, converting DICOM to BIDS, writing metadata sidecars, or creating BIDS derivatives.
 - **[NeuroKit2](../skills/neurokit2/SKILL.md)** - Builds and audits reproducible NeuroKit2 research workflows for physiological time-series preprocessing, event/interval analysis, multimodal alignment, variability, and complexity. Use when code imports neurokit2 or needs its current APIs, schemas, and method-aware validation—not for diagnosis or device validation.
 - **[Neuropixels-Analysis](../skills/neuropixels-analysis/SKILL.md)** - Analyzes Neuropixels extracellular recordings end-to-end with SpikeInterface. Covers loading SpikeGLX/Open Ephys/NWB data, preprocessing, drift/motion correction, Kilosort4 (and CPU) spike sorting, quality metrics, and unit curation (threshold-based, model-based UnitRefine, and AI-assisted visual review). Use when working with Neuropixels 1.0/2.0 recordings, spike sorting, or extracellular electrophysiology analysis.
+- **[Allen Brain Regions](../skills/allen-brain-regions/SKILL.md)** - Looks up and standardizes brain region names with the Allen Institute's structure ontology (mouse CCFv3, human and developing mouse) through the Allen Brain Map API, with parent chains for comparing labels, and lists BrainGlobe reference atlases.
+- **[NeuroMorpho Morphology](../skills/neuromorpho-morphology/SKILL.md)** - Finds neuron reconstructions on NeuroMorpho.Org by region, cell type, species or archive, reads their morphometry, downloads standardized SWC files and gives the three required citations.
 
 ### Protein Engineering & Design
 
