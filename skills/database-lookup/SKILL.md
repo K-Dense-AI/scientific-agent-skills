@@ -4,7 +4,7 @@ description: Queries documented public database APIs with explicit endpoints, fi
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.8"
+  version: "1.9"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
@@ -352,6 +352,7 @@ Read the relevant reference file before making any API call.
 | cBioPortal | `references/cbioportal.md` | Cancer study mutations, CNA, expression, clinical data |
 | DisGeNET | `references/disgenet.md` | Gene-disease associations |
 | GWAS Catalog | `references/gwas-catalog.md` | GWAS SNP-trait associations |
+| eQTL Catalogue (regional) | skill `eqtl-catalogue-region-fetch` | cis-QTL summary statistics for a whole region of one dataset (study x tissue x quantification), by tabix range over FTP; no REST route, so the fetch skill is the reference |
 | Monarch Initiative | `references/monarch.md` | Disease-phenotype-gene links |
 | HPO | `references/hpo.md` | Human Phenotype Ontology |
 
