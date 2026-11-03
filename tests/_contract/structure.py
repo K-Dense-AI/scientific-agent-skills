@@ -34,6 +34,12 @@ ALLOWED_FRONTMATTER_FIELDS = frozenset(
 
 MAX_SKILL_MD_LINES = 500
 
+# Entries a skill directory may hold without further justification. CONTRIBUTING
+# names exactly these four; a bundled license file is additionally canonical --
+# the spec's `license` field explicitly allows "a reference to a bundled
+# license file" (docx, pdf, pptx, xlsx, and pacsomatic all do this).
+ALLOWED_TOP_LEVEL_ENTRIES = frozenset({"SKILL.md", "references", "scripts", "assets"})
+
 # `__import__` is deliberately absent: several skills use it for a legitimate
 # availability probe (`try: __import__("torch")`) or to reach pathlib before
 # the sys.path insert that makes `_common` importable.
@@ -241,6 +247,41 @@ def stray_test_problems(skill: Path) -> list[str]:
         f"{skill.name}: ships {stray}; tests belong in tests/{skill.name}/"
         for stray in strays
     ]
+
+
+def _is_bundled_license(name: str) -> bool:
+    return name == "LICENSE" or name.startswith("LICENSE.")
+
+
+def top_level_entry_problems(skill: Path) -> list[str]:
+    """Every top-level entry is canonical, a license, or documented in SKILL.md.
+
+    CONTRIBUTING allows exactly `SKILL.md`, `references/`, `scripts/`, and
+    `assets/`, but eleven skills predate strict enforcement with extras that
+    earn their place: vendored companions (`pdf`'s `forms.md`/`reference.md`),
+    template and example trees (`templates/`, `examples/`), environment pins
+    (`requirements-flex.txt`), and skill config (`config.yaml`). Deleting them
+    would diverge vendored skills from upstream or strand documented commands,
+    so the contract ratchets instead: a non-canonical entry must be named in
+    `SKILL.md`, where an agent can find it. An entry nobody documents is either
+    cruft to delete or content to point at.
+    """
+    try:
+        text = (skill / "SKILL.md").read_text(encoding="utf-8")
+    except OSError:
+        return [f"{skill.name}: no SKILL.md"]
+    problems = []
+    for entry in sorted(skill.iterdir(), key=lambda path: path.name):
+        name = entry.name
+        if name in ALLOWED_TOP_LEVEL_ENTRIES or _is_bundled_license(name):
+            continue
+        if name not in text:
+            problems.append(
+                f"{skill.name}: top-level `{name}` is not one of "
+                "SKILL.md/references/scripts/assets and is not mentioned in "
+                "SKILL.md -- document it there or move it under references/"
+            )
+    return problems
 
 
 @lru_cache(maxsize=1)
@@ -464,6 +505,7 @@ CHECKS: dict[str, Callable[[Path], list[str]]] = {
     "frontmatter": frontmatter_problems,
     "skill_md_length": length_problems,
     "no_tests_under_skills": stray_test_problems,
+    "documented_top_level_entries": top_level_entry_problems,
     "no_bytecode": bytecode_problems,
     "local_links_resolve": link_problems,
     "scripts_compile": compile_problems,
@@ -481,6 +523,7 @@ DOCUMENT_RULES = frozenset(
         "frontmatter",
         "skill_md_length",
         "no_tests_under_skills",
+        "documented_top_level_entries",
         "local_links_resolve",
         "no_personal_paths",
     }
