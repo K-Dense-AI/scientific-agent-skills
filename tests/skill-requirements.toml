@@ -549,6 +549,9 @@ packages = ["pandas", "rdkit"]
 [skills.rdkit]
 packages = ["rdkit==2026.3.6"]
 
+[skills.qsar-model-validation]
+packages = ["rdkit==2026.3.6", "scikit-learn==1.9.1", "numpy", "pandas", "scipy"]
+
 [skills.datamol]
 packages = ["datamol==0.13.0", "rdkit==2026.3.6", "s3fs", "gcsfs"]
 
