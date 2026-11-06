@@ -2,10 +2,10 @@
 name: folklore-variant-evidence
 description: "Provides ACMG/AMP germline variant classification, gene profiles, disease associations and literature through Folklore MCP. Used for one public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp, public gene identity/profile review, ClinGen assertions, and source-linked literature. Preserves explicit resolution states, ambiguous-identity selection, snapshot continuity and provenance."
 license: MIT
-compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials) and a host supporting its advertised protocol, or curl for direct JSON-RPC POST requests.
+compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials for the public workflow) and a host supporting its advertised protocol, or curl for direct JSON-RPC POST requests.
 metadata:
-  version: "1.4"
-  last-reviewed: "2026-11-01"
+  version: "1.5"
+  last-reviewed: "2026-11-06"
   skill-author: "Helena Bioinformatics"
   website: "https://folklore.helena.bio"
   github: "https://github.com/helena-bioinformatics/folklore-mcp"
@@ -13,8 +13,8 @@ metadata:
 
 # Folklore Variant Evidence
 
-Folklore MCP 1.7.0 provides ACMG/AMP germline variant classification, gene
-profiles, disease associations and literature through eleven tools. Classify one
+Folklore MCP 2.0.0 provides ACMG/AMP germline variant classification, gene
+profiles, disease associations and literature through eleven public tools. Classify one
 public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp with
 `classify_germline_variant`. Resolve public genes into source-qualified profiles,
 retrieve ClinGen assertions, and explore source-linked literature. Preserve
@@ -29,8 +29,11 @@ Bioinformatics. Its hosted endpoint is:
 https://api.helena.bio/folklore/v1/mcp
 ```
 
-No account or API key is required. The public Apache-2.0 adapter and contract are
-available at <https://github.com/helena-bioinformatics/folklore-mcp>.
+The public workflow needs no account or API key. A Folklore Bearer API key
+enables eighteen additional case, approved-source and report tools at the same
+endpoint. This skill covers the public workflow. See the
+[setup guide](https://folklore.helena.bio/integrations/mcp) for authenticated
+workflows. The public Apache-2.0 adapter and contract are available at <https://github.com/helena-bioinformatics/folklore-mcp>.
 
 ## Minimal connection example
 

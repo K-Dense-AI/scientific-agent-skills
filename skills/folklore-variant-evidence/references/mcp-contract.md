@@ -19,10 +19,14 @@ and the VUS prompt is `assess_vus`. This was a schema/documentation review;
 no scientific requests were executed. The older dated checks above and below
 retain their original versions and scope.
 
+On 2026-11-06, the official Server Card identifies hosted adapter 2.0.0, with
+eleven public tools and eighteen additional tools for admitted Bearer API keys.
+The tool examples below remain scoped to public evidence.
+
 ## Connection
 
 - Endpoint: `https://api.helena.bio/folklore/v1/mcp`
-- Authentication: none
+- Authentication for the public workflow: none
 - Transport: stateless Streamable HTTP
 - Publisher: Helena Bioinformatics
 - Registry identity: `io.github.helena-bioinformatics/folklore`
