@@ -169,11 +169,14 @@ class OpenAlexSearcher:
 
     def _normalise(self, work: Dict) -> Dict:
         """Flatten one OpenAlex work into this skill's metadata shape."""
-        authors = [
-            authorship.get('author', {}).get('display_name', '')
-            for authorship in work.get('authorships', [])
-        ]
-        authors = [name for name in authors if name]
+        authors = []
+        for authorship in work.get('authorships', []):
+            # Cite the name on this work, not the author entity's canonical name.
+            name = authorship.get('raw_author_name')
+            if not isinstance(name, str) or not name.strip():
+                name = (authorship.get('author') or {}).get('display_name', '')
+            if name:
+                authors.append(name)
 
         location = work.get('primary_location') or {}
         source = location.get('source') or {}
