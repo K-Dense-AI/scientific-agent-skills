@@ -3862,8 +3862,9 @@ Step 4: Predict regulatory consequence from sequence
 - Select only models appropriate for the organism and question: the hosted DeepSTARR
   enhancer task was trained on Drosophila and is not validated human enhancer evidence
 - For splice prediction, orient both windows in transcript direction and confirm
-  donor/acceptor behavior with a known-strand control. For expression, use the exact
-  9,198 bp TSS window or the documented tss_index bounds for a longer sequence,
+  donor/acceptor behavior with a known-strand control. For expression, size the
+  flank F from the live expression model list (the largest recommended_flank_bp),
+  submit 2F bp of gene-sense sequence with the TSS at offset F and tss_index = F,
   and the required cell-type options.description; preserve log(TPM+1) units
 - Compare promoter, splice, chromatin, and expression outputs only where the task
   applies. Respect per-task floors, the live sequence cap, and allowed options;
