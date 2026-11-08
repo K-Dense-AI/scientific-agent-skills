@@ -19,7 +19,7 @@ one-base shift. Pin a reviewed release when using a local deployment.
 |---|---|---|
 | `fetch_ensembl_sequence` | `gene` | Gene symbol or supported Ensembl ID; optional `species`, nonnegative `flank_bp`. For direct stable-ID REST lookup use `/lookup/id/{id}`. |
 | `fetch_region` | `region` | 1-based inclusive range; optional `species`, `strand` (1 or -1), `flank_bp`. Plus strand is the default. |
-| `fetch_gene_for_expression` | `gene` | Gene-sense 9,198 bp window; verify `data.tss_source`, strand, assembly and source metadata. |
+| `fetch_gene_for_expression` | `gene` | Gene-sense sequence with F bp each side of the canonical TSS, F sized from `list_models` (largest `recommended_flank_bp`, `gi-mcp` 0.1.0a24 and later); the handle records `tss_index` and `flank_bp`. Verify `data.tss_source`, strand, assembly and source metadata, and `meta.flank_source == "listing"` (`"fallback"` means the 4,599 floor was used). |
 | `load_demo_sequence` | `name` | Discover task-specific names from `gi://sequences`; avoid ambiguous gene aliases (HBB has both splice and expression demos). |
 | `store_inline_sequence` | `sequence` | Optional `name`; whitespace stripped. The inline bases necessarily pass through the calling context. |
 
@@ -52,7 +52,7 @@ may be only the acquisition channel. See [sequence acquisition](sequence-acquisi
 `predict_expression` each take **exactly one** of `sequence_ref` or `sequence`,
 plus optional `model` and `sequence_name`. With a handle, its stored name wins.
 Expression also needs `description` and, for longer-than-9,198-bp input,
-`tss_index`. These two semantic requirements are described by the tools even
+`tss_index` (a `fetch_gene_for_expression` handle supplies its own). These two semantic requirements are described by the tools even
 where JSON Schema does not mark the arguments required.
 
 Current hosted prediction schemas do **not** expose REST `options.threshold`,
@@ -92,7 +92,8 @@ find_genes_and_predict_expression(sequence_ref=h.data.ref,
     description="polyA plus RNA-seq; Homo sapiens K562", wait=True)
 
 w = fetch_gene_for_expression(gene="HBB")
-# Check w.data.length == 9198 and w.data.tss_source == "canonical-transcript".
+# Check w.data.length == 2 * w.data.flank_bp, w.data.tss_index == w.data.flank_bp,
+# w.data.tss_source == "canonical-transcript" and w.meta.flank_source == "listing".
 # Retain w.meta assembly/source and w.data strand/TSS/region.
 predict_expression(sequence_ref=w.data.ref,
     description="polyA plus RNA-seq; Homo sapiens K562")
