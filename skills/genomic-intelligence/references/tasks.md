@@ -26,7 +26,7 @@ Source of truth for bounds: the live OpenAPI at
 | splice | sync | 100–500,000 bp | 15,000 bp | BigBird (long-context) |
 | enhancer | sync | 50–500,000 bp | 249 bp | DeepSTARR — ***Drosophila*** |
 | chromatin | sync | 200–500,000 bp | 1,000 bp | DeepSEA — hundreds of tracks |
-| expression | sync | **9,198–500,000 bp** (scores one 9,198 bp window) | n/a (`trained_window_bp` 9,198) | log(TPM+1) |
+| expression | sync | **9,198–500,000 bp**, TSS at least 4,599 bp from each end | n/a (see `recommended_flank_bp`) | log(TPM+1) |
 | annotation | async | 1,000–500,000 bp | n/a | de-novo transcripts; sync JSON above 200,000 bp (`x-sync-limit-bp`) is `413 sync_too_large` |
 
 `Recommended mode` is guidance, not a constraint — every task accepts both. Omit `Prefer` for a synchronous `200`; send `Prefer: respond-async` for a `202` plus `GET /v1/tasks/jobs/{job_id}`. The one enforced limit is per operation: where `/v1/openapi.json` publishes `x-sync-limit-bp` on a `POST`, a synchronous JSON request above that length is `413 sync_too_large` — 200,000 bp on `annotation` and 50,000 bp on the composite workflow in contract revision 16. Read the field rather than memorising the numbers. Annotation BED/GFF3 remains synchronous above its JSON cap and can time out; the other five predict tasks have no hard sync cap.
@@ -132,16 +132,21 @@ The API declares `data.windows` and `data.tracks`; do not promise an unfiltered
 `meta.task_specific_counts.total_annotations` counts reported annotations.
 
 ## expression
-Expression as **log(TPM+1)** from a fixed window. Its operation is
+Expression as **log(TPM+1)** from the sequence around a TSS. Its operation is
 `POST /v1/tasks/expression/predict`, schema `ExpressionPredictRequest` — alone
 among the six it requires `options` as well as `sequence`. Body:
 `{sequence, options, tss_index?, sequence_name?, model?}`, closed to unknown
 fields. Three enforced requirements, each a `422` when violated:
 
-1. **9,198–500,000 bp.** The model scores exactly one 9,198 bp window
-   **centred on the TSS** — `sequence[tss_index-4599 : tss_index+4599]` — but
-   the endpoint accepts up to 500 kb and slices for you. Below 9,198 bp is
-   rejected; nothing is padded or truncated.
+1. **9,198–500,000 bp, TSS at least 4,599 bp from each end.** The rule is the
+   same for every expression model; what each reads around the TSS is not. A
+   fixed-window model reads only `sequence[tss_index-4599 : tss_index+4599]`;
+   a long-context model reads tens of kb on each side. Supply F bp on each
+   side of the TSS, where F is the largest `bio_spec.recommended_flank_bp` the
+   model list publishes (never below 4,599, 2F within `request_max_bp`), and
+   send `tss_index = F` — see `sequence-acquisition.md`. A 9,198 bp window is
+   accepted by every model but starves a long-context one without warning.
+   Below 9,198 bp is rejected; nothing is padded or truncated.
 2. **`tss_index`** — 0-based TSS offset into the **whitespace-stripped**
    sequence. Required unless the sequence is exactly 9,198 bp (where it defaults
    to 4,599, the only legal value). Bounds:
@@ -157,7 +162,9 @@ stripped string, not on file characters.
 
 Result: `data.prediction.expression_log_tpm` (and `expression_tpm`).
 `meta.task_specific_counts` carries `tss_index` and `scored_window`
-(`[start, end]`, always 9,198 wide) — assert on it, because an in-range but
+(`[start, end]`, containing `tss_index`; its width is how much the model read,
+9,198 for a fixed-window model and wider for a long-context one) — assert on
+it, because an in-range but
 wrong `tss_index` scores the wrong window with a `200`. `data.input` echoes only `sequence_name`, `description`, and `tss_index`
 in revision 16. Read the submitted length from `meta.sequence_length` and the
 window from `meta.task_specific_counts.scored_window`; do not read removed
@@ -196,9 +203,12 @@ Over REST it is a single published operation:
 A missing/empty description fails validation. Optional: `annotation_model`,
 `expression_model`, `batch_size` (1–128, default 8), `shift_coordinates`.
 
-It cuts a TSS-centred 9,198 bp window per discovered gene, padding with `N` up to
-half the window rather than dropping an edge gene — the direct expression route
-refuses to pad at all. `meta.task_specific_counts` =
+It cuts a TSS-centred input per discovered gene sized for the chosen
+expression model: up to that model's `recommended_flank_bp` on each side,
+clamped to what the submitted region holds (a fixed-window model's 9,198 bp cut
+is `N`-padded up to half the window rather than dropping an edge gene; the
+direct expression route refuses to pad at all). A tight region around a gene
+gives a long-context model less to read. `meta.task_specific_counts` =
 `{genes_found, genes_predicted, genes_skipped}` with
 `genes_predicted + genes_skipped == genes_found`; per-gene causes in
 `data.expression_predictions[].skip_reason`. Check `skipped` before interpreting
