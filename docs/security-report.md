@@ -1,12 +1,12 @@
 # Security Scan Report
 
-**Generated:** 2026-11-02 09:23 UTC  
+**Generated:** 2026-11-09 09:17 UTC  
 **Skills scanned:** 177  
 **Total findings:** 472  
 **Critical:** 32 | **High:** 21 | **Safe skills:** 159/177
 
 **Scanner:** cisco-ai-skill-scanner 2.3.2 · **Model:** claude-opus-5  
-**This run:** full rescan of all 177 skill(s).  
+**This run:** 0 skill(s) rescanned; 177 unchanged since the last scan and carried forward unmodified. Per-skill scan dates are in [`security-report.json`](security-report.json) (`last_scanned`).  
 
 ## Summary
 
@@ -15,8 +15,8 @@
 | autoskill | 🔴 CRITICAL | 6 | ❌ | 21.2s |
 | citation-management | 🔴 CRITICAL | 6 | ❌ | 34.8s |
 | infographics | 🔴 CRITICAL | 4 | ❌ | 20.5s |
-| literature-review | 🔴 CRITICAL | 3 | ❌ | 19.7s |
 | latex-posters | 🔴 CRITICAL | 4 | ❌ | 24.7s |
+| literature-review | 🔴 CRITICAL | 3 | ❌ | 19.7s |
 | open-notebook | 🔴 CRITICAL | 4 | ❌ | 18.9s |
 | research-lookup | 🔴 CRITICAL | 3 | ❌ | 15.8s |
 | scientific-schematics | 🔴 CRITICAL | 3 | ❌ | 18.6s |
@@ -24,13 +24,13 @@
 | esm | 🟠 HIGH | 4 | ❌ | 20.1s |
 | geomaster | 🟠 HIGH | 3 | ❌ | 21.9s |
 | hugging-science | 🟠 HIGH | 1 | ❌ | 17.9s |
-| modal | 🟠 HIGH | 8 | ❌ | 22.0s |
+| modal | 🟠 HIGH | 8 | ❌ | 22.1s |
 | pytorch-lightning | 🟠 HIGH | 1 | ❌ | 20.5s |
 | torch-geometric | 🟠 HIGH | 4 | ❌ | 13.4s |
-| torchdrug | 🟠 HIGH | 4 | ❌ | 12.5s |
+| torchdrug | 🟠 HIGH | 4 | ❌ | 12.4s |
 | transformers | 🟠 HIGH | 1 | ❌ | 13.0s |
 | waypoint-bio | 🟠 HIGH | 2 | ❌ | 25.8s |
-| biopython | 🟡 MEDIUM | 6 | ✅ | 15.3s |
+| biopython | 🟡 MEDIUM | 6 | ✅ | 15.2s |
 | dnanexus-integration | 🟡 MEDIUM | 1 | ✅ | 14.3s |
 | genomic-intelligence | 🟡 MEDIUM | 2 | ✅ | 11.4s |
 | glycoengineering | 🟡 MEDIUM | 2 | ✅ | 8.8s |
@@ -42,7 +42,7 @@
 | cirq | 🔵 LOW | 1 | ✅ | 16.6s |
 | etetoolkit | 🔵 LOW | 1 | ✅ | 16.0s |
 | latchbio-integration | 🔵 LOW | 1 | ✅ | 17.6s |
-| markitdown | 🔵 LOW | 1 | ✅ | 19.3s |
+| markitdown | 🔵 LOW | 1 | ✅ | 19.2s |
 | matplotlib | 🔵 LOW | 1 | ✅ | 16.0s |
 | medchem | 🔵 LOW | 1 | ✅ | 16.1s |
 | networkx | 🔵 LOW | 1 | ✅ | 14.9s |
@@ -54,141 +54,141 @@
 | zarr-python | 🔵 LOW | 1 | ✅ | 21.7s |
 | ncats-arax | ⚪ INFO | 1 | ✅ | 14.3s |
 | 13c-metabolic-flux | 🟢 SAFE | 0 | ✅ | 14.5s |
+| adaptyv | 🟢 SAFE | 0 | ✅ | 19.1s |
+| alphagenome | 🟢 SAFE | 0 | ✅ | 26.6s |
+| analytical-method-validation | 🟢 SAFE | 0 | ✅ | 20.4s |
 | anndata | 🟢 SAFE | 0 | ✅ | 15.8s |
 | arbor | 🟢 SAFE | 0 | ✅ | 16.3s |
-| adaptyv | 🟢 SAFE | 0 | ✅ | 19.1s |
-| analytical-method-validation | 🟢 SAFE | 0 | ✅ | 20.4s |
-| bgpt-paper-search | 🟢 SAFE | 0 | ✅ | 7.2s |
 | astropy | 🟢 SAFE | 0 | ✅ | 12.1s |
-| alphagenome | 🟢 SAFE | 0 | ✅ | 26.5s |
+| bgpt-paper-search | 🟢 SAFE | 0 | ✅ | 7.2s |
 | bids | 🟢 SAFE | 0 | ✅ | 9.6s |
+| bulk-rnaseq | 🟢 SAFE | 0 | ✅ | 10.3s |
 | cantera | 🟢 SAFE | 0 | ✅ | 8.3s |
 | cellprofiler | 🟢 SAFE | 0 | ✅ | 8.7s |
-| bulk-rnaseq | 🟢 SAFE | 0 | ✅ | 10.3s |
 | cellxgene-census | 🟢 SAFE | 0 | ✅ | 7.9s |
-| consciousness-council | 🟢 SAFE | 0 | ✅ | 6.7s |
 | clinical-decision-support | 🟢 SAFE | 0 | ✅ | 11.4s |
 | clinical-reports | 🟢 SAFE | 0 | ✅ | 11.1s |
-| dask | 🟢 SAFE | 0 | ✅ | 10.5s |
-| datalad | 🟢 SAFE | 0 | ✅ | 6.7s |
 | cobrapy | 🟢 SAFE | 0 | ✅ | 15.9s |
+| consciousness-council | 🟢 SAFE | 0 | ✅ | 6.7s |
+| dask | 🟢 SAFE | 0 | ✅ | 10.5s |
+| database-lookup | 🟢 SAFE | 0 | ✅ | 35.9s |
+| datalad | 🟢 SAFE | 0 | ✅ | 6.7s |
 | datamol | 🟢 SAFE | 0 | ✅ | 8.6s |
-| deepspot-m | 🟢 SAFE | 0 | ✅ | 8.6s |
-| depmap | 🟢 SAFE | 0 | ✅ | 7.6s |
 | deepchem | 🟢 SAFE | 0 | ✅ | 10.9s |
+| deepspot-m | 🟢 SAFE | 0 | ✅ | 8.6s |
 | deeptools | 🟢 SAFE | 0 | ✅ | 10.4s |
+| depmap | 🟢 SAFE | 0 | ✅ | 7.6s |
 | dhdna-profiler | 🟢 SAFE | 0 | ✅ | 6.3s |
+| diffdock | 🟢 SAFE | 0 | ✅ | 16.0s |
 | exa-search | 🟢 SAFE | 0 | ✅ | 8.5s |
 | experimental-design | 🟢 SAFE | 0 | ✅ | 8.8s |
-| diffdock | 🟢 SAFE | 0 | ✅ | 16.0s |
-| database-lookup | 🟢 SAFE | 0 | ✅ | 35.9s |
-| flowkit | 🟢 SAFE | 0 | ✅ | 7.7s |
-| fictiv | 🟢 SAFE | 0 | ✅ | 10.7s |
 | exploratory-data-analysis | 🟢 SAFE | 0 | ✅ | 14.1s |
+| fictiv | 🟢 SAFE | 0 | ✅ | 10.7s |
 | flowio | 🟢 SAFE | 0 | ✅ | 12.4s |
-| generate-image | 🟢 SAFE | 0 | ✅ | 8.3s |
-| folklore-variant-evidence | 🟢 SAFE | 0 | ✅ | 10.4s |
+| flowkit | 🟢 SAFE | 0 | ✅ | 7.7s |
 | fluidsim | 🟢 SAFE | 0 | ✅ | 15.4s |
-| get-available-resources | 🟢 SAFE | 0 | ✅ | 9.4s |
-| genomic-coordinates | 🟢 SAFE | 0 | ✅ | 14.6s |
-| ginkgo-cloud-lab | 🟢 SAFE | 0 | ✅ | 12.0s |
+| folklore-variant-evidence | 🟢 SAFE | 0 | ✅ | 10.4s |
+| generate-image | 🟢 SAFE | 0 | ✅ | 8.3s |
 | geniml | 🟢 SAFE | 0 | ✅ | 21.3s |
+| genomic-coordinates | 🟢 SAFE | 0 | ✅ | 14.6s |
 | geopandas | 🟢 SAFE | 0 | ✅ | 18.3s |
-| histolab | 🟢 SAFE | 0 | ✅ | 10.4s |
+| get-available-resources | 🟢 SAFE | 0 | ✅ | 9.4s |
 | gget | 🟢 SAFE | 0 | ✅ | 19.6s |
+| ginkgo-cloud-lab | 🟢 SAFE | 0 | ✅ | 11.9s |
 | gtars | 🟢 SAFE | 0 | ✅ | 12.3s |
-| hypothesis-generation | 🟢 SAFE | 0 | ✅ | 10.3s |
+| histolab | 🟢 SAFE | 0 | ✅ | 10.4s |
 | hypogenic | 🟢 SAFE | 0 | ✅ | 11.6s |
-| labarchive-integration | 🟢 SAFE | 0 | ✅ | 11.4s |
-| lab-hardware-cad | 🟢 SAFE | 0 | ✅ | 12.6s |
-| lamindb | 🟢 SAFE | 0 | ✅ | 7.5s |
+| hypothesis-generation | 🟢 SAFE | 0 | ✅ | 10.3s |
 | imaging-data-commons | 🟢 SAFE | 0 | ✅ | 16.8s |
 | iso-standards-readiness | 🟢 SAFE | 0 | ✅ | 20.2s |
-| marine-carbonate-chemistry | 🟢 SAFE | 0 | ✅ | 7.2s |
-| mageck | 🟢 SAFE | 0 | ✅ | 9.3s |
+| lab-hardware-cad | 🟢 SAFE | 0 | ✅ | 12.6s |
+| labarchive-integration | 🟢 SAFE | 0 | ✅ | 11.4s |
+| lamindb | 🟢 SAFE | 0 | ✅ | 7.5s |
 | liteparse | 🟢 SAFE | 0 | ✅ | 17.9s |
-| matchms | 🟢 SAFE | 0 | ✅ | 9.4s |
-| market-research-reports | 🟢 SAFE | 0 | ✅ | 13.2s |
-| matlab | 🟢 SAFE | 0 | ✅ | 13.0s |
+| mageck | 🟢 SAFE | 0 | ✅ | 9.3s |
+| marine-carbonate-chemistry | 🟢 SAFE | 0 | ✅ | 7.2s |
 | markdown-mermaid-writing | 🟢 SAFE | 0 | ✅ | 17.8s |
+| market-research-reports | 🟢 SAFE | 0 | ✅ | 13.2s |
+| matchms | 🟢 SAFE | 0 | ✅ | 9.4s |
+| matlab | 🟢 SAFE | 0 | ✅ | 13.1s |
 | molecular-dynamics | 🟢 SAFE | 0 | ✅ | 9.1s |
 | molfeat | 🟢 SAFE | 0 | ✅ | 12.3s |
 | neurokit2 | 🟢 SAFE | 0 | ✅ | 11.7s |
+| neuropixels-analysis | 🟢 SAFE | 0 | ✅ | 22.7s |
+| nextflow | 🟢 SAFE | 0 | ✅ | 17.1s |
 | nmrglue | 🟢 SAFE | 0 | ✅ | 7.8s |
 | nwb-conversion | 🟢 SAFE | 0 | ✅ | 7.5s |
+| omero-integration | 🟢 SAFE | 0 | ✅ | 16.8s |
 | onekgpd | 🟢 SAFE | 0 | ✅ | 9.7s |
 | ontology-term-resolution | 🟢 SAFE | 0 | ✅ | 10.0s |
-| nextflow | 🟢 SAFE | 0 | ✅ | 17.1s |
-| neuropixels-analysis | 🟢 SAFE | 0 | ✅ | 22.7s |
 | openpiv | 🟢 SAFE | 0 | ✅ | 10.5s |
-| omero-integration | 🟢 SAFE | 0 | ✅ | 16.8s |
 | opentrons-integration | 🟢 SAFE | 0 | ✅ | 14.1s |
-| pacsomatic | 🟢 SAFE | 0 | ✅ | 10.2s |
-| paperzilla | 🟢 SAFE | 0 | ✅ | 9.0s |
-| paper-lookup | 🟢 SAFE | 0 | ✅ | 13.4s |
 | optimize-for-gpu | 🟢 SAFE | 0 | ✅ | 15.8s |
-| pathway-enrichment | 🟢 SAFE | 0 | ✅ | 8.6s |
-| pathml | 🟢 SAFE | 0 | ✅ | 11.4s |
+| pacsomatic | 🟢 SAFE | 0 | ✅ | 10.2s |
+| paper-lookup | 🟢 SAFE | 0 | ✅ | 13.4s |
+| paperzilla | 🟢 SAFE | 0 | ✅ | 8.9s |
 | parallel-web | 🟢 SAFE | 0 | ✅ | 15.1s |
-| phylogenetics | 🟢 SAFE | 0 | ✅ | 8.1s |
-| peer-review | 🟢 SAFE | 0 | ✅ | 11.1s |
+| pathml | 🟢 SAFE | 0 | ✅ | 11.4s |
 | pathogen-variant-surveillance | 🟢 SAFE | 0 | ✅ | 14.7s |
+| pathway-enrichment | 🟢 SAFE | 0 | ✅ | 8.6s |
+| peer-review | 🟢 SAFE | 0 | ✅ | 11.1s |
 | pennylane | 🟢 SAFE | 0 | ✅ | 13.3s |
-| polars-bio | 🟢 SAFE | 0 | ✅ | 9.5s |
+| phylogenetics | 🟢 SAFE | 0 | ✅ | 8.1s |
+| pi-agent | 🟢 SAFE | 0 | ✅ | 23.4s |
 | pkpd-modeling | 🟢 SAFE | 0 | ✅ | 13.1s |
+| polars | 🟢 SAFE | 0 | ✅ | 16.6s |
+| polars-bio | 🟢 SAFE | 0 | ✅ | 9.5s |
+| pptx-posters | 🟢 SAFE | 0 | ✅ | 11.7s |
 | primekg | 🟢 SAFE | 0 | ✅ | 9.1s |
 | primer-design | 🟢 SAFE | 0 | ✅ | 9.7s |
-| pptx-posters | 🟢 SAFE | 0 | ✅ | 11.7s |
-| polars | 🟢 SAFE | 0 | ✅ | 16.6s |
+| protocolsio-integration | 🟢 SAFE | 0 | ✅ | 24.1s |
 | pybamm | 🟢 SAFE | 0 | ✅ | 8.3s |
-| pi-agent | 🟢 SAFE | 0 | ✅ | 23.4s |
 | pycalphad | 🟢 SAFE | 0 | ✅ | 8.4s |
 | pydeseq2 | 🟢 SAFE | 0 | ✅ | 8.8s |
 | pydicom | 🟢 SAFE | 0 | ✅ | 15.2s |
-| protocolsio-integration | 🟢 SAFE | 0 | ✅ | 24.1s |
-| pymc | 🟢 SAFE | 0 | ✅ | 10.8s |
+| pyhealth | 🟢 SAFE | 0 | ✅ | 17.1s |
 | pylabrobot | 🟢 SAFE | 0 | ✅ | 11.4s |
 | pymatgen | 🟢 SAFE | 0 | ✅ | 12.0s |
-| pyhealth | 🟢 SAFE | 0 | ✅ | 17.1s |
-| pyopenms | 🟢 SAFE | 0 | ✅ | 9.0s |
+| pymc | 🟢 SAFE | 0 | ✅ | 10.8s |
 | pymoo | 🟢 SAFE | 0 | ✅ | 14.4s |
+| pyopenms | 🟢 SAFE | 0 | ✅ | 9.0s |
 | pysam | 🟢 SAFE | 0 | ✅ | 10.6s |
-| qiime2-amplicon | 🟢 SAFE | 0 | ✅ | 9.4s |
 | pytdc | 🟢 SAFE | 0 | ✅ | 11.9s |
+| qiime2-amplicon | 🟢 SAFE | 0 | ✅ | 9.4s |
 | qiskit | 🟢 SAFE | 0 | ✅ | 11.4s |
-| rdkit | 🟢 SAFE | 0 | ✅ | 8.3s |
 | qutip | 🟢 SAFE | 0 | ✅ | 10.7s |
+| rdkit | 🟢 SAFE | 0 | ✅ | 8.3s |
 | relion | 🟢 SAFE | 0 | ✅ | 8.8s |
-| rowan | 🟢 SAFE | 0 | ✅ | 8.3s |
 | relsa-severity-assessment | 🟢 SAFE | 0 | ✅ | 12.6s |
-| scanpy | 🟢 SAFE | 0 | ✅ | 10.3s |
 | research-grants | 🟢 SAFE | 0 | ✅ | 13.2s |
+| rowan | 🟢 SAFE | 0 | ✅ | 8.3s |
+| scanpy | 🟢 SAFE | 0 | ✅ | 10.3s |
 | scholar-evaluation | 🟢 SAFE | 0 | ✅ | 12.4s |
 | scientific-brainstorming | 🟢 SAFE | 0 | ✅ | 11.7s |
 | scientific-critical-thinking | 🟢 SAFE | 0 | ✅ | 8.7s |
-| scvelo | 🟢 SAFE | 0 | ✅ | 6.7s |
-| scikit-survival | 🟢 SAFE | 0 | ✅ | 11.6s |
 | scikit-bio | 🟢 SAFE | 0 | ✅ | 16.4s |
 | scikit-learn | 🟢 SAFE | 0 | ✅ | 18.8s |
+| scikit-survival | 🟢 SAFE | 0 | ✅ | 11.6s |
+| scvelo | 🟢 SAFE | 0 | ✅ | 6.7s |
 | scvi-tools | 🟢 SAFE | 0 | ✅ | 14.6s |
-| simpy | 🟢 SAFE | 0 | ✅ | 10.1s |
-| stable-baselines3 | 🟢 SAFE | 0 | ✅ | 9.0s |
 | seaborn | 🟢 SAFE | 0 | ✅ | 15.5s |
 | shap | 🟢 SAFE | 0 | ✅ | 17.3s |
-| statsmodels | 🟢 SAFE | 0 | ✅ | 7.6s |
-| tamarind | 🟢 SAFE | 0 | ✅ | 8.8s |
-| tiledbvcf | 🟢 SAFE | 0 | ✅ | 7.0s |
+| simpy | 🟢 SAFE | 0 | ✅ | 10.1s |
+| stable-baselines3 | 🟢 SAFE | 0 | ✅ | 9.0s |
 | statistical-analysis | 🟢 SAFE | 0 | ✅ | 15.4s |
-| tellurium | 🟢 SAFE | 0 | ✅ | 9.3s |
+| statsmodels | 🟢 SAFE | 0 | ✅ | 7.6s |
 | sympy | 🟢 SAFE | 0 | ✅ | 15.6s |
+| tamarind | 🟢 SAFE | 0 | ✅ | 8.8s |
+| tellurium | 🟢 SAFE | 0 | ✅ | 9.2s |
+| tiledbvcf | 🟢 SAFE | 0 | ✅ | 7.0s |
 | timesfm-forecasting | 🟢 SAFE | 0 | ✅ | 12.0s |
-| umap-learn | 🟢 SAFE | 0 | ✅ | 8.5s |
 | treatment-plans | 🟢 SAFE | 0 | ✅ | 11.1s |
+| umap-learn | 🟢 SAFE | 0 | ✅ | 8.5s |
 | uncertainty-and-units | 🟢 SAFE | 0 | ✅ | 9.8s |
 | usfiscaldata | 🟢 SAFE | 0 | ✅ | 12.1s |
 | vaex | 🟢 SAFE | 0 | ✅ | 9.3s |
-| what-if-oracle | 🟢 SAFE | 0 | ✅ | 7.1s |
 | venue-templates | 🟢 SAFE | 0 | ✅ | 21.5s |
+| what-if-oracle | 🟢 SAFE | 0 | ✅ | 7.1s |
 
 ## Detailed Findings
 
@@ -271,21 +271,6 @@
   > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/infographics/scripts/generate_infographic_ai.py`
   > **Remediation:** Remove environment variable harvesting or network transmission
 
-### literature-review — 🔴 CRITICAL
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 3 files
-  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py, scripts/verify_citations.py
-
-- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 3 files
-  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/generate_schematic_ai.py, scripts/verify_citations.py transmit to network
-  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py, scripts/verify_citations.py
-
-- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
-  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py
-  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py`
-  > **Remediation:** Remove environment variable harvesting or network transmission
-
 ### latex-posters — 🔴 CRITICAL
 
 - **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 2 files
@@ -305,6 +290,21 @@
   > Variable $FILE_SIZE_BYTES (line 63) flows to `sh` at line 64.
   > File: `scripts/review_poster.sh:64`
   > **Remediation:** Review the data flow from source to sink. Avoid sending sensitive or untrusted data to network or execution commands.
+
+### literature-review — 🔴 CRITICAL
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` — Cross-file env var exfiltration: 3 files
+  > Environment variable access with network calls in scripts/generate_schematic.py, scripts/generate_schematic_ai.py
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py, scripts/verify_citations.py
+
+- **🔴 CRITICAL** `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` — Cross-file exfiltration chain: 3 files
+  > Multi-file exfiltration chain detected: scripts/generate_schematic.py, scripts/generate_schematic_ai.py collect data → scripts/generate_schematic_ai.py → scripts/generate_schematic_ai.py, scripts/verify_citations.py transmit to network
+  > **Remediation:** Review data flow across files: scripts/generate_schematic.py, scripts/generate_schematic_ai.py, scripts/verify_citations.py
+
+- **🔴 CRITICAL** `BEHAVIOR_ENV_VAR_EXFILTRATION` — Environment variable access with network calls detected
+  > Script accesses environment variables and makes network calls in /home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py
+  > File: `/home/runner/work/scientific-agent-skills/scientific-agent-skills/skills/literature-review/scripts/generate_schematic_ai.py`
+  > **Remediation:** Remove environment variable harvesting or network transmission
 
 ### open-notebook — 🔴 CRITICAL
 

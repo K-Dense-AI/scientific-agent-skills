@@ -1,14 +1,14 @@
 {
-  "generated": "2026-11-02T09:23:02+00:00",
+  "generated": "2026-11-09T09:17:24+00:00",
   "run": {
     "scanner_version": "2.3.2",
     "model": "claude-opus-5",
     "workers": 8,
-    "skills_rescanned": 177,
-    "skills_reused": 0,
-    "wall_seconds": 318.9,
-    "full_scan": true,
-    "cache_invalidated_because": "scanner version changed (2.3.1 -> 2.3.2)",
+    "skills_rescanned": 0,
+    "skills_reused": 177,
+    "wall_seconds": 1.3,
+    "full_scan": false,
+    "cache_invalidated_because": null,
     "last_full_scan": "2026-11-02T09:23:02+00:00"
   },
   "totals": {
@@ -5445,7 +5445,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: assays, its, binding. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: its, assays, binding. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5455,8 +5455,8 @@
         "collector": "adaptyv",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "assays",
           "its",
+          "assays",
           "binding"
         ]
       }
@@ -5488,7 +5488,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: code, python. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: python, code. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5498,8 +5498,8 @@
         "collector": "adaptyv",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "code",
-          "python"
+          "python",
+          "code"
         ]
       }
     },
@@ -5509,7 +5509,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: bio, protein, design, binding, its, sequences, characterization, api, affinity. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: bio, design, sequences, protein, api, binding, characterization, its, affinity. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5520,13 +5520,13 @@
         "sender": "tamarind",
         "shared_context": [
           "bio",
-          "protein",
           "design",
-          "binding",
-          "its",
           "sequences",
-          "characterization",
+          "protein",
           "api",
+          "binding",
+          "characterization",
+          "its",
           "affinity"
         ]
       }
@@ -5558,7 +5558,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: including, data, used, when, ml. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, used, including, ml, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5568,11 +5568,11 @@
         "collector": "aeon",
         "sender": "deepchem",
         "shared_context": [
-          "including",
           "data",
           "used",
-          "when",
-          "ml"
+          "including",
+          "ml",
+          "when"
         ]
       }
     },
@@ -5603,7 +5603,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'flowio' (sender) have complementary descriptions with shared context: standard, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, standard. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5613,8 +5613,8 @@
         "collector": "aeon",
         "sender": "flowio",
         "shared_context": [
-          "standard",
-          "use"
+          "use",
+          "standard"
         ]
       }
     },
@@ -5645,7 +5645,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, use, this, apis, skill. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, apis, use, skill, this. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5656,10 +5656,10 @@
         "sender": "omero-integration",
         "shared_context": [
           "data",
-          "use",
-          "this",
           "apis",
-          "skill"
+          "use",
+          "skill",
+          "this"
         ]
       }
     },
@@ -5669,7 +5669,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, use, learn, when, scikit. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, scikit, learn, use, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5680,10 +5680,10 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "data",
-          "use",
+          "scikit",
           "learn",
-          "when",
-          "scikit"
+          "use",
+          "when"
         ]
       }
     },
@@ -5714,7 +5714,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: when, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: use, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5724,8 +5724,8 @@
         "collector": "aeon",
         "sender": "tamarind",
         "shared_context": [
-          "when",
-          "use"
+          "use",
+          "when"
         ]
       }
     },
@@ -5756,7 +5756,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: used, when, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: scientific, used, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5766,9 +5766,9 @@
         "collector": "citation-management",
         "sender": "deepchem",
         "shared_context": [
+          "scientific",
           "used",
-          "when",
-          "scientific"
+          "when"
         ]
       }
     },
@@ -5778,7 +5778,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: used, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: scientific, used. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5788,8 +5788,8 @@
         "collector": "citation-management",
         "sender": "matplotlib",
         "shared_context": [
-          "used",
-          "scientific"
+          "scientific",
+          "used"
         ]
       }
     },
@@ -5799,7 +5799,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: skill, this, metadata. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: skill, metadata, this. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5810,8 +5810,8 @@
         "sender": "omero-integration",
         "shared_context": [
           "skill",
-          "this",
-          "metadata"
+          "metadata",
+          "this"
         ]
       }
     },
@@ -5821,7 +5821,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: when, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: scientific, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5831,8 +5831,8 @@
         "collector": "citation-management",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "when",
-          "scientific"
+          "scientific",
+          "when"
         ]
       }
     },
@@ -5842,7 +5842,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: scientific, metadata. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: metadata, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5852,8 +5852,8 @@
         "collector": "citation-management",
         "sender": "scientific-visualization",
         "shared_context": [
-          "scientific",
-          "metadata"
+          "metadata",
+          "scientific"
         ]
       }
     },
@@ -5863,7 +5863,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: applies, using. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, applies. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5873,8 +5873,8 @@
         "collector": "exa-search",
         "sender": "adaptyv",
         "shared_context": [
-          "applies",
-          "using"
+          "using",
+          "applies"
         ]
       }
     },
@@ -5884,7 +5884,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: publication, pdf, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: publication, scientific, pdf. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5895,8 +5895,8 @@
         "sender": "matplotlib",
         "shared_context": [
           "publication",
-          "pdf",
-          "scientific"
+          "scientific",
+          "pdf"
         ]
       }
     },
@@ -5906,7 +5906,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: supports, searches, urls. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: searches, urls, supports. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5916,9 +5916,9 @@
         "collector": "exa-search",
         "sender": "paperzilla",
         "shared_context": [
-          "supports",
           "searches",
-          "urls"
+          "urls",
+          "supports"
         ]
       }
     },
@@ -5928,7 +5928,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: publication, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: scientific, publication. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5938,8 +5938,8 @@
         "collector": "exa-search",
         "sender": "scientific-visualization",
         "shared_context": [
-          "publication",
-          "scientific"
+          "scientific",
+          "publication"
         ]
       }
     },
@@ -5949,7 +5949,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, user, even, not, file, also, when, if. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: file, not, if, also, even, when, on, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5959,14 +5959,14 @@
         "collector": "fictiv",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "on",
-          "user",
-          "even",
-          "not",
           "file",
+          "not",
+          "if",
           "also",
+          "even",
           "when",
-          "if"
+          "on",
+          "user"
         ]
       }
     },
@@ -5976,7 +5976,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: feedback, through. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: through, feedback. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5986,8 +5986,8 @@
         "collector": "fictiv",
         "sender": "paperzilla",
         "shared_context": [
-          "feedback",
-          "through"
+          "through",
+          "feedback"
         ]
       }
     },
@@ -5997,7 +5997,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: applies, compression. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: compression, applies. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6007,8 +6007,8 @@
         "collector": "fictiv",
         "sender": "pydicom",
         "shared_context": [
-          "applies",
-          "compression"
+          "compression",
+          "applies"
         ]
       }
     },
@@ -6018,7 +6018,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: on, user, mentions, platform, app, when, wants. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: wants, when, platform, app, on, user, mentions. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6028,13 +6028,13 @@
         "collector": "fictiv",
         "sender": "tamarind",
         "shared_context": [
-          "on",
-          "user",
-          "mentions",
+          "wants",
+          "when",
           "platform",
           "app",
-          "when",
-          "wants"
+          "on",
+          "user",
+          "mentions"
         ]
       }
     },
@@ -6065,7 +6065,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: activity, using, api, expression. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, api, activity, expression. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6075,9 +6075,9 @@
         "collector": "genomic-intelligence",
         "sender": "adaptyv",
         "shared_context": [
-          "activity",
           "using",
           "api",
+          "activity",
           "expression"
         ]
       }
@@ -6088,7 +6088,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: use, any, of. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: of, any, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6098,9 +6098,9 @@
         "collector": "genomic-intelligence",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "use",
+          "of",
           "any",
-          "of"
+          "use"
         ]
       }
     },
@@ -6110,7 +6110,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: models, model, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: when, models, model. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6120,9 +6120,9 @@
         "collector": "genomic-intelligence",
         "sender": "deepchem",
         "shared_context": [
+          "when",
           "models",
-          "model",
-          "when"
+          "model"
         ]
       }
     },
@@ -6132,7 +6132,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: region, user, mentions, when, s, wants, has. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: wants, has, region, s, when, user, mentions. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6142,13 +6142,13 @@
         "collector": "genomic-intelligence",
         "sender": "fictiv",
         "shared_context": [
-          "region",
-          "user",
-          "mentions",
-          "when",
-          "s",
           "wants",
-          "has"
+          "has",
+          "region",
+          "s",
+          "when",
+          "user",
+          "mentions"
         ]
       }
     },
@@ -6158,7 +6158,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, over. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: over, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6168,8 +6168,8 @@
         "collector": "genomic-intelligence",
         "sender": "matplotlib",
         "shared_context": [
-          "use",
-          "over"
+          "over",
+          "use"
         ]
       }
     },
@@ -6200,7 +6200,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: gpu, user, use, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: gpu, use, when, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6211,9 +6211,9 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "gpu",
-          "user",
           "use",
-          "when"
+          "when",
+          "user"
         ]
       }
     },
@@ -6244,7 +6244,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: server, novo, user, mentions, any, local, de, use, models, when, of, api, no, rest, wants, structure, these, mcp. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: wants, local, of, models, mcp, rest, server, these, use, no, any, when, structure, api, de, novo, user, mentions. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6254,24 +6254,24 @@
         "collector": "genomic-intelligence",
         "sender": "tamarind",
         "shared_context": [
+          "wants",
+          "local",
+          "of",
+          "models",
+          "mcp",
+          "rest",
           "server",
+          "these",
+          "use",
+          "no",
+          "any",
+          "when",
+          "structure",
+          "api",
+          "de",
           "novo",
           "user",
-          "mentions",
-          "any",
-          "local",
-          "de",
-          "use",
-          "models",
-          "when",
-          "of",
-          "api",
-          "no",
-          "rest",
-          "wants",
-          "structure",
-          "these",
-          "mcp"
+          "mentions"
         ]
       }
     },
@@ -6281,7 +6281,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: region, use, genomic. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: region, genomic, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6292,8 +6292,8 @@
         "sender": "tiledbvcf",
         "shared_context": [
           "region",
-          "use",
-          "genomic"
+          "genomic",
+          "use"
         ]
       }
     },
@@ -6324,7 +6324,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: validation, data, models, including. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, validation, models, including. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6334,8 +6334,8 @@
         "collector": "lamindb",
         "sender": "deepchem",
         "shared_context": [
-          "validation",
           "data",
+          "validation",
           "models",
           "including"
         ]
@@ -6389,7 +6389,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, datasets. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: datasets, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6399,8 +6399,8 @@
         "collector": "lamindb",
         "sender": "pydicom",
         "shared_context": [
-          "data",
-          "datasets"
+          "datasets",
+          "data"
         ]
       }
     },
@@ -6410,7 +6410,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: validation, data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, validation, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6420,8 +6420,8 @@
         "collector": "lamindb",
         "sender": "scientific-visualization",
         "shared_context": [
-          "validation",
           "data",
+          "validation",
           "use"
         ]
       }
@@ -6453,7 +6453,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, screening. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: screening, using. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6463,8 +6463,8 @@
         "collector": "literature-review",
         "sender": "adaptyv",
         "shared_context": [
-          "using",
-          "screening"
+          "screening",
+          "using"
         ]
       }
     },
@@ -6495,7 +6495,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: pdf, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, pdf. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6505,8 +6505,8 @@
         "collector": "literature-review",
         "sender": "matplotlib",
         "shared_context": [
-          "pdf",
-          "use"
+          "use",
+          "pdf"
         ]
       }
     },
@@ -6537,7 +6537,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: not, does, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: does, not, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6547,8 +6547,8 @@
         "collector": "literature-review",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "not",
           "does",
+          "not",
           "use"
         ]
       }
@@ -6559,7 +6559,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: markdown, searches, supports. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: searches, markdown, supports. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6569,8 +6569,8 @@
         "collector": "literature-review",
         "sender": "paperzilla",
         "shared_context": [
-          "markdown",
           "searches",
+          "markdown",
           "supports"
         ]
       }
@@ -6644,7 +6644,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: server, data, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, server, workflows. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6654,8 +6654,8 @@
         "collector": "markitdown",
         "sender": "omero-integration",
         "shared_context": [
-          "server",
           "data",
+          "server",
           "workflows"
         ]
       }
@@ -6666,7 +6666,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: plugins, data, local. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, local, plugins. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6676,9 +6676,9 @@
         "collector": "markitdown",
         "sender": "pydicom",
         "shared_context": [
-          "plugins",
           "data",
-          "local"
+          "local",
+          "plugins"
         ]
       }
     },
@@ -6688,7 +6688,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: server, local, mcp. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, server, mcp. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6698,8 +6698,8 @@
         "collector": "markitdown",
         "sender": "tamarind",
         "shared_context": [
-          "server",
           "local",
+          "server",
           "mcp"
         ]
       }
@@ -6732,7 +6732,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: documents, use, its. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: its, documents, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6742,9 +6742,9 @@
         "collector": "open-notebook",
         "sender": "analytical-method-validation",
         "shared_context": [
+          "its",
           "documents",
-          "use",
-          "its"
+          "use"
         ]
       }
     },
@@ -6775,7 +6775,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: configuring, when, through, custom. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: custom, through, when, configuring. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6785,10 +6785,10 @@
         "collector": "open-notebook",
         "sender": "fictiv",
         "shared_context": [
-          "configuring",
-          "when",
+          "custom",
           "through",
-          "custom"
+          "when",
+          "configuring"
         ]
       }
     },
@@ -6861,7 +6861,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, vector, when, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, when, multi, vector. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6872,9 +6872,9 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "use",
-          "vector",
           "when",
-          "multi"
+          "multi",
+          "vector"
         ]
       }
     },
@@ -6884,7 +6884,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: through, supports. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: supports, through. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6894,8 +6894,8 @@
         "collector": "open-notebook",
         "sender": "paperzilla",
         "shared_context": [
-          "through",
-          "supports"
+          "supports",
+          "through"
         ]
       }
     },
@@ -6926,7 +6926,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: source, open, its, local, use, when, api, cloud, rest. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, source, rest, use, when, api, its, cloud, open. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6936,15 +6936,15 @@
         "collector": "open-notebook",
         "sender": "tamarind",
         "shared_context": [
-          "source",
-          "open",
-          "its",
           "local",
+          "source",
+          "rest",
           "use",
           "when",
           "api",
+          "its",
           "cloud",
-          "rest"
+          "open"
         ]
       }
     },
@@ -6954,7 +6954,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: through, use, cloud, ingestion. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: cloud, through, ingestion, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6964,10 +6964,10 @@
         "collector": "open-notebook",
         "sender": "tiledbvcf",
         "shared_context": [
-          "through",
-          "use",
           "cloud",
-          "ingestion"
+          "through",
+          "ingestion",
+          "use"
         ]
       }
     },
@@ -6977,7 +6977,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: code, python. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: python, code. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6987,8 +6987,8 @@
         "collector": "optimize-for-gpu",
         "sender": "adaptyv",
         "shared_context": [
-          "code",
-          "python"
+          "python",
+          "code"
         ]
       }
     },
@@ -6998,7 +6998,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: that, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: use, that. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7008,8 +7008,8 @@
         "collector": "optimize-for-gpu",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "that",
-          "use"
+          "use",
+          "that"
         ]
       }
     },
@@ -7019,7 +7019,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, graph, when, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, graph, scientific, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7031,8 +7031,8 @@
         "shared_context": [
           "data",
           "graph",
-          "when",
-          "scientific"
+          "scientific",
+          "when"
         ]
       }
     },
@@ -7042,7 +7042,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: on, user, even, not, file, also, when, if. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: file, not, if, also, even, when, on, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7052,14 +7052,14 @@
         "collector": "optimize-for-gpu",
         "sender": "fictiv",
         "shared_context": [
-          "on",
-          "user",
-          "even",
-          "not",
           "file",
+          "not",
+          "if",
           "also",
+          "even",
           "when",
-          "if"
+          "on",
+          "user"
         ]
       }
     },
@@ -7069,7 +7069,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, multi, numpy. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'flowio' (sender) have complementary descriptions with shared context: numpy, use, multi. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7079,9 +7079,9 @@
         "collector": "optimize-for-gpu",
         "sender": "flowio",
         "shared_context": [
+          "numpy",
           "use",
-          "multi",
-          "numpy"
+          "multi"
         ]
       }
     },
@@ -7091,7 +7091,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, multi, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: scientific, use, multi. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7101,9 +7101,9 @@
         "collector": "optimize-for-gpu",
         "sender": "matplotlib",
         "shared_context": [
+          "scientific",
           "use",
-          "multi",
-          "scientific"
+          "multi"
         ]
       }
     },
@@ -7134,7 +7134,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: multi, data, use, scientific, image. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, image, use, multi, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7144,11 +7144,11 @@
         "collector": "optimize-for-gpu",
         "sender": "scientific-visualization",
         "shared_context": [
-          "multi",
           "data",
+          "image",
           "use",
-          "scientific",
-          "image"
+          "multi",
+          "scientific"
         ]
       }
     },
@@ -7158,7 +7158,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: on, user, use, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: on, use, when, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7169,9 +7169,9 @@
         "sender": "tamarind",
         "shared_context": [
           "on",
-          "user",
           "use",
-          "when"
+          "when",
+          "user"
         ]
       }
     },
@@ -7181,7 +7181,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pacsomatic' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: not, troubleshooting. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pacsomatic' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: troubleshooting, not. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7191,8 +7191,8 @@
         "collector": "pacsomatic",
         "sender": "fictiv",
         "shared_context": [
-          "not",
-          "troubleshooting"
+          "troubleshooting",
+          "not"
         ]
       }
     },
@@ -7288,7 +7288,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: use, triggers, any, of. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: of, any, use, triggers. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7298,10 +7298,10 @@
         "collector": "paper-lookup",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "use",
-          "triggers",
+          "of",
           "any",
-          "of"
+          "use",
+          "triggers"
         ]
       }
     },
@@ -7311,7 +7311,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: on, status, mentions, when, covers. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: status, when, covers, on, mentions. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7321,11 +7321,11 @@
         "collector": "paper-lookup",
         "sender": "fictiv",
         "shared_context": [
-          "on",
           "status",
-          "mentions",
           "when",
-          "covers"
+          "covers",
+          "on",
+          "mentions"
         ]
       }
     },
@@ -7335,7 +7335,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: pdf, journal, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, pdf, journal. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7345,9 +7345,9 @@
         "collector": "paper-lookup",
         "sender": "matplotlib",
         "shared_context": [
+          "use",
           "pdf",
-          "journal",
-          "use"
+          "journal"
         ]
       }
     },
@@ -7357,7 +7357,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: annotations, apis, this, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: annotations, this, apis, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7368,8 +7368,8 @@
         "sender": "omero-integration",
         "shared_context": [
           "annotations",
-          "apis",
           "this",
+          "apis",
           "use"
         ]
       }
@@ -7380,7 +7380,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, when, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, use, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7391,8 +7391,8 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "on",
-          "when",
-          "use"
+          "use",
+          "when"
         ]
       }
     },
@@ -7402,7 +7402,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: paper, papers, searches. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: papers, paper, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7412,8 +7412,8 @@
         "collector": "paper-lookup",
         "sender": "paperzilla",
         "shared_context": [
-          "paper",
           "papers",
+          "paper",
           "searches"
         ]
       }
@@ -7424,7 +7424,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: provenance, ids, of. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: of, ids, provenance. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7434,9 +7434,9 @@
         "collector": "paper-lookup",
         "sender": "qiime2-amplicon",
         "shared_context": [
-          "provenance",
+          "of",
           "ids",
-          "of"
+          "provenance"
         ]
       }
     },
@@ -7446,7 +7446,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: journal, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, journal. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7456,8 +7456,8 @@
         "collector": "paper-lookup",
         "sender": "scientific-visualization",
         "shared_context": [
-          "journal",
-          "use"
+          "use",
+          "journal"
         ]
       }
     },
@@ -7467,7 +7467,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: x, on, mentions, any, open, use, when, of, access. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: of, use, access, x, when, any, open, on, mentions. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7477,15 +7477,15 @@
         "collector": "paper-lookup",
         "sender": "tamarind",
         "shared_context": [
+          "of",
+          "use",
+          "access",
           "x",
-          "on",
-          "mentions",
+          "when",
           "any",
           "open",
-          "use",
-          "when",
-          "of",
-          "access"
+          "on",
+          "mentions"
         ]
       }
     },
@@ -7516,7 +7516,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: python, protein, sdk. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: protein, python, sdk. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7526,8 +7526,8 @@
         "collector": "paperclip",
         "sender": "adaptyv",
         "shared_context": [
-          "python",
           "protein",
+          "python",
           "sdk"
         ]
       }
@@ -7538,7 +7538,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: verification, documents, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: documents, verification, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7548,8 +7548,8 @@
         "collector": "paperclip",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "verification",
           "documents",
+          "verification",
           "use"
         ]
       }
@@ -7560,7 +7560,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: asks, when, through. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: asks, through, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7571,8 +7571,8 @@
         "sender": "fictiv",
         "shared_context": [
           "asks",
-          "when",
-          "through"
+          "through",
+          "when"
         ]
       }
     },
@@ -7582,7 +7582,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'flowio' (sender) have complementary descriptions with shared context: extraction, reads, use, metadata. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, extraction, metadata, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7592,10 +7592,10 @@
         "collector": "paperclip",
         "sender": "flowio",
         "shared_context": [
-          "extraction",
           "reads",
-          "use",
-          "metadata"
+          "extraction",
+          "metadata",
+          "use"
         ]
       }
     },
@@ -7605,7 +7605,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: cli, scoped, use, metadata. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: metadata, cli, use, scoped. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7615,10 +7615,10 @@
         "collector": "paperclip",
         "sender": "omero-integration",
         "shared_context": [
+          "metadata",
           "cli",
-          "scoped",
           "use",
-          "metadata"
+          "scoped"
         ]
       }
     },
@@ -7628,7 +7628,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: when, use, python. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: python, when, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7638,9 +7638,9 @@
         "collector": "paperclip",
         "sender": "optimize-for-gpu",
         "shared_context": [
+          "python",
           "when",
-          "use",
-          "python"
+          "use"
         ]
       }
     },
@@ -7650,7 +7650,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: cli, reads, supports, through, papers, searches. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: papers, reads, cli, supports, through, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7660,11 +7660,11 @@
         "collector": "paperclip",
         "sender": "paperzilla",
         "shared_context": [
-          "cli",
+          "papers",
           "reads",
+          "cli",
           "supports",
           "through",
-          "papers",
           "searches"
         ]
       }
@@ -7696,7 +7696,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, it, figure, metadata. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: figure, metadata, use, it. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7706,10 +7706,10 @@
         "collector": "paperclip",
         "sender": "scientific-visualization",
         "shared_context": [
-          "use",
-          "it",
           "figure",
-          "metadata"
+          "metadata",
+          "use",
+          "it"
         ]
       }
     },
@@ -7719,7 +7719,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: when, protein, use, source. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: protein, source, use, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7729,10 +7729,10 @@
         "collector": "paperclip",
         "sender": "tamarind",
         "shared_context": [
-          "when",
           "protein",
+          "source",
           "use",
-          "source"
+          "when"
         ]
       }
     },
@@ -7785,7 +7785,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'parallel-web' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, data, that. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'parallel-web' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, parallel, that. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7795,8 +7795,8 @@
         "collector": "parallel-web",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "parallel",
           "data",
+          "parallel",
           "that"
         ]
       }
@@ -7849,7 +7849,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: operates, configuring, through, custom. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: operates, custom, through, configuring. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7860,9 +7860,9 @@
         "sender": "fictiv",
         "shared_context": [
           "operates",
-          "configuring",
+          "custom",
           "through",
-          "custom"
+          "configuring"
         ]
       }
     },
@@ -7893,7 +7893,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, over, interactive. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: interactive, over, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7903,9 +7903,9 @@
         "collector": "pi-agent",
         "sender": "matplotlib",
         "shared_context": [
-          "use",
+          "interactive",
           "over",
-          "interactive"
+          "use"
         ]
       }
     },
@@ -7978,7 +7978,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, use, models, access, mcp. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, models, mcp, use, access. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7989,10 +7989,10 @@
         "sender": "tamarind",
         "shared_context": [
           "local",
-          "use",
           "models",
-          "access",
-          "mcp"
+          "mcp",
+          "use",
+          "access"
         ]
       }
     },
@@ -8023,7 +8023,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, writes, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, use, writes. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8034,8 +8034,8 @@
         "sender": "flowio",
         "shared_context": [
           "reads",
-          "writes",
-          "use"
+          "use",
+          "writes"
         ]
       }
     },
@@ -8066,7 +8066,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, o, data, use, i. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, use, o, on, i. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8076,10 +8076,10 @@
         "collector": "polars-bio",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "on",
-          "o",
           "data",
           "use",
+          "o",
+          "on",
           "i"
         ]
       }
@@ -8112,7 +8112,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: reads, fastq, overlap. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: overlap, reads, fastq. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8122,9 +8122,9 @@
         "collector": "polars-bio",
         "sender": "qiime2-amplicon",
         "shared_context": [
+          "overlap",
           "reads",
-          "fastq",
-          "overlap"
+          "fastq"
         ]
       }
     },
@@ -8176,7 +8176,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: use, bcf, genomic, vcf, queries. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: bcf, use, vcf, queries, genomic. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8186,11 +8186,11 @@
         "collector": "polars-bio",
         "sender": "tiledbvcf",
         "shared_context": [
-          "use",
           "bcf",
-          "genomic",
+          "use",
           "vcf",
-          "queries"
+          "queries",
+          "genomic"
         ]
       }
     },
@@ -8200,7 +8200,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: plans, protocol, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: protocol, plans, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8210,8 +8210,8 @@
         "collector": "protocolsio-integration",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "plans",
           "protocol",
+          "plans",
           "use"
         ]
       }
@@ -8265,7 +8265,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: creates, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, creates. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8275,8 +8275,8 @@
         "collector": "protocolsio-integration",
         "sender": "matplotlib",
         "shared_context": [
-          "creates",
-          "use"
+          "use",
+          "creates"
         ]
       }
     },
@@ -8328,7 +8328,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, bounded, reads. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, reads, bounded. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8339,8 +8339,8 @@
         "sender": "pydicom",
         "shared_context": [
           "data",
-          "bounded",
-          "reads"
+          "reads",
+          "bounded"
         ]
       }
     },
@@ -8350,7 +8350,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: creates, data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, use, creates. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8360,9 +8360,9 @@
         "collector": "protocolsio-integration",
         "sender": "scientific-visualization",
         "shared_context": [
-          "creates",
           "data",
-          "use"
+          "use",
+          "creates"
         ]
       }
     },
@@ -8372,7 +8372,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: rest, use, mcp. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: rest, mcp, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8383,8 +8383,8 @@
         "sender": "tamarind",
         "shared_context": [
           "rest",
-          "use",
-          "mcp"
+          "mcp",
+          "use"
         ]
       }
     },
@@ -8437,7 +8437,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'flowio' (sender) have complementary descriptions with shared context: standard, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, standard. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8447,8 +8447,8 @@
         "collector": "rdkit",
         "sender": "flowio",
         "shared_context": [
-          "standard",
-          "use"
+          "use",
+          "standard"
         ]
       }
     },
@@ -8458,7 +8458,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: workflows, use, fine, grained, control. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: fine, workflows, control, use, grained. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8468,11 +8468,11 @@
         "collector": "rdkit",
         "sender": "matplotlib",
         "shared_context": [
-          "workflows",
-          "use",
           "fine",
-          "grained",
-          "control"
+          "workflows",
+          "control",
+          "use",
+          "grained"
         ]
       }
     },
@@ -8503,7 +8503,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: molecular, use, generation. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: generation, molecular, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8513,9 +8513,9 @@
         "collector": "rdkit",
         "sender": "tamarind",
         "shared_context": [
+          "generation",
           "molecular",
-          "use",
-          "generation"
+          "use"
         ]
       }
     },
@@ -8525,7 +8525,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: explicit, when, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: explicit, scientific, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8536,8 +8536,8 @@
         "sender": "deepchem",
         "shared_context": [
           "explicit",
-          "when",
-          "scientific"
+          "scientific",
+          "when"
         ]
       }
     },
@@ -8547,7 +8547,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: asks, user, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: when, asks, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8557,9 +8557,9 @@
         "collector": "research-lookup",
         "sender": "fictiv",
         "shared_context": [
+          "when",
           "asks",
-          "user",
-          "when"
+          "user"
         ]
       }
     },
@@ -8569,7 +8569,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, user, scientific, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, scientific, when, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8580,9 +8580,9 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "parallel",
-          "user",
           "scientific",
-          "when"
+          "when",
+          "user"
         ]
       }
     },
@@ -8592,7 +8592,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: when, user, source, references. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: source, when, user, references. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8602,9 +8602,9 @@
         "collector": "research-lookup",
         "sender": "tamarind",
         "shared_context": [
+          "source",
           "when",
           "user",
-          "source",
           "references"
         ]
       }
@@ -8799,7 +8799,7 @@
       "scan_duration_seconds": 14.46,
       "content_hash": "a5f52d3af3f105bd3f8f575a8f4697f507a46093548eb60deb6c6820d441e62a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -8871,7 +8871,7 @@
       "scan_duration_seconds": 19.07,
       "content_hash": "2762f6977c401815ef245949e02a8864d573a998718a3702916b46e171934a7a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -8943,7 +8943,7 @@
       "scan_duration_seconds": 21.52,
       "content_hash": "6a4cbcf09044c6e8a55dc3756a5c197e84b5e7914341edae3382710c50ceeb97",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9075,7 +9075,7 @@
       "scan_duration_seconds": 26.55,
       "content_hash": "00255ab514b6816393fedd97a4c90c8d54eda8853f1b7687021e4c966c6282dd",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9147,7 +9147,7 @@
       "scan_duration_seconds": 20.41,
       "content_hash": "06c13f0a94f2b4e0ab08cbdce1208a29ee8a52d968e746bc9d0e062364380fd6",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9219,7 +9219,7 @@
       "scan_duration_seconds": 15.75,
       "content_hash": "262ff7584587bf6b02f30e915989073cc3845c0c5845783085ed97792deccb91",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9291,7 +9291,7 @@
       "scan_duration_seconds": 16.28,
       "content_hash": "1e1f9ec887d28c638ccbdf10cf40faa5c4b96c2d4a9c96f9d273621a8d92b937",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9363,7 +9363,7 @@
       "scan_duration_seconds": 21.82,
       "content_hash": "0c020351d2a5cdc2504c5bedb13f3890f8624e9b341c37cd96fd2c1aa899e795",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9495,7 +9495,7 @@
       "scan_duration_seconds": 12.08,
       "content_hash": "ade344f15a49d1deebd4a9be627fbee14ee5e0f6f61c0bef7e0f2c3f911587be",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -9567,7 +9567,7 @@
       "scan_duration_seconds": 21.16,
       "content_hash": "b38ac805a7ca65821d04d2fa207a212a7808f32aa348293c60c89102d9b599e7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10033,7 +10033,7 @@
       "scan_duration_seconds": 12.42,
       "content_hash": "5f3a96d6f4cb64b8782283321fd4411cdfd4be6be5016e4f99725c01919857e4",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10165,7 +10165,7 @@
       "scan_duration_seconds": 7.19,
       "content_hash": "67c7b37e78adc2a5d5d72954f9c7852bf8a57a5cc760df5876d128fee72ffd96",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10237,7 +10237,7 @@
       "scan_duration_seconds": 9.62,
       "content_hash": "b4b3bec1211f44f767ff62b7b998e4e57d6802a65df926069093f868548491f9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10309,7 +10309,7 @@
       "scan_duration_seconds": 15.25,
       "content_hash": "871a54334f4214615a8582e87cbb64985daa60e47907b2d00b52ce7edc0d0d27",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10718,7 +10718,7 @@
       "scan_duration_seconds": 17.49,
       "content_hash": "56fc83446d9326efb4930dababbc69ad211f57bdd915487cd3052bb504b283c1",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10850,7 +10850,7 @@
       "scan_duration_seconds": 10.35,
       "content_hash": "b297332a67bc7fe1e26d0cb62e558a980a4671c2b8095e50c7d713a2fc877033",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10922,7 +10922,7 @@
       "scan_duration_seconds": 8.26,
       "content_hash": "b045bdb21ceef40d46398a44220d314d8f1f7d638ec72054173f9c37f25931f9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -10994,7 +10994,7 @@
       "scan_duration_seconds": 8.73,
       "content_hash": "c44f3b11a7b34195dd77c19ee4250dadcad82678148c057b6420d10bfbdaded1",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11066,7 +11066,7 @@
       "scan_duration_seconds": 7.92,
       "content_hash": "58d464d39275065068a1a4eed71e7ee456d9cbf25bf6a41ba9b0a471a7fcbebc",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11138,7 +11138,7 @@
       "scan_duration_seconds": 16.59,
       "content_hash": "1ae59626ce99bb6c3c2f6c5a24f86ec9343ec0fa9cd87d24d75029a9698f5127",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11270,7 +11270,7 @@
       "scan_duration_seconds": 34.8,
       "content_hash": "ff06853fdc6b13f34b7bf221608655b28ce84aed6ac0785095433f356d2fb06c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11739,7 +11739,7 @@
       "scan_duration_seconds": 11.43,
       "content_hash": "f927b0bde6b2e65db43fae1b5f1dc3212375796fe956f70427a83a12e953fd7e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11811,7 +11811,7 @@
       "scan_duration_seconds": 11.12,
       "content_hash": "da268c169801392c4fd810b52bfd3b893900555be0bc3d0b0265f05383eb55d5",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11883,7 +11883,7 @@
       "scan_duration_seconds": 15.92,
       "content_hash": "744cb4f84af5570d00ba81cd0ab3dcd93dffd3cf79134f40593d6289cf5df223",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -11955,7 +11955,7 @@
       "scan_duration_seconds": 6.66,
       "content_hash": "ae203ac1952720ba9cd7315447d372409559795e6f222234405b61eeb9d2366e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12027,7 +12027,7 @@
       "scan_duration_seconds": 10.51,
       "content_hash": "2cc3610fad57aae19b262925c24108a78a0b25303f1f36a176a7217a78ce5407",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12099,7 +12099,7 @@
       "scan_duration_seconds": 35.87,
       "content_hash": "a601341612e47bb9e62d08a768abf5fa73b9b41e4eea478337bfde66ac8c8e8d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12171,7 +12171,7 @@
       "scan_duration_seconds": 6.67,
       "content_hash": "aa28aea51dfec39929b9177881c62f2a5c6bea5a6864c9547554319158b2dce3",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12243,7 +12243,7 @@
       "scan_duration_seconds": 8.57,
       "content_hash": "494f1a0ce6b1a3b61c279ccf2ebe043e5223943848875c1d6f856efd9becc80d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12315,7 +12315,7 @@
       "scan_duration_seconds": 10.86,
       "content_hash": "ca228edb3e2cd026d1a54aac60fb55690387c70ea87c53696687c05768c28e4b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12387,7 +12387,7 @@
       "scan_duration_seconds": 8.59,
       "content_hash": "211187219e0aa989e9e988470c1fb2d7a34a63b19634449382de7eff24b44f82",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12459,7 +12459,7 @@
       "scan_duration_seconds": 10.41,
       "content_hash": "8d271aa40d6c685ac6cef9132ab04e30c95278f35411771694730cf8908814a2",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12531,7 +12531,7 @@
       "scan_duration_seconds": 7.63,
       "content_hash": "53e683dda08fcf0965267bbd3c510de699ba284286267ac2ed32235b37b2c6a7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12603,7 +12603,7 @@
       "scan_duration_seconds": 6.33,
       "content_hash": "02b56384d1e3f99a48cd1be9cfe1241756dcbe32d1335890064575ef521f7137",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12675,7 +12675,7 @@
       "scan_duration_seconds": 16.0,
       "content_hash": "893087a3cb96c83f485d83cdf250958a9194b34b96ef2fc592ae7eaf259e32a0",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12747,7 +12747,7 @@
       "scan_duration_seconds": 14.29,
       "content_hash": "2e072143202cf73132041ddfc26cc5f64d6589e60bed12d4e9de43e93ab04e94",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -12876,7 +12876,7 @@
       "scan_duration_seconds": 20.12,
       "content_hash": "538a9444d2fdcf5b4937494db9edd5383e0e5ca54bd96d48d5b3718323235012",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13173,7 +13173,7 @@
       "scan_duration_seconds": 15.99,
       "content_hash": "77b5768782bc07d522fd8c2355af0edbdc6d2c5f3025fa95ec9764b85a4c2004",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13305,7 +13305,7 @@
       "scan_duration_seconds": 8.53,
       "content_hash": "a611bcd43776d63dd6b12602991f03379c924ca2d975246ca5c6341f0031f39f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13377,7 +13377,7 @@
       "scan_duration_seconds": 8.83,
       "content_hash": "29d82a332168ef8aa7dbbd4a6a8076106660a0f0fcbcc4e78dbe156496b84d47",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13449,7 +13449,7 @@
       "scan_duration_seconds": 14.09,
       "content_hash": "48e608c745506eb6811d28a5d55165740fa62e33e274152a7022a62968fac405",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13521,7 +13521,7 @@
       "scan_duration_seconds": 10.73,
       "content_hash": "c4674f23d3f3a6fae76ffececd1c7683a843a4874357b4e0d4bb7ddff8002bad",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13593,7 +13593,7 @@
       "scan_duration_seconds": 12.43,
       "content_hash": "0e499b4784c63f907875309fc820fd385500fe94eda8e26abc1464a39a538b7d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13665,7 +13665,7 @@
       "scan_duration_seconds": 7.74,
       "content_hash": "cf1e583c8ec054ecb626cd6e1d0874fac42321f036b5fcaa48e6cb3463bf686e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13737,7 +13737,7 @@
       "scan_duration_seconds": 15.43,
       "content_hash": "0722e7b700533e4c8f56a5e23e937e91ae97197c981eac8d8817ae33c60ec873",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13809,7 +13809,7 @@
       "scan_duration_seconds": 10.39,
       "content_hash": "fd4f52f54a4f2ef0f1dfe9c0baf4005e2385af6fcdb64c8111130e7f5295148b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13881,7 +13881,7 @@
       "scan_duration_seconds": 8.32,
       "content_hash": "11988d6924e5e15de7f5f9336aae7caf00ec1c85fff4dacd2712d379fe1cff54",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -13953,7 +13953,7 @@
       "scan_duration_seconds": 21.31,
       "content_hash": "e370190cd0b6e5c35ab1c367ef6c16d9d488651d232b7b491b47b8b3fc413acc",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14025,7 +14025,7 @@
       "scan_duration_seconds": 14.61,
       "content_hash": "b5a56386d3389f2ef499f3383de91a4aa8d8b3c08efd5e15528d0809638be63e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14097,7 +14097,7 @@
       "scan_duration_seconds": 11.39,
       "content_hash": "790fad0d2c2aae651f30307f4a1badd12b0f46f05c82d0db0c27ad19fdc36e99",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14270,7 +14270,7 @@
       "scan_duration_seconds": 21.94,
       "content_hash": "95c8112d8911eff6ab7dfc6e99e19d1b54afc206b289552a49ea68193cf06c2f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14505,7 +14505,7 @@
       "scan_duration_seconds": 18.34,
       "content_hash": "fde32e29ce4b5faef8eb5840f6cc94936ca933f0ad3a5d4ede686d4f124c76cb",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14577,7 +14577,7 @@
       "scan_duration_seconds": 9.4,
       "content_hash": "2cc05fb94436d0fb8074b7d0c1dd1b896a2e091e164c4e64c1b96fbb945a6217",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14649,7 +14649,7 @@
       "scan_duration_seconds": 19.59,
       "content_hash": "8b09c76e40f1394aba0afcfc184d2fd6c28edb314e05d2141e52344d1aa0ffc1",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14721,7 +14721,7 @@
       "scan_duration_seconds": 11.95,
       "content_hash": "d2c209d98084cf5db6392ec8a59f731fb3e5b5380962e707944a9b8a6617f2a1",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14793,7 +14793,7 @@
       "scan_duration_seconds": 8.79,
       "content_hash": "02b8fef66f858211b23df7fe57cdcdc5e421ac363c88b34caebb6e28cd48dfae",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -14972,7 +14972,7 @@
       "scan_duration_seconds": 12.32,
       "content_hash": "45ea3ae088ab32594c241e44fce12a1078a7ab9899c7383aaa7211baa8b55d62",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15044,7 +15044,7 @@
       "scan_duration_seconds": 10.42,
       "content_hash": "f1cb05c4eff47642ddcc15a73c4f4c77063dd50759823f7aba93e09415ac2546",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15116,7 +15116,7 @@
       "scan_duration_seconds": 17.92,
       "content_hash": "fb7966a9124c313e9914a24b47ee3da8c6947f8495355bc37639b4b22a1c8123",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15245,7 +15245,7 @@
       "scan_duration_seconds": 11.6,
       "content_hash": "84f88011b07148b15c4eadec4d1a05089be8ec21188890466cfffe6c993098ae",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15317,7 +15317,7 @@
       "scan_duration_seconds": 10.31,
       "content_hash": "0f8b0d771c5f9df67f9bfc765ed160795fca6ab4a1af72e84a4e9b5aea8ff82e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15389,7 +15389,7 @@
       "scan_duration_seconds": 16.78,
       "content_hash": "4c601b7da418994df14ed4bc635dadcc789689f2e6acb152da58549e1ddf2f7f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15461,7 +15461,7 @@
       "scan_duration_seconds": 20.54,
       "content_hash": "419b24ae36a83b68a2414b98aa2505e200def515a97e1237baddcba7f87f0a21",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15815,7 +15815,7 @@
       "scan_duration_seconds": 20.22,
       "content_hash": "7df882ed285e45aae5a5738b909a8d20d4813dfb8d7cc83a513fe960d54c1a04",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15887,7 +15887,7 @@
       "scan_duration_seconds": 12.62,
       "content_hash": "d878fdc5648c7c4e5f5671b4b2a22c41e93811b8e69e0dbb770ac90287ba6c7c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -15959,7 +15959,7 @@
       "scan_duration_seconds": 11.36,
       "content_hash": "ba975891339e7914021494d4a978a7e709c629cac13dd353689efab7fddba96c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16031,7 +16031,7 @@
       "scan_duration_seconds": 7.53,
       "content_hash": "23f1aa43d50244d826604081dd4a86226e01b5203bc8c6848bfc4d95259d564c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16103,7 +16103,7 @@
       "scan_duration_seconds": 17.56,
       "content_hash": "2edfdfe97a329cdbb6f33baa635cfd5bcb1b0e43cb51f7249fc75d113024880e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16235,7 +16235,7 @@
       "scan_duration_seconds": 24.7,
       "content_hash": "aef253e8f621efcb559a71efe90b1122f3992868be57411899020bd8fcbc4e0b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16587,7 +16587,7 @@
       "scan_duration_seconds": 17.88,
       "content_hash": "d591ae5f075c7fdde8e0ff06f0ae50b1447c7114eefc1b49d5426db1f64a7473",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16659,7 +16659,7 @@
       "scan_duration_seconds": 19.7,
       "content_hash": "6267602a94b2c40e4e5536191dd018f1fb6fa737aa3751bed15ee1c72c646efa",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -16960,7 +16960,7 @@
       "scan_duration_seconds": 9.27,
       "content_hash": "3089b5d843b91aca0c04bf80ab4f8e4ccb382d52ff31cbb84481a75c7717b7da",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17032,7 +17032,7 @@
       "scan_duration_seconds": 7.24,
       "content_hash": "455ad008acc5ed1f2cc15d4fc16250171818d5fc3c282d87e2113ffd5d53922a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17104,7 +17104,7 @@
       "scan_duration_seconds": 17.78,
       "content_hash": "e16ab3ad39da1218896f984c73b5405e370ae7f433a00218e17ffef073df519b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17176,7 +17176,7 @@
       "scan_duration_seconds": 13.24,
       "content_hash": "624787590737bc0dab3a07004e8a3de2655fe8e0c25a0af395865eb56a03bc84",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17248,7 +17248,7 @@
       "scan_duration_seconds": 19.25,
       "content_hash": "3387ebaca80f77951c861f1fa3c914be04443b83e6f2fe32bb389102472ffb7c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17380,7 +17380,7 @@
       "scan_duration_seconds": 9.44,
       "content_hash": "21abef6ec09baf5399585416d0ce97929f066880e5a4a15733e36b452566b852",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17452,7 +17452,7 @@
       "scan_duration_seconds": 13.05,
       "content_hash": "7dab9d52d4e1f4931feaa76f7a8da5390615fca89490a4fbb004c38945f284e4",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17524,7 +17524,7 @@
       "scan_duration_seconds": 16.01,
       "content_hash": "8d07550ae3c456f32265ba361d1c5193543141106bac352f27f6476ac89d4413",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17656,7 +17656,7 @@
       "scan_duration_seconds": 16.08,
       "content_hash": "4103d0eeea875ed2c88207171b400cd4c9dabc0bbbbdb448c06abea0f1a0a6b3",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -17788,7 +17788,7 @@
       "scan_duration_seconds": 22.05,
       "content_hash": "b68719902bd2ba219e17ae8a060f11347b7cc37f1a3e0f7fc411a5c18863a92a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18303,7 +18303,7 @@
       "scan_duration_seconds": 9.07,
       "content_hash": "e502e1cb11f508c411bdb4805ff063873b20474fea17e4d35269dd8a9c944e8a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18375,7 +18375,7 @@
       "scan_duration_seconds": 12.29,
       "content_hash": "313984faa360b103bfdb62a4ef051e288694896b6cc3f367f0c7a258ffdedb64",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18447,7 +18447,7 @@
       "scan_duration_seconds": 14.34,
       "content_hash": "99cafe0746d35913db0af4d41ab69632524766b7da6ee13221f5583a6d45b56d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18548,7 +18548,7 @@
       "scan_duration_seconds": 14.95,
       "content_hash": "4c544936e4c17ad488c373f8d2ff2791ad33b4749530703f99ff6c59ab4b7493",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18680,7 +18680,7 @@
       "scan_duration_seconds": 11.71,
       "content_hash": "8ab8640a5a150bc8b64d52d04f953ea83b8916dcf32aa8946f79ed87579aacdd",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18752,7 +18752,7 @@
       "scan_duration_seconds": 22.71,
       "content_hash": "5a93734739c377b74e958d7151b25ea609d387805f4c8e749f440409e3416738",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18824,7 +18824,7 @@
       "scan_duration_seconds": 17.11,
       "content_hash": "578969b081c4c0de7f4f66140f0546fd834f49108f59dd1c5b04a334196191a7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18896,7 +18896,7 @@
       "scan_duration_seconds": 7.82,
       "content_hash": "5a3b678e73a4432ae1b51e4e24b11a6937813122771a6032522c790a555b26ad",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -18968,7 +18968,7 @@
       "scan_duration_seconds": 7.47,
       "content_hash": "28608dd2830d67c27d36bb2fbcc742d9b0298ddb9d33ba315a30e6b0f7d437a7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19040,7 +19040,7 @@
       "scan_duration_seconds": 16.76,
       "content_hash": "ab1485a710def5932253c11790dce829e1a5b65f34fed8d65147ab1848f6f68d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19112,7 +19112,7 @@
       "scan_duration_seconds": 9.7,
       "content_hash": "95669db7a629bf1adad469fd7d47844ebd98774ea2ad209a1dbd6efce760e56e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19184,7 +19184,7 @@
       "scan_duration_seconds": 10.0,
       "content_hash": "1cd0420b276a3a1daa80ff988ac43534ff486c2b9b734d6035331c3811dd898a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19256,7 +19256,7 @@
       "scan_duration_seconds": 18.86,
       "content_hash": "6bd58420ad01a95e55055b1eb20ec50e604e7eb3d3f7ce92b8516961ca1446b9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19603,7 +19603,7 @@
       "scan_duration_seconds": 10.52,
       "content_hash": "fc1c1a532bcb2c940f966a1020d25f5650fed075fb458dae4992f79c4ed6484b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19675,7 +19675,7 @@
       "scan_duration_seconds": 14.05,
       "content_hash": "e8792ecc19c7d74223aba129a13adae604951d0a23f64601bc6957d1e4dcd57e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19747,7 +19747,7 @@
       "scan_duration_seconds": 15.81,
       "content_hash": "f4ee1ec099f7c8acdf1662c9a25e125c8c00263ae4c4b2ab50df1432ca328687",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19819,7 +19819,7 @@
       "scan_duration_seconds": 10.19,
       "content_hash": "14d989661b9d55aa1bb881de275a2b98d88fc8c38b0b0158363c54eebe04f34e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19891,7 +19891,7 @@
       "scan_duration_seconds": 13.38,
       "content_hash": "c211b6596ab4ddefa2974d0daf6ef13b532047a595dbe8480bea7c553712e34f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -19963,7 +19963,7 @@
       "scan_duration_seconds": 15.35,
       "content_hash": "487c5aeb961856530ac02c5051441fcc94138109b41b22946b1c2d844ea36dd9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20086,7 +20086,7 @@
       "scan_duration_seconds": 8.95,
       "content_hash": "56a32e0c3a5f59f91dfe2d16dcf7749f39e81b61972851c06c341048b4fb5d76",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20158,7 +20158,7 @@
       "scan_duration_seconds": 15.08,
       "content_hash": "3517d0aaef5d31c259590009aa62f731cd9dca4919e5ffa1d647a1e05fbaffe2",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20230,7 +20230,7 @@
       "scan_duration_seconds": 11.42,
       "content_hash": "3fe0d9a1f27a05306fff8fb84e3e2b6352ac353c6070a72b7332ea9f8b73b183",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20302,7 +20302,7 @@
       "scan_duration_seconds": 14.65,
       "content_hash": "5234a16d270ef591b2d0cb5faf50cab6b9159761c957f5c001e9fa6acb4e73ed",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20374,7 +20374,7 @@
       "scan_duration_seconds": 8.58,
       "content_hash": "f40ba9706777b1a483f48d99f619185be6b0fef828c4dfa3b3f7779ae87cba74",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20446,7 +20446,7 @@
       "scan_duration_seconds": 11.13,
       "content_hash": "d0cfcd36a731298e76cb985c369467fc647fae5e544f17f1acc8a53d1f11ec11",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20518,7 +20518,7 @@
       "scan_duration_seconds": 13.26,
       "content_hash": "7ac5bec714fec95ee0703f9e4051f953809457cd53af4723d120cee7c6fdc2d7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20590,7 +20590,7 @@
       "scan_duration_seconds": 8.08,
       "content_hash": "b1f31a691b8ffd6939151f90ed63d3544c717ba1e7b6e7ffebebdab287554ca4",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20662,7 +20662,7 @@
       "scan_duration_seconds": 23.39,
       "content_hash": "f4bf42c3120e672ccdde2eda50aafe3edb1b1b0340eaecd3472de873d2eb22c6",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20734,7 +20734,7 @@
       "scan_duration_seconds": 13.13,
       "content_hash": "48b1e0f2648aea98ddc4f01151270d451be98a47ad3a3fa80200964e42845f1d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20806,7 +20806,7 @@
       "scan_duration_seconds": 16.63,
       "content_hash": "483a122bef6853e3b568932f8e5f4141c465bde7417e758a13ba48c8e478ca4d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20878,7 +20878,7 @@
       "scan_duration_seconds": 9.54,
       "content_hash": "f97d0f559fbab99bc714d5cb0cd74e53d1547dd15b6e0e4334a1ec68b59c9d67",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -20950,7 +20950,7 @@
       "scan_duration_seconds": 11.69,
       "content_hash": "85c9634e0ce880723489ce243ccd84b385443eb2096b6e0ee25c8796fa5adb5c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21022,7 +21022,7 @@
       "scan_duration_seconds": 9.07,
       "content_hash": "ae1b0f1dbf232392d77f3185dc1d7ed0eed225698c5690123c7e711b424daae9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21094,7 +21094,7 @@
       "scan_duration_seconds": 9.68,
       "content_hash": "f245e866b7892a0275f06f3e49bff1bdb3fcd7d922074911154f070f0f3fbddc",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21166,7 +21166,7 @@
       "scan_duration_seconds": 24.13,
       "content_hash": "1fee57b539f936396eee34d2f12754335956fcde0dd055219806fc7f8695c6d3",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21238,7 +21238,7 @@
       "scan_duration_seconds": 17.84,
       "content_hash": "6dc8d070e744f57f4f380387d01939b66b51a5d30fc1101f347591c549d3cc24",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21370,7 +21370,7 @@
       "scan_duration_seconds": 8.29,
       "content_hash": "42ced7340e7269afe464c93080a83ecadf51ce0d73e3faa9a1998bcbbfa8d49b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21442,7 +21442,7 @@
       "scan_duration_seconds": 8.44,
       "content_hash": "fffe025a9bf79c5b1fa14cceaf27a95dcff6d19249441e924878319519959444",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21514,7 +21514,7 @@
       "scan_duration_seconds": 8.77,
       "content_hash": "1ec70863fd271e5e82a0e91aeff1681c974f907e463b3731d4fd13935f0c517d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21586,7 +21586,7 @@
       "scan_duration_seconds": 15.16,
       "content_hash": "bd47d1021cea41b9ec2f0f6b50af39b16e79352183793bb642b065870428dce5",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21658,7 +21658,7 @@
       "scan_duration_seconds": 17.06,
       "content_hash": "aee347ce2a1ecbaf90b35508ca28162fcc1b4c446100f680597575493bc74d21",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21730,7 +21730,7 @@
       "scan_duration_seconds": 11.38,
       "content_hash": "07986fc506f5eb31228edbf022fda88fb3ea0f029b5823a7cd0ddbdabafd1de1",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21802,7 +21802,7 @@
       "scan_duration_seconds": 11.98,
       "content_hash": "e20bf714814482185b66788e5310d925f5753e8ae1c127e50fdea47a84d0f28c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21874,7 +21874,7 @@
       "scan_duration_seconds": 10.78,
       "content_hash": "7c7f0d3f1fb42296f72982be216dfb3a67c6481d7bdb93b3aa9c5e6ba4fb6266",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -21946,7 +21946,7 @@
       "scan_duration_seconds": 14.36,
       "content_hash": "addcd287bd7cf4f1372f4ff0ff9ed6ee79a91232d25b7c79cf2840e86e6202d2",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22018,7 +22018,7 @@
       "scan_duration_seconds": 8.99,
       "content_hash": "e3322fe6e9a05bdde361c13a3118541e255d29b6e8d6cba005b3d8315fea9b8c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22090,7 +22090,7 @@
       "scan_duration_seconds": 10.63,
       "content_hash": "c9a0222f82f06ab4cb97b97fd80958d38e969ee4b337393f5b7742a98f478f62",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22162,7 +22162,7 @@
       "scan_duration_seconds": 11.93,
       "content_hash": "3a79da3211cd39d2917767dc6c18a050cb2c74564fdca883227177c15b1630bb",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22234,7 +22234,7 @@
       "scan_duration_seconds": 20.49,
       "content_hash": "12c56ee9af581daa19f0317c3e2766c1a0c7bb5d6f45a7cd0db59c90891ef52c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22363,7 +22363,7 @@
       "scan_duration_seconds": 13.27,
       "content_hash": "d5b4dbf3777800db48dc856337da500ecb8cac90acb2cbb5eba37d28750f96cc",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22495,7 +22495,7 @@
       "scan_duration_seconds": 9.41,
       "content_hash": "dfb5c1a20902e01bd4408c82e4dc8b0cac45b824b735fff6289f98713a6b2922",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22567,7 +22567,7 @@
       "scan_duration_seconds": 11.37,
       "content_hash": "b3ca21410215c4805202a1283fe94ac1ffb8387973a560e6ae99c48bee233fb6",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22639,7 +22639,7 @@
       "scan_duration_seconds": 10.71,
       "content_hash": "38c36bf1ec02cba628586854672965279edaa868fb238f23f251d08718b646e9",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22711,7 +22711,7 @@
       "scan_duration_seconds": 8.34,
       "content_hash": "73929e7d70e0029d191f96e5aa2504cb97ffaa2a7f04f12e5d25207c5d5d14d8",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22783,7 +22783,7 @@
       "scan_duration_seconds": 8.85,
       "content_hash": "b29daf08477cf72be107fb334aa27c7e0aa5ee8cada8b668e25340b5477ea6b0",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22855,7 +22855,7 @@
       "scan_duration_seconds": 12.61,
       "content_hash": "2a0118d590d91a0c49628ee807ee87b6d9adadaee881d7863be4cdb689963de4",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22927,7 +22927,7 @@
       "scan_duration_seconds": 13.19,
       "content_hash": "b738e19c672322705293e042f18f1dd66cf375c6b0441b39e022eeaa8d42dc38",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -22999,7 +22999,7 @@
       "scan_duration_seconds": 15.76,
       "content_hash": "7645ffce515da2343d9d2d329613d840e9c63e4ced18b7621d5d9a5dbf0932ff",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23293,7 +23293,7 @@
       "scan_duration_seconds": 8.26,
       "content_hash": "1546214bd6447cefa79ae0288ade1dd1f37dfb1697809bde1ac08b0ed6115065",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23365,7 +23365,7 @@
       "scan_duration_seconds": 10.3,
       "content_hash": "081d4ff76c754382806261c04a7eb8e17e05d4ef78720006f5e35fc709ffbffb",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23437,7 +23437,7 @@
       "scan_duration_seconds": 12.36,
       "content_hash": "1946b15e2a3693a4200c28a309528192897285839eb55aeaa9717e044138e4df",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23509,7 +23509,7 @@
       "scan_duration_seconds": 11.73,
       "content_hash": "757209c30d24af1e76dfe67b2328096f1493334724321899239ee352f6981563",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23581,7 +23581,7 @@
       "scan_duration_seconds": 8.73,
       "content_hash": "e41d7c161cd92a615a0231c7639cd0f480d305d82d776a48a9857112a6298d89",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23653,7 +23653,7 @@
       "scan_duration_seconds": 18.56,
       "content_hash": "c0b0b65a0664ec1d761fb30c55b25408a06e2ae140314c096633b12685c8b56e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -23950,7 +23950,7 @@
       "scan_duration_seconds": 31.96,
       "content_hash": "66eb6dbf857b798e38d770119ad9cdae051fe5ca2e7a45488249663cad88d981",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24309,7 +24309,7 @@
       "scan_duration_seconds": 16.92,
       "content_hash": "192e4c25eb2341a7cab32a3480c184e5cb557f0e78264eb0608c93229ca031a3",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24441,7 +24441,7 @@
       "scan_duration_seconds": 25.63,
       "content_hash": "0ff0aece91b5aa5fc61668af03abcf145d71e75475a0c1cd160794cda873d885",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24573,7 +24573,7 @@
       "scan_duration_seconds": 16.43,
       "content_hash": "1753581a5d5e0aba358101eab0ae14dc929532eb8f16622d46d731e68c0ecbdc",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24645,7 +24645,7 @@
       "scan_duration_seconds": 18.82,
       "content_hash": "e5a9214d1b52145b9166d9b05cdfdcb021043c043cddc2e815c51b758e86d656",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24717,7 +24717,7 @@
       "scan_duration_seconds": 11.61,
       "content_hash": "275bddcbc4006a80a25a5989956bdb8d31920b50add9ac94d33b4c1b3871504c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24789,7 +24789,7 @@
       "scan_duration_seconds": 6.7,
       "content_hash": "8594bfd91aeef6b0a7fe267b602e34cc7a7f3455795aa2875d09e71915a6a7a4",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24861,7 +24861,7 @@
       "scan_duration_seconds": 14.6,
       "content_hash": "8205a7942e5d27ca13a99546f87dd7789f36382a047ab3cbbc7def457aa201a7",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -24933,7 +24933,7 @@
       "scan_duration_seconds": 15.53,
       "content_hash": "cfe9401e02cafd0942b890b430811f893d7f42c1e76fff6c02d25ef3378e440a",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25005,7 +25005,7 @@
       "scan_duration_seconds": 17.26,
       "content_hash": "d121deaaf6d19f89d2c8c8f7c4f6d51bce147d3bc5f5ff8cb96b8099d73e25a5",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25077,7 +25077,7 @@
       "scan_duration_seconds": 10.12,
       "content_hash": "4606044396948ca4b2feab9e78ec12eb20b333d9b008b8c5acc59db72dbf7994",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25149,7 +25149,7 @@
       "scan_duration_seconds": 8.96,
       "content_hash": "0215c6a46d0cbd8d2dd37edd3eade14a32d50d233fb3e33b751148b4b148e24e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25221,7 +25221,7 @@
       "scan_duration_seconds": 15.4,
       "content_hash": "5cf0048af9691d8f9764fc54837a28e2f5850747902a36c444197017336e76ac",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25293,7 +25293,7 @@
       "scan_duration_seconds": 14.12,
       "content_hash": "1df05ad2b0f2ac405f230b9622f0d42d3486ddf6f9af4b3a0fe0571031a996e3",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25425,7 +25425,7 @@
       "scan_duration_seconds": 7.62,
       "content_hash": "3ad751fe1561ccdca47998f418e56e9b8dddb13c2bcd448b66caa172ccbb212d",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25497,7 +25497,7 @@
       "scan_duration_seconds": 15.57,
       "content_hash": "1a34d6a3163cf8c4fe26c57656fe018c5ffecaf329783a639cab62a0aa6aec83",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25569,7 +25569,7 @@
       "scan_duration_seconds": 8.83,
       "content_hash": "d9953bab8874026b679082d6cefe71303bc38da6a75060632e563f3cec9bd0d6",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25641,7 +25641,7 @@
       "scan_duration_seconds": 9.25,
       "content_hash": "f14b1940c6ab9770a867fd72f16bb724cd7f93e5a5da79ed2dd3513a03ee66d2",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25713,7 +25713,7 @@
       "scan_duration_seconds": 6.95,
       "content_hash": "e8a21b58faa45292c7ea487154f28a581eca44d4c7b56e1eb0d6737456b12e6e",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25785,7 +25785,7 @@
       "scan_duration_seconds": 11.99,
       "content_hash": "bf4058d90322a8bbdcafb998a0846d813c7f369dbe1d6fc7b5d338547d17af3f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -25857,7 +25857,7 @@
       "scan_duration_seconds": 13.42,
       "content_hash": "542391bcde2c39deeeae12f1b28dfadda12d018bb793d5c80d103802183d0350",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26154,7 +26154,7 @@
       "scan_duration_seconds": 12.45,
       "content_hash": "974127b243eba1846c10ccce2718877f678b719f5861da7925c0bbe9541898ca",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26451,7 +26451,7 @@
       "scan_duration_seconds": 13.01,
       "content_hash": "465b587d5332148a4d7a0246e9ed4b6476ca249044030a3590315c57db806777",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26580,7 +26580,7 @@
       "scan_duration_seconds": 11.14,
       "content_hash": "44460795568a862264c4df49659e439311821db8762fe770e414b3ef5e6d2e91",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26652,7 +26652,7 @@
       "scan_duration_seconds": 8.46,
       "content_hash": "a11179c287ca73a23b123ea5e9a738295d5586e67f2dbb7ca06399b65b457537",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26724,7 +26724,7 @@
       "scan_duration_seconds": 9.75,
       "content_hash": "42e18132bdbbc4d5d798d0c49bb73e79f14c59d0253376c4015b1456e90838fb",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26796,7 +26796,7 @@
       "scan_duration_seconds": 12.11,
       "content_hash": "c23092b8c23c3f2ecb7f493b555fc457a18e6d1bd3ac4bede77335c08daa2bba",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26868,7 +26868,7 @@
       "scan_duration_seconds": 9.31,
       "content_hash": "05fff9eb8a2708b61e39acb7d0d886a2f812dce34cab80373b9802ac31fc7841",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -26940,7 +26940,7 @@
       "scan_duration_seconds": 21.52,
       "content_hash": "266b7ebcd1ebddc0a7ff114428b720404826cbbd44a4fd2b1fc9ec4ee16b072f",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -27012,7 +27012,7 @@
       "scan_duration_seconds": 25.78,
       "content_hash": "e2988cba4c47b9d045f995d7ee33b354a75a6e934d0e72747fbdd5323221935c",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -27207,7 +27207,7 @@
       "scan_duration_seconds": 7.12,
       "content_hash": "cf587f010767d82f20aa75c1980b9fc588f52c65a340417375a317b161d44b0b",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
@@ -27279,7 +27279,7 @@
       "scan_duration_seconds": 21.72,
       "content_hash": "5d90eecda7691c0de67abb278d9efbb7a3f6a1ae2cd3edb4d267d33cf2834f22",
       "last_scanned": "2026-11-02T09:17:38+00:00",
-      "reused_from_previous_report": false,
+      "reused_from_previous_report": true,
       "analyzers_used": [
         "behavioral_analyzer",
         "trigger_analyzer",
