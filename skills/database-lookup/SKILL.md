@@ -4,14 +4,14 @@ description: Queries documented public database APIs with explicit endpoints, fi
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.8"
+  version: "1.9"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
 
 # Database Lookup
 
-This skill catalogs 80 databases with public, registered, or licensed access patterns. Your job is to turn the user's intent into a reproducible retrieval: select the authoritative database(s), make bounded and rate-limited API calls, verify counts when completeness matters, and return results with enough provenance that another agent or human can repeat the lookup.
+This skill catalogs 81 databases with public, registered, or licensed access patterns. Your job is to turn the user's intent into a reproducible retrieval: select the authoritative database(s), make bounded and rate-limited API calls, verify counts when completeness matters, and return results with enough provenance that another agent or human can repeat the lookup.
 
 For complex biomedical retrievals, assume small filtering differences can change downstream conclusions. Prefer deterministic APIs, explicit identifiers, exhaustive pagination, and auditable logs over broad searching or plausible summaries.
 
@@ -127,6 +127,7 @@ Some databases require API keys or have access restrictions. When an API key is 
 | OMIM | `OMIM_API_KEY` | https://omim.org/api (academic license application) |
 | BioGRID | `BIOGRID_API_KEY` | https://webservice.thebiogrid.org (free) |
 | Alpha Vantage | `ALPHAVANTAGE_API_KEY` | https://www.alphavantage.co/support/#api-key |
+| FXMacroData (USD keyless; other currencies need a paid plan) | `FXMACRODATA_API_KEY` | https://fxmacrodata.com/documentation/reference |
 | US Census (optional below anonymous quota) | `CENSUS_API_KEY` | https://api.census.gov/data/key_signup.html |
 | DisGeNET | `DISGENET_API_KEY` | https://www.disgenet.com (academic subset or licensed plan) |
 | Addgene | `ADDGENE_API_KEY` | https://developers.addgene.org (approved license and scopes) |
@@ -138,6 +139,7 @@ Approval, entitlement and cost vary by provider; a website account may not grant
 
 | Database | Restriction | Free alternative |
 |---|---|---|
+| FXMacroData | Non-USD data requires an Individual or Business paid subscription | **ECB**, **FRED** or **World Bank**, depending on the requested series; verify coverage and access requirements |
 | DrugBank | Paid API license required | Use **ChEMBL** + **PubChem** + **OpenFDA** instead |
 | COSMIC | Licensed downloads; academic registration and use terms apply | **GDC** or **cBioPortal** may cover the requested cohort, with different coverage |
 | BRENDA | Free registration required (SOAP, not REST) | Use **KEGG** for enzyme/pathway data |
@@ -372,6 +374,7 @@ Read the relevant reference file before making any API call.
 | ECB | `references/ecb.md` | Euro exchange rates, monetary stats |
 | US Treasury | `references/treasury.md` | Debt, yield curves, fiscal data |
 | Alpha Vantage | `references/alphavantage.md` | Stocks, forex, crypto |
+| FXMacroData | `references/fxmacrodata.md` | Release-timed macro indicators, policy rates, release calendars (22 currencies) |
 | Data Commons | `references/datacommons.md` | Statistical knowledge graph |
 
 ### Social Sciences & Demographics

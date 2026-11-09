@@ -146,6 +146,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | Euro exchange rates, ECB monetary stats | ECB | — |
 | US debt, yield curves, fiscal data | US Treasury | FRED |
 | Stock prices, forex, crypto | Alpha Vantage | — |
+| Macro releases with release times across countries (CPI, GDP, jobs, policy rates), release calendars | FXMacroData | FRED, World Bank |
 | Statistical data across many topics | Data Commons | — |
 
 ### Social Sciences & Demographics
