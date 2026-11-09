@@ -1,0 +1,8 @@
+{
+  "_description": "IRF5 ge-eQTL in GTEx gtex_adipose_visceral tissue — a canonical SLE locus (Wang 2021). Pairs with SLE on the GWAS side.",
+  "dataset_id": "QTD000121",
+  "molecular_trait_id": "ENSG00000128604",
+  "chromosome": "7",
+  "start_bp": 128937250,
+  "end_bp": 129937250
+}
