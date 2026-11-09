@@ -32,12 +32,12 @@ system architecture diagrams, CONSORT diagrams, and other technical schematics.
 
 ## API key
 
-Generation requires an OpenRouter key. The script resolves it in this order:
+Generation requires an OpenRouter key. Prefer the environment variable: a key passed on the command line is visible in process listings, shell history, and agent transcripts. The script resolves it in this order:
 
-1. `--api-key`
-2. the `OPENROUTER_API_KEY` environment variable
-3. `OPENROUTER_API_KEY=` in a `.env` file, searching the working directory upward, then the
+1. the `OPENROUTER_API_KEY` environment variable
+2. `OPENROUTER_API_KEY=` in a `.env` file, searching the working directory upward, then the
    script's own directory
+3. `--api-key` (last resort; avoid it on shared machines)
 
 If none is present the script exits with setup instructions. Keys: https://openrouter.ai/keys
 
