@@ -270,7 +270,8 @@ class CitationValidator:
         # Check for duplicate DOIs
         doi_map = defaultdict(list)
         for entry in entries:
-            doi = entry['fields'].get('doi', '').strip()
+            # DOI names are case-insensitive (ISO 26324), so fold case before
+            doi = entry['fields'].get('doi', '').strip().lower()
             if doi:
                 doi_map[doi].append(entry['key'])
         
