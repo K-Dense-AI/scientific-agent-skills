@@ -603,7 +603,7 @@ bigwigCompare -b1 treatment.bw -b2 control.bw -o ratio.bw \
 ```
 
 Official contracts: [tool index](https://deeptools.readthedocs.io/en/latest/content/list_of_tools.html),
-[4.0.0 source](https://github.com/deeptools/deepTools/tree/4.0.0/deeptools).
+[4.0.0 source](https://github.com/deeptools/deepTools/tree/4.0.0/pydeeptools/deeptools).
 
 **Verified 4.0.0 limitation:** the legacy bigwigCompare writer can drop a final
 zero-valued run (an identical-track log2 comparison produced an empty bigWig).
