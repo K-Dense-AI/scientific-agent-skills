@@ -82,7 +82,7 @@ def train_and_evaluate_model(X, y, numeric_features, categorical_features,
     -----------
     X : DataFrame
         Feature matrix (feature selectors below are column names)
-    y : Series or array
+    y : array-like
         Target variable
     numeric_features : list
         List of numeric feature names
@@ -217,7 +217,7 @@ def train_and_evaluate_model(X, y, numeric_features, categorical_features,
     # ROC AUC (if binary classification)
     if len(tuned_model.classes_) == 2:
         # Column 1 corresponds to classes_[1], which need not mean disease/case.
-        roc_auc = roc_auc_score(y_test == tuned_model.classes_[1], y_pred_proba[:, 1])
+        roc_auc = roc_auc_score(np.asarray(y_test) == tuned_model.classes_[1], y_pred_proba[:, 1])
         metrics['roc_auc'] = roc_auc
         print(f"ROC AUC:   {roc_auc:.4f}")
 
