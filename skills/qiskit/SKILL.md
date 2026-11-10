@@ -1,10 +1,10 @@
 ---
 name: qiskit
-description: Builds, simulates, transpiles, and executes quantum circuits with Qiskit and IBM Quantum Runtime. Use for Qiskit 2.x circuits and operators, V2 Sampler or Estimator primitives, target-aware transpilation, local or noisy simulation, IBM QPU execution, Runtime sessions or batches, error mitigation, and Qiskit ecosystem packages.
+description: Builds, simulates, transpiles, and executes quantum circuits with Qiskit and IBM Quantum Runtime. Use for Qiskit 2.x circuits and operators, V2 Sampler or Estimator primitives, target-aware transpilation, local or noisy simulation, IBM QPU execution, Runtime sessions or batches, error mitigation, and Qiskit ecosystem packages. For Google Quantum AI hardware or noise-aware low-level circuit design, use cirq; for quantum ML with autodiff, use pennylane.
 license: Apache-2.0
 compatibility: Python 3.10+ on a supported 64-bit platform. Local SDK workflows need qiskit; noisy simulation needs qiskit-aer; IBM QPU access needs qiskit-ibm-runtime, network access, an IBM Quantum Platform account, and an API key.
 metadata:
-  version: "2.3"
+  version: "2.4"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---

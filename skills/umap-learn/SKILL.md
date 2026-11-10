@@ -1,10 +1,10 @@
 ---
 name: umap-learn
-description: Applies UMAP-learn to nonlinear dimensionality reduction, 2D/3D embeddings, clustering preprocessing, supervised or semi-supervised UMAP, DensMAP, AlignedUMAP, and Parametric UMAP workflows.
+description: Applies UMAP-learn to nonlinear dimensionality reduction, 2D/3D embeddings, clustering preprocessing, supervised or semi-supervised UMAP, DensMAP, AlignedUMAP, and Parametric UMAP workflows. For PCA, t-SNE, clustering, or general ML pipelines, use scikit-learn.
 license: BSD-3-Clause license
 compatibility: Requires Python 3.9+ and umap-learn; optional HDBSCAN, Matplotlib, and TensorFlow with Keras 3. Network access is needed for installation, not local fitting.
 metadata:
-  version: "1.5"
+  version: "1.6"
   last-reviewed: "2026-10-01"
   upstream-version: "0.5.12"
   skill-author: K-Dense Inc.
