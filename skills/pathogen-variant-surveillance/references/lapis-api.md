@@ -117,6 +117,10 @@ threshold locally. A missing mutation row still does not provide the opposite si
 or prove a zero frequency; the comparison preserves missing values and labels `not_comparable`.
 AA genes and nucleotide sequence names are distinct namespaces (`HA` versus `seg4`, `S` versus
 `main`). Validate against `referenceGenome`; positions refer to that declared reference.
+On single-sequence instances (SARS-CoV-2, mpox, measles, RSV, hMPV, West Nile, Ebola) the
+reference lists one nucleotide sequence, `main`, but nucleotide mutation rows carry
+`sequenceName: null` and an unprefixed `mutation` (`C241T`); multi-segment instances name the
+segment (`seg4:A30C`). Treat a null name as that one sequence when filtering by segment.
 
 Source: [mutation filters](https://lapis.cov-spectrum.org/open/v2/docs/concepts/mutation-filters/).
 
