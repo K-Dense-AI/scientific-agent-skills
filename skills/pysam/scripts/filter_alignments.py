@@ -240,6 +240,8 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
     input_kwargs: dict[str, Any] = {
         "threads": args.threads,
         "require_index": args.region is not None,
+        # A sequential unmapped-only SAM/BAM may have no reference dictionary.
+        "check_sq": input_mode == "rc" or args.region is not None,
     }
     if reference is not None:
         input_kwargs["reference_filename"] = str(reference)
@@ -279,6 +281,8 @@ def filter_file(args: argparse.Namespace) -> dict[str, Any]:
                     **output_kwargs,
                 ) as destination:
                     for read in selected_reads(source, args.region):
+                        if not source.nreferences and not read.is_unmapped:
+                            raise ValueError("Mapped records require a reference sequence dictionary")
                         selected += 1
                         reasons = exclusion_reasons(read, args)
                         if reasons:
