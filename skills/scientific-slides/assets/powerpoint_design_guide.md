@@ -13,7 +13,7 @@ This guide provides comprehensive instructions for creating professional scienti
 
 **Anti-Pattern Warning**: All-bullet-point slides with black text on white background = instant boredom and forgotten science.
 
-The examples target [PptxGenJS 4.0.1](https://gitbrent.github.io/PptxGenJS/docs/)
+The examples target [PptxGenJS 4.0.1](https://gitbrent.github.io/PptxGenJS/)
 (reviewed 2026-09-30). Use Node.js with `pptxgenjs` installed in a task-local project.
 Code fragments assume supplied images and verified research claims; example numbers
 and citations are placeholders. Native slide composition preserves quantitative
@@ -636,7 +636,7 @@ python skills/scientific-slides/scripts/validate_presentation.py output.pptx --d
 - Image editing (PowerPoint built-in, external tools)
 
 **PowerPoint Tooling Documentation**:
-- [PptxGenJS](https://gitbrent.github.io/PptxGenJS/docs/): programmatic creation
+- [PptxGenJS](https://gitbrent.github.io/PptxGenJS/): programmatic creation
 - [python-pptx](https://python-pptx.readthedocs.io/): template editing
 - `scripts/pdf_to_images.py` and `scripts/validate_presentation.py`: rendering and checks bundled with this skill
 
