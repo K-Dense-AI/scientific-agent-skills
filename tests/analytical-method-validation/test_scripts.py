@@ -284,6 +284,27 @@ class TestVarianceComponents(unittest.TestCase):
         self.assertEqual(comp.sd_between, 0.0)
         self.assertAlmostEqual(comp.sd_intermediate, comp.sd_repeatability, places=12)
 
+    def test_truncated_between_variance_keeps_within_df(self):
+        # MS_between = 0 < MS_within = 1. The intermediate SD is the repeatability
+        # SD, so it carries df_within (2), never more than N - 1 (3).
+        comp = common.one_way_components({"d1": [100.0, 102.0], "d2": [101.0, 101.0]})
+        self.assertEqual(comp.sd_between, 0.0)
+        self.assertEqual(comp.satterthwaite_df(), 2.0)
+
+    def test_satterthwaite_df_hand_check_and_bound(self):
+        groups = {"d1": [10.0, 10.2, 9.8], "d2": [10.5, 10.6, 10.4], "d3": [9.6, 9.5, 9.7]}
+        comp = common.one_way_components(groups)
+        a, b = 0.61 / 3.0, 0.02 * 2.0 / 3.0
+        expected = (a + b) ** 2 / (a ** 2 / 2 + b ** 2 / 6)
+        self.assertAlmostEqual(comp.satterthwaite_df(), expected, places=10)
+        for groups in (
+            {"a": [1.0, 3.0, 2.0], "b": [2.0, 1.0, 3.0], "c": [3.0, 2.0, 1.0]},
+            {"a": [1.0, 1.1, 0.9, 1.05], "b": [2.0, 2.1], "c": [3.0, 3.1, 2.9]},
+            {"a": [5.0, 5.2], "b": [5.1, 5.1], "c": [5.05, 5.15]},
+        ):
+            comp = common.one_way_components(groups)
+            self.assertLessEqual(comp.satterthwaite_df(), comp.n_total - 1)
+
     def test_unbalanced_effective_n(self):
         groups = {"a": [1.0, 1.1, 0.9, 1.05], "b": [2.0, 2.1], "c": [3.0, 3.1, 2.9]}
         comp = common.one_way_components(groups)
@@ -625,6 +646,16 @@ class TestCheckResponse(unittest.TestCase):
 
 
 class TestCheckAccuracyPrecision(unittest.TestCase):
+    def test_truncated_between_day_variance_reports_within_df(self):
+        res = run_script("check_accuracy_precision", "-i", str(FIXTURES / "ap_truncated_between.csv"),
+                         "--format", "json")
+        rows = json.loads(res.stdout)[0]["precision"]
+        rep = [r for r in rows if r["component"].startswith("repeatability")][0]
+        inter = [r for r in rows if r["component"].startswith("intermediate")][0]
+        self.assertEqual(inter["df"], rep["df"])
+        self.assertEqual(inter["ci90_low_sd"], rep["ci90_low_sd"])
+        self.assertEqual(inter["ci90_high_sd"], rep["ci90_high_sd"])
+
     def test_between_day_shift_inflates_intermediate_precision(self):
         res = run_script("check_accuracy_precision", "-i", str(FIXTURES / "ap_between_day.csv"),
                          "--format", "json")
@@ -851,6 +882,29 @@ class TestCheckBioanalyticalRun(unittest.TestCase):
         res = run_script("check_bioanalytical_run", "--modality", "chromatographic",
                          "--run", str(FIXTURES / "m10_run_bad_type.csv"))
         self.assertEqual(res.returncode, 2)
+
+    def test_results_exactly_on_the_limit_pass(self):
+        # 100 * (3.45 - 3) / 3 is 15.000000000000005 in binary floating point;
+        # M10's "within +/-15%" (+/-20% at the LLOQ) includes the limit.
+        res = run_script("check_bioanalytical_run", "--modality", "chromatographic",
+                         "--run", str(FIXTURES / "m10_run_on_limit.csv"), "--format", "json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        rows = json.loads(res.stdout)[0]["run"]
+        self.assertTrue(all(r["within"] is True for r in rows), rows)
+        self.assertNotIn("finding:", res.stderr)
+
+    def test_isr_exactly_on_the_limit_passes(self):
+        res = run_script("check_bioanalytical_run", "--modality", "chromatographic",
+                         "--isr", str(FIXTURES / "m10_isr_on_limit.csv"), "--format", "json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        rows = json.loads(res.stdout)[0]["isr"]
+        self.assertEqual([r["within"] for r in rows], [True, True, True])
+
+    def test_results_just_past_the_limit_still_fail(self):
+        crit = catalog.M10_CRITERIA["chromatographic"]
+        self.assertFalse(common.within_limit(15.0001, crit["qc_run_tolerance_pct"]))
+        self.assertTrue(common.within_limit(100 * (3.45 - 3) / 3, crit["qc_run_tolerance_pct"]))
+        self.assertTrue(common.within_limit(100 * 0.2 / 1.0, crit["isr_tolerance_pct"]))
 
 
 class TestCompareMethods(unittest.TestCase):
