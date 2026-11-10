@@ -185,7 +185,12 @@ def extract_metadata(article: ET.Element) -> dict[str, Any]:
         if field_name and metadata[field_name] is None:
             metadata[field_name] = collapse_ws(article_id.text)
 
-    for contributor in front.findall(".//contrib"):
+    # Journal contributors and explicitly non-author article contributors are
+    # not article authors. Keep nested collaboration members and the legacy
+    # handling of untyped contributors within article metadata.
+    for contributor in front.findall("article-meta//contrib"):
+        if contributor.get("contrib-type", "author") != "author":
+            continue
         surname = contributor.find(".//surname")
         given = contributor.find(".//given-names")
         name = " ".join(
