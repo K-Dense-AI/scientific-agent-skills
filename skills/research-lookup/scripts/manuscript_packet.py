@@ -16,7 +16,7 @@ DOI_PATTERN = re.compile(
     re.IGNORECASE,
 )
 PMID_PATTERN = re.compile(
-    r"(?:pubmed\.ncbi\.nlm\.nih\.gov/|pmid[:\s]*)(\d{6,9})",
+    r"(?:pubmed\.ncbi\.nlm\.nih\.gov/|pmid[:\s]*)(\d{1,9})",
     re.IGNORECASE,
 )
 YEAR_PATTERN = re.compile(r"\b(19\d{2}|20\d{2})\b")
