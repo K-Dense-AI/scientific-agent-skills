@@ -86,7 +86,7 @@ Create a clean environment for the comparison:
 ```bash
 uv venv --python 3.12 .venv-markitdown
 source .venv-markitdown/bin/activate
-uv pip install "markitdown[all]==0.1.8"
+uv pip install "markitdown[all]==0.1.8" "azure-ai-contentunderstanding==1.2.0b3"
 ```
 
 Do not test a migration in an environment that still contains unknown third-party plugins.
@@ -270,7 +270,7 @@ uv pip install "markitdown[all]"
 Repository-standard reproducible install:
 
 ```bash
-uv pip install "markitdown[all]==0.1.8"
+uv pip install "markitdown[all]==0.1.8" "azure-ai-contentunderstanding==1.2.0b3"
 ```
 
 The base package no longer implies every format dependency. Select an extra or `[all]`.

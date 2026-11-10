@@ -9,7 +9,8 @@ Pin both packages to ensure the documented converter version:
 ```bash
 uv pip install \
   "markitdown==0.1.8" \
-  "markitdown-mcp==0.0.1a7"
+  "markitdown-mcp==0.0.1a7" \
+  "azure-ai-contentunderstanding==1.2.0b3"
 ```
 
 The server exposes exactly one tool:
