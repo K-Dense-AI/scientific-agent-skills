@@ -5,7 +5,7 @@ license: MIT
 compatibility: Bundled CLIs require Python 3.10+ (standard library only). PufferLib 5.0 requires a native C/CUDA toolchain; CPU builds support evaluation, not training. PyPI 3.0.0 declares Python >=3.9 and needs a native source build with NumPy <2 and Gymnasium <=0.29.1. Native dependencies and network access are needed for installation; bundled checks require neither.
 allowed-tools: Read Bash Grep Python
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: "K-Dense Inc."
   last-reviewed: "2026-10-01"
 ---
