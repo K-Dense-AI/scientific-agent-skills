@@ -225,7 +225,7 @@ def main() -> int:
     if not scan_targets:
         print("No skill directories to scan — writing no-op comment.")
         md = format_comment(Report(), [])
-        Path(args.output).write_text(md)
+        Path(args.output).write_text(md, encoding="utf-8")
         return 0
 
     if not os.getenv("SKILL_SCANNER_LLM_API_KEY"):
@@ -235,7 +235,7 @@ def main() -> int:
             "SKILL_SCANNER_LLM_API_KEY unset — skipping scan "
             "(typical for pull_request workflows from forks)."
         )
-        Path(args.output).write_text(SKIP_NO_API_KEY_COMMENT)
+        Path(args.output).write_text(SKIP_NO_API_KEY_COMMENT, encoding="utf-8")
         print(f"Comment written to {args.output}")
         return 0
 
@@ -256,7 +256,7 @@ def main() -> int:
     )
 
     md = format_comment(report, scan_targets)
-    Path(args.output).write_text(md)
+    Path(args.output).write_text(md, encoding="utf-8")
     print(f"Comment written to {args.output}")
 
     blocked, reason = _should_block(report, args.fail_on)
