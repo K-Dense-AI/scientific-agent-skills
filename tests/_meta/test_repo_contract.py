@@ -15,6 +15,7 @@ run it on every pull request in seconds.
 from __future__ import annotations
 
 import json
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -127,6 +128,58 @@ class StructuralContractTests(unittest.TestCase):
                         else check(skill)
                     )
                     self.assertEqual(problems, [])
+
+
+class TopLevelEntryTests(unittest.TestCase):
+    """Unit tests for the `documented_top_level_entries` contract rule."""
+
+    maxDiff = None
+
+    def _skill(self, tmp: str, files: dict[str, str]) -> Path:
+        skill = Path(tmp) / "demo-skill"
+        skill.mkdir()
+        for relative, content in files.items():
+            path = skill / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        return skill
+
+    def test_canonical_layout_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = self._skill(tmp, {"SKILL.md": "---\nname: demo-skill\n---\n"})
+            (skill / "references").mkdir()
+            self.assertEqual(structure.top_level_entry_problems(skill), [])
+
+    def test_bundled_license_passes_unmentioned(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = self._skill(tmp, {"SKILL.md": "# Demo\n", "LICENSE.txt": "terms"})
+            self.assertEqual(structure.top_level_entry_problems(skill), [])
+
+    def test_documented_extra_file_and_dir_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = self._skill(
+                tmp,
+                {
+                    "SKILL.md": "# Demo\n\nSee `forms.md` and `templates/a.md`.\n",
+                    "forms.md": "form help",
+                    "templates/a.md": "template",
+                },
+            )
+            self.assertEqual(structure.top_level_entry_problems(skill), [])
+
+    def test_undocumented_extra_is_flagged_by_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = self._skill(
+                tmp, {"SKILL.md": "# Demo\n", "scratch.txt": "notes"}
+            )
+            problems = structure.top_level_entry_problems(skill)
+            self.assertEqual(len(problems), 1)
+            self.assertIn("`scratch.txt`", problems[0])
+
+    def test_rule_is_registered_as_document_wide(self) -> None:
+        self.assertIn(
+            "documented_top_level_entries", structure.DOCUMENT_RULES
+        )
 
 
 class SharedCopyTests(unittest.TestCase):
