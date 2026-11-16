@@ -591,7 +591,11 @@ class CitationValidator:
 
 
 def main():
-    """Command-line interface."""
+    """Validate a BibTeX file from the command line.
+
+    @param: Command-line arguments are parsed from the current process.
+    @returns: None; exits with status 1 when high-severity findings exist.
+    """
     parser = argparse.ArgumentParser(
         description='Validate BibTeX files for errors and inconsistencies',
         epilog='Example: python validate_citations.py references.bib'
@@ -703,9 +707,13 @@ def main():
             json.dump(report, f, indent=2)
         print(f'\nDetailed report saved to: {args.report}')
     
-    # Exit with error code if there are high-severity errors
-    has_high_errors = any(e.get('severity') == 'high' for e in report['errors'])
-    if has_high_errors:
+    # Exit with error code if any high-severity validation finding exists.
+    has_high_severity_findings = any(
+        finding.get('severity') == 'high'
+        for findings in (report['errors'], report['duplicates'])
+        for finding in findings
+    )
+    if has_high_severity_findings:
         sys.exit(1)
 
 

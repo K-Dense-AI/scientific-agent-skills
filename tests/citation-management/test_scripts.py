@@ -11,6 +11,7 @@ through real `.bib` files.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -386,6 +387,77 @@ class ValidationTests(BibTeXTestCase):
     def test_duplicate_detection_finds_repeated_entries(self) -> None:
         entries = self.formatter.parse_bibtex_file(self.bib(BIBLIOGRAPHY + BIBLIOGRAPHY))
         self.assertTrue(self.validator.detect_duplicates(entries))
+
+    def test_cli_exit_status_reflects_duplicate_severity(self) -> None:
+        """Check that CLI failure follows duplicate severity.
+
+        @param self: The unittest case instance.
+        @returns None: Asserts exit codes for high- and medium-severity cases.
+        """
+        cases = (
+            (
+                "high-doi",
+                """@article{a,
+  author = {Smith, Alice},
+  title = {Alpha experiment},
+  journal = {Test Journal},
+  year = {2026},
+  volume = {1},
+  pages = {1--2},
+  doi = {10.1234/abcd}
+}
+@article{b,
+  author = {Jones, Bob},
+  title = {Unrelated beta experiment},
+  journal = {Test Journal},
+  year = {2026},
+  volume = {2},
+  pages = {3--4},
+  doi = {10.1234/abcd}
+}
+""",
+                1,
+            ),
+            (
+                "medium-title",
+                """@article{a,
+  author = {Smith, Alice},
+  title = {Same title},
+  journal = {Test Journal},
+  year = {2026},
+  volume = {1},
+  pages = {1--2},
+  doi = {10.1234/abcd}
+}
+@article{b,
+  author = {Jones, Bob},
+  title = {Same, title!},
+  journal = {Test Journal},
+  year = {2026},
+  volume = {2},
+  pages = {3--4},
+  doi = {10.5678/wxyz}
+}
+""",
+                0,
+            ),
+        )
+        script = SKILL_ROOT / "scripts" / "validate_citations.py"
+        for name, bibliography, expected_status in cases:
+            with self.subTest(name=name):
+                bib_path = self.root / f"{name}.bib"
+                bib_path.write_text(bibliography, encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, str(script), str(bib_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(
+                    result.returncode,
+                    expected_status,
+                    result.stdout + result.stderr,
+                )
 
     def test_distinct_entries_are_not_reported_as_duplicates(self) -> None:
         entries = self.formatter.parse_bibtex_file(self.bib())
