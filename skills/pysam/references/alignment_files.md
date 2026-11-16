@@ -98,6 +98,13 @@ with pysam.AlignmentFile("input.bam", "rb") as bam:
 - Preserves file order.
 - Includes unplaced unmapped records.
 
+SAM headers are optional, and unplaced unmapped SAM/BAM records need no `@SQ`
+sequence dictionary. For that sequential case, open with `check_sq=False`; this
+relaxes the dictionary-presence check, not HTSlib record parsing. The bundled QC
+and filter additionally reject decoded mapped records when the dictionary is empty.
+Indexed region selection and CRAM retain their existing dictionary/reference checks.
+The metadata-only inspector does not scan or validate alignment records.
+
 `fetch("*")` requests only unplaced unmapped records at the end of a
 coordinate-sorted alignment file.
 
