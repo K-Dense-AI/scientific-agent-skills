@@ -549,6 +549,12 @@ packages = ["pandas", "rdkit"]
 [skills.rdkit]
 packages = ["rdkit==2026.3.6"]
 
+# The bundled helpers only need RDKit: they validate targets before a search and
+# check routes afterwards, reading aizynthcli's JSON rather than importing
+# aizynthfinder (which pins numpy<2 and cannot share this interpreter).
+[skills.retrosynthesis]
+packages = ["rdkit==2026.3.6"]
+
 [skills.datamol]
 packages = ["datamol==0.13.0", "rdkit==2026.3.6", "s3fs", "gcsfs"]
 
@@ -894,6 +900,7 @@ relion = "relion skill: RELION 5.0.1 native C++ executables are not supplied by 
 cellprofiler = "cellprofiler skill: CellProfiler 4.2.8 needs Java and native system dependencies. Real integration was tested in the official linux/amd64 Docker image; the portable helper suite needs NumPy and tifffile only."
 mageck = "mageck skill: MAGeCK 0.5.9.5 requires a source or Bioconda installation with its compiled RRA binary. Put the executable on PATH to run real integration tests; the bundled validation helpers use only the standard library."
 adaptyv-sdk = "adaptyv skill: distributed from GitHub only, not on PyPI"
+aizynthfinder = "retrosynthesis skill: aizynthfinder 4.4.1 requires Python >=3.10,<3.13 and pins numpy<2.0 and rdkit<2024, so it cannot share this suite's 3.13 interpreter or the rdkit release the other chemistry skills target. It was installed and exercised separately on Python 3.12 (with pyarrow pinned below 26); the bundled helpers need RDKit only and read aizynthcli output files."
 tiledbvcf = "tiledbvcf skill: native tiledbvcf 0.40.3 is not on PyPI; install tiledb::tiledbvcf-py from the official TileDB Conda channel (osx-arm64/osx-64/linux-64, Python 3.9-3.12), or build source. Native tests run separately from uv."
 matlabengine = "matlab skill: requires a local MATLAB installation to build against"
 hypogenic = "hypogenic skill: pins torch<=2.4.1, which has no cp313 wheels"
