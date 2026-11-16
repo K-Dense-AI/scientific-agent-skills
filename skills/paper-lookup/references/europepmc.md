@@ -149,6 +149,7 @@ parentheses.
 | `AUTH` | Author name | `AUTH:"Doudna J"` |
 | `TITLE` | Title | `TITLE:"gene editing"` |
 | `ABSTRACT` | Abstract | `ABSTRACT:organoid` |
+| `ACCESSION_ID` | Indexed data accession mentions | `ACCESSION_ID:GSE57338` |
 | `PUB_YEAR` | Publication year | `PUB_YEAR:2023`, `PUB_YEAR:[2020 TO 2024]` |
 | `HAS_FT` | Full text indexed | `HAS_FT:Y` |
 | `OPEN_ACCESS` | Open access | `OPEN_ACCESS:Y` |
@@ -174,6 +175,43 @@ curl -s --get "https://www.ebi.ac.uk/europepmc/webservices/rest/search" \
 `hitCount` 1972, with `bookOrReportDetails.publisher` confirming `bioRxiv` on each hit. Take the
 `doi` (a `10.1101/...` preprint DOI) from these results and hand it to the bioRxiv API for
 preprint-specific metadata such as the published-version link.
+
+## Papers linked to a dataset
+
+When the research task or an article already read supplies a dataset accession,
+use the [data-accession index](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/7ZTIYvhJq6E)
+to supplement topic searches. It can find papers whose titles or abstracts omit
+the dataset. Replace this example accession with the one from the actual task:
+
+```bash
+curl --fail --get --max-time 45 \
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search" \
+  --data-urlencode 'query=ACCESSION_ID:GSE57338' \
+  --data-urlencode 'format=json' \
+  --data-urlencode 'resultType=core' \
+  --data-urlencode 'pageSize=20' \
+  --output dataset-papers.json
+```
+
+Check `errCode`, `resultList`, and the echoed `request.queryString` as above.
+Save the query, access date, returned page and its bound. Keep the original topic
+results and merge by DOI, retaining unresolved identities and preprint/published
+version distinctions. The accession index is a complementary source, not an
+exhaustive list of dataset users.
+
+Screen for the research need using title, study type and available source links.
+A missing index abstract need not exclude a relevant record with readable full
+text. Read selected PMCID records via `/{PMCID}/fullTextXML` and the bundled JATS
+reader, or use a same-paper source returned in metadata. Locate the accession in
+the Methods, results or data statement: distinguish original data, discovery,
+validation, comparison and a cited mention. An index match alone does not prove
+reuse. Track shared cohorts across papers rather than counting each publication
+as independent validation, and cite the formal DOI beside the supported claim
+with a body locator.
+
+This bounded given-dataset lookup does not replace the original topic search.
+For an exhaustive request, use the pagination/count reconciliation below and
+report the accession index's coverage separately from scientific eligibility.
 
 ## Result Object (resultType=core, key fields)
 
