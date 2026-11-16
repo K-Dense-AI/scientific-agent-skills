@@ -4,7 +4,7 @@ description: Drafts, revises, and audits scientific manuscripts or reports with 
 license: MIT
 compatibility: Requires Python 3.11+ only for optional dependency-free local CLIs; core guidance is platform-neutral. Bundled tools are offline and require no API keys.
 metadata:
-  version: "2.3"
+  version: "2.4"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -198,6 +198,9 @@ The reference checker validates syntax and duplicate identifiers without network
 resolution. A human must still compare every identifier and quotation with the opened
 source. Follow NLM *Citing Medicine* or the current official style required by the
 venue [SW-S20, SW-S21].
+
+Title matching preserves Unicode letters and numbers, including Greek letters that
+distinguish scientific terms.
 
 ### 8. Validate authorship and disclosure
 
