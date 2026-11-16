@@ -96,7 +96,7 @@ def main() -> int:
 
     weights = build_weights(xs, args.weight)
     fit = fit_linear(xs, ys, weights)
-    distinct = sorted({round(x, 12) for x in xs})
+    distinct = sorted(set(xs))
 
     findings: list[str] = []
 
@@ -134,7 +134,7 @@ def main() -> int:
     level_rows = []
     by_level: dict[float, list[float]] = {}
     for x, y in zip(xs, ys):
-        by_level.setdefault(round(x, 12), []).append(y)
+        by_level.setdefault(x, []).append(y)
     for level in distinct:
         responses = by_level[level]
         back = [
