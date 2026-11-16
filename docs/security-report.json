@@ -1,12 +1,12 @@
 {
-  "generated": "2026-11-09T09:17:24+00:00",
+  "generated": "2026-11-16T09:18:52+00:00",
   "run": {
     "scanner_version": "2.3.2",
     "model": "claude-opus-5",
     "workers": 8,
     "skills_rescanned": 0,
     "skills_reused": 177,
-    "wall_seconds": 1.3,
+    "wall_seconds": 0.9,
     "full_scan": false,
     "cache_invalidated_because": null,
     "last_full_scan": "2026-11-02T09:23:02+00:00"
@@ -773,27 +773,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_461c61bd",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.cms.gov' is referenced by 3 skills: analytical-method-validation, iso-standards-readiness, treatment-plans. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.cms.gov",
-        "skills": [
-          "analytical-method-validation",
-          "iso-standards-readiness",
-          "treatment-plans"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_03ea00a6",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -832,6 +811,27 @@
         "skills": [
           "analytical-method-validation",
           "pkpd-modeling"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_461c61bd",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.cms.gov' is referenced by 3 skills: analytical-method-validation, iso-standards-readiness, treatment-plans. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.cms.gov",
+        "skills": [
+          "analytical-method-validation",
+          "iso-standards-readiness",
+          "treatment-plans"
         ]
       }
     },
@@ -1834,86 +1834,71 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_0d83c227",
+      "id": "CROSS_SKILL_URL_b3bf4ced",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'proceedings.neurips.cc' is referenced by 2 skills: citation-management, shap. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'pmc.ncbi.nlm.nih.gov' is referenced by 9 skills: citation-management, clinical-decision-support, flowio, hypothesis-generation, matchms, neurokit2, paper-lookup, primer-design, scientific-brainstorming. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "proceedings.neurips.cc",
+        "domain": "pmc.ncbi.nlm.nih.gov",
         "skills": [
           "citation-management",
-          "shap"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_72a62d34",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'alphafold.ebi.ac.uk' is referenced by 2 skills: citation-management, database-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "alphafold.ebi.ac.uk",
-        "skills": [
-          "citation-management",
-          "database-lookup"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_5b3dbc7b",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'pandas.pydata.org' is referenced by 4 skills: citation-management, exploratory-data-analysis, flowio, seaborn. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "pandas.pydata.org",
-        "skills": [
-          "citation-management",
-          "exploratory-data-analysis",
+          "clinical-decision-support",
           "flowio",
-          "seaborn"
+          "hypothesis-generation",
+          "matchms",
+          "neurokit2",
+          "paper-lookup",
+          "primer-design",
+          "scientific-brainstorming"
         ]
       }
     },
     {
-      "id": "CROSS_SKILL_URL_7b8c69ed",
+      "id": "CROSS_SKILL_URL_7d0de1e4",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.crossref.org' is referenced by 4 skills: citation-management, literature-review, paper-lookup, scholar-evaluation. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'api.openalex.org' is referenced by 3 skills: citation-management, literature-review, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "www.crossref.org",
+        "domain": "api.openalex.org",
         "skills": [
           "citation-management",
           "literature-review",
-          "paper-lookup",
-          "scholar-evaluation"
+          "paper-lookup"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_def962e7",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'dx.doi.org' is referenced by 3 skills: citation-management, medchem, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "dx.doi.org",
+        "skills": [
+          "citation-management",
+          "medchem",
+          "venue-templates"
         ]
       }
     },
@@ -1968,19 +1953,19 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_7d0de1e4",
+      "id": "CROSS_SKILL_URL_95e39a89",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'api.openalex.org' is referenced by 3 skills: citation-management, literature-review, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'community.crossref.org' is referenced by 3 skills: citation-management, literature-review, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "api.openalex.org",
+        "domain": "community.crossref.org",
         "skills": [
           "citation-management",
           "literature-review",
@@ -1989,29 +1974,22 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_b3bf4ced",
+      "id": "CROSS_SKILL_URL_72a62d34",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'pmc.ncbi.nlm.nih.gov' is referenced by 9 skills: citation-management, clinical-decision-support, flowio, hypothesis-generation, matchms, neurokit2, paper-lookup, primer-design, scientific-brainstorming. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'alphafold.ebi.ac.uk' is referenced by 2 skills: citation-management, database-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "pmc.ncbi.nlm.nih.gov",
+        "domain": "alphafold.ebi.ac.uk",
         "skills": [
           "citation-management",
-          "clinical-decision-support",
-          "flowio",
-          "hypothesis-generation",
-          "matchms",
-          "neurokit2",
-          "paper-lookup",
-          "primer-design",
-          "scientific-brainstorming"
+          "database-lookup"
         ]
       }
     },
@@ -2038,23 +2016,24 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_95e39a89",
+      "id": "CROSS_SKILL_URL_7b8c69ed",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'community.crossref.org' is referenced by 3 skills: citation-management, literature-review, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'www.crossref.org' is referenced by 4 skills: citation-management, literature-review, paper-lookup, scholar-evaluation. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "community.crossref.org",
+        "domain": "www.crossref.org",
         "skills": [
           "citation-management",
           "literature-review",
-          "paper-lookup"
+          "paper-lookup",
+          "scholar-evaluation"
         ]
       }
     },
@@ -2082,23 +2061,110 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_def962e7",
+      "id": "CROSS_SKILL_URL_0d83c227",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'dx.doi.org' is referenced by 3 skills: citation-management, medchem, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'proceedings.neurips.cc' is referenced by 2 skills: citation-management, shap. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "dx.doi.org",
+        "domain": "proceedings.neurips.cc",
         "skills": [
           "citation-management",
-          "medchem",
-          "venue-templates"
+          "shap"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_5b3dbc7b",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'pandas.pydata.org' is referenced by 4 skills: citation-management, exploratory-data-analysis, flowio, seaborn. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "pandas.pydata.org",
+        "skills": [
+          "citation-management",
+          "exploratory-data-analysis",
+          "flowio",
+          "seaborn"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_cbbcb114",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'book.gradepro.org' is referenced by 2 skills: clinical-decision-support, scientific-critical-thinking. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "book.gradepro.org",
+        "skills": [
+          "clinical-decision-support",
+          "scientific-critical-thinking"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_bb929840",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.gradeworkinggroup.org' is referenced by 2 skills: clinical-decision-support, literature-review. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.gradeworkinggroup.org",
+        "skills": [
+          "clinical-decision-support",
+          "literature-review"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_afc05b7f",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.fda.gov' is referenced by 8 skills: clinical-decision-support, clinical-reports, experimental-design, exploratory-data-analysis, iso-standards-readiness, pkpd-modeling, scientific-critical-thinking, treatment-plans. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.fda.gov",
+        "skills": [
+          "clinical-decision-support",
+          "clinical-reports",
+          "experimental-design",
+          "exploratory-data-analysis",
+          "iso-standards-readiness",
+          "pkpd-modeling",
+          "scientific-critical-thinking",
+          "treatment-plans"
         ]
       }
     },
@@ -2124,25 +2190,42 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_913f2b86",
+      "id": "CROSS_SKILL_URL_5354a44c",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.strobe-statement.org' is referenced by 5 skills: clinical-decision-support, peer-review, scientific-critical-thinking, scientific-writing, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'www.federalregister.gov' is referenced by 2 skills: clinical-decision-support, iso-standards-readiness. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "www.strobe-statement.org",
+        "domain": "www.federalregister.gov",
         "skills": [
           "clinical-decision-support",
-          "peer-review",
-          "scientific-critical-thinking",
-          "scientific-writing",
-          "venue-templates"
+          "iso-standards-readiness"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_ed2124ec",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.ich.org' is referenced by 2 skills: clinical-decision-support, clinical-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.ich.org",
+        "skills": [
+          "clinical-decision-support",
+          "clinical-reports"
         ]
       }
     },
@@ -2222,108 +2305,25 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_afc05b7f",
+      "id": "CROSS_SKILL_URL_913f2b86",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.fda.gov' is referenced by 8 skills: clinical-decision-support, clinical-reports, experimental-design, exploratory-data-analysis, iso-standards-readiness, pkpd-modeling, scientific-critical-thinking, treatment-plans. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'www.strobe-statement.org' is referenced by 5 skills: clinical-decision-support, peer-review, scientific-critical-thinking, scientific-writing, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "www.fda.gov",
+        "domain": "www.strobe-statement.org",
         "skills": [
           "clinical-decision-support",
-          "clinical-reports",
-          "experimental-design",
-          "exploratory-data-analysis",
-          "iso-standards-readiness",
-          "pkpd-modeling",
+          "peer-review",
           "scientific-critical-thinking",
-          "treatment-plans"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_5354a44c",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.federalregister.gov' is referenced by 2 skills: clinical-decision-support, iso-standards-readiness. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.federalregister.gov",
-        "skills": [
-          "clinical-decision-support",
-          "iso-standards-readiness"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_bb929840",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.gradeworkinggroup.org' is referenced by 2 skills: clinical-decision-support, literature-review. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.gradeworkinggroup.org",
-        "skills": [
-          "clinical-decision-support",
-          "literature-review"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_cbbcb114",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'book.gradepro.org' is referenced by 2 skills: clinical-decision-support, scientific-critical-thinking. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "book.gradepro.org",
-        "skills": [
-          "clinical-decision-support",
-          "scientific-critical-thinking"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_ed2124ec",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.ich.org' is referenced by 2 skills: clinical-decision-support, clinical-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.ich.org",
-        "skills": [
-          "clinical-decision-support",
-          "clinical-reports"
+          "scientific-writing",
+          "venue-templates"
         ]
       }
     },
@@ -2594,84 +2594,122 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_5dbdb24f",
+      "id": "CROSS_SKILL_URL_9564f236",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'physics.nist.gov' is referenced by 2 skills: database-lookup, uncertainty-and-units. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'api.openweathermap.org' is referenced by 2 skills: database-lookup, geomaster. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "physics.nist.gov",
+        "domain": "api.openweathermap.org",
         "skills": [
           "database-lookup",
-          "uncertainty-and-units"
+          "geomaster"
         ]
       }
     },
     {
-      "id": "CROSS_SKILL_URL_5e4cf3a0",
+      "id": "CROSS_SKILL_URL_6bd3451b",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.cbioportal.org' is referenced by 2 skills: database-lookup, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'purl.obolibrary.org' is referenced by 2 skills: database-lookup, ontology-term-resolution. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "www.cbioportal.org",
+        "domain": "purl.obolibrary.org",
         "skills": [
           "database-lookup",
-          "gget"
+          "ontology-term-resolution"
         ]
       }
     },
     {
-      "id": "CROSS_SKILL_URL_4cf8a079",
+      "id": "CROSS_SKILL_URL_88a5d04f",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.census.gov' is referenced by 2 skills: database-lookup, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'europepmc.org' is referenced by 2 skills: database-lookup, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "www.census.gov",
+        "domain": "europepmc.org",
+        "skills": [
+          "database-lookup",
+          "paper-lookup"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_9a94b3ee",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'api.materialsproject.org' is referenced by 2 skills: database-lookup, pymatgen. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "api.materialsproject.org",
+        "skills": [
+          "database-lookup",
+          "pymatgen"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_35f69db7",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'docs.materialsproject.org' is referenced by 2 skills: database-lookup, pymatgen. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "docs.materialsproject.org",
+        "skills": [
+          "database-lookup",
+          "pymatgen"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_48b406bf",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'ec.europa.eu' is referenced by 2 skills: database-lookup, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "ec.europa.eu",
         "skills": [
           "database-lookup",
           "market-research-reports"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_6123fce3",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'rest.ensembl.org' is referenced by 4 skills: database-lookup, genomic-coordinates, genomic-intelligence, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "rest.ensembl.org",
-        "skills": [
-          "database-lookup",
-          "genomic-coordinates",
-          "genomic-intelligence",
-          "gget"
         ]
       }
     },
@@ -2693,46 +2731,6 @@
           "database-lookup",
           "etetoolkit",
           "paper-lookup"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_fbe419bd",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.epa.gov' is referenced by 2 skills: database-lookup, exploratory-data-analysis. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.epa.gov",
-        "skills": [
-          "database-lookup",
-          "exploratory-data-analysis"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_9564f236",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'api.openweathermap.org' is referenced by 2 skills: database-lookup, geomaster. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "api.openweathermap.org",
-        "skills": [
-          "database-lookup",
-          "geomaster"
         ]
       }
     },
@@ -2800,39 +2798,19 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_88a5d04f",
+      "id": "CROSS_SKILL_URL_4cf8a079",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'europepmc.org' is referenced by 2 skills: database-lookup, paper-lookup. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'www.census.gov' is referenced by 2 skills: database-lookup, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "europepmc.org",
-        "skills": [
-          "database-lookup",
-          "paper-lookup"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_48b406bf",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'ec.europa.eu' is referenced by 2 skills: database-lookup, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "ec.europa.eu",
+        "domain": "www.census.gov",
         "skills": [
           "database-lookup",
           "market-research-reports"
@@ -2840,42 +2818,84 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_9a94b3ee",
+      "id": "CROSS_SKILL_URL_5e4cf3a0",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'api.materialsproject.org' is referenced by 2 skills: database-lookup, pymatgen. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'www.cbioportal.org' is referenced by 2 skills: database-lookup, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "api.materialsproject.org",
+        "domain": "www.cbioportal.org",
         "skills": [
           "database-lookup",
-          "pymatgen"
+          "gget"
         ]
       }
     },
     {
-      "id": "CROSS_SKILL_URL_35f69db7",
+      "id": "CROSS_SKILL_URL_bccc1117",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'docs.materialsproject.org' is referenced by 2 skills: database-lookup, pymatgen. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'cancer.sanger.ac.uk' is referenced by 2 skills: database-lookup, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "docs.materialsproject.org",
+        "domain": "cancer.sanger.ac.uk",
         "skills": [
           "database-lookup",
-          "pymatgen"
+          "gget"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_6123fce3",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'rest.ensembl.org' is referenced by 4 skills: database-lookup, genomic-coordinates, genomic-intelligence, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "rest.ensembl.org",
+        "skills": [
+          "database-lookup",
+          "genomic-coordinates",
+          "genomic-intelligence",
+          "gget"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_fbe419bd",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.epa.gov' is referenced by 2 skills: database-lookup, exploratory-data-analysis. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.epa.gov",
+        "skills": [
+          "database-lookup",
+          "exploratory-data-analysis"
         ]
       }
     },
@@ -2900,42 +2920,22 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_6bd3451b",
+      "id": "CROSS_SKILL_URL_5dbdb24f",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'purl.obolibrary.org' is referenced by 2 skills: database-lookup, ontology-term-resolution. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'physics.nist.gov' is referenced by 2 skills: database-lookup, uncertainty-and-units. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "purl.obolibrary.org",
+        "domain": "physics.nist.gov",
         "skills": [
           "database-lookup",
-          "ontology-term-resolution"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_bccc1117",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'cancer.sanger.ac.uk' is referenced by 2 skills: database-lookup, gget. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "cancer.sanger.ac.uk",
-        "skills": [
-          "database-lookup",
-          "gget"
+          "uncertainty-and-units"
         ]
       }
     },
@@ -3213,26 +3213,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_cac32437",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'openms.de' is referenced by 2 skills: exploratory-data-analysis, pyopenms. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "openms.de",
-        "skills": [
-          "exploratory-data-analysis",
-          "pyopenms"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_0efddb21",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -3272,6 +3252,26 @@
           "genomic-coordinates",
           "gget",
           "gtars"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_cac32437",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'openms.de' is referenced by 2 skills: exploratory-data-analysis, pyopenms. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "openms.de",
+        "skills": [
+          "exploratory-data-analysis",
+          "pyopenms"
         ]
       }
     },
@@ -3404,42 +3404,45 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_f3ef8277",
+      "id": "CROSS_SKILL_URL_f95a6f72",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'docs.rs' is referenced by 2 skills: geomaster, gtars. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'docs.rapids.ai' is referenced by 2 skills: geomaster, optimize-for-gpu. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "docs.rs",
+        "domain": "docs.rapids.ai",
         "skills": [
           "geomaster",
-          "gtars"
+          "optimize-for-gpu"
         ]
       }
     },
     {
-      "id": "CROSS_SKILL_URL_50a2b747",
+      "id": "CROSS_SKILL_URL_8447db07",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'shapely.readthedocs.io' is referenced by 2 skills: geomaster, geopandas. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'docs.pytorch.org' is referenced by 5 skills: geomaster, modal, pufferlib, pytorch-lightning, timesfm-forecasting. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "shapely.readthedocs.io",
+        "domain": "docs.pytorch.org",
         "skills": [
           "geomaster",
-          "geopandas"
+          "modal",
+          "pufferlib",
+          "pytorch-lightning",
+          "timesfm-forecasting"
         ]
       }
     },
@@ -3484,29 +3487,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_8447db07",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'docs.pytorch.org' is referenced by 5 skills: geomaster, modal, pufferlib, pytorch-lightning, timesfm-forecasting. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "docs.pytorch.org",
-        "skills": [
-          "geomaster",
-          "modal",
-          "pufferlib",
-          "pytorch-lightning",
-          "timesfm-forecasting"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_2afeff4d",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -3527,19 +3507,19 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_b70fa5bf",
+      "id": "CROSS_SKILL_URL_50a2b747",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'geopandas.org' is referenced by 2 skills: geomaster, geopandas. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'shapely.readthedocs.io' is referenced by 2 skills: geomaster, geopandas. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "geopandas.org",
+        "domain": "shapely.readthedocs.io",
         "skills": [
           "geomaster",
           "geopandas"
@@ -3567,22 +3547,42 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_f95a6f72",
+      "id": "CROSS_SKILL_URL_f3ef8277",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'docs.rapids.ai' is referenced by 2 skills: geomaster, optimize-for-gpu. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'docs.rs' is referenced by 2 skills: geomaster, gtars. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "docs.rapids.ai",
+        "domain": "docs.rs",
         "skills": [
           "geomaster",
-          "optimize-for-gpu"
+          "gtars"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_b70fa5bf",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'geopandas.org' is referenced by 2 skills: geomaster, geopandas. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "geopandas.org",
+        "skills": [
+          "geomaster",
+          "geopandas"
         ]
       }
     },
@@ -3730,6 +3730,26 @@
       }
     },
     {
+      "id": "CROSS_SKILL_URL_868e42d9",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.whitehouse.gov' is referenced by 2 skills: hypothesis-generation, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.whitehouse.gov",
+        "skills": [
+          "hypothesis-generation",
+          "market-research-reports"
+        ]
+      }
+    },
+    {
       "id": "CROSS_SKILL_URL_bb7198dc",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -3749,6 +3769,29 @@
           "research-grants",
           "scientific-brainstorming",
           "scientific-writing",
+          "venue-templates"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_6b31163e",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'example.invalid' is referenced by 5 skills: hypothesis-generation, iso-standards-readiness, market-research-reports, peer-review, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "example.invalid",
+        "skills": [
+          "hypothesis-generation",
+          "iso-standards-readiness",
+          "market-research-reports",
+          "peer-review",
           "venue-templates"
         ]
       }
@@ -3924,26 +3967,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_868e42d9",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.whitehouse.gov' is referenced by 2 skills: hypothesis-generation, market-research-reports. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.whitehouse.gov",
-        "skills": [
-          "hypothesis-generation",
-          "market-research-reports"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_590ee7d7",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -3960,29 +3983,6 @@
         "skills": [
           "hypothesis-generation",
           "scientific-brainstorming"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_6b31163e",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'example.invalid' is referenced by 5 skills: hypothesis-generation, iso-standards-readiness, market-research-reports, peer-review, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "example.invalid",
-        "skills": [
-          "hypothesis-generation",
-          "iso-standards-readiness",
-          "market-research-reports",
-          "peer-review",
-          "venue-templates"
         ]
       }
     },
@@ -4113,6 +4113,27 @@
       }
     },
     {
+      "id": "CROSS_SKILL_URL_ef6047f8",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'eur-lex.europa.eu' is referenced by 3 skills: iso-standards-readiness, market-research-reports, relsa-severity-assessment. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "eur-lex.europa.eu",
+        "skills": [
+          "iso-standards-readiness",
+          "market-research-reports",
+          "relsa-severity-assessment"
+        ]
+      }
+    },
+    {
       "id": "CROSS_SKILL_URL_7c4811ef",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -4149,27 +4170,6 @@
         "skills": [
           "iso-standards-readiness",
           "uncertainty-and-units"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_ef6047f8",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'eur-lex.europa.eu' is referenced by 3 skills: iso-standards-readiness, market-research-reports, relsa-severity-assessment. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "eur-lex.europa.eu",
-        "skills": [
-          "iso-standards-readiness",
-          "market-research-reports",
-          "relsa-severity-assessment"
         ]
       }
     },
@@ -4304,26 +4304,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_200e0234",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'pandoc.org' is referenced by 2 skills: literature-review, peer-review. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "pandoc.org",
-        "skills": [
-          "literature-review",
-          "peer-review"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_d62508d9",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -4365,6 +4345,26 @@
       }
     },
     {
+      "id": "CROSS_SKILL_URL_200e0234",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'pandoc.org' is referenced by 2 skills: literature-review, peer-review. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "pandoc.org",
+        "skills": [
+          "literature-review",
+          "peer-review"
+        ]
+      }
+    },
+    {
       "id": "CROSS_SKILL_URL_6d49bb61",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -4386,26 +4386,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_557d0936",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'ico.org.uk' is referenced by 2 skills: market-research-reports, scholar-evaluation. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "ico.org.uk",
-        "skills": [
-          "market-research-reports",
-          "scholar-evaluation"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_2ee0dde8",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -4422,6 +4402,26 @@
         "skills": [
           "market-research-reports",
           "what-if-oracle"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_557d0936",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'ico.org.uk' is referenced by 2 skills: market-research-reports, scholar-evaluation. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "ico.org.uk",
+        "skills": [
+          "market-research-reports",
+          "scholar-evaluation"
         ]
       }
     },
@@ -4588,26 +4588,6 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_8ee193ea",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.biorxiv.org' is referenced by 2 skills: paper-lookup, waypoint-bio. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.biorxiv.org",
-        "skills": [
-          "paper-lookup",
-          "waypoint-bio"
-        ]
-      }
-    },
-    {
       "id": "CROSS_SKILL_URL_3f14c9f6",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -4624,6 +4604,26 @@
         "skills": [
           "paper-lookup",
           "pi-agent"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_8ee193ea",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.biorxiv.org' is referenced by 2 skills: paper-lookup, waypoint-bio. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.biorxiv.org",
+        "skills": [
+          "paper-lookup",
+          "waypoint-bio"
         ]
       }
     },
@@ -4668,22 +4668,23 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_290a0aaa",
+      "id": "CROSS_SKILL_URL_661fc3e9",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'resources.equator-network.org' is referenced by 2 skills: peer-review, scientific-writing. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'jamanetwork.com' is referenced by 3 skills: peer-review, scientific-writing, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "resources.equator-network.org",
+        "domain": "jamanetwork.com",
         "skills": [
           "peer-review",
-          "scientific-writing"
+          "scientific-writing",
+          "venue-templates"
         ]
       }
     },
@@ -4748,23 +4749,22 @@
       }
     },
     {
-      "id": "CROSS_SKILL_URL_661fc3e9",
+      "id": "CROSS_SKILL_URL_290a0aaa",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
       "category": "data_exfiltration",
       "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'jamanetwork.com' is referenced by 3 skills: peer-review, scientific-writing, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "description": "Domain 'resources.equator-network.org' is referenced by 2 skills: peer-review, scientific-writing. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
       "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
       "analyzer": "cross_skill",
       "metadata": {
-        "domain": "jamanetwork.com",
+        "domain": "resources.equator-network.org",
         "skills": [
           "peer-review",
-          "scientific-writing",
-          "venue-templates"
+          "scientific-writing"
         ]
       }
     },
@@ -5074,6 +5074,46 @@
       }
     },
     {
+      "id": "CROSS_SKILL_URL_d66e2d43",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'science.osti.gov' is referenced by 2 skills: research-grants, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "science.osti.gov",
+        "skills": [
+          "research-grants",
+          "venue-templates"
+        ]
+      }
+    },
+    {
+      "id": "CROSS_SKILL_URL_a55a8044",
+      "rule_id": "CROSS_SKILL_SHARED_URL",
+      "severity": "MEDIUM",
+      "category": "data_exfiltration",
+      "title": "Multiple skills reference the same external domain",
+      "description": "Domain 'www.energy.gov' is referenced by 2 skills: research-grants, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
+      "file_path": "(cross-skill analysis)",
+      "line_number": null,
+      "snippet": null,
+      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
+      "analyzer": "cross_skill",
+      "metadata": {
+        "domain": "www.energy.gov",
+        "skills": [
+          "research-grants",
+          "venue-templates"
+        ]
+      }
+    },
+    {
       "id": "CROSS_SKILL_URL_23c0169e",
       "rule_id": "CROSS_SKILL_SHARED_URL",
       "severity": "MEDIUM",
@@ -5127,46 +5167,6 @@
       "analyzer": "cross_skill",
       "metadata": {
         "domain": "sam.gov",
-        "skills": [
-          "research-grants",
-          "venue-templates"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_d66e2d43",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'science.osti.gov' is referenced by 2 skills: research-grants, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "science.osti.gov",
-        "skills": [
-          "research-grants",
-          "venue-templates"
-        ]
-      }
-    },
-    {
-      "id": "CROSS_SKILL_URL_a55a8044",
-      "rule_id": "CROSS_SKILL_SHARED_URL",
-      "severity": "MEDIUM",
-      "category": "data_exfiltration",
-      "title": "Multiple skills reference the same external domain",
-      "description": "Domain 'www.energy.gov' is referenced by 2 skills: research-grants, venue-templates. Multiple skills pointing to the same external resource may indicate coordinated C2 or exfiltration.",
-      "file_path": "(cross-skill analysis)",
-      "line_number": null,
-      "snippet": null,
-      "remediation": "Review why multiple skills reference this domain and ensure it is a legitimate, trusted resource.",
-      "analyzer": "cross_skill",
-      "metadata": {
-        "domain": "www.energy.gov",
         "skills": [
           "research-grants",
           "venue-templates"
@@ -5445,7 +5445,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: its, assays, binding. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: assays, its, binding. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5455,8 +5455,8 @@
         "collector": "adaptyv",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "its",
           "assays",
+          "its",
           "binding"
         ]
       }
@@ -5467,7 +5467,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: including, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: workflows, including. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5477,8 +5477,8 @@
         "collector": "adaptyv",
         "sender": "deepchem",
         "shared_context": [
-          "including",
-          "workflows"
+          "workflows",
+          "including"
         ]
       }
     },
@@ -5509,7 +5509,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'adaptyv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: bio, design, sequences, protein, api, binding, characterization, its, affinity. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'adaptyv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: its, sequences, design, bio, api, protein, affinity, binding, characterization. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5519,15 +5519,15 @@
         "collector": "adaptyv",
         "sender": "tamarind",
         "shared_context": [
-          "bio",
-          "design",
-          "sequences",
-          "protein",
-          "api",
-          "binding",
-          "characterization",
           "its",
-          "affinity"
+          "sequences",
+          "design",
+          "bio",
+          "api",
+          "protein",
+          "affinity",
+          "binding",
+          "characterization"
         ]
       }
     },
@@ -5537,7 +5537,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: detection, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: use, detection. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5547,8 +5547,8 @@
         "collector": "aeon",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "detection",
-          "use"
+          "use",
+          "detection"
         ]
       }
     },
@@ -5558,7 +5558,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, used, including, ml, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: when, used, ml, data, including. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5568,11 +5568,11 @@
         "collector": "aeon",
         "sender": "deepchem",
         "shared_context": [
-          "data",
+          "when",
           "used",
-          "including",
           "ml",
-          "when"
+          "data",
+          "including"
         ]
       }
     },
@@ -5603,7 +5603,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, standard. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'flowio' (sender) have complementary descriptions with shared context: standard, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5613,8 +5613,8 @@
         "collector": "aeon",
         "sender": "flowio",
         "shared_context": [
-          "use",
-          "standard"
+          "standard",
+          "use"
         ]
       }
     },
@@ -5645,7 +5645,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, apis, use, skill, this. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: apis, skill, data, this, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5655,11 +5655,11 @@
         "collector": "aeon",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
           "apis",
-          "use",
           "skill",
-          "this"
+          "data",
+          "this",
+          "use"
         ]
       }
     },
@@ -5669,7 +5669,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, scikit, learn, use, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: learn, when, data, use, scikit. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5679,11 +5679,11 @@
         "collector": "aeon",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "data",
-          "scikit",
           "learn",
+          "when",
+          "data",
           "use",
-          "when"
+          "scikit"
         ]
       }
     },
@@ -5693,7 +5693,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5703,8 +5703,8 @@
         "collector": "aeon",
         "sender": "scientific-visualization",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -5735,7 +5735,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'aeon' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: indexed, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'aeon' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: use, indexed. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5745,8 +5745,8 @@
         "collector": "aeon",
         "sender": "tiledbvcf",
         "shared_context": [
-          "indexed",
-          "use"
+          "use",
+          "indexed"
         ]
       }
     },
@@ -5756,7 +5756,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: scientific, used, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: used, when, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5766,9 +5766,9 @@
         "collector": "citation-management",
         "sender": "deepchem",
         "shared_context": [
-          "scientific",
           "used",
-          "when"
+          "when",
+          "scientific"
         ]
       }
     },
@@ -5778,7 +5778,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: scientific, used. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: used, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5788,8 +5788,8 @@
         "collector": "citation-management",
         "sender": "matplotlib",
         "shared_context": [
-          "scientific",
-          "used"
+          "used",
+          "scientific"
         ]
       }
     },
@@ -5799,7 +5799,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: skill, metadata, this. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: this, metadata, skill. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5809,9 +5809,9 @@
         "collector": "citation-management",
         "sender": "omero-integration",
         "shared_context": [
-          "skill",
+          "this",
           "metadata",
-          "this"
+          "skill"
         ]
       }
     },
@@ -5821,7 +5821,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: scientific, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: when, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5831,8 +5831,8 @@
         "collector": "citation-management",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "scientific",
-          "when"
+          "when",
+          "scientific"
         ]
       }
     },
@@ -5842,7 +5842,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'citation-management' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: metadata, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'citation-management' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: scientific, metadata. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5852,8 +5852,8 @@
         "collector": "citation-management",
         "sender": "scientific-visualization",
         "shared_context": [
-          "metadata",
-          "scientific"
+          "scientific",
+          "metadata"
         ]
       }
     },
@@ -5863,7 +5863,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, applies. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: applies, using. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5873,8 +5873,8 @@
         "collector": "exa-search",
         "sender": "adaptyv",
         "shared_context": [
-          "using",
-          "applies"
+          "applies",
+          "using"
         ]
       }
     },
@@ -5884,7 +5884,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: publication, scientific, pdf. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: pdf, scientific, publication. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5894,9 +5894,9 @@
         "collector": "exa-search",
         "sender": "matplotlib",
         "shared_context": [
-          "publication",
+          "pdf",
           "scientific",
-          "pdf"
+          "publication"
         ]
       }
     },
@@ -5906,7 +5906,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'exa-search' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: searches, urls, supports. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'exa-search' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: supports, urls, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5916,9 +5916,9 @@
         "collector": "exa-search",
         "sender": "paperzilla",
         "shared_context": [
-          "searches",
+          "supports",
           "urls",
-          "supports"
+          "searches"
         ]
       }
     },
@@ -5949,7 +5949,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: file, not, if, also, even, when, on, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: file, when, user, on, also, not, if, even. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -5960,13 +5960,13 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "file",
+          "when",
+          "user",
+          "on",
+          "also",
           "not",
           "if",
-          "also",
-          "even",
-          "when",
-          "on",
-          "user"
+          "even"
         ]
       }
     },
@@ -5997,7 +5997,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: compression, applies. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: applies, compression. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6007,8 +6007,8 @@
         "collector": "fictiv",
         "sender": "pydicom",
         "shared_context": [
-          "compression",
-          "applies"
+          "applies",
+          "compression"
         ]
       }
     },
@@ -6018,7 +6018,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'fictiv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: wants, when, platform, app, on, user, mentions. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'fictiv' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: wants, when, user, platform, on, mentions, app. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6030,11 +6030,11 @@
         "shared_context": [
           "wants",
           "when",
-          "platform",
-          "app",
-          "on",
           "user",
-          "mentions"
+          "platform",
+          "on",
+          "mentions",
+          "app"
         ]
       }
     },
@@ -6065,7 +6065,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, api, activity, expression. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: activity, api, expression, using. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6075,10 +6075,10 @@
         "collector": "genomic-intelligence",
         "sender": "adaptyv",
         "shared_context": [
-          "using",
-          "api",
           "activity",
-          "expression"
+          "api",
+          "expression",
+          "using"
         ]
       }
     },
@@ -6088,7 +6088,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: of, any, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: any, use, of. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6098,9 +6098,9 @@
         "collector": "genomic-intelligence",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "of",
           "any",
-          "use"
+          "use",
+          "of"
         ]
       }
     },
@@ -6110,7 +6110,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: when, models, model. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: models, when, model. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6120,8 +6120,8 @@
         "collector": "genomic-intelligence",
         "sender": "deepchem",
         "shared_context": [
-          "when",
           "models",
+          "when",
           "model"
         ]
       }
@@ -6132,7 +6132,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: wants, has, region, s, when, user, mentions. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: wants, when, has, user, mentions, region, s. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6143,12 +6143,12 @@
         "sender": "fictiv",
         "shared_context": [
           "wants",
-          "has",
-          "region",
-          "s",
           "when",
+          "has",
           "user",
-          "mentions"
+          "mentions",
+          "region",
+          "s"
         ]
       }
     },
@@ -6158,7 +6158,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: over, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, over. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6168,8 +6168,8 @@
         "collector": "genomic-intelligence",
         "sender": "matplotlib",
         "shared_context": [
-          "over",
-          "use"
+          "use",
+          "over"
         ]
       }
     },
@@ -6179,7 +6179,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: server, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, server. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6189,8 +6189,8 @@
         "collector": "genomic-intelligence",
         "sender": "omero-integration",
         "shared_context": [
-          "server",
-          "use"
+          "use",
+          "server"
         ]
       }
     },
@@ -6200,7 +6200,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: gpu, use, when, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, when, user, gpu. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6210,10 +6210,10 @@
         "collector": "genomic-intelligence",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "gpu",
           "use",
           "when",
-          "user"
+          "user",
+          "gpu"
         ]
       }
     },
@@ -6244,7 +6244,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: wants, local, of, models, mcp, rest, server, these, use, no, any, when, structure, api, de, novo, user, mentions. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: structure, models, of, no, when, novo, server, these, de, user, wants, mentions, api, local, any, mcp, use, rest. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6254,24 +6254,24 @@
         "collector": "genomic-intelligence",
         "sender": "tamarind",
         "shared_context": [
-          "wants",
-          "local",
-          "of",
+          "structure",
           "models",
-          "mcp",
-          "rest",
+          "of",
+          "no",
+          "when",
+          "novo",
           "server",
           "these",
-          "use",
-          "no",
-          "any",
-          "when",
-          "structure",
-          "api",
           "de",
-          "novo",
           "user",
-          "mentions"
+          "wants",
+          "mentions",
+          "api",
+          "local",
+          "any",
+          "mcp",
+          "use",
+          "rest"
         ]
       }
     },
@@ -6281,7 +6281,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'genomic-intelligence' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: region, genomic, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'genomic-intelligence' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: region, use, genomic. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6292,8 +6292,8 @@
         "sender": "tiledbvcf",
         "shared_context": [
           "region",
-          "genomic",
-          "use"
+          "use",
+          "genomic"
         ]
       }
     },
@@ -6303,7 +6303,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: validation, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: use, validation. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6313,8 +6313,8 @@
         "collector": "lamindb",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "validation",
-          "use"
+          "use",
+          "validation"
         ]
       }
     },
@@ -6324,7 +6324,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, validation, models, including. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: models, including, data, validation. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6334,10 +6334,10 @@
         "collector": "lamindb",
         "sender": "deepchem",
         "shared_context": [
-          "data",
-          "validation",
           "models",
-          "including"
+          "including",
+          "data",
+          "validation"
         ]
       }
     },
@@ -6347,7 +6347,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6357,8 +6357,8 @@
         "collector": "lamindb",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -6368,7 +6368,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6378,8 +6378,8 @@
         "collector": "lamindb",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -6389,7 +6389,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: datasets, data. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, datasets. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6399,8 +6399,8 @@
         "collector": "lamindb",
         "sender": "pydicom",
         "shared_context": [
-          "datasets",
-          "data"
+          "data",
+          "datasets"
         ]
       }
     },
@@ -6410,7 +6410,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'lamindb' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, validation, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'lamindb' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, data, validation. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6420,9 +6420,9 @@
         "collector": "lamindb",
         "sender": "scientific-visualization",
         "shared_context": [
+          "use",
           "data",
-          "validation",
-          "use"
+          "validation"
         ]
       }
     },
@@ -6516,7 +6516,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, planning. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: planning, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6526,8 +6526,8 @@
         "collector": "literature-review",
         "sender": "omero-integration",
         "shared_context": [
-          "use",
-          "planning"
+          "planning",
+          "use"
         ]
       }
     },
@@ -6559,7 +6559,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: searches, markdown, supports. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: markdown, supports, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6569,9 +6569,9 @@
         "collector": "literature-review",
         "sender": "paperzilla",
         "shared_context": [
-          "searches",
           "markdown",
-          "supports"
+          "supports",
+          "searches"
         ]
       }
     },
@@ -6581,7 +6581,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'literature-review' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, planning. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'literature-review' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: planning, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6591,8 +6591,8 @@
         "collector": "literature-review",
         "sender": "scientific-visualization",
         "shared_context": [
-          "use",
-          "planning"
+          "planning",
+          "use"
         ]
       }
     },
@@ -6602,7 +6602,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: workflows, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6612,8 +6612,8 @@
         "collector": "markitdown",
         "sender": "deepchem",
         "shared_context": [
-          "data",
-          "workflows"
+          "workflows",
+          "data"
         ]
       }
     },
@@ -6623,7 +6623,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: pdf, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: workflows, pdf. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6633,8 +6633,8 @@
         "collector": "markitdown",
         "sender": "matplotlib",
         "shared_context": [
-          "pdf",
-          "workflows"
+          "workflows",
+          "pdf"
         ]
       }
     },
@@ -6644,7 +6644,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, server, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: workflows, data, server. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6654,9 +6654,9 @@
         "collector": "markitdown",
         "sender": "omero-integration",
         "shared_context": [
+          "workflows",
           "data",
-          "server",
-          "workflows"
+          "server"
         ]
       }
     },
@@ -6666,7 +6666,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, local, plugins. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: local, data, plugins. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6676,8 +6676,8 @@
         "collector": "markitdown",
         "sender": "pydicom",
         "shared_context": [
-          "data",
           "local",
+          "data",
           "plugins"
         ]
       }
@@ -6688,7 +6688,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'markitdown' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, server, mcp. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'markitdown' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, mcp, server. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6699,8 +6699,8 @@
         "sender": "tamarind",
         "shared_context": [
           "local",
-          "server",
-          "mcp"
+          "mcp",
+          "server"
         ]
       }
     },
@@ -6754,7 +6754,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: when, including. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: including, when. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6764,8 +6764,8 @@
         "collector": "open-notebook",
         "sender": "deepchem",
         "shared_context": [
-          "when",
-          "including"
+          "including",
+          "when"
         ]
       }
     },
@@ -6775,7 +6775,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: custom, through, when, configuring. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: through, custom, when, configuring. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6785,8 +6785,8 @@
         "collector": "open-notebook",
         "sender": "fictiv",
         "shared_context": [
-          "custom",
           "through",
+          "custom",
           "when",
           "configuring"
         ]
@@ -6798,7 +6798,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'flowio' (sender) have complementary descriptions with shared context: multi, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6808,8 +6808,8 @@
         "collector": "open-notebook",
         "sender": "flowio",
         "shared_context": [
-          "use",
-          "multi"
+          "multi",
+          "use"
         ]
       }
     },
@@ -6819,7 +6819,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: multi, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6829,8 +6829,8 @@
         "collector": "open-notebook",
         "sender": "matplotlib",
         "shared_context": [
-          "use",
-          "multi"
+          "multi",
+          "use"
         ]
       }
     },
@@ -6861,7 +6861,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, when, multi, vector. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: vector, multi, when, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6871,10 +6871,10 @@
         "collector": "open-notebook",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "use",
-          "when",
+          "vector",
           "multi",
-          "vector"
+          "when",
+          "use"
         ]
       }
     },
@@ -6884,7 +6884,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: supports, through. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: through, supports. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6894,8 +6894,8 @@
         "collector": "open-notebook",
         "sender": "paperzilla",
         "shared_context": [
-          "supports",
-          "through"
+          "through",
+          "supports"
         ]
       }
     },
@@ -6905,7 +6905,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: multi, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6915,8 +6915,8 @@
         "collector": "open-notebook",
         "sender": "scientific-visualization",
         "shared_context": [
-          "use",
-          "multi"
+          "multi",
+          "use"
         ]
       }
     },
@@ -6926,7 +6926,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, source, rest, use, when, api, its, cloud, open. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: its, when, local, api, source, cloud, open, use, rest. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6936,15 +6936,15 @@
         "collector": "open-notebook",
         "sender": "tamarind",
         "shared_context": [
-          "local",
-          "source",
-          "rest",
-          "use",
-          "when",
-          "api",
           "its",
+          "when",
+          "local",
+          "api",
+          "source",
           "cloud",
-          "open"
+          "open",
+          "use",
+          "rest"
         ]
       }
     },
@@ -6954,7 +6954,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'open-notebook' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: cloud, through, ingestion, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'open-notebook' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: through, ingestion, use, cloud. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -6964,10 +6964,10 @@
         "collector": "open-notebook",
         "sender": "tiledbvcf",
         "shared_context": [
-          "cloud",
           "through",
           "ingestion",
-          "use"
+          "use",
+          "cloud"
         ]
       }
     },
@@ -7019,7 +7019,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, graph, scientific, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: when, scientific, data, graph. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7029,10 +7029,10 @@
         "collector": "optimize-for-gpu",
         "sender": "deepchem",
         "shared_context": [
-          "data",
-          "graph",
+          "when",
           "scientific",
-          "when"
+          "data",
+          "graph"
         ]
       }
     },
@@ -7042,7 +7042,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: file, not, if, also, even, when, on, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: file, when, user, on, also, not, if, even. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7053,13 +7053,13 @@
         "sender": "fictiv",
         "shared_context": [
           "file",
+          "when",
+          "user",
+          "on",
+          "also",
           "not",
           "if",
-          "also",
-          "even",
-          "when",
-          "on",
-          "user"
+          "even"
         ]
       }
     },
@@ -7069,7 +7069,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'flowio' (sender) have complementary descriptions with shared context: numpy, use, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'flowio' (sender) have complementary descriptions with shared context: numpy, multi, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7080,8 +7080,8 @@
         "sender": "flowio",
         "shared_context": [
           "numpy",
-          "use",
-          "multi"
+          "multi",
+          "use"
         ]
       }
     },
@@ -7091,7 +7091,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: scientific, use, multi. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: multi, scientific, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7101,9 +7101,9 @@
         "collector": "optimize-for-gpu",
         "sender": "matplotlib",
         "shared_context": [
+          "multi",
           "scientific",
-          "use",
-          "multi"
+          "use"
         ]
       }
     },
@@ -7113,7 +7113,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7123,8 +7123,8 @@
         "collector": "optimize-for-gpu",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -7134,7 +7134,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, image, use, multi, scientific. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: image, multi, data, scientific, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7144,11 +7144,11 @@
         "collector": "optimize-for-gpu",
         "sender": "scientific-visualization",
         "shared_context": [
-          "data",
           "image",
-          "use",
           "multi",
-          "scientific"
+          "data",
+          "scientific",
+          "use"
         ]
       }
     },
@@ -7158,7 +7158,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'optimize-for-gpu' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: on, use, when, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'optimize-for-gpu' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: on, when, user, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7169,9 +7169,9 @@
         "sender": "tamarind",
         "shared_context": [
           "on",
-          "use",
           "when",
-          "user"
+          "user",
+          "use"
         ]
       }
     },
@@ -7202,7 +7202,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pacsomatic' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pacsomatic' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: workflows, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7212,8 +7212,8 @@
         "collector": "pacsomatic",
         "sender": "matplotlib",
         "shared_context": [
-          "use",
-          "workflows"
+          "workflows",
+          "use"
         ]
       }
     },
@@ -7223,7 +7223,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pacsomatic' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pacsomatic' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: workflows, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7233,8 +7233,8 @@
         "collector": "pacsomatic",
         "sender": "omero-integration",
         "shared_context": [
-          "use",
-          "workflows"
+          "workflows",
+          "use"
         ]
       }
     },
@@ -7244,7 +7244,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pacsomatic' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: not, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pacsomatic' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, not. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7254,8 +7254,8 @@
         "collector": "pacsomatic",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "not",
-          "use"
+          "use",
+          "not"
         ]
       }
     },
@@ -7265,7 +7265,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pacsomatic' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: generation, local, use, run. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pacsomatic' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, use, run, generation. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7275,10 +7275,10 @@
         "collector": "pacsomatic",
         "sender": "tamarind",
         "shared_context": [
-          "generation",
           "local",
           "use",
-          "run"
+          "run",
+          "generation"
         ]
       }
     },
@@ -7288,7 +7288,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: of, any, use, triggers. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: any, triggers, use, of. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7298,10 +7298,10 @@
         "collector": "paper-lookup",
         "sender": "analytical-method-validation",
         "shared_context": [
-          "of",
           "any",
+          "triggers",
           "use",
-          "triggers"
+          "of"
         ]
       }
     },
@@ -7311,7 +7311,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: status, when, covers, on, mentions. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: when, status, on, mentions, covers. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7321,11 +7321,11 @@
         "collector": "paper-lookup",
         "sender": "fictiv",
         "shared_context": [
-          "status",
           "when",
-          "covers",
+          "status",
           "on",
-          "mentions"
+          "mentions",
+          "covers"
         ]
       }
     },
@@ -7357,7 +7357,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: annotations, this, apis, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: this, use, apis, annotations. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7367,10 +7367,10 @@
         "collector": "paper-lookup",
         "sender": "omero-integration",
         "shared_context": [
-          "annotations",
           "this",
+          "use",
           "apis",
-          "use"
+          "annotations"
         ]
       }
     },
@@ -7380,7 +7380,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, use, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, when, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7391,8 +7391,8 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "on",
-          "use",
-          "when"
+          "when",
+          "use"
         ]
       }
     },
@@ -7402,7 +7402,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: papers, paper, searches. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: paper, papers, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7412,8 +7412,8 @@
         "collector": "paper-lookup",
         "sender": "paperzilla",
         "shared_context": [
-          "papers",
           "paper",
+          "papers",
           "searches"
         ]
       }
@@ -7424,7 +7424,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: of, ids, provenance. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: ids, of, provenance. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7434,8 +7434,8 @@
         "collector": "paper-lookup",
         "sender": "qiime2-amplicon",
         "shared_context": [
-          "of",
           "ids",
+          "of",
           "provenance"
         ]
       }
@@ -7467,7 +7467,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: of, use, access, x, when, any, open, on, mentions. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: x, of, when, on, mentions, any, access, open, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7477,15 +7477,15 @@
         "collector": "paper-lookup",
         "sender": "tamarind",
         "shared_context": [
-          "of",
-          "use",
-          "access",
           "x",
+          "of",
           "when",
-          "any",
-          "open",
           "on",
-          "mentions"
+          "mentions",
+          "any",
+          "access",
+          "open",
+          "use"
         ]
       }
     },
@@ -7495,7 +7495,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paper-lookup' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: results, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paper-lookup' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: use, results. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7505,8 +7505,8 @@
         "collector": "paper-lookup",
         "sender": "tiledbvcf",
         "shared_context": [
-          "results",
-          "use"
+          "use",
+          "results"
         ]
       }
     },
@@ -7516,7 +7516,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: protein, python, sdk. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: protein, sdk, python. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7527,8 +7527,8 @@
         "sender": "adaptyv",
         "shared_context": [
           "protein",
-          "python",
-          "sdk"
+          "sdk",
+          "python"
         ]
       }
     },
@@ -7538,7 +7538,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: documents, verification, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: documents, use, verification. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7549,8 +7549,8 @@
         "sender": "analytical-method-validation",
         "shared_context": [
           "documents",
-          "verification",
-          "use"
+          "use",
+          "verification"
         ]
       }
     },
@@ -7582,7 +7582,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, extraction, metadata, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, reads, extraction, metadata. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7592,10 +7592,10 @@
         "collector": "paperclip",
         "sender": "flowio",
         "shared_context": [
+          "use",
           "reads",
           "extraction",
-          "metadata",
-          "use"
+          "metadata"
         ]
       }
     },
@@ -7605,7 +7605,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: metadata, cli, use, scoped. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, cli, scoped, metadata. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7615,10 +7615,10 @@
         "collector": "paperclip",
         "sender": "omero-integration",
         "shared_context": [
-          "metadata",
-          "cli",
           "use",
-          "scoped"
+          "cli",
+          "scoped",
+          "metadata"
         ]
       }
     },
@@ -7628,7 +7628,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: python, when, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, when, python. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7638,9 +7638,9 @@
         "collector": "paperclip",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "python",
+          "use",
           "when",
-          "use"
+          "python"
         ]
       }
     },
@@ -7650,7 +7650,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: papers, reads, cli, supports, through, searches. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'paperzilla' (sender) have complementary descriptions with shared context: cli, reads, papers, supports, through, searches. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7660,9 +7660,9 @@
         "collector": "paperclip",
         "sender": "paperzilla",
         "shared_context": [
-          "papers",
-          "reads",
           "cli",
+          "reads",
+          "papers",
           "supports",
           "through",
           "searches"
@@ -7696,7 +7696,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: figure, metadata, use, it. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, it, metadata, figure. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7706,10 +7706,10 @@
         "collector": "paperclip",
         "sender": "scientific-visualization",
         "shared_context": [
-          "figure",
-          "metadata",
           "use",
-          "it"
+          "it",
+          "metadata",
+          "figure"
         ]
       }
     },
@@ -7719,7 +7719,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'paperclip' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: protein, source, use, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'paperclip' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: protein, use, when, source. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7730,9 +7730,9 @@
         "sender": "tamarind",
         "shared_context": [
           "protein",
-          "source",
           "use",
-          "when"
+          "when",
+          "source"
         ]
       }
     },
@@ -7763,7 +7763,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'parallel-web' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, cli, web. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'parallel-web' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: web, cli, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7773,9 +7773,9 @@
         "collector": "parallel-web",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
+          "web",
           "cli",
-          "web"
+          "data"
         ]
       }
     },
@@ -7785,7 +7785,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'parallel-web' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, parallel, that. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'parallel-web' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, that, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7795,9 +7795,9 @@
         "collector": "parallel-web",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "data",
           "parallel",
-          "that"
+          "that",
+          "data"
         ]
       }
     },
@@ -7807,7 +7807,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: using, sdk. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'adaptyv' (sender) have complementary descriptions with shared context: sdk, using. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7817,8 +7817,8 @@
         "collector": "pi-agent",
         "sender": "adaptyv",
         "shared_context": [
-          "using",
-          "sdk"
+          "sdk",
+          "using"
         ]
       }
     },
@@ -7828,7 +7828,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: models, builds. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: builds, models. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7838,8 +7838,8 @@
         "collector": "pi-agent",
         "sender": "deepchem",
         "shared_context": [
-          "models",
-          "builds"
+          "builds",
+          "models"
         ]
       }
     },
@@ -7849,7 +7849,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: operates, custom, through, configuring. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: operates, through, custom, configuring. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7860,8 +7860,8 @@
         "sender": "fictiv",
         "shared_context": [
           "operates",
-          "custom",
           "through",
+          "custom",
           "configuring"
         ]
       }
@@ -7893,7 +7893,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: interactive, over, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: over, use, interactive. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7903,9 +7903,9 @@
         "collector": "pi-agent",
         "sender": "matplotlib",
         "shared_context": [
-          "interactive",
           "over",
-          "use"
+          "use",
+          "interactive"
         ]
       }
     },
@@ -7978,7 +7978,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'pi-agent' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: local, models, mcp, use, access. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'pi-agent' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: models, local, access, mcp, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -7988,11 +7988,11 @@
         "collector": "pi-agent",
         "sender": "tamarind",
         "shared_context": [
-          "local",
           "models",
+          "local",
+          "access",
           "mcp",
-          "use",
-          "access"
+          "use"
         ]
       }
     },
@@ -8023,7 +8023,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, use, writes. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, reads, writes. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8033,8 +8033,8 @@
         "collector": "polars-bio",
         "sender": "flowio",
         "shared_context": [
-          "reads",
           "use",
+          "reads",
           "writes"
         ]
       }
@@ -8045,7 +8045,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8055,8 +8055,8 @@
         "collector": "polars-bio",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -8066,7 +8066,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, use, o, on, i. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: on, data, i, use, o. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8076,11 +8076,11 @@
         "collector": "polars-bio",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "data",
-          "use",
-          "o",
           "on",
-          "i"
+          "data",
+          "i",
+          "use",
+          "o"
         ]
       }
     },
@@ -8090,7 +8090,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, reads, writes. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: reads, data, writes. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8100,8 +8100,8 @@
         "collector": "polars-bio",
         "sender": "pydicom",
         "shared_context": [
-          "data",
           "reads",
+          "data",
           "writes"
         ]
       }
@@ -8112,7 +8112,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: overlap, reads, fastq. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'qiime2-amplicon' (sender) have complementary descriptions with shared context: reads, overlap, fastq. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8122,8 +8122,8 @@
         "collector": "polars-bio",
         "sender": "qiime2-amplicon",
         "shared_context": [
-          "overlap",
           "reads",
+          "overlap",
           "fastq"
         ]
       }
@@ -8134,7 +8134,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8144,8 +8144,8 @@
         "collector": "polars-bio",
         "sender": "scientific-visualization",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -8176,7 +8176,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'polars-bio' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: bcf, use, vcf, queries, genomic. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'polars-bio' (collector) and 'tiledbvcf' (sender) have complementary descriptions with shared context: queries, bcf, genomic, vcf, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8186,11 +8186,11 @@
         "collector": "polars-bio",
         "sender": "tiledbvcf",
         "shared_context": [
-          "bcf",
-          "use",
-          "vcf",
           "queries",
-          "genomic"
+          "bcf",
+          "genomic",
+          "vcf",
+          "use"
         ]
       }
     },
@@ -8200,7 +8200,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: protocol, plans, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'analytical-method-validation' (sender) have complementary descriptions with shared context: protocol, use, plans. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8211,8 +8211,8 @@
         "sender": "analytical-method-validation",
         "shared_context": [
           "protocol",
-          "plans",
-          "use"
+          "use",
+          "plans"
         ]
       }
     },
@@ -8222,7 +8222,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: data, explicit, contracts. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: explicit, data, contracts. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8232,8 +8232,8 @@
         "collector": "protocolsio-integration",
         "sender": "deepchem",
         "shared_context": [
-          "data",
           "explicit",
+          "data",
           "contracts"
         ]
       }
@@ -8244,7 +8244,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'flowio' (sender) have complementary descriptions with shared context: reads, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, reads. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8254,8 +8254,8 @@
         "collector": "protocolsio-integration",
         "sender": "flowio",
         "shared_context": [
-          "reads",
-          "use"
+          "use",
+          "reads"
         ]
       }
     },
@@ -8265,7 +8265,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: use, creates. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: creates, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8275,8 +8275,8 @@
         "collector": "protocolsio-integration",
         "sender": "matplotlib",
         "shared_context": [
-          "use",
-          "creates"
+          "creates",
+          "use"
         ]
       }
     },
@@ -8286,7 +8286,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8296,8 +8296,8 @@
         "collector": "protocolsio-integration",
         "sender": "omero-integration",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -8307,7 +8307,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: data, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8317,8 +8317,8 @@
         "collector": "protocolsio-integration",
         "sender": "optimize-for-gpu",
         "shared_context": [
-          "data",
-          "use"
+          "use",
+          "data"
         ]
       }
     },
@@ -8328,7 +8328,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: data, reads, bounded. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'pydicom' (sender) have complementary descriptions with shared context: bounded, reads, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8338,9 +8338,9 @@
         "collector": "protocolsio-integration",
         "sender": "pydicom",
         "shared_context": [
-          "data",
+          "bounded",
           "reads",
-          "bounded"
+          "data"
         ]
       }
     },
@@ -8350,7 +8350,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: data, use, creates. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'scientific-visualization' (sender) have complementary descriptions with shared context: creates, use, data. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8360,9 +8360,9 @@
         "collector": "protocolsio-integration",
         "sender": "scientific-visualization",
         "shared_context": [
-          "data",
+          "creates",
           "use",
-          "creates"
+          "data"
         ]
       }
     },
@@ -8372,7 +8372,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'protocolsio-integration' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: rest, mcp, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'protocolsio-integration' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: mcp, use, rest. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8382,9 +8382,9 @@
         "collector": "protocolsio-integration",
         "sender": "tamarind",
         "shared_context": [
-          "rest",
           "mcp",
-          "use"
+          "use",
+          "rest"
         ]
       }
     },
@@ -8415,7 +8415,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: molecular, smiles, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: workflows, smiles, molecular. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8425,9 +8425,9 @@
         "collector": "rdkit",
         "sender": "deepchem",
         "shared_context": [
-          "molecular",
+          "workflows",
           "smiles",
-          "workflows"
+          "molecular"
         ]
       }
     },
@@ -8437,7 +8437,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'flowio' (sender) have complementary descriptions with shared context: use, standard. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'flowio' (sender) have complementary descriptions with shared context: standard, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8447,8 +8447,8 @@
         "collector": "rdkit",
         "sender": "flowio",
         "shared_context": [
-          "use",
-          "standard"
+          "standard",
+          "use"
         ]
       }
     },
@@ -8458,7 +8458,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: fine, workflows, control, use, grained. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'matplotlib' (sender) have complementary descriptions with shared context: fine, workflows, control, grained, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8471,8 +8471,8 @@
           "fine",
           "workflows",
           "control",
-          "use",
-          "grained"
+          "grained",
+          "use"
         ]
       }
     },
@@ -8482,7 +8482,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: use, workflows. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'omero-integration' (sender) have complementary descriptions with shared context: workflows, use. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8492,8 +8492,8 @@
         "collector": "rdkit",
         "sender": "omero-integration",
         "shared_context": [
-          "use",
-          "workflows"
+          "workflows",
+          "use"
         ]
       }
     },
@@ -8503,7 +8503,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'rdkit' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: generation, molecular, use. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'rdkit' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: use, molecular, generation. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8513,9 +8513,9 @@
         "collector": "rdkit",
         "sender": "tamarind",
         "shared_context": [
-          "generation",
+          "use",
           "molecular",
-          "use"
+          "generation"
         ]
       }
     },
@@ -8525,7 +8525,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: explicit, scientific, when. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'deepchem' (sender) have complementary descriptions with shared context: explicit, when, scientific. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8536,8 +8536,8 @@
         "sender": "deepchem",
         "shared_context": [
           "explicit",
-          "scientific",
-          "when"
+          "when",
+          "scientific"
         ]
       }
     },
@@ -8547,7 +8547,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: when, asks, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'fictiv' (sender) have complementary descriptions with shared context: asks, when, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8557,8 +8557,8 @@
         "collector": "research-lookup",
         "sender": "fictiv",
         "shared_context": [
-          "when",
           "asks",
+          "when",
           "user"
         ]
       }
@@ -8569,7 +8569,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, scientific, when, user. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'optimize-for-gpu' (sender) have complementary descriptions with shared context: parallel, when, scientific, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8580,8 +8580,8 @@
         "sender": "optimize-for-gpu",
         "shared_context": [
           "parallel",
-          "scientific",
           "when",
+          "scientific",
           "user"
         ]
       }
@@ -8592,7 +8592,7 @@
       "severity": "LOW",
       "category": "social_engineering",
       "title": "Skills have complementary descriptions",
-      "description": "Skill 'research-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: source, when, user, references. This may be intentional design or could indicate coordinated behavior.",
+      "description": "Skill 'research-lookup' (collector) and 'tamarind' (sender) have complementary descriptions with shared context: references, when, source, user. This may be intentional design or could indicate coordinated behavior.",
       "file_path": "(cross-skill analysis)",
       "line_number": null,
       "snippet": null,
@@ -8602,10 +8602,10 @@
         "collector": "research-lookup",
         "sender": "tamarind",
         "shared_context": [
-          "source",
+          "references",
           "when",
-          "user",
-          "references"
+          "source",
+          "user"
         ]
       }
     },

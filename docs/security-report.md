@@ -1,6 +1,6 @@
 # Security Scan Report
 
-**Generated:** 2026-11-09 09:17 UTC  
+**Generated:** 2026-11-16 09:18 UTC  
 **Skills scanned:** 177  
 **Total findings:** 472  
 **Critical:** 32 | **High:** 21 | **Safe skills:** 159/177
