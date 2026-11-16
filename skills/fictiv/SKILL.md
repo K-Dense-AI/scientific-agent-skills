@@ -4,7 +4,7 @@ description: Operates Fictiv (app.fictiv.com), the on-demand manufacturing platf
 license: MIT
 compatibility: Needs network access, a browser-automation tool, and the user's logged-in Fictiv account at app.fictiv.com. The optional DOM helpers need browser JavaScript execution; the local CAD pre-flight script needs Python 3.10+ (standard library only).
 metadata:
-  version: "1.3"
+  version: "1.4"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
 ---
@@ -81,6 +81,7 @@ Resolve blocking items before uploading:
 - Export STEP.
 - Split separate parts; review documented CNC pins/inserts and functional 3DP multi-body exceptions before treating a warning as a rejection.
 - Confirm units.
+- Re-export STL files if the checker finds no triangles; a nonempty file can still contain no mesh geometry.
 
 **3. Upload**
 - Go to `/pages/quotes/upload` and **click the process card** (check that the URL gains `?process=…`).
