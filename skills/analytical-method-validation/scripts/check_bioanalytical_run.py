@@ -48,6 +48,7 @@ from _common import (  # noqa: E402
     require_columns,
     run_cli,
     to_float,
+    within_limit,
 )
 
 LIMIT_LABELS = {"lloq", "uloq"}
@@ -97,7 +98,7 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
                                "tolerance_pct": float("nan"), "within": "excluded"})
                 continue
             tol = calibrator_tolerance(label, crit)
-            ok = abs(dev) <= tol
+            ok = within_limit(abs(dev), tol)
             cal_total += 1
             cal_pass += int(ok)
             cal_by_level.setdefault(nominal, []).append(ok)
@@ -106,7 +107,7 @@ def check_run(path: str, crit: dict) -> tuple[list[dict], list[str]]:
                            "tolerance_pct": tol, "within": ok})
         elif kind in ("qc", "quality-control"):
             tol = crit["qc_run_tolerance_pct"]
-            ok = abs(dev) <= tol
+            ok = within_limit(abs(dev), tol)
             key = nominal
             qc_labels[key] = label or f"{nominal:g}"
             qc_by_level.setdefault(key, []).append(ok)
@@ -202,7 +203,7 @@ def check_isr(path: str, crit: dict) -> tuple[list[dict], list[str]]:
             raise InputError(f"row {i + 1}: mean of original and repeat is zero")
         # M10 defines the ISR percent difference against the mean of the two.
         diff = 100.0 * (repeat - original) / mean_val
-        ok = abs(diff) <= tol
+        ok = within_limit(abs(diff), tol)
         passes += int(ok)
         detail.append({"sample": r.get("sample", str(i + 1)), "original": original,
                        "repeat": repeat, "mean": mean_val, "percent_difference": diff,
@@ -237,7 +238,7 @@ def check_total_error(path: str, crit: dict) -> tuple[list[dict], list[str]]:
             if label.lower() in LIMIT_LABELS
             else crit["total_error_pct"]
         )
-        ok = total <= limit
+        ok = within_limit(total, limit)
         detail.append({"label": label or "-", "accuracy_pct": acc, "precision_pct": prec,
                        "total_error_pct": total, "limit_pct": limit, "within": ok})
         if not ok:

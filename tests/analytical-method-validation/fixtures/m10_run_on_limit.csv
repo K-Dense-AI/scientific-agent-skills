@@ -1,0 +1,14 @@
+type,label,nominal,measured
+calibrator,LLOQ,1,1.2
+calibrator,,3,3.45
+calibrator,,5,5
+calibrator,,7,8.05
+calibrator,,9,9
+calibrator,,11,12.65
+calibrator,ULOQ,13,13
+qc,LQC,3,3.45
+qc,LQC,3,3
+qc,MQC,7,5.95
+qc,MQC,7,7
+qc,HQC,11,12.65
+qc,HQC,11,11
