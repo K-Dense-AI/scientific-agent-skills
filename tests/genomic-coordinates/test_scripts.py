@@ -229,22 +229,25 @@ class ReferenceTests(unittest.TestCase):
 
     def test_indexed_and_unindexed_readers_agree(self):
         """A .fai must give the same bases as reading the FASTA sequentially."""
-        with tempfile.TemporaryDirectory() as temporary:
-            fasta = Path(temporary) / "wrapped.fa"
-            sequence = "ACGT" * 25
-            fasta.write_text(
-                ">chr1\n" + "\n".join(sequence[i:i + 10] for i in range(0, 100, 10)) + "\n"
-            )
-            plain = common.Reference(fasta)
-            # offset of the first base = len(">chr1\n") = 6; 10 bases per line, 11 wide
-            Path(str(fasta) + ".fai").write_text("chr1\t100\t6\t10\t11\n")
-            indexed = common.Reference(fasta)
-            for start, end in [(0, 4), (8, 15), (0, 100), (95, 100), (37, 38)]:
-                self.assertEqual(
-                    indexed.fetch("chr1", start, end),
-                    plain.fetch("chr1", start, end),
-                    f"disagreement on [{start}, {end})",
+        sequence = "ACGT" * 25
+        for newline in (b"\n", b"\r\n"):
+            with self.subTest(newline=newline), tempfile.TemporaryDirectory() as temporary:
+                fasta = Path(temporary) / "wrapped.fa"
+                lines = [sequence[i:i + 10].encode("ascii") for i in range(0, 100, 10)]
+                fasta.write_bytes(b">chr1" + newline + newline.join(lines) + newline)
+                plain = common.Reference(fasta)
+                offset = len(b">chr1" + newline)
+                linewidth = 10 + len(newline)
+                Path(str(fasta) + ".fai").write_text(
+                    f"chr1\t100\t{offset}\t10\t{linewidth}\n"
                 )
+                indexed = common.Reference(fasta)
+                for start, end in [(0, 4), (8, 15), (0, 100), (95, 100), (37, 38)]:
+                    self.assertEqual(
+                        indexed.fetch("chr1", start, end),
+                        plain.fetch("chr1", start, end),
+                        f"disagreement on [{start}, {end})",
+                    )
 
 
 class NormalisationTests(unittest.TestCase):
@@ -784,7 +787,7 @@ class SkillStructureTests(unittest.TestCase):
 
     def test_no_tests_ship_inside_the_skill(self):
         self.assertEqual(list(SKILL_ROOT.rglob("test_*.py")), [])
-        self.assertEqual(list(SKILL_ROOT.rglob("*.pyc")), [])
+        self.assertEqual(skill_contract.structure.bytecode_problems(SKILL_ROOT), [])
 
     def test_local_markdown_links_resolve(self):
         pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
