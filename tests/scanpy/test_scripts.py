@@ -128,10 +128,20 @@ class SummaryTests(unittest.TestCase):
         # for X, which must not be rendered as a layer (and must not raise).
         self.assertEqual(len(_common.summarize(synthetic()).splitlines()), 1)
 
-    def test_the_unnamed_x_layer_is_never_listed(self) -> None:
-        adata = synthetic()
-        self.assertIn(None, list(adata.layers.keys()))
-        self.assertNotIn("layers:", _common.summarize(adata))
+    def test_unnamed_mapping_keys_are_filtered_without_losing_named_layers(self) -> None:
+        # AnnData versions differ in whether .layers exposes X under None.
+        # Probe the filtering boundary explicitly; the tests above cover real
+        # AnnData summaries with both bare matrices and named layers.
+        sentinel = object()
+        for keys, expected in (
+            ({}, []),
+            ({None: sentinel}, []),
+            ({None: sentinel, "counts": sentinel}, ["counts"]),
+            ({"counts": sentinel, None: sentinel, "normalized": sentinel},
+             ["counts", "normalized"]),
+        ):
+            with self.subTest(keys=list(keys)):
+                self.assertEqual(_common._named_keys(keys), expected)
 
     def test_the_obs_listing_is_capped(self) -> None:
         # A dataset with hundreds of obs columns must not print all of them.
