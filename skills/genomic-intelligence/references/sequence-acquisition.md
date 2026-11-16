@@ -52,12 +52,26 @@ probes returned HTTP 500 during this review; the equivalent hosted acquisition
 checks succeeded through its cache/UCSC paths. Treat direct-network availability
 as unverified, not a reason to claim the endpoint is retired.
 
-## Expression: select a transcript, then build the window
+## Expression: select a transcript, then size the flank from the model list
 
-Expression scores one half-open slice
-`sequence[tss_index - 4599 : tss_index + 4599]`. In a 9,198-bp gene-sense
-window the **TSS base is at offset 4,599**: 4,599 upstream bases, the TSS base,
-and 4,598 downstream bases. Its asymmetry reverses in genomic coordinates.
+Every expression model admits the same input: at least 9,198 bp of gene-sense
+sequence with the TSS at least 4,599 bp from each end, plus `tss_index` unless
+the body is exactly 9,198 bp. What a model *reads* around `tss_index` differs:
+a fixed-window model reads only `sequence[tss_index - 4599 : tss_index + 4599]`,
+a long-context model reads tens of kb on each side. Each model publishes how
+much to supply as `bio_spec.recommended_flank_bp`; read it at call time, because
+new and longer-window models are added and become the default without notice.
+
+**The flank F.** F is the largest `recommended_flank_bp` among the models
+`GET /v1/tasks/expression/models` lists (public, no key), never below 4,599, and
+with 2F within `request_max_bp`. One fetch at that F serves every listed model.
+Fetch F bp before the TSS and F bp from the TSS onward, gene-sense, so the
+**TSS base is at offset F**, and send `tss_index = F`. In 1-based genomic
+coordinates that is `[tss - F, tss + F - 1]` on plus strand and
+`[tss - F + 1, tss + F]` reverse-complemented (Ensembl `strand=-1`) on minus
+strand; the asymmetry reverses with the strand. Fetching the plus-strand range
+on a minus-strand gene puts the TSS at F - 1, still in range, so it returns a
+confident `200` for the wrong window.
 
 Use the intended transcript, or explicitly choose Ensembl's canonical transcript
 from the expanded lookup. On plus strand its TSS is transcript start; on minus
@@ -65,36 +79,60 @@ strand it is transcript end. Gene-body boundaries can differ substantially and
 are not a substitute. Canonical status is a reference convention, not evidence
 that this transcript is active in the assayed cell type.
 
-The MCP helper prefers a canonical transcript but **falls back to the gene
-boundary if none is available**. Check `data.tss_source == "canonical-transcript"`
-or resolve the intended transcript yourself; an exact 9,198-bp length alone
-does not establish correct TSS placement.
+The MCP helper `fetch_gene_for_expression` sizes F from the model list itself
+and records `tss_index` on the handle. It prefers a canonical transcript but
+**falls back to the gene boundary if none is available**. Check
+`data.tss_source == "canonical-transcript"` or resolve the intended transcript
+yourself; a correct length alone does not establish correct TSS placement.
 
 ```python
-def expression_region(tss, strand):
-    """Return 1-based inclusive genomic bounds with gene-sense TSS offset 4599."""
+import requests
+
+FLOOR = 4599  # the contract's minimum flank; not a target
+
+def expression_flank(base="https://api.genomicintelligence.ai"):
+    """F: the largest listed recommended_flank_bp, >= 4599, 2F <= request_max_bp."""
+    r = requests.get(f"{base}/v1/tasks/expression/models", timeout=30)
+    r.raise_for_status()
+    specs = [m.get("bio_spec") or {} for m in r.json()["models"]]
+    flanks = [s["recommended_flank_bp"] for s in specs if s.get("recommended_flank_bp")]
+    caps = [s["request_max_bp"] for s in specs if s.get("request_max_bp")]
+    flank = max([FLOOR, *flanks])
+    if caps:
+        flank = min(flank, min(caps) // 2)
+    return max(flank, FLOOR)
+
+def expression_region(tss, strand, flank):
+    """1-based inclusive genomic bounds with the gene-sense TSS at offset `flank`."""
     if not isinstance(tss, int) or isinstance(tss, bool) or tss < 1:
         raise ValueError("tss must be a positive 1-based integer")
     if isinstance(strand, bool) or strand not in (-1, 1):
         raise ValueError("strand must be +1 or -1")
-    start, end = ((tss - 4599, tss + 4598) if strand == 1
-                  else (tss - 4598, tss + 4599))
+    if not isinstance(flank, int) or flank < FLOOR:
+        raise ValueError("flank must be an integer >= 4599")
+    start, end = ((tss - flank, tss + flank - 1) if strand == 1
+                  else (tss - flank + 1, tss + flank))
     if start < 1:
-        raise ValueError("TSS window extends before chromosome start")
+        raise ValueError("TSS flank extends before chromosome start")
     return start, end
 
-# HBB minus-strand canonical TSS in the reviewed GRCh38 reference:
-assert expression_region(5227071, -1) == (5222473, 5231670)
-# After fetching with strand=-1, 5231670 - 4599 == 5227071.
+# HBB minus-strand canonical TSS in the reviewed GRCh38 reference, at the
+# 4,599 floor and at an illustrative larger F:
+assert expression_region(5227071, -1, 4599) == (5222473, 5231670)
+assert expression_region(5227071, -1, 20000) == (5207072, 5247071)
+# After fetching with strand=-1 the TSS is at end - tss == flank.
 ```
 
-Also reject a chromosome-end truncation: check the returned length is exactly
-9,198 and preserve the transcript accession/version, assembly and fetch region.
-For a wider gene-sense locus, compute `tss_index = tss - start` on plus strand
-or `end - tss` on minus strand, after stripping sequence whitespace. Require
+Near a chromosome end, use the largest symmetric F that fits, down to 4,599,
+and say so; a TSS closer than 4,599 bp to the end cannot be scored. Check the
+returned length is exactly 2F (no silent truncation) and preserve the transcript
+accession/version, assembly, fetch region and F. For a locus you did not cut
+this way, compute `tss_index = tss - start` on plus strand or `end - tss` on
+minus strand, after stripping sequence whitespace, and require
 `4599 <= tss_index <= len(sequence) - 4599`. Direct expression does not pad or
-find TSSs. Verify `meta.sequence_length`, `data.input.tss_index`, and
-`meta.task_specific_counts.scored_window` against those expected values.
+find TSSs. Verify `meta.sequence_length`, `data.input.tss_index`, and that
+`meta.task_specific_counts.scored_window` contains `tss_index`; its width is how
+much the model read.
 
 ## Other tasks
 
