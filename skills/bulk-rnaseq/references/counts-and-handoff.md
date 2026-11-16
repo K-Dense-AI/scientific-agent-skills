@@ -98,6 +98,10 @@ as fragments (`-p --countReadPairs`). Neither importer infers experimental desig
 Raw duplicate column labels are rejected before pandas can rename them, including
 Salmon tables, transcript maps, featureCounts, samplesheets and metadata. Resolve
 the ambiguity in the source instead of choosing one renamed column.
+Header-bearing tables never use inferred row indices: surplus nonempty fields
+must not shift gene IDs or counts or be silently discarded. Pandas still owns
+quoting, comments and empty trailing fields; missing required values remain
+subject to each importer's checks.
 
 All-zero genes are removed during export. Samples with no counts stop the export.
 

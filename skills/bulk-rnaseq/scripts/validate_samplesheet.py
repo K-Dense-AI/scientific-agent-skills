@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from _tabular import validate_header
+from _tabular import read_table, validate_header
 
 VALID_STRANDEDNESS = {"auto", "forward", "reverse", "unstranded"}
 REMOTE_PREFIXES = ("http://", "https://", "ftp://", "s3://", "gs://", "az://")
@@ -73,7 +73,7 @@ def validate_samplesheet(path: Path, check_files: bool, rep: Report,
 
     try:
         validate_header(path)
-        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+        df = read_table(path, dtype=str, keep_default_na=False)
     except ValueError as exc:
         rep.error(f"invalid samplesheet CSV: {exc}")
         return None
@@ -164,7 +164,8 @@ def validate_metadata(meta_path: Path, sheet: pd.DataFrame | None,
 
     try:
         validate_header(meta_path)
-        meta = pd.read_csv(meta_path, dtype=str, keep_default_na=False, index_col=0)
+        meta = read_table(meta_path, dtype=str, keep_default_na=False)
+        meta = meta.set_index(meta.columns[0])
     except ValueError as exc:
         rep.error(f"invalid metadata CSV: {exc}")
         return
