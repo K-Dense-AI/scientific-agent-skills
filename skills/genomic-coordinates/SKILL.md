@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library - no third-party packages and no network access. Variant normalisation needs an uncompressed reference FASTA with exact contig names; .fai enables indexed access. Without .fai the entire FASTA is loaded into memory.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -147,6 +147,8 @@ code 1 on a detected conflict. `unknown`/`ambiguous` with exit 0 is not proof of
 compatibility; lengths cannot detect same-length sequence changes or masking.
 Reference contig supersets are expected. VCF header and record extents are both
 checked when comparing; SV/gVCF spans require a native validator.
+Empty record sets provide no observed contig conflicts; declared VCF headers
+are still compared against other headers and references.
 
 **GRCh37 and hg19 share primary nuclear coordinates, but differ in mitochondrial reference** — 16,569 bp (rCRS) versus
 16,571 bp. Nuclear coordinates are identical, so a mixed pipeline runs fine and
