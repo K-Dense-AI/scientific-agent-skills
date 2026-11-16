@@ -147,6 +147,7 @@ Match the user's intent to the right database(s). Many queries benefit from hitt
 | US debt, yield curves, fiscal data | US Treasury | FRED |
 | Stock prices, forex, crypto | Alpha Vantage | — |
 | Statistical data across many topics | Data Commons | — |
+| Official statistics across places and periods, when one cross-source access layer is useful | The relevant statistical publisher | Invokely (MCP or REST access; cite the publisher returned with each result) |
 
 ### Social Sciences & Demographics
 | User is asking about... | Primary database(s) | Also consider |
