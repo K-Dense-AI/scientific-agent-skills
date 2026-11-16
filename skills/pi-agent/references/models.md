@@ -32,6 +32,26 @@ Only `id` is required per model. The `apiKey` placeholder matters because Pi tre
 
 For `google-generative-ai` custom models, `baseUrl` is required (for example `https://generativelanguage.googleapis.com/v1beta`).
 
+## Gateway Example
+
+Self-hosted OpenAI-compatible gateways use the same shape. For example, [Bifrost](https://github.com/maximhq/bifrost) (`npx -y @maximhq/bifrost`, port 8080 by default) routes `provider/model` IDs to its configured providers and adds fallbacks, load balancing, and virtual-key budgets. `apiKey` is a Bifrost virtual key (`sk-bf-...`), or any placeholder when virtual keys are not enforced:
+
+```json
+{
+  "providers": {
+    "bifrost": {
+      "baseUrl": "http://localhost:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "$BIFROST_VIRTUAL_KEY",
+      "models": [
+        { "id": "openai/gpt-4o-mini" },
+        { "id": "anthropic/claude-sonnet-4-6" }
+      ]
+    }
+  }
+}
+```
+
 ## Supported APIs
 
 `openai-completions` (most compatible), `openai-responses`, `anthropic-messages`, `google-generative-ai`. Set `api` at provider level as the default, or per model to override.
