@@ -22,7 +22,8 @@ Every walk here:
     python3 paginate.py --api openalex --query 'filter=publication_year:2024' --dry-run
 
 Needs network access. No credentials required for bioRxiv, medRxiv, Europe PMC,
-Crossref, or OpenAlex; OPENALEX_API_KEY raises the OpenAlex daily budget.
+Crossref, or OpenAlex; OPENALEX_API_KEY raises the OpenAlex daily budget and
+is needed to follow OpenAlex cursors past the first page.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import Reconciliation, emit, fail, redact_url  # noqa: E402
 
-USER_AGENT = "paper-lookup-skill/2.4 (+https://agentskills.io)"
+USER_AGENT = "paper-lookup-skill/2.5 (+https://agentskills.io)"
 DEFAULT_MAX_RECORDS = 1000
 DEFAULT_MAX_CALLS = 50
 REQUEST_TIMEOUT = 60
@@ -219,6 +220,13 @@ def _openalex_url(query: str, state: Any, limit: int) -> str:
     key = os.environ.get("OPENALEX_API_KEY")
     if key:
         params["api_key"] = key
+    elif state != "*":
+        # Without a key, OpenAlex answers a followed next_cursor with HTTP 401.
+        raise RuntimeError(
+            "OpenAlex needs a free API key to page past the first page with cursor=: "
+            "set OPENALEX_API_KEY (https://openalex.org/settings/api), or pass "
+            "--max-records 100 or fewer to keep only the first page"
+        )
     return base + urllib.parse.urlencode(params)
 
 
