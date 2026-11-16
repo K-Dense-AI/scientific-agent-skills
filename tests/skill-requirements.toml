@@ -466,6 +466,8 @@ packages = ["biopython", "matplotlib", "numpy", "reportlab"]
 python = "3.13"
 packages = ["primer3-py==2.3.1"]
 
+[skills.proteingym]
+packages = []
 [skills.pysam]
 packages = ["pysam==0.24.1"]
 
