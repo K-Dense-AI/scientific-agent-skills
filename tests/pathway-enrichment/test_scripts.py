@@ -230,3 +230,81 @@ def test_cli_local_results_metadata_and_no_stale_plot(tmp_path):
     assert not (out/"ora_dotplot.png").exists()
     second=subprocess.run(cmd,capture_output=True,text=True,env=env)
     assert second.returncode!=0 and "fresh directory" in second.stderr
+
+
+# FlyBase's na (narrow abdomen) is a literal gene ID, not a missing-value marker.
+# https://flybase.org/reports/FBgn0002917.htm
+@pytest.mark.parametrize("filename,header", [("hits.txt", ""), ("hits.csv", "gene\n"), ("hits.tsv", "gene\n")])
+def test_literal_missing_like_gene_ids_survive_file_cleanup(tmp_path, filename, header):
+    ids = ["na", "nan", "NA", "None", "N/A", "dpp"]
+    path = write(tmp_path, filename, header + "\n".join(ids) + "\n")
+    assert runner._clean_symbols(runner._read_gene_list(path), "fly") == ids
+
+
+def test_actual_missing_ids_are_still_removed_not_stringified():
+    values = [None, np.nan, pd.NA, "", "  ", " na ", "na", "dpp"]
+    assert runner._clean_symbols(values, "fly") == ["na", "dpp"]
+    for missing in (None, np.nan, pd.NA, "", "  "):
+        with pytest.raises(ValueError, match="identifiers"):
+            runner._prepare_rank(pd.Series([2., 1.], index=[missing, "dpp"]), "fly")
+
+
+@pytest.mark.parametrize("source", ["rnk", "deseq2"])
+def test_ranked_literal_ids_keep_scores_while_missing_scores_are_excluded(tmp_path, source):
+    text = "gene,stat\nna,4\nnan,3\nNone,2\nN/A,1\ndpp,NA\nhh,nan\nwg,None\nen,N/A\nptc,\n"
+    path = write(tmp_path, "rank.csv", text)
+    reader = runner._read_rnk if source == "rnk" else runner._build_rank_from_deseq2
+    with pytest.warns(UserWarning, match="Excluded 5"):
+        rank = reader(path, "fly")
+    assert rank.to_dict() == {"na": 4., "nan": 3., "None": 2., "N/A": 1.}
+    assert rank.attrs["missing_statistics_excluded"] == 5
+
+
+def test_local_ora_preserves_na_hit_and_background_in_exact_statistics(tmp_path):
+    genes = write(tmp_path, "hits.txt", "na\ndpp\n")
+    background = write(tmp_path, "background.txt", "na\ndpp\nhh\nwg\nen\nptc\nsmo\nci\nap\nvg\n")
+    gmt = write(tmp_path, "fly.gmt", "SET\tdescription\tna\tdpp\thh\n")
+    args = argparse.Namespace(genes=str(genes), background=str(background),
+        libraries=[str(gmt)], organism="fly", fdr=0.05)
+    res, _, _ = runner.run_ora(args)
+    assert args.input_summary["query_genes"] == 2
+    assert args.input_summary["background_genes"] == 10
+    assert res.Overlap.tolist() == ["2/3"]
+    assert float(res["P-value"].iloc[0]) == pytest.approx(hypergeom.sf(1, 10, 3, 2))
+    assert set(res.Genes.iloc[0].split(";")) == {"na", "dpp"}
+
+
+def test_cli_local_ora_reports_literal_na_without_losing_universe(tmp_path):
+    genes = write(tmp_path, "hits.csv", "gene\nna\ndpp\n")
+    background = write(tmp_path, "background.tsv", "gene\nna\ndpp\nhh\nwg\nen\nptc\nsmo\nci\nap\nvg\n")
+    gmt = write(tmp_path, "fly.gmt", "SET\tdescription\tna\tdpp\thh\n")
+    out = tmp_path / "output"
+    cmd = [sys.executable, str(SKILL_ROOT / "scripts/run_enrichment.py"), "ora",
+        "--genes", str(genes), "--background", str(background), "--libraries", str(gmt),
+        "--organism", "fly", "--outdir", str(out)]
+    run = subprocess.run(cmd, capture_output=True, text=True,
+        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", MPLBACKEND="Agg"))
+    assert run.returncode == 0, run.stderr
+    res = pd.read_csv(out / "ora_results.csv")
+    assert res.Overlap.tolist() == ["2/3"]
+    assert float(res["P-value"].iloc[0]) == pytest.approx(1 / 15)
+    metadata = json.loads((out / "ora_metadata.json").read_text())
+    assert metadata["arguments"]["input_summary"]["query_genes"] == 2
+    assert metadata["arguments"]["input_summary"]["background_genes"] == 10
+
+
+def test_native_prerank_keeps_na_and_nan_in_leading_edges(tmp_path):
+    ids = ["na", *[f"gene{i}" for i in range(38)], "nan"]
+    scores = np.linspace(4, -4, 40)
+    rank_path = write(tmp_path, "genes.rnk", "".join(f"{gene}\t{score}\n" for gene, score in zip(ids, scores)))
+    gmt = write(tmp_path, "fly.gmt", "TOP\tdescription\t" + "\t".join(ids[:8]) +
+        "\nBOTTOM\tdescription\t" + "\t".join(ids[-8:]) + "\n")
+    args = argparse.Namespace(deseq2=None, rnk=str(rank_path), organism="fly",
+        libraries=[str(gmt)], min_size=3, max_size=20, permutations=100,
+        seed=123, threads=1, fdr=0.05)
+    res, _, _ = runner.run_gsea(args)
+    assert args.input_summary["ranked_genes"] == 40
+    leading = set(";".join(res.Lead_genes).split(";"))
+    assert {"na", "nan"} <= leading
+    assert (res.NES.astype(float) > 0).any()
+    assert (res.NES.astype(float) < 0).any()
