@@ -404,6 +404,26 @@ class RoutingTests(unittest.TestCase):
 
 
 class PacketTests(unittest.TestCase):
+    def test_packet_extracts_pmids_only_from_explicit_identifiers(self):
+        for url, text, pmid, missing in (
+            ("https://pubmed.ncbi.nlm.nih.gov/1/", "", "1", 0),
+            ("https://pubmed.ncbi.nlm.nih.gov/12345/", "", "12345", 0),
+            ("https://example.org/paper", "PMID: 1", "1", 0),
+            ("https://example.org/paper", "PMID: 12345", "12345", 0),
+            ("https://example.org/paper", "PMID: 12345678", "12345678", 0),
+            ("https://example.org/paper", "Published in 1975 with 1 patient", "", 1),
+        ):
+            with self.subTest(url=url, text=text):
+                packet = build_manuscript_packet(
+                    query="topic",
+                    sources=[{"url": url, "excerpts": [text]}],
+                    search_ledger=[],
+                    target_references=1,
+                )
+
+                self.assertEqual(packet["references"][0]["pmid"], pmid)
+                self.assertEqual(packet["coverage"]["missing_doi_or_pmid"], missing)
+
     def test_deduplication_merges_doi_url_and_title_records(self):
         first = {
             "title": "A Definitive Study",
