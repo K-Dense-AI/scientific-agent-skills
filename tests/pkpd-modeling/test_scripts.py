@@ -654,6 +654,43 @@ class TestExposureResponse(unittest.TestCase):
         self.assertGreater(fit["slope"], 0.0)
         self.assertAlmostEqual(fit["exposure_at_50pct_probability"], 50.0, delta=12.0)
 
+    def test_logistic_converges_on_auc_scale_exposure(self) -> None:
+        # Rescaling exposure must rescale the slope and its SE and change nothing
+        # else; BFGS reported non-convergence from about 100x onwards.
+        rng = np.random.default_rng(7)
+        base = rng.lognormal(np.log(2.0), 0.6, 300)
+        response = (rng.uniform(0, 1, 300) < 1 / (1 + np.exp(-(base - 2.0)))).astype(float)
+        unit = exposure_response.fit_logistic(base, response)
+        for scale in (100.0, 1000.0, 10000.0):
+            fit = exposure_response.fit_logistic(base * scale, response)
+            self.assertTrue(fit["converged"], scale)
+            self.assertAlmostEqual(fit["slope"] * scale / unit["slope"], 1.0, places=9)
+            self.assertAlmostEqual(fit["se_slope"] * scale / unit["se_slope"], 1.0, places=9)
+            self.assertAlmostEqual(fit["neg_loglik"], unit["neg_loglik"], places=9)
+
+    def test_logistic_se_is_the_fisher_information(self) -> None:
+        rng = np.random.default_rng(11)
+        conc = rng.uniform(100, 5000, 200)
+        response = (rng.uniform(0, 1, 200) < 1 / (1 + np.exp(-(conc - 2500) / 800))).astype(float)
+        fit = exposure_response.fit_logistic(conc, response)
+        design = np.column_stack([np.ones_like(conc), conc])
+        prob = 1 / (1 + np.exp(-(fit["intercept"] + fit["slope"] * conc)))
+        self.assertLess(np.max(np.abs(design.T @ (response - prob))), 1e-6 * len(conc) * conc.max())
+        fisher = design.T @ (design * (prob * (1 - prob))[:, None])
+        self.assertAlmostEqual(fit["se_slope"] / math.sqrt(np.linalg.inv(fisher)[1, 1]), 1.0, places=9)
+
+    def test_logistic_cli_reports_convergence_on_auc_scale(self) -> None:
+        rng = np.random.default_rng(7)
+        auc = rng.lognormal(np.log(2000.0), 0.6, 300)
+        response = rng.uniform(0, 1, 300) < 1 / (1 + np.exp(-(auc - 2000.0) / 1000.0))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "er.csv"
+            path.write_text("exposure,response\n" + "".join(
+                f"{a:.6g},{int(r)}\n" for a, r in zip(auc, response)))
+            result = run_script("exposure_response", "--logistic", "-i", str(path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("did not converge", result.stdout + result.stderr)
+
     def test_logistic_rejects_non_binary(self) -> None:
         with self.assertRaises(_common.InputError):
             exposure_response.fit_logistic(np.array([1.0, 2.0]), np.array([0.0, 3.0]))
