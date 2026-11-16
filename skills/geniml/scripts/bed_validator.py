@@ -119,8 +119,6 @@ def validate(args: argparse.Namespace) -> tuple[dict, int]:
     contigs: set[str] = set()
     seen: set[tuple[str, int, int]] = set()
     duplicate_count = 0
-    overlap_count = 0
-    max_end_by_contig: dict[str, int] = {}
     previous_sort_key: tuple[int | str, int, int] | None = None
     unsorted_count = 0
     strand_rows = 0
@@ -249,11 +247,6 @@ def validate(args: argparse.Namespace) -> tuple[dict, int]:
         else:
             seen.add(key)
 
-        prior_end = max_end_by_contig.get(chrom)
-        if prior_end is not None and start < prior_end:
-            overlap_count += 1
-        max_end_by_contig[chrom] = max(end, prior_end or end)
-
         if chrom_order is None:
             sort_key: tuple[int | str, int, int] = (chrom, start, end)
         else:
@@ -261,6 +254,17 @@ def validate(args: argparse.Namespace) -> tuple[dict, int]:
         if previous_sort_key is not None and sort_key < previous_sort_key:
             unsorted_count += 1
         previous_sort_key = sort_key
+
+    # Sweep in coordinate order without rewriting the input. Reuse the unique
+    # intervals already retained for duplicate detection; every duplicate also
+    # contributes one overlap observation, as it does in a sorted BED.
+    overlap_count = duplicate_count
+    max_end_by_contig: dict[str, int] = {}
+    for chrom, start, end in sorted(seen):
+        prior_end = max_end_by_contig.get(chrom)
+        if prior_end is not None and start < prior_end:
+            overlap_count += 1
+        max_end_by_contig[chrom] = max(end, prior_end or end)
 
     if records == 0 and not args.allow_empty:
         errors["no_data_records"] += 1
