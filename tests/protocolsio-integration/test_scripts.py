@@ -12,6 +12,9 @@ import unittest
 import urllib.error
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -708,6 +711,115 @@ class ScriptTests(unittest.TestCase):
                 "https://example.org/",
             )
         )
+
+
+def paginated_fixture(total, *, max_pages=20, max_items=2000, extra=None):
+    """Provide synthetic 100-item pages through the real request parser."""
+    argv = [
+        "--execute", "list", "--query", "synthetic", "--page-size", "100",
+        "--max-pages", str(max_pages), "--max-items", str(max_items),
+    ]
+    args = protocols_read.build_parser().parse_args(argv)
+    plan = protocols_read._plan(args)
+    page_url = plan["url"].rsplit("=", 1)[0] + "="
+    pages = max(1, (total + 99) // 100)
+    responses = []
+    for page in range(1, pages + 1):
+        items = [
+            {"id": index, **(extra or {})}
+            for index in range((page - 1) * 100, min(page * 100, total))
+        ]
+        body = json.dumps({
+            "status_code": 0,
+            "items": items,
+            "pagination": {
+                "page_size": 100,
+                "total_results": total,
+                "total_pages": pages,
+                "current_page": page,
+                "next_page": page_url + str(page + 1) if page < pages else None,
+            },
+        }).encode()
+        responses.append(FakeResponse(body, url=page_url + str(page)))
+    return argv, args, plan, SequenceOpener(responses)
+
+
+@pytest.mark.parametrize("total", [0, 1, 499, 500, 501, 600, 2000])
+def test_list_reports_serialized_protocol_count_separately_from_collection(total):
+    _, args, plan, opener = paginated_fixture(total)
+    report = protocols_read.execute(
+        args, plan, environ={ACCESS_TOKEN_ENV: "unit-test"},
+        opener=opener, sleep=lambda _: None,
+    )
+    assert report["returned_items"] == min(total, 500)
+    assert report["collected_items"] == total
+    assert report["items"] == sanitize_untrusted(
+        [{"id": index} for index in range(total)]
+    )
+    assert report["request_count"] == max(1, (total + 99) // 100)
+
+
+@pytest.mark.parametrize(
+    "max_pages,max_items,expected,requests",
+    [(5, 2000, 500, 5), (20, 550, 550, 6), (6, 600, 600, 6)],
+)
+def test_list_output_still_respects_page_and_item_caps(
+    max_pages, max_items, expected, requests
+):
+    _, args, plan, opener = paginated_fixture(
+        2000, max_pages=max_pages, max_items=max_items,
+    )
+    report = protocols_read.execute(
+        args, plan, environ={ACCESS_TOKEN_ENV: "unit-test"},
+        opener=opener, sleep=lambda _: None,
+    )
+    assert report["returned_items"] == min(expected, 500)
+    assert report["collected_items"] == expected
+    assert report["items"] == sanitize_untrusted(
+        [{"id": index} for index in range(expected)]
+    )
+    assert len(opener.requests) == requests
+    assert report["pagination"]["local_caps"]["reached"]
+    assert not report["pagination"]["can_continue"]
+
+
+def test_list_keeps_existing_aggregate_and_per_item_sanitization():
+    nested = {"value": "leaf"}
+    for _ in range(14):
+        nested = {"child": nested}
+    extra = {
+        "title": "x" * 4001,
+        "access_token": "synthetic-field-value",
+        "versions": list(range(501)),
+        "nested": nested,
+    }
+    _, args, plan, opener = paginated_fixture(600, extra=extra)
+    report = protocols_read.execute(
+        args, plan, environ={ACCESS_TOKEN_ENV: "unit-test"},
+        opener=opener, sleep=lambda _: None,
+    )
+    # Match the original list sanitizer's per-item nesting depth and caps.
+    for index in (0, 499):
+        expected = sanitize_untrusted([{"id": index, **extra}])[0]
+        assert report["items"][index] == expected
+    assert report["items"][499]["access_token"] == "[REDACTED]"
+    assert report["items"][499]["versions"][-1] == {"_truncated_items": 1}
+    assert report["items"][-1] == {"_truncated_items": 100}
+
+
+def test_list_main_emits_matching_count_and_json_items(capsys):
+    argv, _, _, opener = paginated_fixture(600)
+    with patch.dict(os.environ, {ACCESS_TOKEN_ENV: "unit-test"}), patch(
+        "scripts._common.urllib.request.build_opener", return_value=opener,
+    ):
+        assert protocols_read.main(argv) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["returned_items"] == 500
+    assert report["collected_items"] == 600
+    assert len(report["items"]) == 501
+    assert report["items"][499] == {"id": 499}
+    assert report["items"][-1] == {"_truncated_items": 100}
+    assert len(opener.requests) == 6
 
 
 if __name__ == "__main__":
