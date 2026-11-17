@@ -65,6 +65,54 @@ def similarity_screen(query_smiles, database_smiles, threshold=0.7):
     return sorted(hits, key=lambda x: x[2], reverse=True)
 ```
 
+### Batched Search CLI
+
+For file-based screening with recorded parameters, use the bundled helper:
+
+```bash
+python scripts/similarity_search.py 'CCCO' database.smi --method morgan --radius 2 --bits 2048 --threshold 0.7 --batch-size 1000 --num-threads 2 --output hits.csv
+```
+
+Paths above assume the skill directory is the working directory. One generator
+is reused for the query and database; database fingerprints are computed with
+`GetFingerprints(..., numThreads=...)` in bounded batches, then scored with the
+matching `BulkTanimotoSimilarity`, `BulkDiceSimilarity`, or `BulkCosineSimilarity`.
+MACCS uses its dedicated single-molecule API within each batch and remains
+single-threaded. Both batch size and thread count must be positive. Batching
+bounds the temporary fingerprint list; the CLI still loads valid database
+molecules and retains hits in memory. Equal-score hits retain source order.
+
+An all-zero query fingerprint raises an error before results are written. For
+example, ethanol has no four-atom torsions, so its default torsion fingerprint
+is empty even though the molecule is valid. Choose a representation suitable for
+the chemistry; the helper never silently substitutes a different fingerprint.
+All-zero database fingerprints are skipped, even at threshold zero, with a
+warning and their source indices recorded. A nonzero vector is not an identity
+guarantee: collisions and the chosen chemical representation still matter.
+
+`--output hits.csv` writes the existing CSV columns plus `hits.csv.metadata.json`,
+including for a successful search with no hits. The UTF-8 sidecar records:
+
+- RDKit version, query SMILES/CXSMILES, and database file path;
+- method, bit representation, effective radius/size/chirality, and generator
+  `GetInfoString()` where available;
+- metric, threshold, batch size, effective thread count, zero-vector policy,
+  skipped zero-vector source indices, and record/hit counts.
+
+MACCS records its actual 167-bit size, a null radius and generator info, and one
+effective thread; requested size/radius/thread arguments are retained separately
+so ignored options are visible. The CLI's input count is the number of valid
+records loaded by its reader, not physical lines; invalid file records are
+reported by the reader and never reach the search. Direct Python callers may
+pass an iterable of entries and an empty `metadata` dict to `similarity_search`;
+that dict is populated on success, including invalid Mol entries skipped there.
+Keep the original inputs alongside the sidecar: a path is not a dataset snapshot.
+CSV scores retain the existing four-decimal formatting; thresholding uses the
+unrounded score. Metadata records configuration, not cross-version equivalence.
+
+Official APIs: [fingerprint generators](https://www.rdkit.org/docs/source/rdkit.Chem.rdFingerprintGenerator.html)
+and [bulk similarities](https://www.rdkit.org/docs/source/rdkit.DataStructs.cDataStructs.html).
+
 ### Substructure Filtering
 
 ```python
