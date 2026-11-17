@@ -13,6 +13,8 @@ Usage:
 import argparse
 import sys
 import math
+import json
+from itertools import islice
 from pathlib import Path
 
 try:
@@ -36,12 +38,8 @@ FINGERPRINT_METHODS = {
 }
 
 
-def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048,
-                         include_chirality=False):
-    """Generate molecular fingerprint based on specified method."""
-    if mol is None or mol.GetNumAtoms() == 0:
-        return None
-
+def create_generator(method='morgan', radius=2, n_bits=2048, include_chirality=False):
+    """Create one reusable generator; MACCS uses its dedicated API instead."""
     method = method.lower()
     if radius < 0 or n_bits <= 0:
         raise ValueError("radius must be nonnegative and n_bits must be positive")
@@ -49,21 +47,26 @@ def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048,
         raise ValueError(f"{method} does not support include_chirality")
 
     if method == 'morgan':
-        gen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits, includeChirality=include_chirality)
-        return gen.GetFingerprint(mol)
+        return rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=n_bits, includeChirality=include_chirality)
     elif method == 'rdkit':
-        gen = rdFingerprintGenerator.GetRDKitFPGenerator(maxPath=7, fpSize=n_bits)
-        return gen.GetFingerprint(mol)
+        return rdFingerprintGenerator.GetRDKitFPGenerator(maxPath=7, fpSize=n_bits)
     elif method == 'maccs':
-        return MACCSkeys.GenMACCSKeys(mol)
+        return None
     elif method == 'atompair':
-        gen = rdFingerprintGenerator.GetAtomPairGenerator(fpSize=n_bits, includeChirality=include_chirality)
-        return gen.GetFingerprint(mol)
+        return rdFingerprintGenerator.GetAtomPairGenerator(fpSize=n_bits, includeChirality=include_chirality)
     elif method == 'torsion':
-        gen = rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=n_bits, includeChirality=include_chirality)
-        return gen.GetFingerprint(mol)
+        return rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=n_bits, includeChirality=include_chirality)
     else:
         raise ValueError(f"Unknown fingerprint method: {method}")
+
+
+def generate_fingerprint(mol, method='morgan', radius=2, n_bits=2048,
+                         include_chirality=False):
+    """Generate one fingerprint; search separately checks for all-zero vectors."""
+    if mol is None or mol.GetNumAtoms() == 0:
+        return None
+    generator = create_generator(method, radius, n_bits, include_chirality)
+    return generator.GetFingerprint(mol) if generator is not None else MACCSkeys.GenMACCSKeys(mol)
 
 
 def load_molecules(file_path):
@@ -77,63 +80,111 @@ def load_molecules(file_path):
 
 
 def similarity_search(query_mol, database, method='morgan', threshold=0.7,
-                     radius=2, n_bits=2048, metric='tanimoto', include_chirality=False):
+                     radius=2, n_bits=2048, metric='tanimoto', include_chirality=False,
+                     batch_size=1000, num_threads=1, metadata=None):
     """
     Perform similarity search.
 
     Args:
         query_mol: Query molecule (RDKit Mol object)
-        database: List of database molecules
+        database: Iterable of database entries, in source order
         method: Fingerprint method
         threshold: Similarity threshold (0-1)
         radius: Morgan fingerprint radius
         n_bits: Fingerprint size
         metric: Similarity metric (tanimoto, dice, cosine)
+        batch_size: Maximum database entries per fingerprint batch
+        num_threads: Positive thread count for generator batch APIs (not MACCS)
+        metadata: Optional dict populated with effective parameters and counts
 
     Returns:
         List of hits with similarity scores
     """
     if not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError("threshold must be finite and between 0 and 1")
+    if (not isinstance(batch_size, int) or batch_size <= 0 or
+            not isinstance(num_threads, int) or num_threads <= 0):
+        raise ValueError("batch_size and num_threads must be positive integers")
     if query_mol is None or query_mol.GetNumAtoms() == 0:
-        print("Error: Invalid query molecule")
-        return []
+        raise ValueError("Invalid or empty query molecule")
 
-    # Generate query fingerprint
-    query_fp = generate_fingerprint(query_mol, method, radius, n_bits, include_chirality)
-    if query_fp is None:
-        print("Error: Failed to generate query fingerprint")
-        return []
+    method, metric = method.lower(), metric.lower()
+    generator = create_generator(method, radius, n_bits, include_chirality)
+    query_fp = (generator.GetFingerprint(query_mol) if generator is not None
+                else MACCSkeys.GenMACCSKeys(query_mol))
+    if query_fp.GetNumOnBits() == 0:
+        raise ValueError(f"Query has an all-zero {method} fingerprint; choose a suitable fingerprint method")
 
     # Choose similarity function
     if metric.lower() == 'tanimoto':
-        sim_func = DataStructs.TanimotoSimilarity
+        sim_func = DataStructs.BulkTanimotoSimilarity
     elif metric.lower() == 'dice':
-        sim_func = DataStructs.DiceSimilarity
+        sim_func = DataStructs.BulkDiceSimilarity
     elif metric.lower() == 'cosine':
-        sim_func = DataStructs.CosineSimilarity
+        sim_func = DataStructs.BulkCosineSimilarity
     else:
         raise ValueError(f"Unknown similarity metric: {metric}")
 
-    # Search database
+    # Batch fingerprints without changing source order or tie ordering.
     hits = []
-    for db_entry in database:
-        db_fp = generate_fingerprint(db_entry['mol'], method, radius, n_bits, include_chirality)
-        if db_fp is None:
+    counts = {'input_records': 0, 'invalid_molecules': 0, 'zero_fingerprints': 0,
+              'scored_records': 0}
+    zero_indices = []
+    entries = iter(database)
+    while batch := list(islice(entries, batch_size)):
+        counts['input_records'] += len(batch)
+        valid = [entry for entry in batch
+                 if entry['mol'] is not None and entry['mol'].GetNumAtoms() > 0]
+        counts['invalid_molecules'] += len(batch) - len(valid)
+        if not valid:
             continue
-
-        similarity = sim_func(query_fp, db_fp)
-
-        if similarity >= threshold:
-            hits.append({
-                'index': db_entry['index'],
-                'name': db_entry['name'],
-                'smiles': db_entry['smiles'],
-                'similarity': similarity
-            })
+        mols = [entry['mol'] for entry in valid]
+        fps = (generator.GetFingerprints(mols, numThreads=num_threads) if generator is not None
+               else [MACCSkeys.GenMACCSKeys(mol) for mol in mols])
+        scored, nonzero = [], []
+        for entry, fp in zip(valid, fps):
+            if fp.GetNumOnBits() == 0:
+                zero_indices.append(entry['index'])
+                counts['zero_fingerprints'] += 1
+            else:
+                scored.append(entry)
+                nonzero.append(fp)
+        counts['scored_records'] += len(scored)
+        for db_entry, similarity in zip(scored, sim_func(query_fp, nonzero)):
+            if similarity >= threshold:
+                hits.append({
+                    'index': db_entry['index'],
+                    'name': db_entry['name'],
+                    'smiles': db_entry['smiles'],
+                    'similarity': similarity
+                })
 
     # Sort by similarity (descending)
     hits.sort(key=lambda x: x['similarity'], reverse=True)
+    if zero_indices:
+        print(f"[WARN] Skipped {len(zero_indices)} all-zero {method} database fingerprints",
+              file=sys.stderr)
+    if metadata is not None:
+        metadata.clear()
+        metadata.update({
+            'schema_version': 1,
+            'rdkit_version': rdBase.rdkitVersion,
+            'query_smiles': molecule_smiles(query_mol),
+            'fingerprint': {
+                'method': method, 'representation': 'bit',
+                'radius': radius if method == 'morgan' else None,
+                'bits': query_fp.GetNumBits(), 'include_chirality': include_chirality,
+                'generator_info': generator.GetInfoString() if generator is not None else None,
+                'implementation': 'rdFingerprintGenerator' if generator is not None else 'MACCSkeys.GenMACCSKeys',
+            },
+            'metric': metric, 'threshold': threshold,
+            'batch_size': batch_size,
+            'num_threads': num_threads if generator is not None else 1,
+            'requested': {'radius': radius, 'bits': n_bits, 'num_threads': num_threads},
+            'zero_fingerprint_policy': {'query': 'error', 'database': 'skip'},
+            'zero_fingerprint_source_indices': zero_indices,
+            'counts': {**counts, 'hits': len(hits)},
+        })
 
     return hits
 
@@ -223,7 +274,11 @@ Examples:
     parser.add_argument('--metric', default='tanimoto',
                        choices=['tanimoto', 'dice', 'cosine'],
                        help='Similarity metric (default: tanimoto)')
-    parser.add_argument('--output', '-o', help='Output CSV file')
+    parser.add_argument('--output', '-o', help='Output CSV and <output>.metadata.json sidecar')
+    parser.add_argument('--batch-size', type=int, default=1000,
+                       help='Database entries per fingerprint batch (default: 1000)')
+    parser.add_argument('--num-threads', type=int, default=1,
+                       help='Fingerprint batch threads (positive; MACCS remains single-threaded)')
     parser.add_argument('--max-display', type=int, default=20,
                        help='Maximum hits to display (default: 20)')
 
@@ -235,6 +290,8 @@ Examples:
         parser.error("radius must be nonnegative; bits and max-display must be positive")
     if args.chirality and args.method in {'rdkit', 'maccs'}:
         parser.error(f"{args.method} does not support --chirality")
+    if args.batch_size <= 0 or args.num_threads <= 0:
+        parser.error('batch-size and num-threads must be positive')
 
     # Load query
     query_path = Path(args.query)
@@ -273,20 +330,27 @@ Examples:
     print("Searching...")
 
     # Perform search
-    hits = similarity_search(
-        query_mol, database,
-        method=args.method,
-        threshold=args.threshold,
-        radius=args.radius,
-        n_bits=args.bits,
-        metric=args.metric,
-        include_chirality=args.chirality
-    )
+    metadata = {}
+    try:
+        hits = similarity_search(
+            query_mol, database, method=args.method, threshold=args.threshold,
+            radius=args.radius, n_bits=args.bits, metric=args.metric,
+            include_chirality=args.chirality, batch_size=args.batch_size,
+            num_threads=args.num_threads, metadata=metadata
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     # Output results
     if args.output:
         write_results(hits, args.output)
+        metadata['database_file'] = str(args.database)
+        metadata['csv_similarity_decimal_places'] = 4
+        metadata_path = Path(str(args.output) + '.metadata.json')
+        metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + '\n',
+                                 encoding='utf-8')
         print(f"\nResults written to: {args.output}")
+        print(f"Search metadata written to: {metadata_path}")
 
     print_results(hits, args.max_display)
 
