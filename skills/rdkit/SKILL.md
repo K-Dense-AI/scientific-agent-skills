@@ -5,7 +5,7 @@ license: BSD-3-Clause license
 allowed-tools: Read Write Edit Bash
 compatibility: Tested with RDKit 2026.03.6 on Python 3.13; bundled scripts require the rdkit package. No credentials or network are needed after installation. Use conda-forge for the broadest binary support or PyPI package `rdkit` for supported platform wheels; `rdkit-pypi` is the legacy PyPI name.
 metadata:
-  version: "1.5"
+  version: "1.6"
   last-reviewed: "2026-10-01"
   tested-rdkit: "2026.03.6"
   skill-author: K-Dense Inc.
@@ -51,13 +51,17 @@ Twelve capability areas, each with worked code, are documented in
 | 6 | Substructure searching | SMARTS queries, match retrieval, and a library of common patterns |
 | 7 | Chemical reactions | reaction SMARTS, applying reactions, reaction fingerprints |
 | 8 | 2D and 3D coordinates | depiction, template alignment, ETKDG embedding, force-field optimization, RMSD, constrained embedding |
-| 9 | Visualization | single and grid images, substructure highlighting, custom drawer options, Jupyter integration, fingerprint bit environments |
+| 9 | Visualization | single and grid images, ACS1996 SVG/PNG depiction, substructure highlighting, custom drawer options, Jupyter integration, fingerprint bit environments |
 | 10 | Molecular modification | explicit hydrogens, Kekulization, aromaticity, substructure replacement, charge neutralization |
 | 11 | Hashes and standardization | Murcko scaffold and canonical hashes, regioisomer hashes, randomized SMILES for augmentation |
 | 12 | Pharmacophore and 3D features | feature factories and feature extraction |
 
 Worked workflows and the performance, thread-safety, and version-sensitivity notes are in
 [references/workflows_and_best_practices.md](references/workflows_and_best_practices.md).
+
+For ACS-style organic structure figures, see the ACS1996 examples in
+[Molecular Visualization](references/core_capabilities.md#9-molecular-visualization),
+including automatic canvas sizing, drawing finalization, and optional CoordGen layout.
 
 Prefer portable exchange formats (SMILES, SDF) for shared data; for local caches RDKit's
 binary molecule representation avoids generic pickle.

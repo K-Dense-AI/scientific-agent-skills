@@ -1,5 +1,27 @@
 # RDKit review record
 
+## ACS1996 depiction supplement (2026-11-17)
+
+Executed the ACS1996 examples in `core_capabilities.md` with RDKit **2026.09.1**
+on Windows / Python 3.12.14: both SVG flows produced parseable, completed SVG;
+the Cairo flow produced a readable PNG. Checked RDKit and optional CoordGen
+layouts with enantiomers, specified alkene stereo, and a charged disconnected
+salt. Isomeric SMILES and MOL-block round trips retained their chemical meaning,
+and the original molecules retained their conformers.
+
+The [drawing API](https://www.rdkit.org/docs/source/rdkit.Chem.Draw.rdMolDraw2D.html),
+[maintainer examples](https://greglandrum.github.io/rdkit-blog/posts/2023-05-26-drawing-options-explained.html#acs1996-mode),
+and released `drawMolACS1996` / `setACS1996Options` implementations in
+[2023.03.1](https://github.com/rdkit/rdkit/blob/Release_2023_03_1/Code/GraphMol/MolDraw2D/MolDraw2DUtils.cpp),
+[2026.03.6](https://github.com/rdkit/rdkit/blob/Release_2026_03_6/Code/GraphMol/MolDraw2D/MolDraw2DUtils.cpp),
+and [2026.09.1](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/MolDraw2D/MolDraw2DUtils.cpp)
+confirm API availability, automatic canvas guidance, coordinate handling, and
+caller-owned drawing finalization. The older releases were source-reviewed,
+not executed for this supplement. This is a depiction check, not a guarantee
+of journal compliance or layout quality for arbitrary molecules.
+
+## Baseline review (2026-10-01)
+
 Reviewed 2026-10-01 against stable RDKit **2026.03.6**, PyPI package
 `rdkit==2026.3.6`, executed on macOS ARM64 / Python 3.13. Development branches and
 pre-release APIs were not adopted. `FindPotentialStereo` and multithreaded

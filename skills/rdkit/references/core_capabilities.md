@@ -513,6 +513,83 @@ with open('molecule.png', 'wb') as f:
     f.write(drawer.GetDrawingText())
 ```
 
+**ACS1996 Structure Figures (SVG and PNG):**
+
+RDKit's ACS1996 preset is useful for the monochrome organic structure figures
+commonly used in manuscripts. It adjusts drawing style (including fonts, bond
+widths, and spacing); it does not improve the underlying 2D layout or guarantee
+compliance with a journal's current figure requirements.
+
+This runnable example uses the official `DrawMoleculeACS1996` helper and an
+automatically sized canvas (`-1, -1`):
+
+```python
+from pathlib import Path
+from rdkit import Chem
+from rdkit.Chem import rdDepictor
+from rdkit.Chem.Draw import rdMolDraw2D
+
+mol = Chem.MolFromSmiles('C[C@H](O)C(=O)O')
+if mol is None:
+    raise ValueError('Invalid SMILES')
+depiction = Chem.Mol(mol)  # Keep the original molecule and its conformers intact
+rdDepictor.Compute2DCoords(depiction, forceRDKit=True)
+
+drawer = rdMolDraw2D.MolDraw2DSVG(-1, -1)
+rdMolDraw2D.DrawMoleculeACS1996(drawer, depiction)
+drawer.FinishDrawing()  # Required to close the SVG before retrieving it
+Path('molecule_acs1996.svg').write_text(drawer.GetDrawingText(), encoding='utf-8')
+```
+
+The helper generates coordinates on a copy if there are no conformers, but uses
+existing coordinates otherwise. Explicitly generate 2D coordinates on a depiction
+copy when the input may contain a 3D conformer. Neither this example nor the style
+preset strips salts, neutralizes charges, or changes the specified stereochemistry.
+
+For direct option control, replace the drawing block above with:
+
+```python
+drawer = rdMolDraw2D.MolDraw2DSVG(-1, -1)
+mean_bond_length = rdMolDraw2D.MeanBondLength(depiction)
+if mean_bond_length <= 0:
+    raise ValueError('ACS1996 needs a positive mean bond length')
+rdMolDraw2D.SetACS1996Mode(drawer.drawOptions(), mean_bond_length)
+drawer.DrawMolecule(depiction)
+drawer.FinishDrawing()
+Path('molecule_acs1996.svg').write_text(drawer.GetDrawingText(), encoding='utf-8')
+```
+
+`MeanBondLength` needs coordinates: compute it after the final layout, on the
+molecule/conformer being drawn. Bondless structures or degenerate coordinates
+are unsuitable for this preset; use ordinary drawing for them. In both flows,
+the caller finishes the drawing. In particular, do not omit `FinishDrawing()`
+for SVG just because a PNG example retrieves drawing data without it.
+
+For PNG, a build with the Cairo drawing backend is required. After the same
+molecule/coordinate setup, use a new drawer and write bytes:
+
+```python
+drawer = rdMolDraw2D.MolDraw2DCairo(-1, -1)
+rdMolDraw2D.DrawMoleculeACS1996(drawer, depiction)
+drawer.FinishDrawing()
+Path('molecule_acs1996.png').write_bytes(drawer.GetDrawingText())
+```
+
+Layout and style are independent. If the build includes CoordGen, optionally
+replace `Compute2DCoords` with `from rdkit.Chem import rdCoordGen` followed by
+`rdCoordGen.AddCoords(depiction)` before either drawing flow. Inspect the resulting
+skeleton and stereo wedges; an ACS preset alone cannot repair a poor layout.
+For screen previews, zoom the SVG in the viewer. Screen zoom is separate from
+the physical size at which a figure is placed in a manuscript; check label and
+line sizes at the final publication size rather than multiplying unrelated
+drawing options together.
+
+These APIs are present in RDKit 2023.03.1 and the skill's 2026.03.6 baseline;
+the examples were executed with 2026.09.1. See the official
+[drawing API](https://www.rdkit.org/docs/source/rdkit.Chem.Draw.rdMolDraw2D.html)
+and the maintainer's
+[ACS1996 and flexicanvas examples](https://greglandrum.github.io/rdkit-blog/posts/2023-05-26-drawing-options-explained.html#acs1996-mode).
+
 **Jupyter Notebook Integration:**
 
 ```python
