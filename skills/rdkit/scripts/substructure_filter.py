@@ -185,7 +185,7 @@ def write_molecules(molecules, output_file):
             writer.write(mol)
         writer.close()
     elif output_path.suffix.lower() in ['.smi', '.smiles', '.txt']:
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             for mol in molecules:
                 smiles = molecule_smiles(mol)
                 name = mol.GetProp('_Name') if mol.HasProp('_Name') else ''
@@ -200,7 +200,7 @@ def write_report(match_info, output_file):
     """Write detailed match report."""
     import csv
 
-    with open(output_file, 'w', newline='') as f:
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
         fieldnames = ['Index', 'SMILES', 'Status', 'Matches']
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -261,8 +261,11 @@ Examples:
   # Exclude illustrative alert motifs (not a toxicity or PAINS verdict)
   python substructure_filter.py compounds.smi --filter-type pains --exclude-mode -o clean.smi
 
-  # Multiple patterns
-  python substructure_filter.py mol.smi --pattern "c1ccccc1" --pattern "N" --match-all -o aromatic_amines.smi
+  # Neutral amine N directly bonded to aromatic C, excluding common amide-like N
+  python substructure_filter.py mol.smi --pattern '[NX3;+0;!$(N-C=O);!$(N-S(=O)=O);!$(N-P=O)]-c' -o aromatic_amines.smi
+
+  # --match-all requires each pattern somewhere in the molecule; it does not
+  # require the matches to be connected or even in the same disconnected fragment.
         """
     )
 

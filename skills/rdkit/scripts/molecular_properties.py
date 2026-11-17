@@ -136,7 +136,7 @@ def write_csv(results, output_file):
         print("No results to write")
         return
 
-    with open(output_file, 'w', newline='') as f:
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
         fieldnames = results[0].keys()
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
