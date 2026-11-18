@@ -4,7 +4,7 @@ description: Supports geospatial research workflows for remote sensing, vector a
 license: MIT License
 compatibility: Core examples require Python 3.12+ and GeoPandas, Rasterio, NumPy and PyProj. Optional workflows require their named packages, native GIS applications, GPU runtimes, or service credentials and network access.
 metadata:
-  version: "1.5"
+  version: "1.6"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-10-01"
 ---
@@ -14,6 +14,8 @@ metadata:
 Geospatial analysis across vector/raster GIS, remote sensing, spatial ML, terrain,
 networks, and scientific applications. Start with the relevant workflow, inspect
 input provenance, and load only the reference needed for the task.
+
+See `README.md` for an overview and section map of this skill.
 
 ## Tested scope and installation
 
