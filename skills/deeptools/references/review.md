@@ -63,7 +63,7 @@ differential binding require separate inferential workflows.
 - [CLI overview](https://deeptools.readthedocs.io/en/latest/content/list_of_tools.html)
 - [Released normalization source](https://github.com/deeptools/deepTools/blob/4.0.0/src/normalization.rs)
 - [Released operation source](https://github.com/deeptools/deepTools/blob/4.0.0/src/calc.rs)
-- [Released CLI source](https://github.com/deeptools/deepTools/tree/4.0.0/deeptools)
+- [Released CLI source](https://github.com/deeptools/deepTools/tree/4.0.0/pydeeptools/deeptools)
 - [bamCoverage](https://deeptools.readthedocs.io/en/latest/content/tools/bamCoverage.html)
 - [bamCompare](https://deeptools.readthedocs.io/en/latest/content/tools/bamCompare.html)
 - [alignmentSieve](https://deeptools.readthedocs.io/en/latest/content/tools/alignmentSieve.html)
