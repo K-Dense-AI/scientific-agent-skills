@@ -347,7 +347,7 @@ When composing diagrams in a real document, follow these practices:
 
 | Practice                     | Example                                                                                                                             |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Use headers as anchors**   | `See [Authentication Flow](#authentication-flow-for-backend-team) for the full login sequence`                                      |
+| **Use headers as anchors**   | `See [Authentication Flow](#authentication-flow--for-backend-team) for the full login sequence`                                      |
 | **Reference specific nodes** | "The **API Gateway** from the overview connects to the services detailed below"                                                     |
 | **Consistent naming**        | Same entity = same name in every diagram (User Service, not "User Svc" in one and "Users API" in another)                           |
 | **Adjacent placement**       | Keep related diagrams in consecutive sections, not scattered across the document                                                    |
