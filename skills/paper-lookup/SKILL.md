@@ -5,7 +5,7 @@ allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.4"
+  version: "2.5"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
@@ -18,7 +18,9 @@ A literature lookup is only as trustworthy as it is repeatable. Prefer explicit 
 
 Endpoint contracts were reviewed against official documentation on 2026-09-30. Response examples are illustrative shapes or explicitly dated historical captures; counts, prices, availability, and status values are not current lookup results. Selected public smoke calls and offline parser tests do not establish authenticated full-text access.
 
-**These APIs can fail with HTTP 200.** That is the recurring hazard, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv treats cursors as absolute offsets, so an incorrect step skips records. Figshare `GET /articles?search_for=` ignores the query and still 200s. OpenCitations answers an unknown DOI with `[{"count": "0"}]`. None of these raise, and every one of them produces a confident, wrong answer. Verify the shape of what you got, not just the status code.
+**These APIs can fail with HTTP 200.** That is the recurring hazard, and the reason for most of the rules below. PMC eFetch returns a well-formed article with no `<body>` when the publisher forbids redistribution. arXiv returns `totalResults: 1` and one entry titled `Error` for a malformed parameter, and silently rewrites an unknown field prefix to `all:`. Europe PMC puts `errCode` in a 200 body. bioRxiv treats cursors as absolute offsets, so an incorrect step skips records. Figshare `GET /articles?search_for=` ignores the query and still 200s. OpenCitations answers an unknown DOI with `[{"count": "0"}]`. PMC `/bin/` file URLs can also return an HTML "Preparing to download" page with HTTP 200. None of these raise, and every one of them can produce a confident, wrong answer. Verify the response shape, not just the status code.
+
+Before passing a downloaded file to a parser, check that its size is plausible for the requested format and that its initial bytes match the expected signature (`%PDF-` for PDF, `PK` for ZIP-based formats). Treat an HTML or interstitial response, an empty body, or a mismatched signature as a failed download; never present it as document content. In one reported NIHMS supplement case, changing curl headers did not help, while fetching the same PMC `/bin/` URL from within the fully loaded browser page returned PDF bytes. This was observed for one article only, so do not assume it applies to every PMC file. If a browser session is unavailable, report the download failure rather than parsing the HTML page.
 
 ## Core Workflow
 
