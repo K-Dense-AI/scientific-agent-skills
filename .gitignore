@@ -16,7 +16,9 @@ research/
 
 # Local agent tooling
 .claude/
-.agents/
+.agents/*
+!.agents/plugins/
+!.agents/plugins/**
 
 skills-lock.json
 
