@@ -1,0 +1,22 @@
+{
+  "name": "scientific-agent-skills",
+  "owner": {
+    "name": "K-Dense Inc.",
+    "url": "https://k-dense.ai"
+  },
+  "metadata": {
+    "description": "Ready-to-use scientific and research Agent Skills for biology, chemistry, medicine, and related workflows."
+  },
+  "plugins": [
+    {
+      "name": "scientific-agent-skills",
+      "source": "./",
+      "description": "Ready-to-use scientific and research Agent Skills for biology, chemistry, medicine, and related workflows.",
+      "author": {
+        "name": "K-Dense Inc.",
+        "url": "https://k-dense.ai"
+      },
+      "category": "productivity"
+    }
+  ]
+}

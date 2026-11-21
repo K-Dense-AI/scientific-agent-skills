@@ -1,0 +1,31 @@
+{
+  "name": "scientific-agent-skills",
+  "version": "2.72.0",
+  "description": "Ready-to-use scientific and research Agent Skills for biology, chemistry, medicine, and related workflows.",
+  "author": {
+    "name": "K-Dense Inc.",
+    "url": "https://k-dense.ai"
+  },
+  "homepage": "https://github.com/K-Dense-AI/scientific-agent-skills",
+  "repository": "https://github.com/K-Dense-AI/scientific-agent-skills",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "science",
+    "research",
+    "bioinformatics",
+    "cheminformatics",
+    "biology",
+    "chemistry",
+    "medicine"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Scientific Agent Skills",
+    "shortDescription": "Scientific and research Agent Skills for biology, chemistry, medicine, and related workflows.",
+    "category": "Productivity",
+    "developerName": "K-Dense Inc.",
+    "websiteUrl": "https://github.com/K-Dense-AI/scientific-agent-skills",
+    "logo": "./.claude-plugin/icon.png"
+  }
+}

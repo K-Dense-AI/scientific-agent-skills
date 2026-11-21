@@ -1,0 +1,17 @@
+{
+  "name": "scientific-agent-skills",
+  "plugins": [
+    {
+      "name": "scientific-agent-skills",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
