@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.12 and uv for the tested geniml 0.8.4 / gtars 0.10.0 stack; scEmbed needs AnnData 0.12.19 with Zarr 2.18.7 and the listed ML packages. Bundled planners and inspectors are dependency-free, local-only, and make no network requests.
 allowed-tools: Read Write Edit Bash Glob
 metadata:
-  version: "1.4"
+  version: "1.5"
   skill-author: "K-Dense Inc."
   upstream-version: "0.8.4"
   last-reviewed: "2026-10-01"
@@ -121,6 +121,8 @@ python skills/geniml/scripts/bed_validator.py \
 ```
 
 The validator reports proposed actions but never rewrites the BED file.
+Overlap observations are computed in coordinate order regardless of input order;
+adjacent half-open intervals do not overlap, and input-order warnings are retained.
 
 ## Current API map
 
