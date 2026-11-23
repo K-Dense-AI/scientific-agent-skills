@@ -4,7 +4,7 @@ description: "Compiles current scholarly evidence for a scientific manuscript or
 license: MIT license
 compatibility: Requires Python 3.10+ and network access; targets parallel-web-tools CLI 0.9.3 for Search, Extract, and Research. Explicit Chat requires requests and PARALLEL_API_KEY; optional Perplexity through openrouter.ai requires requests and OPENROUTER_API_KEY.
 metadata:
-  version: "1.7"
+  version: "1.8"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
@@ -26,6 +26,8 @@ and produces a manuscript-ready research packet rather than a loose list of link
 Here `verified_references` counts successful retrieval of nonempty Extract excerpts,
 excluding flagged retractions. It does not establish bibliographic identity, claim
 support, peer review, or absence of corrections; those require source review.
+
+See `README.md` for an overview and the backend routing table.
 
 ## Scope and boundaries
 
