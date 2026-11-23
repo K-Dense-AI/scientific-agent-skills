@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from pathlib import Path
@@ -246,6 +247,8 @@ def summarize_variants(args: argparse.Namespace) -> dict[str, Any]:
 
             if record.qual is None:
                 record_counts["missing_quality"] += 1
+            elif not math.isfinite(record.qual):
+                record_counts["nonfinite_quality"] += 1
             else:
                 quality_sum += float(record.qual)
                 quality_count += 1
