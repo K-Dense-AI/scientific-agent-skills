@@ -10,7 +10,7 @@ compatibility: >-
   network access is disabled unless --execute is supplied. The scripts never
   load .env files or execute mutations.
 metadata:
-  version: "1.4"
+  version: "1.5"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
   openclaw:
@@ -160,6 +160,12 @@ python3 -B scripts/pagination_helper.py \
 
 The helper also recognizes an opaque `next_cursor` defensively, but the
 reviewed protocols.io list documentation is page-based.
+
+`--max-items` bounds collection. List reports distinguish `collected_items`
+from `returned_items`, the number of protocol records included in the output.
+The output sanitizer retains at most 500 records and appends a
+`_truncated_items` marker when more were collected; that marker is not a
+returned protocol. Per-record redaction and bounds still apply.
 
 ## Offline Protocol Validation
 
