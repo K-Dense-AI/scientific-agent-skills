@@ -58,7 +58,7 @@ class CitationValidator:
         # Required fields by entry type
         self.required_fields = {
             'article': ['author', 'title', 'journal', 'year'],
-            'book': ['title', 'publisher', 'year'],  # author OR editor
+            'book': ['author', 'title', 'publisher', 'year'],  # author OR editor
             'inproceedings': ['author', 'title', 'booktitle', 'year'],
             'incollection': ['author', 'title', 'booktitle', 'publisher', 'year'],
             'phdthesis': ['author', 'title', 'school', 'year'],

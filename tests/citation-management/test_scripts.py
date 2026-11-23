@@ -383,6 +383,31 @@ class ValidationTests(BibTeXTestCase):
         self.assertTrue(errors)
         self.assertIn("author", " ".join(str(error) for error in errors).lower())
 
+    def book_errors(self, **people: str) -> list[dict]:
+        entry = {
+            "key": "book2026",
+            "type": "book",
+            "fields": {
+                "title": "A Book",
+                "publisher": "Test Press",
+                "year": "2026",
+                **people,
+            },
+        }
+        errors, _ = self.validator.validate_entry(entry)
+        return errors
+
+    def test_a_book_without_author_or_editor_is_reported(self) -> None:
+        errors = self.book_errors()
+        self.assertEqual(
+            [(e["field"], e["severity"]) for e in errors],
+            [("author or editor", "high")],
+        )
+
+    def test_a_book_with_only_an_author_or_an_editor_is_valid(self) -> None:
+        self.assertEqual(self.book_errors(author="Doe, Jane"), [])
+        self.assertEqual(self.book_errors(editor="Roe, Rick"), [])
+
     def test_duplicate_detection_finds_repeated_entries(self) -> None:
         entries = self.formatter.parse_bibtex_file(self.bib(BIBLIOGRAPHY + BIBLIOGRAPHY))
         self.assertTrue(self.validator.detect_duplicates(entries))
