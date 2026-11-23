@@ -483,6 +483,19 @@ class PaginateAdapterTests(unittest.TestCase):
         page = paginate._openalex_parse({"meta": {"count": 5, "next_cursor": "X"}, "results": []}, "*")
         self.assertIsNone(page.next_state)
 
+    def test_openalex_keyless_cursor_past_page_one_explains_the_key(self) -> None:
+        # Live behavior (2026-10-16): keyless cursor=* returns page 1; following
+        # next_cursor returns HTTP 401 "API key required for cursor paging".
+        with patch.dict("os.environ", {"OPENALEX_API_KEY": ""}):
+            self.assertIn("cursor=%2A", paginate._openalex_url("search=kelp", "*", 100))
+            with self.assertRaisesRegex(RuntimeError, "OPENALEX_API_KEY"):
+                paginate._openalex_url("search=kelp", "NEXT", 100)
+
+    def test_openalex_cursor_past_page_one_works_with_a_key(self) -> None:
+        with patch.dict("os.environ", {"OPENALEX_API_KEY": "SECRET"}):
+            url = paginate._openalex_url("search=kelp", "NEXT", 100)
+        self.assertIn("cursor=NEXT", url)
+
     def test_openalex_surfaces_the_reported_cost(self) -> None:
         page = paginate._openalex_parse(
             {"meta": {"count": 5, "next_cursor": "X", "cost_usd": 0.001}, "results": [{"id": "W1"}]},
