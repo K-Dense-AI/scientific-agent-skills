@@ -221,6 +221,25 @@ gh skill update --all
 
 This repository is a valid [Agent Plugins](https://agent-plugins.org/) 1.0.0 package: root [`plugin.json`](plugin.json) plus Agent Skills under `skills/`. Clients that support the standard discover every immediate child of `skills/` that contains a `SKILL.md`.
 
+#### Install as an agent plugin
+
+This repo also ships an agent-agnostic marketplace at [`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json) that points at the existing root plugin (no skill duplication).
+
+**Claude Code:**
+
+```bash
+/plugin install scientific-agent-skills --marketplace K-Dense-AI/scientific-agent-skills
+```
+
+**Codex:**
+
+```bash
+codex plugin marketplace add K-Dense-AI/scientific-agent-skills
+codex plugin add scientific-agent-skills@scientific-agent-skills
+```
+
+Local checkout: `codex plugin marketplace add /path/to/scientific-agent-skills`.
+
 **Cursor** — symlink or copy the repo into the local plugins directory, then reload:
 
 ```bash
@@ -230,7 +249,7 @@ ln -s "$(pwd)" ~/.cursor/plugins/local/scientific-agent-skills
 
 Restart Cursor or run **Developer: Reload Window**, then confirm the plugin and its skills appear under **Customize**. See [Cursor plugins](https://cursor.com/docs/plugins).
 
-**Codex** — install from a local checkout (confirm the current CLI flag names in Codex docs):
+**Codex (Agent Plugins package)** — install from a local checkout (confirm the current CLI flag names in Codex docs):
 
 ```bash
 codex plugins install .
