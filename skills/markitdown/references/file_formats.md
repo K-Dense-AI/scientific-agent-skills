@@ -6,7 +6,7 @@ This reference targets Microsoft MarkItDown 0.1.8. "Built-in" means the converte
 
 ```bash
 # Full built-in feature set
-uv pip install "markitdown[all]==0.1.8"
+uv pip install "markitdown[all]==0.1.8" "azure-ai-contentunderstanding==1.2.0b3"
 
 # Common document subset
 uv pip install "markitdown[pdf,docx,pptx,xlsx]==0.1.8"

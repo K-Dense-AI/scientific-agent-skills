@@ -4,7 +4,7 @@ description: Converts heterogeneous documents and selected URIs to Markdown with
 license: MIT
 compatibility: Python >=3.10,<3.15 and uv. Examples target MarkItDown 0.1.8. Core local conversion can run offline; URL, YouTube, audio transcription, LLM, Azure, and MCP workflows may use network or external services.
 metadata:
-  version: "2.5"
+  version: "2.6"
   last-reviewed: "2026-10-01"
   skill-author: K-Dense Inc.
 ---
@@ -42,8 +42,11 @@ source .venv/bin/activate
 Install every built-in feature:
 
 ```bash
-uv pip install "markitdown[all]==0.1.8"
+uv pip install "markitdown[all]==0.1.8" "azure-ai-contentunderstanding==1.2.0b3"
 ```
+
+`[all]` pulls in `azure-ai-contentunderstanding>=1.2.0b1`, a pre-release. uv does not
+resolve a transitive pre-release on its own, so name it explicitly as above.
 
 Or install only the converters required by the task:
 
@@ -211,7 +214,7 @@ The 0.1.8 core CLI does not expose LLM-client/model flags for the OCR plugin. Co
 The official MCP package exposes one tool, `convert_to_markdown(uri)`.
 
 ```bash
-uv pip install "markitdown==0.1.8" "markitdown-mcp==0.0.1a7"
+uv pip install "markitdown==0.1.8" "markitdown-mcp==0.0.1a7" "azure-ai-contentunderstanding==1.2.0b3"
 markitdown-mcp
 ```
 
