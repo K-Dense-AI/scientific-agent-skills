@@ -301,8 +301,8 @@ def link_problems(skill: Path, known_skills: Iterable[str] | None = None) -> lis
     names = set(known_skills) if known_skills is not None else all_skill_names()
     documents = [
         skill / "SKILL.md",
-        *sorted((skill / "references").glob("*.md")),
-        *sorted((skill / "assets").glob("*.md")),
+        *sorted((skill / "references").rglob("*.md")),
+        *sorted((skill / "assets").rglob("*.md")),
     ]
 
     problems = []
@@ -395,14 +395,25 @@ def shadow_module_problems(skill: Path) -> list[str]:
 
     Tests and the scripts themselves put `scripts/` on `sys.path`, so a file
     named `json.py` or `csv.py` there wins over the real module for the rest
-    of the process.
+    of the process. Nested helpers count too -- a `scripts/utils/json.py`
+    still wins once its directory is importable -- except the vendored
+    `scripts/office/` tree, whose `helpers/` and `validators/` subpackages
+    never resolve as top-level modules.
     """
-    return [
-        f"{skill.name}: scripts/{path.name} shadows the standard-library module "
-        f"`{path.stem}`"
-        for path in sorted((skill / "scripts").glob("*.py"))
-        if path.stem in sys.stdlib_module_names
-    ]
+    candidates = []
+    for path in sorted((skill / "scripts").rglob("*.py")):
+        try:
+            relative = path.relative_to(skill / "scripts")
+        except ValueError:
+            continue
+        if relative.parts and relative.parts[0] == "office":
+            continue
+        if path.stem in sys.stdlib_module_names:
+            candidates.append(
+                f"{skill.name}: scripts/{relative.as_posix()} shadows "
+                f"the standard-library module `{path.stem}`"
+            )
+    return candidates
 
 
 def personal_path_problems(skill: Path) -> list[str]:
@@ -414,7 +425,8 @@ def personal_path_problems(skill: Path) -> list[str]:
     """
     documents = [
         skill / "SKILL.md",
-        *sorted((skill / "references").glob("*.md")),
+        *sorted((skill / "references").rglob("*.md")),
+        *sorted((skill / "assets").rglob("*.md")),
         *_script_paths(skill),
         *_script_paths(skill, ".sh"),
     ]
