@@ -39,6 +39,10 @@ criterion into a chromatographic method is its mirror image.
 | Selectivity sources/lots | ≥6 individual sources | ≥10 individual sources |
 | Carry-over in blank | ≤20% of LLOQ analyte response and ≤5% of IS response | below LLOQ if platform is prone to carry-over |
 
+Tolerances are inclusive: a deviation of exactly 15.00% is within ±15%. `check_bioanalytical_run.py`
+compares with a 1e-9 relative allowance so binary rounding (`100 * (3.45 - 3) / 3` is
+15.000000000000005) does not fail a result that sits on the limit.
+
 Verify any figure against the guideline before using it in a protocol; regional implementation and
 subsequent revisions can change the picture.
 

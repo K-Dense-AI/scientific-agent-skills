@@ -116,7 +116,10 @@ s · sqrt(ν / χ²_{1-α/2, ν})  <  σ  <  s · sqrt(ν / χ²_{α/2, ν})
 These intervals are wide, and that is the point. With ν = 5 the upper bound is roughly twice the
 point estimate. An RSD that lands just inside a limit on six replicates has not demonstrated that the
 procedure meets the limit. For the total (intermediate) SD, which is a sum of variance components,
-the effective degrees of freedom come from the Satterthwaite approximation.
+the effective degrees of freedom come from the Satterthwaite approximation. When `MS_between <
+MS_within` the between-group variance is truncated to zero, the total SD is the repeatability SD,
+and it keeps `df_within`; Satterthwaite applied to the untruncated mean squares would exceed `N - 1`
+and give an interval narrower than the repeatability interval for the same SD.
 
 ## Accuracy
 
