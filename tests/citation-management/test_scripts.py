@@ -407,6 +407,83 @@ class ValidationTests(BibTeXTestCase):
         manuscript.write_text("No citations here.\n", encoding="utf-8")
         self.assertEqual(self.validator.parse_manuscript_citations(str(manuscript)), [])
 
+    def test_biblatex_and_natbib_commands_extract_only_citation_keys(self) -> None:
+        manuscript = self.root / "paper.tex"
+        commands = (
+            "cite", "citep", "citet", "citealp", "citealt", "citeauthor",
+            "citefullauthor", "citeyear", "citeyearpar", "citenum", "citetitle",
+            "citedate", "citeurl", "parencite", "textcite", "autocite",
+            "footcite", "footcitetext", "smartcite", "supercite", "fullcite",
+            "footfullcite", "Cite", "Citep", "Citet", "Parencite", "Textcite",
+            "Autocite", "Smartcite",
+        )
+        for command in commands:
+            for arguments in ("", "[p.~5]", "[see][p.~7]", "[][p.~7]"):
+                for star in ("", "*"):
+                    with self.subTest(command=command, arguments=arguments, star=star):
+                        manuscript.write_text(
+                            f"\\{command}{star}{arguments}{{jumper2021, vaswani2017}}",
+                            encoding="utf-8",
+                        )
+                        self.assertEqual(
+                            set(self.validator.parse_manuscript_citations(str(manuscript))),
+                            {"jumper2021", "vaswani2017"},
+                        )
+
+    def test_latex_citations_allow_whitespace_and_deduplicate_keys(self) -> None:
+        manuscript = self.root / "paper.tex"
+        manuscript.write_text(
+            "\\citep* \n[see] \n[p.~7] \n{jumper2021, , vaswani2017}\n"
+            "\\textcite {jumper2021}",
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            set(self.validator.parse_manuscript_citations(str(manuscript))),
+            {"jumper2021", "vaswani2017"},
+        )
+
+    def test_citation_configuration_commands_are_not_citations(self) -> None:
+        manuscript = self.root / "paper.tex"
+        manuscript.write_text(
+            r"\citestyle{plain} \citestylecustom{other} \citesetup{setting} "
+            r"\citetracker{true} \citepreamble{preface}",
+            encoding="utf-8",
+        )
+        self.assertEqual(self.validator.parse_manuscript_citations(str(manuscript)), [])
+
+    def test_pandoc_citations_still_exclude_email_addresses(self) -> None:
+        manuscript = self.root / "paper.md"
+        manuscript.write_text(
+            "See [@jumper2021; @vaswani2017] and @jumper2021. "
+            "Contact researcher@example.org; @2021 is not a reference.",
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            set(self.validator.parse_manuscript_citations(str(manuscript))),
+            {"jumper2021", "vaswani2017"},
+        )
+
+    def test_manuscript_validation_reports_real_missing_and_unused_keys(self) -> None:
+        manuscript = self.root / "paper.tex"
+        manuscript.write_text(
+            r"\citestyle{plain} \parencite[see][p.~7]{jumper2021} "
+            r"\textcite{missing2020}",
+            encoding="utf-8",
+        )
+        report = self.validator.validate_file(
+            self.bib(), manuscript_filepath=str(manuscript)
+        )
+        self.assertEqual(report["manuscript_results"]["missing_keys"], ["missing2020"])
+        self.assertEqual(report["manuscript_results"]["unused_keys"], ["vaswani2017"])
+        self.assertEqual(
+            [e["entry"] for e in report["errors"] if e["type"] == "unresolved_citation"],
+            ["missing2020"],
+        )
+        self.assertEqual(
+            [w["entry"] for w in report["warnings"] if w["type"] == "unused_citation"],
+            ["vaswani2017"],
+        )
+
     def test_the_valid_entry_count_never_goes_negative(self) -> None:
         # Several errors can land on one entry. Subtracting the error *count*
         # from the entry count reported `Valid entries: -2` for a one-entry
