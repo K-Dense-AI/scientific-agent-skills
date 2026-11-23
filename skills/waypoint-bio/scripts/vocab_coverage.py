@@ -64,7 +64,7 @@ def load_dataframe(path: Path) -> pd.DataFrame:
         # Our converter writes the sample-ID index as its first CSV column.
         if frame.columns[0] == "sample_id" or str(frame.columns[0]).startswith("Unnamed:"):
             id_column = frame.columns[0]
-            frame = pd.read_csv(path, sep=sep, dtype={id_column: str}).set_index(id_column)
+            frame = pd.read_csv(path, sep=sep, converters={0: str}).set_index(id_column)
         # Lists round-trip through CSV as their repr. Check each value rather
         # than the column dtype: pandas 3 uses a dedicated string dtype, so a
         # ``dtype == object`` guard silently skips the parse.
