@@ -385,6 +385,8 @@ Modern fingerprint generation API. Prefer this over legacy `AllChem.GetMorganFin
 - `rdFingerprintGenerator.GetAtomPairGenerator(minDistance=1, maxDistance=30)` - Atom pair generator
 - `rdFingerprintGenerator.GetTopologicalTorsionGenerator(fpSize=2048)` - Topological torsion generator
 - `generator.GetFingerprint(mol)` - Generate fingerprint
+- `generator.GetFingerprints(mols, numThreads=1)` - Batch bit fingerprints in input order; reuse the generator
+- `generator.GetInfoString()` - Record generator configuration with the RDKit version
 - `generator.GetCountFingerprint(mol)` - Count-based fingerprint
 - `rdFingerprintGenerator.AdditionalOutput()` - Collect bit information for visualization and explanations
 
