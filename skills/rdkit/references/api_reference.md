@@ -238,6 +238,9 @@ Molecular visualization.
 
 ### Drawing Options
 
+- `rdMolDraw2D.DrawMoleculeACS1996(drawer, mol)` - Draw with the ACS1996 preset; call `drawer.FinishDrawing()` before exporting SVG
+- `rdMolDraw2D.SetACS1996Mode(options, meanBondLength)` - Apply the preset to drawer options; use a `(-1, -1)` canvas
+- `rdMolDraw2D.MeanBondLength(mol, confId=-1)` - Measure bond length from existing coordinates for the preset
 - `rdMolDraw2D.MolDrawOptions()` - Get drawing options object
   - `.addAtomIndices` - Show atom indices
   - `.addBondIndices` - Show bond indices
