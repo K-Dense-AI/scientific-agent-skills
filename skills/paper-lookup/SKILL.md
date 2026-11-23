@@ -1,11 +1,11 @@
 ---
 name: paper-lookup
-description: Searches 18 scholarly APIs for papers, preprints, citations, open-access full text, repository records, and journal OA status, and returns results with reproducible provenance. Covers PubMed, PMC, Europe PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall, OpenCitations, PubTator3, Zenodo, Figshare, ROR, BioStudies, and DOAJ. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, biomedical entity annotations, deposited records (Zenodo, Figshare, BioStudies), institution ROR IDs, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
+description: Searches 18 scholarly APIs for papers, preprints, dataset-linked papers, citations, open-access full text, repository records, and journal OA status, and returns results with reproducible provenance. Covers PubMed, PMC, Europe PMC, bioRxiv, medRxiv, arXiv, OpenAlex, Crossref, Semantic Scholar, CORE, Unpaywall, OpenCitations, PubTator3, Zenodo, Figshare, ROR, BioStudies, and DOAJ. Use when searching for papers, citations, DOI/PMID/arXiv lookups, abstracts, full text, open-access PDFs, preprints, citation graphs, author publications, biomedical entity annotations, deposited records (Zenodo, Figshare, BioStudies), institution ROR IDs, or any scholarly literature query. Triggers on mentions of any supported database or requests like "find papers on X", "look up this DOI", "who cites this paper", or "get me the PDF".
 allowed-tools: Read Bash
 license: MIT
 compatibility: Needs network access and curl. The bundled scripts require Python 3.11+ and use only the standard library. No credentials are required; NCBI_API_KEY, S2_API_KEY, CORE_API_KEY, and OPENALEX_API_KEY raise rate limits or unlock full text where noted.
 metadata:
-  version: "2.4"
+  version: "2.5"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
@@ -47,6 +47,7 @@ Match the user's intent to the right database(s).
 | Papers on a biomedical topic | PubMed | Europe PMC, Semantic Scholar, OpenAlex |
 | Full text of a biomedical article | Europe PMC | PMC, CORE |
 | Keyword search *inside* full text | Europe PMC | CORE |
+| Papers linked to a dataset accession from the task or a read article | Europe PMC (`ACCESSION_ID`) | [Dataset-to-paper workflow](references/europepmc.md#papers-linked-to-a-dataset) |
 | Biology preprints, by topic | Europe PMC (`SRC:"PPR"`) | Semantic Scholar, OpenAlex |
 | Biology preprints, by date or DOI | bioRxiv | Europe PMC |
 | Health/medical preprints, by date or DOI | medRxiv | Europe PMC |
