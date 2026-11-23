@@ -4,7 +4,43 @@ Review notes for the [security report](security-report.md) and its
 [machine-readable companion](security-report.json). Automated findings require code review;
 neither a finding nor the scanner's `is_safe` field is a security certification.
 
-## Current report: 2026-09-13
+## Current report: 2026-10-19
+
+**Report generated:** 2026-10-19 09:33 UTC, scanner 2.3.0, model `claude-opus-5`.
+This is a full rescan of **177 skills**, with **177 rescanned / 0 reused**.
+The report contains **466 findings**: 32 CRITICAL, 21 HIGH, 255 MEDIUM, 157 LOW, and 1 INFO.
+Of these, **89 are per-skill findings** and **377 are cross-skill findings**.
+The reported **159/177 safe skills** is the scanner's classification, not a maintainer clearance or a security certification.
+
+**Incomplete analysis:** 9 skills record at least one `analyzers_failed` entry. Review those entries in the JSON; they are not successful analyzer passes.
+
+### Current rule inventory and review status
+
+The table below is an inventory derived from the current JSON, not an adjudication.
+The historical assessments below refer to earlier scans and must not be treated as current findings being cleared.
+A maintainer still needs to review the current evidence and record a verdict for each rule; no new safety verdict is asserted by this refresh.
+
+| Rule | Findings | Severity counts | Current-review status |
+|---|---:|---|---|
+| `BEHAVIOR_BASH_TAINT_FLOW` | 1 | MEDIUM: 1 | Pending maintainer adjudication |
+| `BEHAVIOR_CROSSFILE_ENV_VAR_EXFILTRATION` | 9 | CRITICAL: 9 | Pending maintainer adjudication |
+| `BEHAVIOR_CROSSFILE_EXFILTRATION_CHAIN` | 9 | CRITICAL: 9 | Pending maintainer adjudication |
+| `BEHAVIOR_ENV_VAR_EXFILTRATION` | 14 | CRITICAL: 14 | Pending maintainer adjudication |
+| `CROSS_SKILL_COMPLEMENTARY_TRIGGERS` | 143 | LOW: 143 | Pending maintainer adjudication |
+| `CROSS_SKILL_DATA_RELAY` | 1 | HIGH: 1 | Pending maintainer adjudication |
+| `CROSS_SKILL_SHARED_PATTERN` | 6 | MEDIUM: 6 | Pending maintainer adjudication |
+| `CROSS_SKILL_SHARED_URL` | 227 | MEDIUM: 227 | Pending maintainer adjudication |
+| `LLM_CONTEXT_BUDGET_EXCEEDED` | 1 | INFO: 1 | Pending maintainer adjudication |
+| `LLM_POLICY_VIOLATION` | 7 | LOW: 7 | Pending maintainer adjudication |
+| `LLM_SOCIAL_ENGINEERING` | 6 | LOW: 6 | Pending maintainer adjudication |
+| `LLM_TRANSITIVE_TRUST_ABUSE` | 1 | LOW: 1 | Pending maintainer adjudication |
+| `MDBLOCK_PYTHON_EVAL_EXEC` | 20 | HIGH: 20 | Pending maintainer adjudication |
+| `MDBLOCK_PYTHON_HTTP_POST` | 6 | MEDIUM: 6 | Pending maintainer adjudication |
+| `MDBLOCK_PYTHON_SUBPROCESS` | 15 | MEDIUM: 15 | Pending maintainer adjudication |
+
+This refresh addresses the report/date mismatch in #324. Completing the maintainer verdicts remains outstanding.
+
+## Historical report: 2026-09-13
 
 **Report generated:** 2026-09-13 14:32 UTC, scanner 2.1.0, model `claude-opus-5`.
 The report covers all **165 skills**: **661 findings** (28 CRITICAL, 4 HIGH,
