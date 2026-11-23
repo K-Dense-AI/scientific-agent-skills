@@ -1,0 +1,8 @@
+{
+  "_description": "IL6R ge-eQTL in GTEx small intestine — the textbook Mendelian-randomisation example (Swerdlow 2012; tocilizumab proof of concept). Pairs with C-reactive protein on the GWAS side.",
+  "dataset_id": "QTD000321",
+  "molecular_trait_id": "ENSG00000160712",
+  "chromosome": "1",
+  "start_bp": 153925508,
+  "end_bp": 154925508
+}
