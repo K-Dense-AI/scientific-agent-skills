@@ -92,8 +92,13 @@ length — under the floor *or* over 500,000 bp; over-length is not a `413`).
   expression. The promoter default reports 2,000 (the 300 bp promoter models
   report 300), splice 15,000, enhancer 249, chromatin 1,000. Compare your sequence
   length against this to know whether the model scored real sequence or padding.
-- `trained_window_bp` — fixed receptive field; 9,198 for the expression model,
-  `null` for sliding-window models.
+- `trained_window_bp` — fixed receptive field; 9,198 for a fixed-window
+  expression model, `null` for long-context expression models and for
+  sliding-window models.
+- `recommended_flank_bp` — expression models only: how many bp of gene-sense
+  sequence to supply on each side of the TSS. Fetch the largest value in the
+  list (never below 4,599, 2F within `request_max_bp`) and send `tss_index` at
+  that offset; see `sequence-acquisition.md`.
 - The legacy `max_seq_length_bp` is not part of `bio_spec` and is absent from the
   response. It was ambiguous — it read 9,198 for the expression model, the trained
   window rather than a request cap, so gating on it wrongly rejected the
