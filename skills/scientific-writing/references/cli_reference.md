@@ -89,6 +89,12 @@ The command checks local syntax and duplicates for DOI, PMID, PMCID, ISBN, URL, 
 normalized title. It never resolves an identifier; a human must compare each value with
 the opened source.
 
+Title comparison uses Unicode compatibility normalization and case folding, with
+punctuation and underscores separating tokens. Combining marks attached to a token
+remain significant: `café` matches its decomposed spelling, but not `cafe`; Japanese
+`が` does not match `か`. Standalone marks do not form a title token. This is a local
+heuristic, not a publication-identity lookup or a language-aware fuzzy matcher.
+
 ## Authorship and disclosure
 
 ```bash
