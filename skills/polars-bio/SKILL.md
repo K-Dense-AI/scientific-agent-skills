@@ -1,11 +1,11 @@
 ---
 name: polars-bio
-description: Performs genomic interval overlap, nearest, merge, coverage, complement and subtraction on Polars DataFrames, and reads or writes BED, VCF, BCF, BAM, CRAM, GFF, GTF, FASTA and FASTQ data. Use for coordinate-aware genomic joins, read-depth analysis, lazy bioinformatics I/O, SQL queries or migration from bioframe.
+description: Performs genomic interval overlap, nearest, merge, coverage, complement and subtraction on Polars DataFrames, and reads or writes BED, VCF, BCF, BAM, CRAM, GFF, GTF, FASTA and FASTQ data. Use for coordinate-aware genomic joins, read-depth analysis, lazy bioinformatics I/O, SQL queries or migration from bioframe. For per-read access, pileup, or indexed region queries on single files, use pysam.
 license: Apache-2.0
 allowed-tools: Read Write Edit Bash
 compatibility: Requires Python 3.11–3.14 and polars-bio 0.36.0. Native wheels are available for major desktop/server platforms. Network access and provider credentials are needed only for remote data. External-reference CRAM needs a local FASTA and .fai.
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-10-01"
   upstream-version: "0.36.0"
