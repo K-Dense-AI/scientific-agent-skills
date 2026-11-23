@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.12+ with NumPy 2+ and SciPy. No network access and no proprietary software. The estimation tools this skill orients you towards (NONMEM, Monolix, Phoenix, Simcyp, GastroPlus) are licensed separately and are never invoked by these scripts.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "2.0"
+  version: "2.1"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-10-01"
 ---

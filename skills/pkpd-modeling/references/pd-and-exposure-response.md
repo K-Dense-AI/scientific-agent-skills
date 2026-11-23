@@ -32,7 +32,10 @@ Balance efficacy and safety outcomes rather than maximizing a single modeled res
 `exposure_response.py` uses independent observations. Repeated longitudinal responses, count or
 time-to-event endpoints need models with appropriate distributions and dependence. Logistic data
 must contain both outcomes and exposure variation; complete/quasi-complete separation is rejected
-rather than returning a misleading finite estimate. C-QTc limitations are in [DDI/QT](ddi-and-qt.md).
+rather than returning a misleading finite estimate. The logistic fit is Newton-Raphson (IRLS) on
+centered, scaled exposure, so convergence does not depend on exposure units (ng·h/mL AUCs in the
+thousands fit like unit-scale data), and the Wald SE comes from the inverse Fisher information
+`(XᵀWX)⁻¹` mapped back to the original units. C-QTc limitations are in [DDI/QT](ddi-and-qt.md).
 
 ## Pharmpy model construction
 
