@@ -89,7 +89,7 @@ packages = ["pyzotero", "bibtexparser", "python-dotenv"]
 packages = ["requests", "python-dotenv"]
 
 [skills.research-lookup]
-packages = ["requests"]
+packages = ["requests", "mcp>=1.28,<2"]
 
 [skills.exa-search]
 packages = ["exa-py", "python-dotenv"]
