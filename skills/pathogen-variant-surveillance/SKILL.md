@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires Python 3.11+. Scripts use only the standard library. Needs network access to public LAPIS deployments on lapis.cov-spectrum.org, lapis.genspectrum.org, lapis.pathoplexus.org and raw.githubusercontent.com for pango-designation. No credentials for these public queries.
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.3"
+  version: "1.4"
   skill-author: K-Dense Inc.
   last-reviewed: "2026-10-01"
 ---

@@ -60,11 +60,17 @@ def parse_where(pairs: list[str], schema: dict) -> dict[str, str]:
 
 
 def profile(base_url: str, filters: dict, *, amino_acid: bool, min_proportion: float,
-            gene: str | None) -> dict[str, dict]:
-    """Mutation rows keyed by mutation string, optionally restricted to one gene."""
+            gene: str | None, unnamed_sequence: str | None = None) -> dict[str, dict]:
+    """Mutation rows keyed by mutation string, optionally restricted to one gene.
+
+    ``unnamed_sequence`` is the reference's only nucleotide sequence. LAPIS
+    returns ``sequenceName: null`` for it (``main`` in ``referenceGenome``).
+    """
     rows = mutations(base_url, filters, amino_acid=amino_acid, min_proportion=min_proportion)
     keyed: dict[str, dict] = {}
     for row in rows:
+        if unnamed_sequence and not row.get("sequenceName"):
+            row = {**row, "sequenceName": unnamed_sequence}
         if gene and str(row.get("sequenceName") or "").upper() != gene.upper():
             continue
         keyed[row["mutation"]] = row
@@ -108,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             date.fromisoformat(args.since)
             date_field = pick_date_field(schema, "collection", args.date_field)
             where[range_keys(date_field)[0]] = args.since
+        unnamed_sequence = None
         if args.gene:
             reference = request(base_url, "sample/referenceGenome")
             names = [r["name"] for r in reference["nucleotideSequences" if args.nucleotide else "genes"]]
@@ -115,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
             if len(matches) != 1:
                 raise LapisError(f"unknown {'segment' if args.nucleotide else 'gene'} {args.gene!r}; choose from {names}")
             args.gene = matches[0]
+            if args.nucleotide and len(names) == 1:
+                unnamed_sequence = names[0]
 
         # Fetch unpruned mutation rows for comparisons. A missing row still
         # has unknown coverage and cannot establish a zero proportion.
@@ -138,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             amino_acid=not args.nucleotide,
             min_proportion=args.min_proportion if not args.versus else diff_floor,
             gene=args.gene,
+            unnamed_sequence=unnamed_sequence,
         )
 
         if not args.versus:
@@ -176,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
                 amino_acid=not args.nucleotide,
                 min_proportion=diff_floor,
                 gene=args.gene,
+                unnamed_sequence=unnamed_sequence,
             )
 
             rows = []
