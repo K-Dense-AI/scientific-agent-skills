@@ -96,12 +96,14 @@ def comments_in(xml_text: str) -> list[str]:
     return [collapse_ws(match) for match in re.findall(r"<!--(.*?)-->", xml_text, re.DOTALL)]
 
 
-def element_text(element: ET.Element) -> str:
+def element_text(
+    element: ET.Element, *, skip_tags: frozenset[str] = SKIP_TAGS
+) -> str:
     """Flattened text of an element, skipping non-reading-order tags."""
     parts: list[str] = []
 
     def walk(node: ET.Element) -> None:
-        if node.tag in SKIP_TAGS:
+        if node.tag in skip_tags:
             # Keep the tail: text following an <xref> continues the sentence.
             if node.tail:
                 parts.append(node.tail)
@@ -128,7 +130,7 @@ def section_title(section: ET.Element) -> str:
 
 
 def collect_sections(body: ET.Element) -> list[dict[str, Any]]:
-    """Top-level `<sec>` blocks, each with its nested subsection text inlined."""
+    """Top-level sections and unsectioned paragraphs, in document order."""
     sections: list[dict[str, Any]] = []
 
     top_level = body.findall("sec")
@@ -137,16 +139,31 @@ def collect_sections(body: ET.Element) -> list[dict[str, Any]]:
         text = element_text(body)
         return [{"title": "", "sec_type": None, "text": text}] if text else []
 
-    for section in top_level:
-        sections.append(
-            {
-                "title": section_title(section),
-                "sec_type": section.get("sec-type"),
-                "text": element_text(section),
-            }
-        )
-    return sections
+    paragraphs: list[str] = []
 
+    def flush_paragraphs() -> None:
+        text = collapse_ws(" ".join(paragraphs))
+        if text:
+            sections.append({"title": "", "sec_type": None, "text": text})
+        paragraphs.clear()
+
+    for child in body:
+        if child.tag == "p":
+            paragraphs.append(
+                element_text(child, skip_tags=SKIP_TAGS | {"sub-article", "response"})
+            )
+        else:
+            flush_paragraphs()
+            if child.tag == "sec":
+                sections.append(
+                    {
+                        "title": section_title(child),
+                        "sec_type": child.get("sec-type"),
+                        "text": element_text(child),
+                    }
+                )
+    flush_paragraphs()
+    return sections
 
 #: JATS `pub-id-type` values, mapped to the field names this script emits.
 #: PMC tags its own accession as `pmcid` (the bare `pmc` form appears in older
