@@ -13,6 +13,7 @@ The following is the tested installation pattern; choose an environment director
 uv venv --python 3.11 mageck-env
 uv pip install --python mageck-env/bin/python numpy==1.26.4 scipy==1.13.1 setuptools==69.5.1
 curl -fL 'https://sourceforge.net/projects/mageck/files/0.5/mageck-0.5.9.5.tar.gz/download' -o mageck.tar.gz
+echo "b06a18036da63959cd7751911a46727aefe2fb1d8dd79d95043c3e3bdaf1d93a  mageck.tar.gz" | sha256sum -c -
 tar -xzf mageck.tar.gz
 # This archive contains liulab-mageck-c491c3874dca, not a directory named mageck-0.5.9.5.
 cd liulab-mageck-c491c3874dca
