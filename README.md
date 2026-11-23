@@ -548,11 +548,13 @@ Package versions below identify the baselines documented by the skills. Follow e
 - Quantitative microscopy: [CellProfiler](skills/cellprofiler/SKILL.md) (reusable nuclei-measurement pipeline, channel manifests, segmentation overlays, and measurement checks)
 - Virtual spatial transcriptomics: noncommercial DeepSpot-M for transcriptome-wide spatial gene expression from 224x224 H&E tiles
 
-#### 🧠 **Neuroscience & Electrophysiology** (4 skills)
+#### 🧠 **Neuroscience & Electrophysiology** (6 skills)
 - Data standards: BIDS (Brain Imaging Data Structure for neuroscience and biomedical datasets; pairs with DataLad for retrieval — OpenNeuro at github.com/OpenNeuroDatasets and DANDI at github.com/dandisets publish their holdings as DataLad datasets — and for BIDS-App runs under recorded provenance, with BEP028 the extension proposal for provenance records in derivatives)
 - Neural recordings: Neuropixels-Analysis (extracellular spikes, silicon probes, spike sorting)
 - Data conversion: [NWB Conversion](skills/nwb-conversion/SKILL.md) (two-photon TIFF and behavioral positions, clock alignment, round-trip preservation, and NWB validation)
 - Physiological signals: NeuroKit2 0.2.13 for reproducible research workflows—not diagnosis, monitoring decisions, or medical-device validation
+- Brain regions: [Allen Brain Regions](skills/allen-brain-regions/SKILL.md) (Allen structure ontology lookups, region hierarchies and BrainGlobe atlas choice)
+- Neuron morphology: [NeuroMorpho Morphology](skills/neuromorpho-morphology/SKILL.md) (NeuroMorpho.Org search, morphometry, SWC files and required citations)
 
 #### 🤖 **Machine Learning & AI** (14 core skills)
 - Deep learning: PyTorch Lightning, Transformers, Stable Baselines3, and [PufferLib](skills/pufferlib/SKILL.md) workflows for native 5.0, published 3.0.0, and pinned historical 4.0
