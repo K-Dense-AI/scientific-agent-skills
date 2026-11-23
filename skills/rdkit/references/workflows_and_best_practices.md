@@ -14,7 +14,7 @@ from rdkit.Chem import Descriptors
 
 def analyze_druglikeness(smiles):
     mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
+    if mol is None or mol.GetNumAtoms() == 0:
         return None
 
     # Calculate Lipinski descriptors
@@ -109,12 +109,21 @@ from rdkit import Chem
 
 # Portable exchange formats such as SMILES and SDF are safest for shared data.
 # For local caches, RDKit's binary molecule representation avoids generic pickle.
-payload = [base64.b64encode(mol.ToBinary()).decode("ascii") for mol in mols]
-Path("molecules.rdmol.json").write_text(json.dumps(payload))
+# Explicitly preserve molecule, atom, and bond properties, including private
+# names such as _Name. Default ToBinary() omits these under the default policy.
+payload = [base64.b64encode(mol.ToBinary(Chem.PropertyPickleOptions.AllProps))
+           .decode("ascii") for mol in mols]
+Path("molecules.rdmol.json").write_text(json.dumps(payload), encoding="utf-8")
 
-cached = json.loads(Path("molecules.rdmol.json").read_text())
+cached = json.loads(Path("molecules.rdmol.json").read_text(encoding="utf-8"))
 mols = [Chem.Mol(base64.b64decode(item)) for item in cached]
 ```
+
+This local-cache example retains properties such as source IDs and names. Use
+narrower [property flags](https://www.rdkit.org/docs/source/rdkit.Chem.rdchem.html#rdkit.Chem.rdchem.PropertyPickleOptions)
+if only selected property categories belong in the cache; `AllProps` also includes
+private and computed properties. It does not promise cross-version equivalence
+or bit-for-bit coordinate precision.
 
 Do not load Python pickle files from untrusted sources. Pickle deserialization can execute arbitrary code; prefer SMILES/SDF for interchange and RDKit binary payloads for trusted local caches.
 

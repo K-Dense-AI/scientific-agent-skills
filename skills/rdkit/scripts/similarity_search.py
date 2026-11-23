@@ -142,7 +142,7 @@ def write_results(hits, output_file):
     """Write results to CSV file."""
     import csv
 
-    with open(output_file, 'w', newline='') as f:
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
         fieldnames = ['Rank', 'Index', 'Name', 'SMILES', 'Similarity']
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
