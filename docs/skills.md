@@ -1,6 +1,6 @@
 # Scientific Skills
 
-This checkout contains **177 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
+This checkout contains **178 skills**. The catalog below groups skills by domain. Summaries mirror each skill's
 current `description`; open its linked `SKILL.md` for setup, tested versions, workflows,
 and limitations. Browse the [illustrated skill guides](skill-guides/README.md) for
 scientist-facing explanations, or see [workflow examples](examples.md) for ways to combine them.
@@ -136,6 +136,7 @@ scientist-facing explanations, or see [workflow examples](examples.md) for ways 
 
 ### Protein Engineering & Design
 
+- **[Mol* Story](../skills/molstar-story/SKILL.md)** - Builds evidence-backed interactive Mol* Story/MolViewStories artifacts for structural-mechanism questions. Use when ligand pockets, conformational states, interfaces, mutations, density, or multi-structure results must be organized into a traceable scene sequence with scientific claim boundaries and browser acceptance. Do not use for ordinary HTML indexes, generic structure retrieval, or PyMOL-specific sessions.
 - **[RELION](../skills/relion/SKILL.md)** - Validates and executes RELION single-particle cryo-EM refinement and half-map postprocessing. Supports STAR optics/acquisition checks, particle-stack consistency, gold-standard half sets, soft-mask validation, diagnostic Fourier shell correlation, and restart guidance.
 - **[Adaptyv](../skills/adaptyv/SKILL.md)** - Uses the Adaptyv Bio Foundry API and Python SDK to design protein characterization experiments, estimate costs, submit sequences, monitor laboratory progress, and retrieve results. Applies to Adaptyv Foundry, its target catalog, binding screening and affinity assays, thermostability, expression, fluorescence, epitope binning, and enzyme activity workflows, including code using adaptyv or FoundryClient.
 - **[ESM (Evolutionary Scale Modeling)](../skills/esm/SKILL.md)** - Uses the Biohub esm Python SDK for ESM3 protein generation, ESMC embeddings, and ESMFold2 all-atom folding. Applies to local model inference and Biohub hosted clients, including former Forge workflows; distinguishes the separate legacy fair-esm distribution.
