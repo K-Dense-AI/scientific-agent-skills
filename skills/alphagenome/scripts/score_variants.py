@@ -60,7 +60,7 @@ def select_scorers(names: Sequence[str] | None, organism: str, include_active: b
     variants (absolute activity of the allele, not the REF-ALT difference),
     which are only useful when explicitly asked for.
     """
-    from alphagenome.models import dna_client, variant_scorers  # noqa: PLC0415
+    from alphagenome.models.v1 import dna_client, variant_scorers  # noqa: PLC0415
 
     recommended = variant_scorers.RECOMMENDED_VARIANT_SCORERS
     organism_enum = dna_client.Organism.HOMO_SAPIENS if organism == "human" else dna_client.Organism.MUS_MUSCULUS
@@ -88,7 +88,7 @@ def make_model(args: argparse.Namespace):
     api_key = common.load_api_key(args.api_key_env)
     common.require_alphagenome()
     import grpc  # noqa: PLC0415
-    from alphagenome.models import dna_client  # noqa: PLC0415
+    from alphagenome.models.v1 import dna_client  # noqa: PLC0415
 
     try:
         return dna_client.create(api_key, timeout=args.timeout)
@@ -100,7 +100,7 @@ def make_model(args: argparse.Namespace):
 
 
 def organism_enum(name: str):
-    from alphagenome.models import dna_client  # noqa: PLC0415
+    from alphagenome.models.v1 import dna_client  # noqa: PLC0415
 
     return dna_client.Organism.HOMO_SAPIENS if name == "human" else dna_client.Organism.MUS_MUSCULUS
 
@@ -125,7 +125,7 @@ def list_tracks(model, args: argparse.Namespace) -> int:
 
 
 def list_scorers() -> int:
-    from alphagenome.models import variant_scorers  # noqa: PLC0415
+    from alphagenome.models.v1 import variant_scorers  # noqa: PLC0415
 
     rows = []
     for name, scorer in variant_scorers.RECOMMENDED_VARIANT_SCORERS.items():
@@ -140,7 +140,7 @@ def list_scorers() -> int:
 
 
 def score(model, args: argparse.Namespace) -> int:
-    from alphagenome.models import variant_scorers  # noqa: PLC0415
+    from alphagenome.models.v1 import variant_scorers  # noqa: PLC0415
 
     specs, warnings = common.collect_variants(args.variant, args.input)
     for message in warnings:

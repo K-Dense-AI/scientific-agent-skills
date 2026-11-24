@@ -350,7 +350,7 @@ class SequenceLengthTests(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_SDK, "alphagenome not installed")
     def test_lengths_match_the_sdk_constants(self):
-        from alphagenome.models import dna_client
+        from alphagenome.models.v1 import dna_client
 
         self.assertEqual(
             set(score_variants.SEQUENCE_LENGTHS.values()), set(dna_client.SUPPORTED_SEQUENCE_LENGTHS.values())
@@ -387,7 +387,7 @@ class ScorerSelectionTests(unittest.TestCase):
         self.assertIn("RNA_SEQ", {row["name"] for row in rows})
 
     def test_model_quantile_filter_requires_calibration(self):
-        from alphagenome.models import variant_scorers
+        from alphagenome.models.v1 import variant_scorers
 
         model = mock.Mock()
         args = score_variants.build_parser().parse_args([
