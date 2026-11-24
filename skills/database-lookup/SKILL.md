@@ -4,7 +4,7 @@ description: Queries documented public database APIs with explicit endpoints, fi
 allowed-tools: Read Bash
 license: MIT
 metadata:
-  version: "1.8"
+  version: "1.9"
   last-reviewed: "2026-09-30"
   skill-author: "K-Dense Inc."
 ---
