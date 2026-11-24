@@ -2,15 +2,18 @@ import re
 
 # Order matters: multi-line and prefixed patterns run before narrower ones.
 _PATTERNS = [
-    (re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----"),
-     "[REDACTED:private_key]"),
+    # "[A-Z ]*": PKCS#8 keys have no type before "PRIVATE KEY".
+    (re.compile(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?"
+        r"-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----"
+    ), "[REDACTED:private_key]"),
 
-    # Known-env-var secret assignments: NAME=value  (catches long values only)
+    # Known-env-var secret assignments: NAME=value, NAME="value" or NAME='value'
     (re.compile(
         r"\b(?:AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|GITHUB_TOKEN|HF_TOKEN"
         r"|ANTHROPIC_API_KEY|OPENAI_API_KEY|FOUNDRY_API_KEY|SCREENPIPE_TOKEN|LM_API_TOKEN"
         r"|GOOGLE_API_KEY|SLACK_TOKEN|DEEPGRAM_API_KEY)"
-        r"\s*=\s*[^\s\"']+"
+        r"\s*=\s*(?:\"[^\"\r\n]+\"?|'[^'\r\n]+'?|[^\s\"']+)"
     ), "[REDACTED:kv_secret]"),
 
     (re.compile(r"Bearer\s+[A-Za-z0-9_\-\.=]+"), "[REDACTED:bearer]"),

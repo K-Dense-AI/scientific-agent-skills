@@ -5,7 +5,7 @@ allowed-tools: Read Write Edit Bash
 license: MIT license
 compatibility: Requires Python 3.10+ with httpx, PyYAML, and sentence-transformers; Screenpipe and a local LM Studio server or an opt-in cloud LLM. Initial model installation needs network access.
 metadata:
-  version: "1.6"
+  version: "1.7"
   last-reviewed: "2026-09-30"
   skill-author: K-Dense Inc.
   openclaw:
