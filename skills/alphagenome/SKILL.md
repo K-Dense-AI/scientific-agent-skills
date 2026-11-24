@@ -2,10 +2,10 @@
 name: alphagenome
 description: "Looks up precomputed AlphaGenome Atlas effects for any GRCh38 single-nucleotide variant (AVI score with Phred and 18 SHAP feature attributions, plus raw and quantile scores for RNA-seq, DNase, ATAC, ChIP-TF, ChIP-histone, CAGE, PRO-cap, splicing, polyadenylation and contact-map tracks), scores variants or scans windows on demand with the AlphaGenome model for human and mouse (variant scoring, in silico mutagenesis, REF-versus-ALT track prediction), and builds Atlas website deep links. Use when the user mentions AlphaGenome, AlphaGenome Atlas, AVI or AlphaGenome Variant Impact, DeepMind variant effect prediction, or wants to prioritise or mechanistically interpret non-coding, regulatory, splicing, enhancer, promoter, or chromatin-accessibility effects of SNVs from a VCF, credible set, or region. Research use only; not a clinical tool."
 license: MIT
-compatibility: "Python 3.10+ with the alphagenome package (0.9.0 or later for the Atlas client; brings numpy, pandas, anndata, grpcio). Network access to gdmscience.googleapis.com:443 and a free non-commercial AlphaGenome API key in ALPHAGENOME_API_KEY (ALPHA_GENOME_API_KEY also read). Human data is GRCh38 only; mouse is mm10 (model only)."
+compatibility: "Python 3.10+ with the alphagenome package (0.10.0 or later for the alphagenome.models.v1 imports; brings numpy, pandas, anndata, grpcio). Network access to gdmscience.googleapis.com:443 and a free non-commercial AlphaGenome API key in ALPHAGENOME_API_KEY (ALPHA_GENOME_API_KEY also read). Human data is GRCh38 only; mouse is mm10 (model only)."
 allowed-tools: Read Write Edit Bash
 metadata:
-  version: "1.2"
+  version: "1.3"
   skill-author: K-Dense Inc.
   upstream-version: "alphagenome 0.9.0"
   last-reviewed: "2026-09-30"
@@ -45,7 +45,7 @@ Both are reached through one `pip install alphagenome` and one API key.
 ## Setup
 
 ```bash
-uv pip install alphagenome                     # PyPI; tested on Python 3.12 and 3.13, alphagenome 0.9.0
+uv pip install "alphagenome>=0.10"             # PyPI; models.v1 imports need 0.10.0+ (checked with 0.10.0 and 2.0.0)
 export ALPHAGENOME_API_KEY="..."               # https://deepmind.google.com/science/alphagenome
 cd skills/alphagenome/scripts
 python atlas_query.py scorers                  # proves key + network in one call
@@ -189,7 +189,7 @@ scorers per request. Mouse has no calibrated quantiles; use raw scores there.
 scorers use their upper-tail quantile); it never treats zero as an extreme.
 
 ```python
-from alphagenome.models import dna_client, variant_scorers
+from alphagenome.models.v1 import dna_client, variant_scorers
 model = dna_client.create(os.environ["ALPHAGENOME_API_KEY"])
 variant = genome.Variant.from_str("chr22:36201698:A>C")
 interval = variant.reference_interval.resize(dna_client.SEQUENCE_LENGTH_1MB)

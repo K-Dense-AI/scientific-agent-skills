@@ -1,4 +1,4 @@
-# AlphaGenome model API (`alphagenome.models.dna_client`)
+# AlphaGenome model API (`alphagenome.models.v1.dna_client`)
 
 Reviewed 2026-09-30 against released `alphagenome` 0.9.0, the current official
 SDK source, scoring definitions, and research implementation. Network examples
@@ -15,7 +15,7 @@ export ALPHAGENOME_API_KEY=...        # https://deepmind.google.com/science/alph
 ```python
 import os
 from alphagenome.data import gene_annotation, genome, transcript
-from alphagenome.models import dna_client, variant_scorers
+from alphagenome.models.v1 import dna_client, variant_scorers
 from alphagenome.visualization import plot_components
 
 dna_model = dna_client.create(os.environ["ALPHAGENOME_API_KEY"], timeout=30)
