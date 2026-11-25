@@ -83,6 +83,11 @@ run(10e-9)
 MuMax3 writes OVF 2.0 files (`m000000.ovf`, …). Data are stored x-fastest, so a
 reshaped array is `(nz, ny, nx, 3)`.
 
+A tested reader that also checks the binary check value and file length is in
+[`scripts/ovf.py`](scripts/ovf.py) (`from ovf import read_ovf`, or
+`python scripts/ovf.py file.ovf` for a quick summary). The minimal version below
+shows the format:
+
 ```python
 import glob, numpy as np
 
