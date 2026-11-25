@@ -698,6 +698,9 @@ packages = ["qutip==5.3.1", "qutip-qip==0.4.2", "qutip-qtrl==0.2.0", "qutip-jax=
 
 # --- physics, astronomy, and simulation -----------------------------------
 
+[skills.mumax3]
+packages = ["numpy"]
+
 [skills.astropy]
 packages = ["astropy", "matplotlib", "numpy", "pandas", "dask", "scipy", "h5py"]
 
