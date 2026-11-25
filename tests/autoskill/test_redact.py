@@ -1,3 +1,4 @@
+import pytest
 from redact import redact
 
 # Test fixtures are synthetic strings *constructed* at runtime from parts
@@ -82,6 +83,43 @@ def test_redacts_ssh_private_key_block():
     assert "b3BlbnNzaC1rZXktdjEAAAAAhello" not in result
     assert "[REDACTED:private_key]" in result
     assert "before" in result and "after" in result
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "PRIVATE " + "KEY",  # PKCS#8, what "openssl genpkey" writes
+        "RSA PRIVATE " + "KEY",
+        "ENCRYPTED PRIVATE " + "KEY",
+        "PGP PRIVATE " + "KEY BLOCK",
+    ],
+)
+def test_redacts_private_key_block_of_any_type(label):
+    body = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC\nhello+world/0123456789=="
+    result = redact(f"before\n-----BEGIN {label}-----\n{body}\n-----END {label}-----\nafter")
+    assert result == "before\n[REDACTED:private_key]\nafter"
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        'export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"',
+        "export AWS_SECRET_ACCESS_KEY='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'",
+        'AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"',
+        # A window title or OCR line can be cut before the closing quote.
+        'export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPx',
+    ],
+)
+def test_redacts_quoted_secret_env_var_assignments(assignment):
+    out = redact(f"{assignment}\nnext line")
+    assert "wJalrXUtnFEMI" not in out
+    assert "bPx" not in out
+    assert out.endswith("[REDACTED:kv_secret]\nnext line")
+
+
+def test_text_after_a_quoted_secret_is_kept():
+    out = redact("AWS_SECRET_ACCESS_KEY='synthetic-value' aws s3 ls")
+    assert out == "[REDACTED:kv_secret] aws s3 ls"
 
 
 def test_redacts_us_ssn():
